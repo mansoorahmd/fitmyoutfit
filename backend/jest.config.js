@@ -16,7 +16,7 @@ module.exports = {
   moduleFileExtensions: ["js", "ts", "json"],
   modulePathIgnorePatterns: ["dist/", "<rootDir>/.medusa/"],
   // `medusa build` copies the tests into .medusa/server; never run those copies.
-  testPathIgnorePatterns: ["/node_modules/", "/\.medusa/"],
+  testPathIgnorePatterns: ["/node_modules/", "/[.]medusa/"],
   setupFiles: ["./integration-tests/setup.js"],
 };
 
