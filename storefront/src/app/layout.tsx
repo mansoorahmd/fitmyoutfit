@@ -1,4 +1,4 @@
-import { fontVariables } from "@lib/fonts"
+import { fontFaceStyle, fontVariables } from "@lib/fonts"
 import { STORE_NAME } from "@lib/store-config"
 import { getBaseURL } from "@lib/util/env"
 import { Metadata } from "next"
@@ -12,7 +12,12 @@ export const metadata: Metadata = {
 
 export default function RootLayout(props: { children: React.ReactNode }) {
   return (
-    <html lang="en" data-mode="light" className={fontVariables}>
+    <html
+      lang="en"
+      data-mode="light"
+      className={fontVariables}
+      style={fontFaceStyle as React.CSSProperties}
+    >
       <body>
         <main className="relative">{props.children}</main>
       </body>

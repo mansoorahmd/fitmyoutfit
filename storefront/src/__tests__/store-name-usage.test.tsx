@@ -11,7 +11,7 @@ vi.mock("@lib/store-config", () => ({
 
 vi.mock("styles/globals.css", () => ({}))
 // next/font only works inside the Next.js compiler
-vi.mock("@lib/fonts", () => ({ fontVariables: "" }))
+vi.mock("@lib/fonts", () => ({ fontVariables: "", fontFaceStyle: {} }))
 vi.mock("@lib/config", ()=> ({ sdk: { client: { fetch: vi.fn() } } }))
 vi.mock("@lib/data/categories", () => ({ listCategories: async () => [] }))
 vi.mock("@lib/data/collections", () => ({

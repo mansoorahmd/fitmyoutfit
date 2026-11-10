@@ -76,10 +76,17 @@ describe("other brand tokens", () => {
     expect(radius.sheet).toBe("var(--radius-sheet)")
   })
 
-  it("puts the next/font variables in the font stacks, Arabic second", () => {
+  it("puts Noto Sans Arabic's real face before any Arial fallback", () => {
     const { sans, heading } = config.theme.extend.fontFamily
-    expect(sans.slice(0, 2)).toEqual(["var(--font-body)", "var(--font-arabic)"])
-    expect(heading.slice(0, 2)).toEqual([
+    expect(sans.slice(0, 4)).toEqual([
+      "var(--font-body-face)",
+      "var(--font-arabic-face)",
+      "var(--font-body)",
+      "var(--font-arabic)",
+    ])
+    expect(heading.slice(0, 4)).toEqual([
+      "var(--font-heading-face)",
+      "var(--font-arabic-face)",
       "var(--font-heading)",
       "var(--font-arabic)",
     ])

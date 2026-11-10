@@ -110,10 +110,14 @@ module.exports = {
       fontSize: {
         "3xl": "2rem",
       },
-      // The variables are set by next/font in src/lib/fonts.ts. Noto Sans
-      // Arabic comes second so Arabic-script letters fall through to it.
+      // The variables are set in src/app/layout.tsx from src/lib/fonts.ts.
+      // Order: the real face, then Noto Sans Arabic's real face (so Arabic
+      // and Urdu letters use it), then next/font's metric-matched fallbacks
+      // and system fonts. See src/lib/util/font-stack.ts.
       fontFamily: {
         sans: [
+          "var(--font-body-face)",
+          "var(--font-arabic-face)",
           "var(--font-body)",
           "var(--font-arabic)",
           "-apple-system",
@@ -124,6 +128,8 @@ module.exports = {
           "sans-serif",
         ],
         heading: [
+          "var(--font-heading-face)",
+          "var(--font-arabic-face)",
           "var(--font-heading)",
           "var(--font-arabic)",
           "Arial Narrow",
