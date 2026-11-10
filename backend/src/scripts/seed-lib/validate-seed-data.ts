@@ -7,6 +7,7 @@ import { existsSync } from "node:fs"
 import { join } from "node:path"
 import { SEED_IMAGES_DIR } from "../seed-data"
 import type { PlaceholderData, ProductKind, SeedData } from "../seed-data/types"
+import { readRushPercentage } from "../../lib/settings/rush-percentage"
 import { imageMimeType } from "./product-images"
 
 const CURRENCY_RE = /^[a-z]{3}$/
@@ -222,7 +223,8 @@ export function validateSeedData(seed: SeedData, options: ValidateOptions = {}):
     }
   }
 
-  // Prices: every product has a valid price in every supported currency, and nothing extra.
+  // Prices: a product with has_fixed_prices has a valid price in every supported currency and
+  // nothing extra; a product without has no price row at all.
   const productHandles = new Set(products.map((p) => p.handle))
   for (const handle of Object.keys(prices)) {
     if (!productHandles.has(handle)) {
@@ -231,6 +233,18 @@ export function validateSeedData(seed: SeedData, options: ValidateOptions = {}):
   }
   for (const product of products) {
     const row = prices[product.handle]
+    if (typeof product.has_fixed_prices !== "boolean") {
+      problems.push(`products: "${product.handle}" has_fixed_prices must be true or false`)
+      continue
+    }
+    if (!product.has_fixed_prices) {
+      if (row) {
+        problems.push(
+          `prices: product "${product.handle}" has has_fixed_prices: false, so it must have no prices`
+        )
+      }
+      continue
+    }
     if (!row) {
       problems.push(`prices: product "${product.handle}" has no prices`)
       continue
@@ -256,6 +270,12 @@ export function validateSeedData(seed: SeedData, options: ValidateOptions = {}):
         )
       }
     }
+  }
+
+  // Store settings
+  const rush = readRushPercentage(seed.settings.data)
+  if (!rush.ok) {
+    problems.push(`settings: ${rush.error}`)
   }
 
   return problems

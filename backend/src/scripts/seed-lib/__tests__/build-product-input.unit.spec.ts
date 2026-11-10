@@ -49,6 +49,13 @@ describe("buildProductInput", () => {
     expect(rush.variants).toHaveLength(1)
   })
 
+  it("gives a product without fixed prices a variant with no prices (rush is a percentage)", () => {
+    const rush = buildProductInput(byHandle("rush-add-on"), ctx)
+    expect(byHandle("rush-add-on").has_fixed_prices).toBe(false)
+    expect(rush.variants[0].prices).toEqual([])
+    expect(rush.variants[0].sku).toBe("RUSH")
+  })
+
   it("publishes the product in the given sales channel", () => {
     const input = buildProductInput(byHandle("jacket"), ctx)
     expect(input.status).toBe("published")

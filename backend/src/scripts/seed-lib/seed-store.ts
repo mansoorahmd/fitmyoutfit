@@ -30,6 +30,7 @@ import { SEED_IMAGES_DIR, seedData as defaultSeedData } from "../seed-data"
 import type { SeedData } from "../seed-data/types"
 import { buildProductInput, buildSizeRanks, SIZE_OPTION } from "./build-product-input"
 import { imageMimeType, planPlaceholderImages, type ExistingProduct } from "./product-images"
+import { missingStoreSettings } from "./store-settings"
 import { assertValidSeedData } from "./validate-seed-data"
 
 export type SeedOptions = {
@@ -45,6 +46,8 @@ export type SeedResult = {
   publishableKey: string
   created: {
     regions: string[]
+    /** Store metadata settings written in this run (only ones that were missing). */
+    settings: string[]
     collections: string[]
     products: string[]
     /** Handles of the products that got their placeholder image in this run. */
@@ -75,6 +78,7 @@ export async function seedStore(
   const store = seed.store.data
   const created: SeedResult["created"] = {
     regions: [],
+    settings: [],
     collections: [],
     products: [],
     images: [],
@@ -127,6 +131,20 @@ export async function seedStore(
         },
       },
     })
+  }
+
+  // 2b. Store-wide settings (rush_percentage, ...) in the Store's metadata, which an admin edits
+  // in Settings > Store > Metadata. Only keys that are missing are written; existing values,
+  // including other metadata keys, are kept.
+  const missingSettings = missingStoreSettings(storeRecord.metadata, seed.settings.data)
+  if (Object.keys(missingSettings).length > 0) {
+    await updateStoresWorkflow(container).run({
+      input: {
+        selector: { id: storeRecord.id },
+        update: { metadata: { ...(storeRecord.metadata ?? {}), ...missingSettings } },
+      },
+    })
+    created.settings = Object.keys(missingSettings)
   }
 
   // 3. Regions

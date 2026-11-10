@@ -1,6 +1,7 @@
 import { medusaIntegrationTestRunner } from "@medusajs/test-utils"
 import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils"
-import { updateProductsWorkflow } from "@medusajs/medusa/core-flows"
+import { updateProductsWorkflow, updateStoresWorkflow } from "@medusajs/medusa/core-flows"
+import { readRushPercentage } from "../../src/lib/settings/rush-percentage"
 import { seedData } from "../../src/scripts/seed-data"
 import { seedStore } from "../../src/scripts/seed-lib/seed-store"
 
@@ -19,6 +20,7 @@ medusaIntegrationTestRunner({
       let publishableKey: string
       let headers: Record<string, string>
       let firstRunImages: string[]
+      let firstRunSettings: string[]
 
       // The runner snapshots the database after this hook and restores it before every test,
       // so each test starts from the freshly seeded state.
@@ -30,6 +32,55 @@ medusaIntegrationTestRunner({
         publishableKey = result.publishableKey
         headers = { "x-publishable-api-key": publishableKey }
         firstRunImages = result.created.images
+        firstRunSettings = result.created.settings
+      })
+
+      it("stores rush_percentage 20 in the Store's metadata, readable by the settings module", async () => {
+        expect(firstRunSettings).toEqual(["rush_percentage"])
+        const storeModule = getContainer().resolve(Modules.STORE)
+        const [store] = await storeModule.listStores({})
+        expect(store.metadata).toMatchObject({ rush_percentage: 20 })
+        expect(readRushPercentage(store.metadata)).toEqual({ ok: true, value: 20 })
+      })
+
+      it("keeps an admin's rush_percentage and other metadata on a re-run", async () => {
+        const container = getContainer()
+        const storeModule = container.resolve(Modules.STORE)
+        const [store] = await storeModule.listStores({})
+        await updateStoresWorkflow(container).run({
+          input: {
+            selector: { id: store.id },
+            update: { metadata: { rush_percentage: 35, admin_note: "keep me" } },
+          },
+        })
+        const rerun = await seedStore(container, {
+          adminEmail: ADMIN_EMAIL,
+          adminPassword: ADMIN_PASSWORD,
+        })
+        expect(rerun.created.settings).toEqual([])
+        const [after] = await storeModule.listStores({})
+        expect(after.metadata).toMatchObject({ rush_percentage: 35, admin_note: "keep me" })
+      })
+
+      it("gives rush-add-on a variant with no fixed price, still listed by the store API", async () => {
+        const { data: regionsRes } = await api.get("/store/regions", { headers })
+        for (const region of regionsRes.regions) {
+          const { data } = await api.get(
+            `/store/products?handle=rush-add-on&region_id=${region.id}` +
+              `&fields=handle,*variants,*variants.calculated_price`,
+            { headers }
+          )
+          expect(data.products).toHaveLength(1)
+          expect(data.products[0].variants).toHaveLength(1)
+          expect(data.products[0].variants[0].calculated_price ?? null).toBeNull()
+        }
+        const query = getContainer().resolve(ContainerRegistrationKeys.QUERY)
+        const { data: rows } = await query.graph({
+          entity: "product_variant",
+          fields: ["sku", "prices.id"],
+          filters: { sku: "RUSH" },
+        })
+        expect((rows as any[])[0].prices ?? []).toHaveLength(0)
       })
 
       it("gives every product its placeholder image through the file module", async () => {
@@ -231,6 +282,7 @@ medusaIntegrationTestRunner({
         })
         expect(second.created).toEqual({
           regions: [],
+          settings: [],
           collections: [],
           products: [],
           images: [],

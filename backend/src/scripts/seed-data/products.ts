@@ -2,7 +2,8 @@ import type { PlaceholderData, ProductSeed } from "./types"
 
 /**
  * PLACEHOLDER DATA: launch products and their copy.
- * Real input: final product names and descriptions (product lead). Prices are in prices.ts, sizes in sizes.ts.
+ * Real input: final product names and descriptions (product lead). Prices are in prices.ts (for
+ * products with has_fixed_prices: true), sizes in sizes.ts.
  * Images: `image` names a file in ./images/. Those files are PLACEHOLDER drawings made by
  * backend/scripts/generate-placeholder-images.mjs; real input is product photos.
  * All products are made to order, so inventory is not managed.
@@ -20,6 +21,7 @@ export const products: PlaceholderData<ProductSeed[]> = {
       has_sizes: true,
       sku_prefix: "JERSEY",
       image: "jersey.png",
+      has_fixed_prices: true,
     },
     {
       handle: "t-shirt",
@@ -30,6 +32,7 @@ export const products: PlaceholderData<ProductSeed[]> = {
       has_sizes: true,
       sku_prefix: "TSHIRT",
       image: "t-shirt.png",
+      has_fixed_prices: true,
     },
     {
       handle: "jacket",
@@ -40,6 +43,7 @@ export const products: PlaceholderData<ProductSeed[]> = {
       has_sizes: true,
       sku_prefix: "JACKET",
       image: "jacket.png",
+      has_fixed_prices: true,
     },
     {
       handle: "fit-kit",
@@ -51,6 +55,7 @@ export const products: PlaceholderData<ProductSeed[]> = {
       has_sizes: false,
       sku_prefix: "FITKIT",
       image: "fit-kit.png",
+      has_fixed_prices: true,
     },
     {
       handle: "rush-add-on",
@@ -62,6 +67,8 @@ export const products: PlaceholderData<ProductSeed[]> = {
       has_sizes: false,
       sku_prefix: "RUSH",
       image: "rush-add-on.png",
+      // Rush is a percentage of the order (settings.ts), so this product has no fixed price.
+      has_fixed_prices: false,
     },
   ],
 }

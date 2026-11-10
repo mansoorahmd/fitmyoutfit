@@ -71,6 +71,54 @@ describe("validateSeedData", () => {
     expect(problems).toContain('prices: product "fit-kit" price in usd has more than 2 decimals')
   })
 
+  it("takes the price rule per product from the data: rush-add-on has no fixed prices", () => {
+    expect(
+      seedData.products.data.map((p) => [p.handle, p.has_fixed_prices])
+    ).toEqual([
+      ["jersey", true],
+      ["t-shirt", true],
+      ["jacket", true],
+      ["fit-kit", true],
+      ["rush-add-on", false],
+    ])
+    expect(seedData.prices.data["rush-add-on"]).toBeUndefined()
+  })
+
+  it("rejects prices for a product marked has_fixed_prices: false", () => {
+    const seed = clone()
+    seed.prices.data["rush-add-on"] = { pkr: 500, gbp: 4, aed: 15, usd: 5 }
+    expect(validateSeedData(seed)).toContain(
+      'prices: product "rush-add-on" has has_fixed_prices: false, so it must have no prices'
+    )
+  })
+
+  it("requires prices once a product is switched to has_fixed_prices: true", () => {
+    const seed = clone()
+    seed.products.data[4].has_fixed_prices = true
+    expect(validateSeedData(seed)).toContain('prices: product "rush-add-on" has no prices')
+  })
+
+  it("rejects a product without a has_fixed_prices flag", () => {
+    const seed = clone()
+    delete (seed.products.data[0] as { has_fixed_prices?: boolean }).has_fixed_prices
+    expect(validateSeedData(seed)).toContain(
+      'products: "jersey" has_fixed_prices must be true or false'
+    )
+  })
+
+  it("checks the rush_percentage setting: present, a number, 0 to 100", () => {
+    expect(seedData.settings.data.rush_percentage).toBe(20)
+    const seed = clone()
+    seed.settings.data.rush_percentage = 150
+    expect(validateSeedData(seed)).toContain(
+      "settings: rush_percentage must not be above 100, got 150."
+    )
+    delete (seed.settings.data as { rush_percentage?: number }).rush_percentage
+    expect(validateSeedData(seed).some((p) => p.startsWith("settings: rush_percentage is not set"))).toBe(
+      true
+    )
+  })
+
   it("rejects a price in a currency the store does not support", () => {
     const seed = clone()
     seed.prices.data.jersey.eur = 20

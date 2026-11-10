@@ -55,6 +55,12 @@ export type ProductSeed = {
   /** Prefix for variant SKUs, for example JERSEY gives JERSEY-YS. */
   sku_prefix: string
   /**
+   * True: the product has a fixed price per unit in every supported currency (prices.ts).
+   * False: it has no fixed prices at all and must have no row in prices.ts. The rush add-on is
+   * like this: its charge is a percentage of the order (settings.ts), worked out in Sprint 1.
+   */
+  has_fixed_prices: boolean
+  /**
    * File name of the product's placeholder image in seed-data/images/ (PNG, WebP or JPEG).
    * The seed uploads it through Medusa's file module and sets it as the product's thumbnail,
    * but only for a product that has no picture yet. To use another picture, replace the file
@@ -63,8 +69,20 @@ export type ProductSeed = {
   image: string
 }
 
-/** Per product handle, the price per unit in each currency (same price for every size). */
+/**
+ * Per product handle, the price per unit in each currency (same price for every size).
+ * Only for products with `has_fixed_prices: true`.
+ */
 export type PriceTableSeed = Record<string, Record<CurrencyCode, number>>
+
+/**
+ * Store-wide settings. The seed writes each one into the Store's `metadata` when it is missing,
+ * and never overwrites a value there, so an admin can change it in Settings > Store > Metadata.
+ */
+export type StoreSettingsSeed = {
+  /** Rush production charge, in percent (0 to 100). How it is applied is Sprint 1 work. */
+  rush_percentage: number
+}
 
 export type SeedData = {
   regions: PlaceholderData<RegionSeed[]>
@@ -73,4 +91,5 @@ export type SeedData = {
   collections: PlaceholderData<CollectionSeed[]>
   products: PlaceholderData<ProductSeed[]>
   prices: PlaceholderData<PriceTableSeed>
+  settings: PlaceholderData<StoreSettingsSeed>
 }

@@ -54,18 +54,29 @@ export function buildSizeRanks(sizes: string[]): Record<string, number> {
   return Object.fromEntries(sizes.map((size, index) => [size, index]))
 }
 
-export function buildProductInput(product: ProductSeed, ctx: BuildContext): ProductInput {
+/** The variant prices: one per currency for a product with fixed prices, none otherwise. */
+function buildVariantPrices(
+  product: ProductSeed,
+  ctx: BuildContext
+): { amount: number; currency_code: string }[] {
+  if (!product.has_fixed_prices) {
+    return []
+  }
   const row = ctx.prices[product.handle]
   if (!row) {
     throw new Error(`No prices for product "${product.handle}"`)
   }
-  const variantPrices = ctx.currencies.map((currency_code) => {
+  return ctx.currencies.map((currency_code) => {
     const amount = row[currency_code]
     if (amount === undefined) {
       throw new Error(`No ${currency_code} price for product "${product.handle}"`)
     }
     return { amount, currency_code }
   })
+}
+
+export function buildProductInput(product: ProductSeed, ctx: BuildContext): ProductInput {
+  const variantPrices = buildVariantPrices(product, ctx)
 
   const common = {
     manage_inventory: false,

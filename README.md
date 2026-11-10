@@ -63,7 +63,8 @@ All of it is placeholder data, kept in `backend/src/scripts/seed-data/` (one fil
 - Store currencies: those four, PKR as default.
 - Products: `jersey`, `t-shirt`, `jacket` (11 size variants each, in the `garments` collection), plus `fit-kit` and `rush-add-on` (one variant each, no collection). Each has `metadata.kind`. Inventory is not managed (made to order).
 - A placeholder image per product (thumbnail and one gallery image): flat drawings in `backend/src/scripts/seed-data/images/`, named by the `image` field in `products.ts`. The seed uploads them through Medusa's file module, so in local development they land in the MinIO bucket `fitmyoutfit-dev` (URLs `http://localhost:9100/fitmyoutfit-dev/...`); with the `S3_*` variables empty they go to `backend/static` instead. A product gets its image only when it has no thumbnail and no images, so a photo set in the admin is never replaced, and an older database without images is repaired by the next `npm run setup`. To change a picture, replace the file or name another one in `products.ts`. `npm run images:placeholders -w backend` regenerates the drawings (`backend/scripts/generate-placeholder-images.mjs`, no dependencies).
-- Sample prices in all four currencies. Amounts are in major units (3500 means Rs 3,500), as Medusa v2 stores them.
+- Sample prices in all four currencies for `jersey`, `t-shirt`, `jacket` and `fit-kit`. Amounts are in major units (3500 means Rs 3,500), as Medusa v2 stores them. Which products have fixed prices is data too (`has_fixed_prices` in `products.ts`).
+- Rush: `rush-add-on` has **no fixed prices**. Rush is priced as a percentage of the order, held in the store setting `rush_percentage` (placeholder `20`, in `seed-data/settings.ts`). The seed writes it into the Store's metadata only when it is missing, so after the first run the value lives in the database: change it in the admin under **Settings > Store > Metadata**. Code reads it with `readRushPercentage` (`backend/src/lib/settings/rush-percentage.ts`). The charge itself is Sprint 1.
 - The default sales channel and a publishable API key linked to it.
 - The local admin user.
 - Minimum extras Medusa needs: the default shipping profile (created by Medusa's own migration). No stock location, shipping options, tax regions or payment providers yet: those are Sprint 1.
@@ -99,6 +100,8 @@ npm run setup
 ```
 
 Stop the backend first. The compose project is shared by every git worktree, so this resets the database for all of them.
+
+**Databases seeded before 10 Nov 2026** still have fixed prices on `rush-add-on` (PKR 500, GBP 4, AED 15, USD 5): the seed never changes or deletes existing records, so a re-run only adds the `rush_percentage` setting and any missing product images. Reset the database as above to get the current data (rush with no fixed prices).
 
 Wipe everything (PostgreSQL, Redis and MinIO volumes) and start over:
 
