@@ -93,7 +93,12 @@ const OptionSelect: React.FC<OptionSelectProps> = ({
                   {group.label}
                 </p>
               )}
-              <div className="grid grid-cols-4 gap-2 md:flex md:flex-wrap">
+              {/*
+                4 to a row on phones, a flexible row from 768 px, and from
+                1024 px a 7-column grid in the buy column: the seven adult
+                sizes stay on one row (no lone "3XL") and both groups line up.
+              */}
+              <div className="grid grid-cols-4 gap-2 md:flex md:flex-wrap lg:grid lg:grid-cols-7">
                 {group.values.map((value) => {
                   const isUnavailable = unavailable.includes(value)
 
@@ -112,7 +117,7 @@ const OptionSelect: React.FC<OptionSelectProps> = ({
                       />
                       <span
                         className={clx(
-                          "relative flex h-12 w-full items-center justify-center overflow-hidden px-3 md:min-w-[64px] md:px-4",
+                          "relative flex h-12 w-full items-center justify-center overflow-hidden px-3 md:min-w-[64px] md:px-4 lg:min-w-[44px] lg:px-1",
                           "rounded-control border bg-brand-surface type-body font-semibold text-brand-ink",
                           "cursor-pointer transition-colors duration-150 ease-out",
                           "hover:border-brand-ink",

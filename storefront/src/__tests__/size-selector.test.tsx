@@ -78,6 +78,8 @@ describe("size selector", () => {
     expect(row.className).toContain("grid-cols-4")
     expect(row.className).toContain("gap-2")
     expect(row.className).toContain("md:flex")
+    // from 1024 px the seven adult sizes share one row in the buy column
+    expect(row.className).toContain("lg:grid-cols-7")
     expect(chipOf(screen.getByRole("radio", { name: "M" })).className).toContain(
       "h-12"
     )
