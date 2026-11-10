@@ -19,6 +19,7 @@ The three coding tasks run in parallel, each in its own worktree, against [contr
 | S0-4 | Three technical choices: email provider, hosting target, PDF library | coordinator | Done | Recorded in decisions 002, 003 and 005 (005 replaces 004) |
 | S0-5 | QA review of each branch, merge, root lockfile, full check from a clean database | qa-reviewer, coordinator | Not started | The "done when" above is seen working on `master` |
 | S0-6 | Rush as a percentage: drop the fixed rush prices from the seed, add the `rush_percentage` setting (placeholder 20) | backend-dev | Waiting for S0-1 | The setting is seeded as data and can be changed without a code change. `rush-add-on` has no fixed prices. Tests updated |
+| S0-3c | Jersey number rule in the editor's design format: 1 or 2 digits up to a maximum held as data (99), English or Arabic digits, no mixing | editor-3d-dev | Waiting for S0-3b | The rule is one exported plain function that the backend can reuse. Tests cover both digit sets, mixing, and the maximum |
 | S0-7 | Store name from one setting (`NEXT_PUBLIC_STORE_NAME`, default FitMyOutfit) in place of "Medusa Store" | storefront-dev | Waiting for S0-2 | The name shows in the header, footer and page titles, and comes from one place. Tests updated |
 
 ## Done
@@ -49,9 +50,25 @@ Given in the coordinator session. critiques/DECISIONS.md and plan.md have not be
 | Can jerseys carry Arabic or Urdu names? | Yes | PDF choice changed (decision 005). Sprint 2 roster checks allow Latin and Arabic script. The editor must shape right-to-left text, and one placeholder font must cover Arabic and Urdu |
 | How is rush priced? | As a percentage | Task S0-6. Placeholder 20%, assumed to apply to the garments subtotal. The real percentage and what it applies to are still open |
 | Store name? | FitMyOutfit, for now | Task S0-7. Read from one setting so it can change |
+| Which digits can a jersey number use? | English (0 to 9) and Arabic (٠ to ٩) | Editor number layers and the Sprint 2 roster checks accept both. See the number rule below |
+| Largest jersey number? | 99 | The limit is stored as a setting with the value 99, not written into code. The editor draft currently allows three digits; corrected in task S0-3c |
+
+### Jersey number rule (from the two answers above)
+
+The editor's number layers and the roster checks in Sprint 2 must apply the same rule, from one shared plain TypeScript module:
+
+- A number is 1 or 2 digits, with a value from 0 to 99. The maximum is a setting.
+- The digits are English (0 to 9) or Arabic (٠ to ٩). One number can't mix the two.
+- **Duplicates are compared by value.** ٧ and 7 are the same number, so two players can't hold them in one team.
+
+Assumptions the founders have not confirmed:
+
+- The lowest number is 0.
+- 7 and 07 are the same number, and it is stored as the player typed it.
+- The Urdu and Persian digit forms (۰ to ۹), which look different from the Arabic ones for 4, 5 and 6, are accepted too, because Urdu names are allowed.
 
 ## Notes and known limits
-- The repo has no git remote, so the CI workflow can't run yet. Until the repo is on GitHub, the coordinator runs the same lint, type-check and test commands locally before each merge.
+- The GitHub remote is added (`origin`), but nothing has been pushed: the repository was public when checked on 10 Nov, and the founder is switching it to private first. Until the push, the CI workflow can't run, and the coordinator runs the same lint, type-check and test commands locally before each merge.
 - The dev machine already runs a PostgreSQL on port 5432, so the project's database container is published on 5433.
 - All prices and the size list in the seed are placeholders, stored as data.
 
