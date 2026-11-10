@@ -82,6 +82,10 @@ export const descriptionOf = (
 
 export type DetailRow = { label: string; value: string }
 
+/** A value that says nothing: only dashes, dots and the like ("-", "n/a" is data). */
+const isPlaceholder = (value: string): boolean =>
+  /^[\s\-–—.·…/_*?]*$/.test(value)
+
 /**
  * Rows for "Fabric and decoration": only those the product has data for,
  * never a placeholder such as "-". No rows means no section.
@@ -92,7 +96,7 @@ export const fabricRows = (
 ): DetailRow[] => {
   const rows: DetailRow[] = []
   const material = product.material?.trim()
-  if (material) {
+  if (material && !isPlaceholder(material)) {
     rows.push({ label: labels.material, value: material })
   }
   return rows
