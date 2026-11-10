@@ -62,7 +62,7 @@ All of it is placeholder data, kept in `backend/src/scripts/seed-data/` (one fil
 - 4 regions: Pakistan (PKR), United Kingdom (GBP), United Arab Emirates (AED), United States (USD). Region metadata `tax_final: false` is the data behind the "tax not final" label.
 - Store currencies: those four, PKR as default.
 - Products: `jersey`, `t-shirt`, `jacket` (11 size variants each, in the `garments` collection), plus `fit-kit` and `rush-add-on` (one variant each, no collection). Each has `metadata.kind`. Inventory is not managed (made to order).
-- A placeholder image per product (thumbnail and one gallery image): flat drawings in `backend/src/scripts/seed-data/images/`, named by the `image` field in `products.ts`. The seed uploads them through Medusa's file module, so in local development they land in the MinIO bucket `fitmyoutfit-dev` (URLs `http://localhost:9100/fitmyoutfit-dev/...`); with the `S3_*` variables empty they go to `backend/static` instead. A product gets its image only when it has no thumbnail and no images, so a photo set in the admin is never replaced, and an older database without images is repaired by the next `npm run setup`. To change a picture, replace the file or name another one in `products.ts`. `npm run images:placeholders -w backend` regenerates the drawings (`backend/scripts/generate-placeholder-images.mjs`, no dependencies).
+- A placeholder image per product (thumbnail and one gallery image): flat drawings in `backend/src/scripts/seed-data/images/`, named by the `image` field in `products.ts`. The seed uploads them through Medusa's file module, so in local development they land in the MinIO bucket `fitmyoutfit-dev` (URLs `http://localhost:9100/fitmyoutfit-dev/...`); with the `S3_*` variables empty they go to `backend/static` instead. A product gets its image only when it has no thumbnail and no images, so a photo set in the admin is never replaced, and an older database without images is repaired by the next `npm run setup`. To change a picture, replace the file or name another one in `products.ts`. `npm run images:placeholders --prefix backend` regenerates the drawings (`backend/scripts/generate-placeholder-images.mjs`, no dependencies).
 - Sample prices in all four currencies for `jersey`, `t-shirt`, `jacket` and `fit-kit`. Amounts are in major units (3500 means Rs 3,500), as Medusa v2 stores them. Which products have fixed prices is data too (`has_fixed_prices` in `products.ts`).
 - Rush: `rush-add-on` has **no fixed prices**. Rush is priced as a percentage of the order, held in the store setting `rush_percentage` (placeholder `20`, in `seed-data/settings.ts`). The seed writes it into the Store's metadata only when it is missing, so after the first run the value lives in the database: change it in the admin under **Settings > Store > Metadata**. Code reads it with `readRushPercentage` (`backend/src/lib/settings/rush-percentage.ts`). The charge itself is Sprint 1.
 - The default sales channel and a publishable API key linked to it.
@@ -80,13 +80,34 @@ curl -H "x-publishable-api-key: <key from storefront/.env.local>" http://localho
 | Command | What it does |
 | --- | --- |
 | `npm run setup` | Env files, migrations, seed, publishable key (idempotent) |
-| `npm run dev` | Backend and storefront together (a missing workspace is skipped) |
-| `npm run lint` | ESLint in every workspace, plus a syntax check of `scripts/` |
-| `npm run typecheck` | `tsc --noEmit` in every workspace |
-| `npm run test` | Tests in every workspace, plus `scripts/` tests |
-| `npm run build` | Production build of every workspace |
+| `npm run dev` | Backend and storefront together (a missing part is skipped) |
+| `npm run lint` | ESLint in the backend, storefront and editor, plus a syntax check of `scripts/` |
+| `npm run typecheck` | `tsc --noEmit` in the backend, storefront and editor |
+| `npm run test` | Tests in the backend, storefront and editor, plus `scripts/` tests |
+| `npm run build` | Production build of the backend, storefront and editor |
 
-Backend only: `npm run <script> -w backend` (`dev`, `build`, `migrate`, `seed`, `images:placeholders`, `test:unit`, `test:integration:http`).
+Backend only: `npm run <script> --prefix backend` (`dev`, `build`, `migrate`, `seed`, `images:placeholders`, `test:unit`, `test:integration:http`). Storefront or editor only: `npm run <script> -w storefront` or `-w packages/editor`.
+
+## Installing and adding dependencies
+
+The backend is **not** an npm workspace. Medusa's admin runs on React 18 and the storefront and editor on React 19; in one shared install npm put React 18 at the root, where the storefront's libraries picked it up (see `docs/decisions/006-react-and-tool-versions.md`). So there are two installs, each with its own lockfile:
+
+| Folder | Lockfile | Contains |
+| --- | --- | --- |
+| repo root | `package-lock.json` | the workspaces `storefront` and `packages/editor` |
+| `backend/` | `backend/package-lock.json` | the backend only |
+
+A root `npm install` (or `npm ci`) does both: when the root install finishes, its `postinstall` script (`scripts/install-backend.mjs`) runs `npm install` (or `npm ci`) in `backend/`. `npm run install:backend` runs only the backend part.
+
+To add a dependency:
+
+```
+npm install <package> --prefix backend      # backend (updates backend/package-lock.json)
+npm install <package> -w storefront         # storefront (updates the root package-lock.json)
+npm install <package> -w packages/editor    # editor (updates the root package-lock.json)
+```
+
+The root `package.json` has one `overrides` entry: it lets `@medusajs/ui` (which declares React 18 as its peer) use the storefront's React 19, as Medusa's own storefront starter does. It does not reach the backend, whose install is separate. Keep its version equal to the storefront's `react`.
 
 Backend integration tests create and drop temporary databases on the PostgreSQL server (host `localhost`, port 5433 by default, user `medusa`). They never touch the `medusa` development database. Start `docker compose up -d` first. To point them elsewhere set `DB_HOST`, `DB_PORT`, `DB_USERNAME`, `DB_PASSWORD`, as the CI workflow does. Medusa also reads `backend/.env` in tests, so with the `S3_*` and `REDIS_URL` values set there the seed test uploads its images to MinIO and uses Redis; CI has no `backend/.env`, so there it uses the local file provider and in-memory modules.
 

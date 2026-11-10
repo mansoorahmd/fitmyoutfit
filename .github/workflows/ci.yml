@@ -59,7 +59,12 @@ jobs:
         with:
           node-version: 22
           cache: npm
+          # Two lockfiles: the root one (storefront and editor workspaces) and the backend's own.
+          cache-dependency-path: |
+            package-lock.json
+            backend/package-lock.json
 
+      # Installs the root workspaces, then the backend (root postinstall runs `npm ci` in backend/).
       - name: Install dependencies
         run: npm ci
 
