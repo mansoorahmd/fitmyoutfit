@@ -13,6 +13,7 @@ export default defineConfig({
       { find: /^@lib\//, replacement: `${src}/lib/` },
       { find: /^@modules\//, replacement: `${src}/modules/` },
       { find: /^types\//, replacement: `${src}/types/` },
+      { find: /^styles\//, replacement: `${src}/styles/` },
     ],
   },
   test: {

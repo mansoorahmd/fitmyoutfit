@@ -1,4 +1,5 @@
 import { Metadata } from "next"
+import { STORE_NAME } from "@lib/store-config"
 import { notFound } from "next/navigation"
 
 import { getCollectionByHandle, listCollections } from "@lib/data/collections"
@@ -59,7 +60,7 @@ export async function generateMetadata(props: Props): Promise<Metadata> {
   }
 
   const metadata = {
-    title: `${collection.title} | Medusa Store`,
+    title: `${collection.title} | ${STORE_NAME}`,
     description: `${collection.title} collection`,
   } as Metadata
 
