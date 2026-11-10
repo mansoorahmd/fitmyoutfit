@@ -104,12 +104,12 @@ async function main() {
 
   // 3. Migrations
   log("running database migrations");
-  const migrate = await run("npm run migrate --workspace backend", root);
+  const migrate = await run("npm run migrate --prefix backend", root);
   if (migrate.code !== 0) fail("migrations failed");
 
   // 4. Seed
   log("seeding placeholder data (only creates what is missing)");
-  const seed = await run("npm run seed --workspace backend", root);
+  const seed = await run("npm run seed --prefix backend", root);
   if (seed.code !== 0) fail("seed failed");
   const publishableKey = extractPublishableKey(seed.output);
   if (!publishableKey) fail("the seed did not print a publishable key");
