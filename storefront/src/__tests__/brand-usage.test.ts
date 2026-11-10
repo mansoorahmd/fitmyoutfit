@@ -22,7 +22,7 @@ describe("brand colour usage", () => {
       .filter((file) => !allowed.includes(file))
 
     expect(offenders).toEqual([])
-  })
+  }, 30_000) // reads every source file; slow on a busy disk
 
   it("has no raw hex colours in the components restyled for the brand", () => {
     const restyled = [
