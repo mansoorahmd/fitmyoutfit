@@ -103,7 +103,7 @@ All of this is placeholder data. It lives in data files (JSON or TS data modules
 | United Arab Emirates | `aed` | `ae` | `tax_final: false` |
 | United States | `usd` | `us` | `tax_final: false` |
 
-The store's supported currencies are those four, with `pkr` as the default. `tax_final: false` is the data behind the "tax not final" label the dev plan asks for; the label itself is Sprint 1 storefront work.
+The store's supported currencies are those four, with `pkr` as the default. On a fresh database there are exactly those four. On a re-run the seed adds any of the four that is missing and removes only `eur` (the starter's default), and only when no region uses it; a currency an admin added is left alone (changed 11 Nov after the second QA review). `tax_final: false` is the data behind the "tax not final" label the dev plan asks for; the label itself is Sprint 1 storefront work.
 
 ### Products
 

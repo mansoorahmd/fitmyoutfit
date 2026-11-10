@@ -141,6 +141,14 @@ Assumptions the founders have not confirmed:
 
 - **After S0-15 (seen in the preview, 11 Nov):** the home page, listing, product cards and footer have the new look. Still the old template: the product page layout (title and accordions above the image on phones, no `h1`, the phone buy bar covers the footer), which is task S0-16; and the cart, checkout, account and sign-in pages. Known and accepted for now: the Jacket stand-in photo has its own grey background, so it shows as a darker box inside the card; "Complete the kit" shows two cards in a three-column grid on desktop. In task S0-16 the stand-in hero image is switched off in production builds at the data level, so a production build shows the plain navy hero and cannot fail on the disallowed host.
 
+- **Second QA review of the backend (11 Nov): changes needed, fix round S0-1c started.** QA confirmed by real runs: a seed killed at five different points is repaired by a re-run to a database identical to a clean one; four currencies; regions matched by country code; stable product order; setup prints no password; images and rush setting as in the contract. Defects found:
+  - **Blocks the merge:** `NODE_ENV=prod` is production for Medusa but not for our checks, so the backend starts with the dev secrets and the seed creates the dev admin.
+  - A variant missing one currency's price, or its size value, is neither repaired nor reported (only reachable by hand damage, not by an interrupted run).
+  - A re-run removes currencies an admin added, even when a region uses them. Decision: the seed removes only `eur`, and only when no region uses it (contract updated).
+  - The test that setup never prints the admin password only scans the source and misses a plain string concatenation.
+  - Databases seeded by the old code keep a random product order until reset; the README did not say so. The preview's `medusa` database is one of them.
+  - Not fixed, accepted: orphaned price sets after an interrupted run, the `eur` price preference on a fresh database, "Repaired" wording on a fresh database.
+
 ## Blocked or waiting on founders
 
 - **Launch blocker: replace the stand-in product photos.** The development photos belong to spized.com and carry its logo. Our own product shoot must replace them before anything is deployed publicly. Founder to arrange the shoot once the design is ready.
