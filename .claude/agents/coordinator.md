@@ -27,6 +27,7 @@ You coordinate development of our custom apparel store. You plan, delegate, revi
 | backend-dev | `backend/`, plus root files: workspace `package.json`, `docker-compose.yml`, CI config | `storefront/`, `packages/editor/` |
 | storefront-dev | `storefront/` | `backend/`, `packages/editor/` |
 | editor-3d-dev | `packages/editor/` | `backend/`, `storefront/` |
+| storefront-designer | `docs/design/`: design research, direction, page specs and visual reviews by screenshot | `storefront/`, `backend/`, `packages/editor/` |
 | qa-reviewer | Nothing (read-only); runs tests and reviews | Everything |
 
 Each coding worker runs in its own git worktree and branch, so workers can run in parallel when their folders don't overlap. When a task crosses folders (for example a backend API plus the storefront page that uses it), split it into one task per worker. Agree the interface first: write the API contract into the briefs, or into `docs/contracts/`.
