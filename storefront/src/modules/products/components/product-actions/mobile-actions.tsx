@@ -10,13 +10,15 @@ import { getProductPrice } from "@lib/util/get-product-price"
 import OptionSelect from "./option-select"
 import { HttpTypes } from "@medusajs/types"
 import { isSimpleProduct } from "@lib/util/product"
+import { getAddToCartState } from "@lib/util/add-to-cart-state"
 
 type MobileActionsProps = {
   product: HttpTypes.StoreProduct
   variant?: HttpTypes.StoreProductVariant
   options: Record<string, string | undefined>
   updateOptions: (title: string, value: string) => void
-  inStock?: boolean
+  isValidVariant?: boolean
+  needsSelection: boolean
   handleAddToCart: () => void
   isAdding?: boolean
   show: boolean
@@ -28,7 +30,8 @@ const MobileActions: React.FC<MobileActionsProps> = ({
   variant,
   options,
   updateOptions,
-  inStock,
+  isValidVariant,
+  needsSelection,
   handleAddToCart,
   isAdding,
   show,
@@ -51,6 +54,12 @@ const MobileActions: React.FC<MobileActionsProps> = ({
   }, [price])
 
   const isSimple = isSimpleProduct(product)
+
+  const addToCartState = getAddToCartState({
+    variant,
+    isValidVariant,
+    needsSelection,
+  })
 
   return (
     <>
@@ -118,16 +127,12 @@ const MobileActions: React.FC<MobileActionsProps> = ({
               </Button>}
               <Button
                 onClick={handleAddToCart}
-                disabled={!inStock || !variant}
+                disabled={addToCartState.disabled}
                 className="w-full"
                 isLoading={isAdding}
                 data-testid="mobile-cart-button"
               >
-                {!variant
-                  ? "Select variant"
-                  : !inStock
-                  ? "Out of stock"
-                  : "Add to cart"}
+                {addToCartState.label}
               </Button>
             </div>
           </div>
