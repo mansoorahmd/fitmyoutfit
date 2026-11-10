@@ -21,6 +21,7 @@ The three coding tasks run in parallel, each in its own worktree, against [contr
 | S0-6 | Rush as a percentage: drop the fixed rush prices from the seed, add the `rush_percentage` setting (placeholder 20) | backend-dev | Waiting for S0-1 | The setting is seeded as data and can be changed without a code change. `rush-add-on` has no fixed prices. Tests updated |
 | S0-3c | Jersey number rule in the editor's design format: 1 or 2 digits up to a maximum held as data (99), English or Arabic digits, no mixing | editor-3d-dev | **Done, merged to `master`** on 10 Nov | The rule is one exported plain function that the backend can reuse. Tests cover both digit sets, mixing, and the maximum |
 | S0-7 | Store name from one setting (`NEXT_PUBLIC_STORE_NAME`, default FitMyOutfit) in place of "Medusa Store" | storefront-dev | **Done**, merged with S0-2b | The name shows in the header, footer and page titles, and comes from one place. Tests updated |
+| S0-9 | Placeholder product images: one image per product, kept as seed data, uploaded to file storage by the seed and shown by the storefront | backend-dev | Waiting for S0-1's QA result; goes into the same fix round as S0-6 | Each of the 5 products has a thumbnail in the store API, the storefront shows it on listings and product pages, and the images are placeholders stored as data |
 | S0-8 | Home page headline from one data file, replacing the starter's hero text and Medusa banner (wording below) | storefront-dev | **Done, merged to `master`** on 10 Nov | The headline, subline and button label come from one file. Tests updated |
 
 ## Done
@@ -94,7 +95,13 @@ Assumptions the founders have not confirmed:
 - 7 and 07 are the same number, and it is stored as the player typed it.
 - The Urdu and Persian digit forms (۰ to ۹), which look different from the Arabic ones for 4, 5 and 6, are accepted too, because Urdu names are allowed.
 
+## Standing instructions from the founder
+
+- **Worker models (10 Nov 2026):** use the Opus model for difficult worker tasks. The coordinator passes the model override on those tasks; routine and mechanical tasks stay on each agent's default model. Counted as difficult so far: Medusa backend work (modules, workflows, seed, payments) and the reviews of it.
+
 ## Notes and known limits
+- **No product images (found 10 Nov in the founder's preview).** The seed creates products with no images, because the Sprint 0 contract did not ask for any. The storefront shows empty image boxes. Fixed by task S0-9.
+- **First preview (10 Nov) was unreliable.** The coordinator pointed the storefront at the backend that qa-reviewer was running on its scratch database. QA then rebuilt that database and stopped the backend, so the founder saw "fetch failed" and "A valid publishable key is required". Neither is a product defect. Previews now run from a private copy (`.claude/worktrees/integration-preview`, local only) on the real `medusa` database.
 - The GitHub remote is added (`origin`), but nothing has been pushed: the repository was public when checked on 10 Nov, and the founder is switching it to private first. Until the push, the CI workflow can't run, and the coordinator runs the same lint, type-check and test commands locally before each merge.
 - The dev machine already runs a PostgreSQL on port 5432, so the project's database container is published on 5433.
 - All prices and the size list in the seed are placeholders, stored as data.
