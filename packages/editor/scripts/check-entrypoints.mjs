@@ -18,6 +18,7 @@
 // package's own node_modules, as a real install would from the host's.
 import { spawnSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -102,7 +103,8 @@ for (const file of packed) {
 }
 console.log(`packed ${packed.length} files into a fake node_modules install`);
 
-const tsc = resolve(root, "node_modules/typescript/bin/tsc");
+// The TypeScript this package resolves (hoisted to the workspace root when versions match).
+const tsc = createRequire(import.meta.url).resolve("typescript/bin/tsc");
 const fixtures = resolve(root, "scripts/consumer-fixtures");
 const productJson = resolve(root, "samples/products/placeholder-jersey.json");
 
