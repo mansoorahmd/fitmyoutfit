@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // `npm run dev`: start the backend (9000) and the storefront (8000) together.
-// A workspace that does not exist yet (or has no `dev` script) is skipped with a note,
+// A part that does not exist yet (or has no `dev` script) is skipped with a note,
 // so this works in a checkout that has only some of the parts.
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
@@ -59,7 +59,7 @@ for (const target of targets) {
     console.warn(`[dev] ${target.dir}/ not found or has no "dev" script: skipping ${target.name}`);
     continue;
   }
-  const child = spawn(`npm run dev --workspace ${target.dir}`, {
+  const child = spawn(`npm run dev --prefix ${target.dir}`, {
     cwd: root,
     shell: true,
     stdio: ["inherit", "pipe", "pipe"],
