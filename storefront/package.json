@@ -1,12 +1,8 @@
 {
   "name": "@fitmyoutfit/storefront",
-  "version": "1.0.3",
+  "version": "0.1.0",
   "private": true,
-  "author": "Kasper Fabricius Kristensen <kasper@medusajs.com> & Victor Gerbrands <victor@medusajs.com> (https://www.medusajs.com)",
-  "description": "Next.js Starter to be used with Medusa V2",
-  "keywords": [
-    "medusa-storefront"
-  ],
+  "description": "Storefront for the FitMyOutfit custom apparel store",
   "scripts": {
     "dev": "next dev --turbopack -p 8000",
     "build": "next build",
@@ -14,14 +10,13 @@
     "lint": "eslint --ext .js,.ts,.tsx src",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest",
-    "analyze": "ANALYZE=true next build"
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@headlessui/react": "^2.2.0",
-    "@medusajs/icons": "latest",
-    "@medusajs/js-sdk": "latest",
-    "@medusajs/ui": "latest",
+    "@medusajs/icons": "2.22.6",
+    "@medusajs/js-sdk": "2.22.6",
+    "@medusajs/ui": "4.2.13",
     "@radix-ui/react-accordion": "^1.2.1",
     "@stripe/react-stripe-js": "^5.3.0",
     "@stripe/stripe-js": "^8.2.0",
@@ -38,8 +33,8 @@
   },
   "devDependencies": {
     "@babel/core": "^7.17.5",
-    "@medusajs/types": "latest",
-    "@medusajs/ui-preset": "latest",
+    "@medusajs/types": "2.22.6",
+    "@medusajs/ui-preset": "2.22.6",
     "@testing-library/dom": "^10.4.2",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.3",
