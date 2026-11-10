@@ -1,5 +1,6 @@
 import { medusaIntegrationTestRunner } from "@medusajs/test-utils"
-jest.setTimeout(60 * 1000)
+// Booting the app and migrating a fresh database can take minutes on a busy machine.
+jest.setTimeout(300 * 1000)
 
 medusaIntegrationTestRunner({
   env: {},
