@@ -123,6 +123,22 @@ The three garments belong to one product collection, title `Garments`, handle `g
 
 Each product also carries metadata `kind`: `"garment"` for the three garments, `"fit_kit"` and `"rush_add_on"` for the extras. Later sprints use this to find the extras without relying on handles.
 
+### Product images (added 10 Nov 2026, founder's direction)
+
+For local development the products use ready-made images from the web. Nothing is generated or drawn for this. The seed data holds one or two image URLs per product, marked as placeholder like the rest; the seed sets them as the product's thumbnail and images when the product has none.
+
+The placeholders are Medusa's public demo product photos, from a host the storefront already allows (`medusa-public-images.s3.eu-west-1.amazonaws.com`):
+
+| Product | Images |
+| --- | --- |
+| Jersey | `tee-white-front.png`, `tee-white-back.png` |
+| T-Shirt | `tee-black-front.png`, `tee-black-back.png` |
+| Jacket | `sweatshirt-vintage-front.png`, `sweatshirt-vintage-back.png` |
+| Fit Kit | `sweatpants-gray-front.png` |
+| Rush Production | `shorts-vintage-front.png` |
+
+These are stand-ins and do not show our garments. Real product photos are uploaded through the admin, or put into the seed data as URLs, before any public launch. Images taken from another store's site must not be used outside local development.
+
 ### Sample prices (placeholders, per unit, same price for every size)
 
 | Product | PKR | GBP | AED | USD |
