@@ -3,7 +3,16 @@
 // tested without rendering. Only the primary variant uses the brand's red:
 // red anywhere else is a defect.
 
-export type ButtonVariant = "primary" | "secondary" | "text"
+/**
+ * `secondary-inverse` and `text-inverse` are the secondary and text buttons
+ * for navy (`inverse`) backgrounds such as the hero: white outline and label.
+ */
+export type ButtonVariant =
+  | "primary"
+  | "secondary"
+  | "secondary-inverse"
+  | "text"
+  | "text-inverse"
 
 export type ButtonStyleOptions = {
   variant?: ButtonVariant
@@ -47,11 +56,24 @@ const VARIANTS: Record<ButtonVariant, { active: string; inactive: string }> = {
     inactive:
       "bg-transparent border-brand-ink/40 text-brand-ink-muted cursor-not-allowed",
   },
+  "secondary-inverse": {
+    active:
+      "bg-transparent border-brand-on-inverse text-brand-on-inverse hover:bg-brand-on-inverse/10",
+    inactive:
+      "bg-transparent border-brand-on-inverse/40 text-brand-on-inverse-muted cursor-not-allowed",
+  },
   text: {
     active: "text-brand-ink decoration-1 hover:decoration-2",
     inactive: "text-brand-ink-muted decoration-1 cursor-not-allowed",
   },
+  "text-inverse": {
+    active: "text-brand-on-inverse decoration-1 hover:decoration-2",
+    inactive: "text-brand-on-inverse-muted decoration-1 cursor-not-allowed",
+  },
 }
+
+const isTextVariant = (variant: ButtonVariant) =>
+  variant === "text" || variant === "text-inverse"
 
 export const buttonClasses = ({
   variant = "primary",
@@ -60,7 +82,7 @@ export const buttonClasses = ({
 }: ButtonStyleOptions = {}): string =>
   [
     BASE,
-    variant === "text" ? TEXT : BLOCK,
+    isTextVariant(variant) ? TEXT : BLOCK,
     inactive ? VARIANTS[variant].inactive : VARIANTS[variant].active,
     fullWidth ? "w-full" : "",
   ]
