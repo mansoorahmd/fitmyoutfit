@@ -1,23 +1,9 @@
 /**
- * Placeholder product images: which products need one, and the MIME type of an image file.
- * Plain TypeScript, no Medusa imports. The seed asks Medusa for the products, passes them in
- * here, and uploads and links only what this returns.
+ * Placeholder product images: which products get them, and what to set.
+ * Plain TypeScript, no Medusa imports. The images are web URLs in the seed data; nothing is
+ * uploaded or generated.
  */
 import type { ProductSeed } from "../seed-data/types"
-
-/** Image file extensions the seed accepts, with their MIME types (all work in `next/image`). */
-const MIME_TYPES: Record<string, string> = {
-  png: "image/png",
-  webp: "image/webp",
-  jpg: "image/jpeg",
-  jpeg: "image/jpeg",
-}
-
-/** MIME type for an image file name, or undefined when the extension is not supported. */
-export function imageMimeType(fileName: string): string | undefined {
-  const match = /\.([a-z0-9]+)$/i.exec(fileName)
-  return match ? MIME_TYPES[match[1].toLowerCase()] : undefined
-}
 
 /** The parts of an existing product this decision looks at. */
 export type ProductPictureState = {
@@ -41,12 +27,14 @@ export type ExistingProduct = ProductPictureState & { id: string; handle: string
 export type ImagePlanEntry = {
   productId: string
   handle: string
-  /** File name in the seed images folder. */
-  image: string
+  /** The first URL of the seed list. */
+  thumbnail: string
+  /** Every URL of the seed list, in order. */
+  images: { url: string }[]
 }
 
 /**
- * For every seeded product that exists and has no picture, the image to upload for it.
+ * For every seeded product that exists and has no picture, the thumbnail and images to set.
  * In seed-data order. Products in the database that are not in the seed data are ignored.
  */
 export function planPlaceholderImages(
@@ -57,9 +45,28 @@ export function planPlaceholderImages(
   const plan: ImagePlanEntry[] = []
   for (const seed of seeds) {
     const product = existingByHandle.get(seed.handle)
-    if (product && needsPlaceholderImage(product)) {
-      plan.push({ productId: product.id, handle: product.handle, image: seed.image })
+    const urls = seed.images.urls
+    if (product && urls.length > 0 && needsPlaceholderImage(product)) {
+      plan.push({
+        productId: product.id,
+        handle: product.handle,
+        thumbnail: urls[0],
+        images: urls.map((url) => ({ url })),
+      })
     }
   }
   return plan
+}
+
+/** True for an absolute `https://` URL with a host. */
+export function isHttpsUrl(value: unknown): boolean {
+  if (typeof value !== "string" || value !== value.trim()) {
+    return false
+  }
+  try {
+    const url = new URL(value)
+    return url.protocol === "https:" && url.hostname !== ""
+  } catch {
+    return false
+  }
 }

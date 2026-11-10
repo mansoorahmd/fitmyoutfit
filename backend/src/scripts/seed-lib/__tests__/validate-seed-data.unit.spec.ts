@@ -183,37 +183,46 @@ describe("validateSeedData", () => {
     expect(problems).toContain('store: currency "sek" has no region')
   })
 
-  it("finds every product's image file in seed-data/images (checked on disk)", () => {
+  it("names the store FitMyOutfit and rejects a blank store name", () => {
+    expect(seedData.store.data.name).toBe("FitMyOutfit")
+    const seed = clone()
+    seed.store.data.name = " "
+    expect(validateSeedData(seed)).toContain("store: name must not be blank")
+  })
+
+  it("gives every product https image URLs marked placeholder (no network needed)", () => {
     for (const product of seedData.products.data) {
-      expect(product.image).toMatch(/\.png$/)
+      expect(product.images.placeholder).toBe(true)
+      expect(product.images.urls.length).toBeGreaterThan(0)
+      for (const url of product.images.urls) {
+        expect(url).toMatch(/^https:\/\/medusa-public-images\.s3\.eu-west-1\.amazonaws\.com\//)
+      }
     }
-    // The default check reads the real folder; the shipped data must pass it.
     expect(validateSeedData(seedData).filter((p) => p.includes("image"))).toEqual([])
   })
 
-  it("rejects a product that names no image, or a file that does not exist", () => {
+  it("rejects image URLs that are not https, an empty list, duplicates and a missing marker", () => {
     const seed = clone()
-    seed.products.data[0].image = ""
-    seed.products.data[1].image = "missing.png"
-    const problems = validateSeedData(seed, { imageExists: (f) => f !== "missing.png" })
-    expect(problems).toContain('products: "jersey" names no image')
-    expect(problems).toContain('products: "t-shirt" image "missing.png" is not in seed-data/images')
+    seed.products.data[0].images.urls = ["http://example.com/jersey.png"]
+    seed.products.data[1].images.urls = ["t-shirt.png"]
+    seed.products.data[2].images.urls = []
+    seed.products.data[3].images.urls = ["https://x.example/a.png", "https://x.example/a.png"]
+    ;(seed.products.data[4].images as { placeholder: boolean }).placeholder = false
+    const problems = validateSeedData(seed)
+    expect(problems).toContain(
+      'products: "jersey" image "http://example.com/jersey.png" must be an https URL'
+    )
+    expect(problems).toContain('products: "t-shirt" image "t-shirt.png" must be an https URL')
+    expect(problems).toContain('products: "jacket" needs at least one image URL')
+    expect(problems).toContain('products: "fit-kit" image "https://x.example/a.png" is listed twice')
+    expect(problems).toContain('products: "rush-add-on" images must be marked placeholder: true')
   })
 
-  it("rejects image paths outside the folder and formats next/image does not take as-is", () => {
+  it("rejects a product without an images entry", () => {
     const seed = clone()
-    seed.products.data[0].image = "../secret.png"
-    seed.products.data[1].image = "sub/t-shirt.png"
-    seed.products.data[2].image = "jacket.svg"
-    const problems = validateSeedData(seed, { imageExists: () => true })
-    expect(problems).toContain(
-      'products: "jersey" image "../secret.png" must be a plain file name in seed-data/images'
-    )
-    expect(problems).toContain(
-      'products: "t-shirt" image "sub/t-shirt.png" must be a plain file name in seed-data/images'
-    )
-    expect(problems).toContain(
-      'products: "jacket" image "jacket.svg" must be a .png, .webp, .jpg or .jpeg file'
+    delete (seed.products.data[0] as { images?: unknown }).images
+    expect(validateSeedData(seed)).toContain(
+      'products: "jersey" needs images: { placeholder, urls }'
     )
   })
 

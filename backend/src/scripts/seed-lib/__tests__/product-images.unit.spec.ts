@@ -1,9 +1,28 @@
 import { seedData } from "../../seed-data"
-import {
-  imageMimeType,
-  needsPlaceholderImage,
-  planPlaceholderImages,
-} from "../product-images"
+import { isHttpsUrl, needsPlaceholderImage, planPlaceholderImages } from "../product-images"
+
+const BASE = "https://medusa-public-images.s3.eu-west-1.amazonaws.com/"
+
+describe("the placeholder image URLs in the seed data", () => {
+  it("are the contract's Medusa demo photos, marked placeholder, first one the thumbnail", () => {
+    const byHandle = Object.fromEntries(
+      seedData.products.data.map((p) => [p.handle, p.images])
+    )
+    expect(byHandle).toEqual({
+      jersey: { placeholder: true, urls: [`${BASE}ls-black-front.png`, `${BASE}ls-black-back.png`] },
+      "t-shirt": {
+        placeholder: true,
+        urls: [`${BASE}tee-black-front.png`, `${BASE}tee-black-back.png`],
+      },
+      jacket: {
+        placeholder: true,
+        urls: [`${BASE}sweatshirt-vintage-front.png`, `${BASE}sweatshirt-vintage-back.png`],
+      },
+      "fit-kit": { placeholder: true, urls: [`${BASE}sweatpants-gray-front.png`] },
+      "rush-add-on": { placeholder: true, urls: [`${BASE}shorts-vintage-front.png`] },
+    })
+  })
+})
 
 describe("needsPlaceholderImage", () => {
   it("is true for a product with no thumbnail and no images", () => {
@@ -24,7 +43,7 @@ describe("needsPlaceholderImage", () => {
 describe("planPlaceholderImages", () => {
   const seeds = seedData.products.data
 
-  it("plans an image for each seeded product without a picture, from the data file", () => {
+  it("sets the first URL as thumbnail and all URLs as images, only on products without a picture", () => {
     const plan = planPlaceholderImages(
       [
         { id: "p1", handle: "jersey", thumbnail: null, images: [] },
@@ -34,9 +53,25 @@ describe("planPlaceholderImages", () => {
       seeds
     )
     expect(plan).toEqual([
-      { productId: "p1", handle: "jersey", image: "jersey.png" },
-      { productId: "p3", handle: "fit-kit", image: "fit-kit.png" },
+      {
+        productId: "p1",
+        handle: "jersey",
+        thumbnail: `${BASE}ls-black-front.png`,
+        images: [{ url: `${BASE}ls-black-front.png` }, { url: `${BASE}ls-black-back.png` }],
+      },
+      {
+        productId: "p3",
+        handle: "fit-kit",
+        thumbnail: `${BASE}sweatpants-gray-front.png`,
+        images: [{ url: `${BASE}sweatpants-gray-front.png` }],
+      },
     ])
+  })
+
+  it("leaves a product with an admin's images alone, even without a thumbnail", () => {
+    expect(
+      planPlaceholderImages([{ id: "p1", handle: "jersey", thumbnail: null, images: [{}] }], seeds)
+    ).toEqual([])
   })
 
   it("ignores products that are not in the seed data", () => {
@@ -49,23 +84,21 @@ describe("planPlaceholderImages", () => {
     const existing = seeds.map((p, i) => ({
       id: `p${i}`,
       handle: p.handle,
-      thumbnail: `http://x/${p.image}`,
+      thumbnail: p.images.urls[0],
       images: [{ id: `i${i}` }],
     }))
     expect(planPlaceholderImages(existing, seeds)).toEqual([])
   })
 })
 
-describe("imageMimeType", () => {
-  it("knows PNG, WebP and JPEG, in any letter case", () => {
-    expect(imageMimeType("jersey.png")).toBe("image/png")
-    expect(imageMimeType("a.WEBP")).toBe("image/webp")
-    expect(imageMimeType("a.jpg")).toBe("image/jpeg")
-    expect(imageMimeType("a.jpeg")).toBe("image/jpeg")
-  })
-
-  it("rejects SVG and files without an extension", () => {
-    expect(imageMimeType("a.svg")).toBeUndefined()
-    expect(imageMimeType("png")).toBeUndefined()
+describe("isHttpsUrl", () => {
+  it("accepts absolute https URLs only", () => {
+    expect(isHttpsUrl(`${BASE}tee-black-front.png`)).toBe(true)
+    expect(isHttpsUrl("http://example.com/a.png")).toBe(false)
+    expect(isHttpsUrl("//example.com/a.png")).toBe(false)
+    expect(isHttpsUrl("tee-black-front.png")).toBe(false)
+    expect(isHttpsUrl(" https://example.com/a.png")).toBe(false)
+    expect(isHttpsUrl("")).toBe(false)
+    expect(isHttpsUrl(undefined)).toBe(false)
   })
 })

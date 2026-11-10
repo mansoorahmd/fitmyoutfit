@@ -27,7 +27,15 @@ export type RegionSeed = {
 }
 
 export type StoreSeed = {
-  /** Currencies the store supports. Must cover every region's currency. */
+  /**
+   * The store's name in the admin. Written only while the store still has Medusa's default
+   * name ("Medusa Store"), so a name changed in the admin is kept.
+   */
+  name: string
+  /**
+   * Currencies the store supports, exactly: the seed removes any other (such as Medusa's
+   * default `eur`). Must cover every region's currency.
+   */
   supported_currencies: CurrencyCode[]
   default_currency_code: CurrencyCode
   default_sales_channel_name: string
@@ -61,12 +69,21 @@ export type ProductSeed = {
    */
   has_fixed_prices: boolean
   /**
-   * File name of the product's placeholder image in seed-data/images/ (PNG, WebP or JPEG).
-   * The seed uploads it through Medusa's file module and sets it as the product's thumbnail,
-   * but only for a product that has no picture yet. To use another picture, replace the file
-   * or name another file here. No code change needed.
+   * The product's images as web URLs (`https://` only). The seed sets the first as the
+   * thumbnail and all of them as the product's images, but only for a product that has no
+   * thumbnail and no images, so a photo set in the admin is never replaced.
    */
-  image: string
+  images: ProductImagesSeed
+}
+
+export type ProductImagesSeed = {
+  /**
+   * True while these are stand-ins (not photos of our garments). The validator requires it;
+   * the real photos are uploaded in the admin or listed here before any public launch.
+   */
+  placeholder: true
+  /** At least one; the first becomes the thumbnail. */
+  urls: string[]
 }
 
 /**

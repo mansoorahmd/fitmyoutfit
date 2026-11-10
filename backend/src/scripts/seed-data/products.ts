@@ -1,12 +1,24 @@
-import type { PlaceholderData, ProductSeed } from "./types"
+import type { PlaceholderData, ProductImagesSeed, ProductSeed } from "./types"
+
+/**
+ * Medusa's public demo product photos, from a host the storefront already allows.
+ * PLACEHOLDER IMAGES for local development only: they are stand-ins that do not show our
+ * garments, taken from another store's demo, and must not be used outside local development.
+ */
+const DEMO_IMAGES_BASE = "https://medusa-public-images.s3.eu-west-1.amazonaws.com/"
+
+function demoImages(...files: string[]): ProductImagesSeed {
+  return { placeholder: true, urls: files.map((file) => `${DEMO_IMAGES_BASE}${file}`) }
+}
 
 /**
  * PLACEHOLDER DATA: launch products and their copy.
  * Real input: final product names and descriptions (product lead). Prices are in prices.ts (for
  * products with has_fixed_prices: true), sizes in sizes.ts.
- * Images: `image` names a file in ./images/. Those files are PLACEHOLDER drawings made by
- * backend/scripts/generate-placeholder-images.mjs; real input is product photos.
+ * Images: web URLs, placeholders (see above); real input is product photos, uploaded in the
+ * admin or listed here as URLs. The seed sets them only on a product with no picture yet.
  * All products are made to order, so inventory is not managed.
+ * The order of this list is the store's default product order (jersey first).
  */
 export const products: PlaceholderData<ProductSeed[]> = {
   placeholder: true,
@@ -20,7 +32,7 @@ export const products: PlaceholderData<ProductSeed[]> = {
       collection_handle: "garments",
       has_sizes: true,
       sku_prefix: "JERSEY",
-      image: "jersey.png",
+      images: demoImages("ls-black-front.png", "ls-black-back.png"),
       has_fixed_prices: true,
     },
     {
@@ -31,7 +43,7 @@ export const products: PlaceholderData<ProductSeed[]> = {
       collection_handle: "garments",
       has_sizes: true,
       sku_prefix: "TSHIRT",
-      image: "t-shirt.png",
+      images: demoImages("tee-black-front.png", "tee-black-back.png"),
       has_fixed_prices: true,
     },
     {
@@ -42,7 +54,7 @@ export const products: PlaceholderData<ProductSeed[]> = {
       collection_handle: "garments",
       has_sizes: true,
       sku_prefix: "JACKET",
-      image: "jacket.png",
+      images: demoImages("sweatshirt-vintage-front.png", "sweatshirt-vintage-back.png"),
       has_fixed_prices: true,
     },
     {
@@ -54,7 +66,7 @@ export const products: PlaceholderData<ProductSeed[]> = {
       collection_handle: null,
       has_sizes: false,
       sku_prefix: "FITKIT",
-      image: "fit-kit.png",
+      images: demoImages("sweatpants-gray-front.png"),
       has_fixed_prices: true,
     },
     {
@@ -66,7 +78,7 @@ export const products: PlaceholderData<ProductSeed[]> = {
       collection_handle: null,
       has_sizes: false,
       sku_prefix: "RUSH",
-      image: "rush-add-on.png",
+      images: demoImages("shorts-vintage-front.png"),
       // Rush is a percentage of the order (settings.ts), so this product has no fixed price.
       has_fixed_prices: false,
     },
