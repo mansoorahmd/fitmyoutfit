@@ -1,14 +1,24 @@
-const path = require("path")
+const { packageContentGlob, toGlob } = require("./tailwind.paths")
+
+// Every content path is absolute. Tailwind reads relative paths from the
+// current working directory, not from this file, and a package may be
+// installed here or hoisted to a parent node_modules. See tailwind.paths.js.
+const CONTENT_EXTENSIONS = "{js,ts,jsx,tsx}"
 
 module.exports = {
   darkMode: "class",
+  // require() finds the preset wherever npm installed it (here or hoisted).
   presets: [require("@medusajs/ui-preset")],
   content: [
-    "./src/app/**/*.{js,ts,jsx,tsx}",
-    "./src/pages/**/*.{js,ts,jsx,tsx}",
-    "./src/components/**/*.{js,ts,jsx,tsx}",
-    "./src/modules/**/*.{js,ts,jsx,tsx}",
-    "./node_modules/@medusajs/ui/dist/**/*.{js,jsx,ts,tsx}",
+    toGlob(__dirname, `src/app/**/*.${CONTENT_EXTENSIONS}`),
+    toGlob(__dirname, `src/pages/**/*.${CONTENT_EXTENSIONS}`),
+    toGlob(__dirname, `src/components/**/*.${CONTENT_EXTENSIONS}`),
+    toGlob(__dirname, `src/modules/**/*.${CONTENT_EXTENSIONS}`),
+    packageContentGlob(
+      "@medusajs/ui",
+      __dirname,
+      `dist/**/*.${CONTENT_EXTENSIONS}`
+    ),
   ],
   theme: {
     extend: {
