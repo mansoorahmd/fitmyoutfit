@@ -11,7 +11,8 @@ Written by the coordinator before Sprint 0 work started. The three workers build
 | Language | TypeScript everywhere |
 | Workspaces | `backend`, `storefront`, `packages/*` |
 | Package names | `@fitmyoutfit/backend`, `@fitmyoutfit/storefront`, `@fitmyoutfit/editor` |
-| React | 19 in the storefront; the editor declares `react` and `react-dom` as peer dependencies, `^18 \|\| ^19`, and develops against 19 |
+| React | 19 in the storefront and the editor. The editor declares `react` and `react-dom` as peer dependencies at `^19.0.0`. (Corrected 10 Nov 2026: the first version of this contract allowed React 18 as well, but `@react-three/fiber` 9 supports React 19 only, and currently only below 19.4) |
+| Editor entry points | `@fitmyoutfit/editor` (the React component) and `@fitmyoutfit/editor/design` (design-document functions and types, with no React or Three.js). The `/design` entry must be importable from the backend, which is a CommonJS project using TypeScript `Node16` module resolution |
 
 ### Scripts every workspace must expose
 
