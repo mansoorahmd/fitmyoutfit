@@ -131,7 +131,7 @@ The placeholders are Medusa's public demo product photos, from a host the storef
 
 | Product | Images |
 | --- | --- |
-| Jersey | `tee-white-front.png`, `tee-white-back.png` |
+| Jersey | `ls-black-front.png`, `ls-black-back.png` (changed 10 Nov: the white T-shirt photo was invisible on the storefront's light image background) |
 | T-Shirt | `tee-black-front.png`, `tee-black-back.png` |
 | Jacket | `sweatshirt-vintage-front.png`, `sweatshirt-vintage-back.png` |
 | Fit Kit | `sweatpants-gray-front.png` |
