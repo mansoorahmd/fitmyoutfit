@@ -11,10 +11,14 @@ export type VariantInput = {
   options: Record<string, string>
   manage_inventory: false
   allow_backorder: false
+  /** Display order among the product's variants (the size order; 0 for a single variant). */
+  variant_rank: number
   prices: { amount: number; currency_code: string }[]
 }
 
 export type ProductInput = {
+  /** Set by the seed so that the store's default order (by id) follows the seed data. */
+  id?: string
   title: string
   handle: string
   description: string
@@ -28,6 +32,8 @@ export type ProductInput = {
 }
 
 export type BuildContext = {
+  /** Id for the new product, when the caller picks it (see orderedIds). */
+  id?: string
   sizes: string[]
   prices: PriceTableSeed
   /** Currency codes to price in, in order. */
@@ -89,11 +95,12 @@ export function buildProductInput(product: ProductSeed, ctx: BuildContext): Prod
     : [{ title: DEFAULT_OPTION_TITLE, values: [DEFAULT_OPTION_VALUE] }]
 
   const variants: VariantInput[] = product.has_sizes
-    ? ctx.sizes.map((size) => ({
+    ? ctx.sizes.map((size, index) => ({
         ...common,
         title: size,
         sku: `${product.sku_prefix}-${size}`,
         options: { [SIZE_OPTION_TITLE]: size },
+        variant_rank: index,
         prices: variantPrices.map((p) => ({ ...p })),
       }))
     : [
@@ -102,11 +109,13 @@ export function buildProductInput(product: ProductSeed, ctx: BuildContext): Prod
           title: product.title,
           sku: product.sku_prefix,
           options: { [DEFAULT_OPTION_TITLE]: DEFAULT_OPTION_VALUE },
+          variant_rank: 0,
           prices: variantPrices.map((p) => ({ ...p })),
         },
       ]
 
   return {
+    ...(ctx.id ? { id: ctx.id } : {}),
     title: product.title,
     handle: product.handle,
     description: product.description,

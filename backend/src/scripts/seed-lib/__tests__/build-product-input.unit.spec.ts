@@ -79,6 +79,14 @@ describe("buildProductInput", () => {
     expect(Object.keys(ranks)).toEqual(seedData.sizes.data)
   })
 
+  it("ranks the size variants in size order at creation, and uses a given product id", () => {
+    const input = buildProductInput(byHandle("jersey"), { ...ctx, id: "prod_01AAA" })
+    expect(input.id).toBe("prod_01AAA")
+    expect(input.variants.map((v) => v.variant_rank)).toEqual(seedData.sizes.data.map((_, i) => i))
+    expect(buildProductInput(byHandle("fit-kit"), ctx).id).toBeUndefined()
+    expect(buildProductInput(byHandle("fit-kit"), ctx).variants[0].variant_rank).toBe(0)
+  })
+
   it("reads sizes from the data, not from the code", () => {
     const input = buildProductInput(byHandle("jersey"), { ...ctx, sizes: ["ONE"] })
     expect(input.variants).toHaveLength(1)
