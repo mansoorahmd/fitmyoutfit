@@ -21,8 +21,6 @@ export type ProductFact = {
   /** Who sees it: everyone, Pakistan only or export regions only. */
   showIn: RegionScope
   link?: ProductLink
-  /** Left out on the fit kit's own page (it would point to itself). */
-  hideOnFitKit?: boolean
 }
 
 /** The fit kit's handle; its page is /products/fit-kit. */
@@ -54,6 +52,7 @@ export const productContent = {
     /** The main button's label while the size is being added to the cart. */
     adding: "Adding…",
   },
+  /** Shown on garment pages only (lib/util/product-kind.ts), never on the extras. */
   facts: [
     {
       icon: "delivery",
@@ -79,7 +78,6 @@ export const productContent = {
       text: "Order a fit kit and try the sizes on first. The deposit is refundable.",
       showIn: "all",
       link: { label: "See the fit kit", href: `/products/${FIT_KIT_HANDLE}` },
-      hideOnFitKit: true,
     },
   ] as ProductFact[],
   details: {

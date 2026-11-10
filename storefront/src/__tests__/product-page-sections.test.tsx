@@ -127,6 +127,21 @@ describe("product page template", () => {
     )
   })
 
+  it("on the fit kit: no facts, the buy block runs straight into the Description", () => {
+    render(
+      <ProductTemplate product={fitKit} region={regionPk} countryCode="pk" images={[]} />
+    )
+
+    expect(screen.queryByTestId("product-facts")).toBeNull()
+    const column = screen.getByTestId("product-buy-column")
+    const children = Array.from(column.children)
+    // the buy block (name, price, size, button), then the details: nothing between
+    expect(children).toHaveLength(2)
+    expect(within(children[0] as HTMLElement).getByTestId("add-product-button")).toBeTruthy()
+    expect(children[1]).toContainElement(screen.getByTestId("product-description"))
+    expect(screen.getByTestId("product-description")).toHaveTextContent("Description")
+  })
+
   it("has no starter 'Shipping & Returns' and no starter wording anywhere", () => {
     const { container } = render(
       <ProductTemplate product={jersey} region={regionPk} countryCode="pk" images={[]} />
@@ -278,11 +293,20 @@ describe("facts boxes", () => {
     expect(facts()).toHaveLength(4)
   })
 
-  it("leaves the fit-kit box out on the fit kit's own page", () => {
-    render(<ProductFacts product={fitKit} countryCode="pk" />)
-
-    expect(facts().map((f) => f.title)).toEqual(["Delivered in 15 days", "Free replacement"])
-    expect(screen.queryByRole("link", { name: "See the fit kit" })).toBeNull()
+  it("renders nothing on the fit kit, the rush add-on or a product with no kind", () => {
+    for (const product of [
+      fitKit,
+      { ...jersey, metadata: { kind: "rush_add_on" } },
+      { ...jersey, metadata: null },
+    ]) {
+      for (const countryCode of ["pk", "gb"]) {
+        const { container, unmount } = render(
+          <ProductFacts product={product} countryCode={countryCode} />
+        )
+        expect(container).toBeEmptyDOMElement()
+        unmount()
+      }
+    }
   })
 })
 

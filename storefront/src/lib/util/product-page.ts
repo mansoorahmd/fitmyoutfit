@@ -1,18 +1,14 @@
 import { HttpTypes } from "@medusajs/types"
 
-import { FIT_KIT_HANDLE, ProductFact } from "@content/product"
+import { ProductFact } from "@content/product"
 import { forRegion } from "@lib/util/home-regions"
+import { kindRules } from "@lib/util/product-kind"
 
 // Plain decisions for the product page, kept out of the components so they
-// can be unit tested.
+// can be unit tested. What depends on the product's kind is decided in
+// ./product-kind; this module only reads it.
 
 type ProductLike = Pick<HttpTypes.StoreProduct, "handle" | "metadata">
-
-/** The product's `kind` metadata (docs/contracts/sprint-0-dev-setup.md). */
-const kindOf = (product: ProductLike): string | undefined => {
-  const kind = product.metadata?.kind
-  return typeof kind === "string" ? kind : undefined
-}
 
 /**
  * Whether "Complete the kit" can have anything to show: related products
@@ -23,31 +19,30 @@ export const hasRelatedProducts = (
   product: Pick<HttpTypes.StoreProduct, "collection_id" | "tags">
 ): boolean => !!product.collection_id || !!product.tags?.length
 
-/** The fit kit, found by its `kind` metadata, or by its handle without it. */
-export const isFitKit = (product: ProductLike): boolean =>
-  kindOf(product) === "fit_kit" || product.handle === FIT_KIT_HANDLE
-
 /**
  * "per piece" belongs to garments. The fit kit (a refundable deposit for a
  * set) and the rush add-on are not sold per piece.
  */
-export const showsPerPiece = (product: ProductLike): boolean => {
-  const kind = kindOf(product)
-  return kind !== "fit_kit" && kind !== "rush_add_on"
-}
+export const showsPerPiece = (product: ProductLike): boolean =>
+  kindRules(product).perPiece
 
 /**
- * The facts boxes a visitor sees: by region (export regions add the
- * shipping box), and without the fit-kit box on the fit kit's own page.
+ * Whether the facts boxes show: on garments only. They promise delivery,
+ * replacement and sizing for a garment and read wrongly on the extras. A
+ * product with no kind gets none either.
+ */
+export const showsFacts = (product: ProductLike): boolean =>
+  kindRules(product).facts
+
+/**
+ * The facts boxes a visitor sees: none unless the product is a garment;
+ * on a garment, by region (export regions add the shipping box).
  */
 export const factsFor = (
   facts: ProductFact[],
   countryCode: string | undefined,
   product: ProductLike
-): ProductFact[] =>
-  forRegion(facts, countryCode).filter(
-    (fact) => !(fact.hideOnFitKit && isFitKit(product))
-  )
+): ProductFact[] => (showsFacts(product) ? forRegion(facts, countryCode) : [])
 
 /**
  * The "tax not final" note shows until the region's metadata says its tax is
