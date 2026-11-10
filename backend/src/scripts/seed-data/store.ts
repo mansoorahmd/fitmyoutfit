@@ -6,7 +6,7 @@ import type { PlaceholderData, StoreSeed } from "./types"
  */
 export const store: PlaceholderData<StoreSeed> = {
   placeholder: true,
-  note: "Store name for now (it may change). Supported currencies are exactly the launch markets' four; PKR is the default (first market).",
+  note: "Store name for now (it may change). The seed currencies are the launch markets' four; PKR is the default (first market).",
   data: {
     name: "FitMyOutfit",
     supported_currencies: ["pkr", "gbp", "aed", "usd"],
