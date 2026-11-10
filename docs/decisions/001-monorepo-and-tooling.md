@@ -29,3 +29,7 @@ dev-plan.md asks for one repo with three parts: `backend/` (Medusa v2), `storefr
 - The repo has no git remote yet, so the GitHub Actions workflow can't run until the repo is pushed to GitHub. Until then the coordinator runs the same root scripts locally before each merge.
 - If the repo ends up on a host other than GitHub, the workflow file is rewritten for that host; the root scripts stay the same.
 - The editor stays free of Medusa and Next.js dependencies, so it could move to its own repo, or serve a different store platform, without changes.
+
+## Update, 11 Nov 2026
+
+The backend is no longer an npm workspace: it has its own install and lockfile, and a root `postinstall` installs it. The root workspaces are `storefront` and `packages/*`. The root commands are unchanged. Reason and details: [decision 006](006-react-and-tool-versions.md), "Update, 11 Nov 2026".

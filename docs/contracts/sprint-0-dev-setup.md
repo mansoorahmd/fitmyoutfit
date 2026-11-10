@@ -9,7 +9,7 @@ Written by the coordinator before Sprint 0 work started. The three workers build
 | Package manager | npm workspaces (see [decision 001](../decisions/001-monorepo-and-tooling.md)) |
 | Node | 22 (the version on the dev machine); `engines` set to `>=20` |
 | Language | TypeScript everywhere |
-| Workspaces | `backend`, `storefront`, `packages/*` |
+| Workspaces | `storefront`, `packages/*`. The backend has its own install and lockfile in `backend/`, installed by the root `postinstall` (changed 11 Nov, [decision 006](../decisions/006-react-and-tool-versions.md)) |
 | Package names | `@fitmyoutfit/backend`, `@fitmyoutfit/storefront`, `@fitmyoutfit/editor` |
 | React | 19 in the storefront and the editor. The editor declares `react` and `react-dom` as peer dependencies at `^19.0.0`. (Corrected 10 Nov 2026: the first version of this contract allowed React 18 as well, but `@react-three/fiber` 9 supports React 19 only, and currently only below 19.4) |
 | Editor entry points | `@fitmyoutfit/editor` (the React component) and `@fitmyoutfit/editor/design` (design-document functions and types, with no React or Three.js). The `/design` entry must be importable from the backend, which is a CommonJS project using TypeScript `Node16` module resolution |
@@ -27,6 +27,8 @@ Written by the coordinator before Sprint 0 work started. The three workers build
 The root `package.json` (owned by backend-dev) runs these across workspaces: `npm run lint`, `npm run typecheck`, `npm run test`. CI calls the root scripts.
 
 ### Lockfiles
+
+**Changed 11 Nov:** there are two lockfiles: `package-lock.json` at the repo root (storefront and editor) and `backend/package-lock.json` (backend). Both are committed. The rest of this section describes how the workers started, before the root install existed.
 
 There will be one lockfile, `package-lock.json` at the repo root. The storefront and editor workers build in worktrees where the root `package.json` doesn't exist yet, so they run `npm install` inside their own folder and **must not commit** a `package-lock.json`, `yarn.lock` or `pnpm-lock.yaml` in their folder. The coordinator generates the root lockfile after the three branches are merged.
 

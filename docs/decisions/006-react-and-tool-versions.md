@@ -35,3 +35,33 @@ The first two rows are forced by Medusa. The last two are our own doing.
 - The 3D editor can't be embedded in the Medusa admin as it stands. Admin shows a design through its rendered proof images, which is what the dev plan already describes.
 - When Medusa moves its admin to React 19, the backend follows and the second copy disappears. Check on each Medusa upgrade.
 - `@medusajs/ui` 4.2.13, used by the storefront, declares React 18 as its peer but is run on React 19 by Medusa's own storefront starter. npm reports a peer warning for it. It is Medusa's inconsistency; watch for a release that fixes it.
+
+## Update, 11 Nov 2026 (task S0-10): the backend has its own install
+
+**What went wrong.** In one shared npm install, npm put the backend's React 18 at the root `node_modules`, and the storefront's libraries (`next`, `@medusajs/ui`, the testing library) resolved it there. Root `npm run typecheck` failed with 147 errors in the storefront and the storefront tests failed.
+
+**What was tried.** Declaring React 19 at the root: npm refuses it (ERESOLVE), because `@medusajs/medusa` and `@medusajs/ui` declare React 18 peers. An override wide enough to get past that would also put the admin on React 19, which this decision rules out. pnpm was not tried, because the next option met the goal without replacing the package manager of [decision 001](001-monorepo-and-tooling.md).
+
+**Decision.** The backend is no longer an npm workspace.
+
+- The root workspaces are `storefront` and `packages/*`, with the root `package-lock.json`.
+- The backend has its own `backend/node_modules` and `backend/package-lock.json`.
+- A root `postinstall` (`scripts/install-backend.mjs`) installs the backend, so `npm install` or `npm ci` at the root is still the one step.
+- One root override lets the storefront's `@medusajs/ui` (React 18 peer) use React 19.3.1, as Medusa's own storefront starter does. It can't reach the admin, whose install is separate.
+
+**Result, checked on disk.** The storefront, the editor and their dependencies resolve one React 19.3.1. The backend and its admin have one React 18.3.1. TypeScript is 5.9.3 everywhere. ESLint is 9 everywhere, not 10 as targeted above: `eslint-config-next` and its plugins don't declare support for ESLint 10 yet. npm now marks ESLint 9 as unsupported; re-check on each Next.js upgrade.
+
+**Forced duplicates, added to the table above:**
+
+| Package | Versions installed | Who needs each |
+| --- | --- | --- |
+| TypeScript | 5.9.3 and 7.0.2 | **7.0.2:** nested under `@medusajs/ui`, pulled in by an optional peer of its `cva` dependency, in both installs. None of our scripts runs it |
+| `eslint-plugin-react-hooks` | 5 and 7 | **5:** `eslint-config-next` in the storefront. **7:** the editor |
+
+**Consequences for developers.**
+
+- The root commands are unchanged: `npm install`, `npm run setup`, `npm run dev`, `npm run lint`, `npm run typecheck`, `npm run test`.
+- Backend-only commands use `--prefix backend`, not `-w backend`. A backend dependency is added with `npm install <package> --prefix backend`.
+- There are two lockfiles to commit. `npm ls` at the root no longer shows the backend.
+- `npm install --ignore-scripts` skips the backend; run `npm run install:backend` after it.
+- When the backend needs the editor's design schema (`@fitmyoutfit/editor/design`, Sprint 2), it is added to `backend/package.json` as `"file:../packages/editor"`. That was tested in a scratch copy: npm links the folder and installs nothing extra. A deployment must then include `packages/editor` or bundle it.
