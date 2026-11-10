@@ -2,7 +2,8 @@ import { Metadata } from "next"
 
 import FeaturedProducts from "@modules/home/components/featured-products"
 import Hero from "@modules/home/components/hero"
-import { listCollections } from "@lib/data/collections"
+import EmptyProducts from "@modules/store/components/empty-products"
+import { getGarmentsCollection } from "@lib/data/collections"
 import { getRegion } from "@lib/data/regions"
 
 export const metadata: Metadata = {
@@ -20,11 +21,11 @@ export default async function Home(props: {
 
   const region = await getRegion(countryCode)
 
-  const { collections } = await listCollections({
-    fields: "id, handle, title",
-  })
+  // The home page lists the garments collection only. If the backend has no
+  // such collection yet, show an empty state instead of failing.
+  const garments = await getGarmentsCollection()
 
-  if (!collections || !region) {
+  if (!region) {
     return null
   }
 
@@ -32,9 +33,13 @@ export default async function Home(props: {
     <>
       <Hero />
       <div className="py-12">
-        <ul className="flex flex-col gap-x-6">
-          <FeaturedProducts collections={collections} region={region} />
-        </ul>
+        {garments ? (
+          <ul className="flex flex-col gap-x-6">
+            <FeaturedProducts collections={[garments]} region={region} />
+          </ul>
+        ) : (
+          <EmptyProducts />
+        )}
       </div>
     </>
   )

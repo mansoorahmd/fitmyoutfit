@@ -2,6 +2,7 @@ import { listProducts } from "@lib/data/products"
 import { HttpTypes } from "@medusajs/types"
 import { Text } from "@medusajs/ui"
 
+import EmptyProducts from "@modules/store/components/empty-products"
 import InteractiveLink from "@modules/common/components/interactive-link"
 import ProductPreview from "@modules/products/components/product-preview"
 
@@ -22,8 +23,8 @@ export default async function ProductRail({
     },
   })
 
-  if (!pricedProducts) {
-    return null
+  if (!pricedProducts?.length) {
+    return <EmptyProducts />
   }
 
   return (

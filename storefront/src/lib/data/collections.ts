@@ -1,6 +1,7 @@
 "use server"
 
 import { sdk } from "@lib/config"
+import { GARMENTS_COLLECTION_HANDLE } from "@lib/garments"
 import { HttpTypes } from "@medusajs/types"
 import { getCacheOptions } from "./cookies"
 
@@ -56,4 +57,25 @@ export const getCollectionByHandle = async (
       cache: "force-cache",
     })
     .then(({ collections }) => collections[0])
+}
+
+/**
+ * The collection the main listings show. Returns undefined when the backend
+ * has no such collection (for example before the seed has run), so callers
+ * can render an empty state instead of failing.
+ */
+export const getGarmentsCollection = async (): Promise<
+  HttpTypes.StoreCollection | undefined
+> => {
+  const next = {
+    ...(await getCacheOptions("collections")),
+  }
+
+  return sdk.client
+    .fetch<HttpTypes.StoreCollectionListResponse>(`/store/collections`, {
+      query: { handle: GARMENTS_COLLECTION_HANDLE, fields: "id,handle,title" },
+      next,
+      cache: "force-cache",
+    })
+    .then(({ collections }) => collections?.[0])
 }
