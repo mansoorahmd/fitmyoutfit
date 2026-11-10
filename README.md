@@ -62,12 +62,17 @@ All of it is placeholder data, kept in `backend/src/scripts/seed-data/` (one fil
 - 4 regions: Pakistan (PKR), United Kingdom (GBP), United Arab Emirates (AED), United States (USD). Region metadata `tax_final: false` is the data behind the "tax not final" label.
 - Store currencies: those four, PKR as default.
 - Products: `jersey`, `t-shirt`, `jacket` (11 size variants each, in the `garments` collection), plus `fit-kit` and `rush-add-on` (one variant each, no collection). Each has `metadata.kind`. Inventory is not managed (made to order).
-- A placeholder image per product (thumbnail and one gallery image): flat drawings in `backend/src/scripts/seed-data/images/`, named by the `image` field in `products.ts`. The seed uploads them through Medusa's file module, so in local development they land in the MinIO bucket `fitmyoutfit-dev` (URLs `http://localhost:9100/fitmyoutfit-dev/...`); with the `S3_*` variables empty they go to `backend/static` instead. A product gets its image only when it has no thumbnail and no images, so a photo set in the admin is never replaced, and an older database without images is repaired by the next `npm run setup`. To change a picture, replace the file or name another one in `products.ts`. `npm run images:placeholders -w backend` regenerates the drawings (`backend/scripts/generate-placeholder-images.mjs`, no dependencies).
+- Placeholder product images, as web URLs in `products.ts` (`images.urls`, marked `placeholder: true`): stand-in photos from spized.com for the jersey, T-shirt, jacket and fit kit, and a Medusa demo photo for the rush add-on. The seed sets the first URL as the thumbnail and all of them as the product's images, only when the product has no thumbnail and no images, so a photo set in the admin is never replaced. Nothing is downloaded or uploaded, and no image file is kept in the repo. **These photos belong to another store: local development only.** They must be replaced by our own product photos before anything is deployed where the public can see it. To change a picture, edit the URL in `products.ts` (on an existing database, remove the product's images in the admin first, or reset the database).
 - Sample prices in all four currencies for `jersey`, `t-shirt`, `jacket` and `fit-kit`. Amounts are in major units (3500 means Rs 3,500), as Medusa v2 stores them. Which products have fixed prices is data too (`has_fixed_prices` in `products.ts`).
 - Rush: `rush-add-on` has **no fixed prices**. Rush is priced as a percentage of the order, held in the store setting `rush_percentage` (placeholder `20`, in `seed-data/settings.ts`). The seed writes it into the Store's metadata only when it is missing, so after the first run the value lives in the database: change it in the admin under **Settings > Store > Metadata**. Code reads it with `readRushPercentage` (`backend/src/lib/settings/rush-percentage.ts`). The charge itself is Sprint 1.
 - The default sales channel and a publishable API key linked to it.
-- The local admin user.
+- The local admin user (not when `NODE_ENV=production`).
+- The store's name, `FitMyOutfit` (only while the store still has Medusa's default name, so a name set in the admin is kept).
 - Minimum extras Medusa needs: the default shipping profile (created by Medusa's own migration). No stock location, shipping options, tax regions or payment providers yet: those are Sprint 1.
+
+The products are listed in the order of `products.ts` (jersey, t-shirt, jacket, fit-kit, rush-add-on) when no other order is asked for. Regions are recognised by their country code, so you can rename them in the admin.
+
+**An interrupted seed is repaired by the next run.** Medusa writes a product, its variants, prices, size order and links in separate steps, so a seed stopped half-way can leave a product without prices or with sizes out of order, or an admin user without a login. Each run checks those parts on their own and fills in only what is missing (it never overwrites a value an admin can edit). The exceptions are on purpose: the store's currencies are set to exactly the four above (Medusa's default `eur` is removed), and a store still named "Medusa Store" is renamed.
 
 Check it: with the backend running,
 
@@ -81,14 +86,16 @@ curl -H "x-publishable-api-key: <key from storefront/.env.local>" http://localho
 | --- | --- |
 | `npm run setup` | Env files, migrations, seed, publishable key (idempotent) |
 | `npm run dev` | Backend and storefront together (a missing workspace is skipped) |
-| `npm run lint` | ESLint in every workspace, plus a syntax check of `scripts/` |
+| `npm run lint` | ESLint in every workspace and in `scripts/` |
 | `npm run typecheck` | `tsc --noEmit` in every workspace |
 | `npm run test` | Tests in every workspace, plus `scripts/` tests |
 | `npm run build` | Production build of every workspace |
 
-Backend only: `npm run <script> -w backend` (`dev`, `build`, `migrate`, `seed`, `images:placeholders`, `test:unit`, `test:integration:http`).
+Backend only: `npm run <script> -w backend` (`dev`, `build`, `migrate`, `seed`, `test:unit`, `test:integration:http`).
 
-Backend integration tests create and drop temporary databases on the PostgreSQL server (host `localhost`, port 5433 by default, user `medusa`). They never touch the `medusa` development database. Start `docker compose up -d` first. To point them elsewhere set `DB_HOST`, `DB_PORT`, `DB_USERNAME`, `DB_PASSWORD`, as the CI workflow does. Medusa also reads `backend/.env` in tests, so with the `S3_*` and `REDIS_URL` values set there the seed test uploads its images to MinIO and uses Redis; CI has no `backend/.env`, so there it uses the local file provider and in-memory modules.
+Backend integration tests create and drop temporary databases on the PostgreSQL server (host `localhost`, port 5433 by default, user `medusa`). They never touch the `medusa` development database. Start `docker compose up -d` first. To point them elsewhere set `DB_HOST`, `DB_PORT`, `DB_USERNAME`, `DB_PASSWORD`, as the CI workflow does. Medusa also reads `backend/.env` in tests, so with `REDIS_URL` set there the tests use Redis, which makes them several times slower; CI has no `backend/.env` and sets no `REDIS_URL`, so there they use Medusa's in-memory modules. The tests use no network: image tests check the stored URLs only.
+
+**Production start.** With `NODE_ENV=production` the backend refuses to start when `JWT_SECRET`, `COOKIE_SECRET`, `S3_ACCESS_KEY_ID` or `S3_SECRET_ACCESS_KEY` is missing, or when any of them or `MEDUSA_ADMIN_PASSWORD` still has its dev value from `backend/.env.example` (`backend/src/lib/config/build-config.ts`). The seed creates no dev admin user in production.
 
 ## Reset the database
 
@@ -101,7 +108,7 @@ npm run setup
 
 Stop the backend first. The compose project is shared by every git worktree, so this resets the database for all of them.
 
-**Databases seeded before 10 Nov 2026** still have fixed prices on `rush-add-on` (PKR 500, GBP 4, AED 15, USD 5): the seed never changes or deletes existing records, so a re-run only adds the `rush_percentage` setting and any missing product images. Reset the database as above to get the current data (rush with no fixed prices).
+**Databases seeded before 10 Nov 2026** still have fixed prices on `rush-add-on` (PKR 500, GBP 4, AED 15, USD 5), and products that already have images keep them (for example Medusa's demo photos): the seed does not delete prices or replace images, so a re-run only adds the `rush_percentage` setting, images on products that have none, and whatever an interrupted run left out. Reset the database as above to get the current data (rush with no fixed prices, the spized.com stand-in photos).
 
 Wipe everything (PostgreSQL, Redis and MinIO volumes) and start over:
 
@@ -116,4 +123,4 @@ npm run setup
 - **MinIO image.** MinIO no longer publishes official Docker images (`minio/minio` is gone from Docker Hub and Quay). `docker-compose.yml` uses the Chainguard build, `cgr.dev/chainguard/minio:latest`, for local development only.
 - **File storage.** The backend uses Medusa's S3 file provider pointed at MinIO when the `S3_*` variables in `backend/.env` are set (path-style addressing is turned on automatically when `S3_ENDPOINT` is set). With them empty it falls back to local files in `backend/static`.
 - **Redis.** The cache, event bus and workflow engine use `REDIS_URL`. Remove it from `backend/.env` to run with Medusa's in-memory versions.
-- **CI.** `.github/workflows/ci.yml` runs `npm ci`, then root `lint`, `typecheck` and `test` on every push and pull request, with PostgreSQL and Redis service containers.
+- **CI.** `.github/workflows/ci.yml` runs `npm ci`, then root `lint`, `typecheck` and `test` on every push and pull request, with a PostgreSQL service container. The test job sets no `REDIS_URL` (with it the integration tests ran about eight times slower).
