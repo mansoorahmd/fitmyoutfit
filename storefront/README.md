@@ -1,127 +1,39 @@
-> ⚠️ This repository is now deprecated. Use the [dtc-starter](https://github.com/medusajs/dtc-starter) instead.
+# FitMyOutfit storefront
 
-<p align="center">
-  <a href="https://www.medusajs.com">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://user-images.githubusercontent.com/59018053/229103275-b5e482bb-4601-46e6-8142-244f531cebdb.svg">
-    <source media="(prefers-color-scheme: light)" srcset="https://user-images.githubusercontent.com/59018053/229103726-e5b529a3-9b3f-4970-8a1f-c6af37f087bf.svg">
-    <img alt="Medusa logo" src="https://user-images.githubusercontent.com/59018053/229103726-e5b529a3-9b3f-4970-8a1f-c6af37f087bf.svg">
-    </picture>
-  </a>
-</p>
+Next.js 15 storefront (React 19, Tailwind) for the FitMyOutfit custom apparel store. It talks to the Medusa v2 backend in `../backend`. It started from the official Medusa Next.js starter; `LICENSE` is that starter's MIT licence.
 
-<h1 align="center">
-  Medusa Next.js Starter Template
-</h1>
+For full setup (Docker services, backend, seed data, the publishable key) see the README in the repository root.
 
-<p align="center">
-Combine Medusa's modules for your commerce backend with the newest Next.js 15 features for a performant storefront.</p>
+## Scripts
 
-<p align="center">
-  <a href="https://github.com/medusajs/medusa/blob/master/CONTRIBUTING.md">
-    <img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat" alt="PRs welcome!" />
-  </a>
-  <a href="https://discord.gg/xpCwq3Kfn8">
-    <img src="https://img.shields.io/badge/chat-on%20discord-7289DA.svg" alt="Discord Chat" />
-  </a>
-  <a href="https://twitter.com/intent/follow?screen_name=medusajs">
-    <img src="https://img.shields.io/twitter/follow/medusajs.svg?label=Follow%20@medusajs" alt="Follow @medusajs" />
-  </a>
-</p>
+Run from `storefront/`.
 
-### Prerequisites
+| Script | What it does |
+| --- | --- |
+| `npm run dev` | Dev server on http://localhost:8000 (Turbopack) |
+| `npm run build` | Production build |
+| `npm run start` | Serve the production build on port 8000 |
+| `npm run lint` | ESLint (exits non-zero on errors) |
+| `npm run typecheck` | `tsc --noEmit` |
+| `npm test` | Vitest, run once. No backend or `.env.local` needed |
+| `npm run test:watch` | Vitest in watch mode |
 
-To use the [Next.js Starter Template](https://medusajs.com/nextjs-commerce/), you should have a Medusa server running locally on port 9000.
-For a quick setup, run:
+## Environment variables
 
-```shell
-npx create-medusa-app@latest
-```
+Copy `.env.example` to `.env.local`. The root `npm run setup` does this and writes the publishable key for you.
 
-Check out [create-medusa-app docs](https://docs.medusajs.com/learn/installation) for more details and troubleshooting.
+| Variable | Purpose | Dev default |
+| --- | --- | --- |
+| `MEDUSA_BACKEND_URL` | Medusa backend URL | `http://localhost:9000` |
+| `NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY` | Publishable API key. Required for `dev` and `build` | none |
+| `NEXT_PUBLIC_BASE_URL` | URL of this storefront | `http://localhost:8000` |
+| `NEXT_PUBLIC_STORE_NAME` | Store name shown in the header, footer and page titles | `FitMyOutfit` |
+| `NEXT_PUBLIC_DEFAULT_REGION` | Region used when the visitor's country is not detected (ISO-2, lowercase) | `pk` |
+| `NEXT_PUBLIC_STRIPE_KEY` | Stripe public key | none |
+| `NEXT_PUBLIC_MEDUSA_PAYMENTS_PUBLISHABLE_KEY`, `NEXT_PUBLIC_MEDUSA_PAYMENTS_ACCOUNT_ID` | Medusa payments, read by the starter checkout code; leave empty | none |
+| `MEDUSA_CLOUD_S3_HOSTNAME`, `MEDUSA_CLOUD_S3_PATHNAME` | Image host for Medusa Cloud, read by `next.config.js`; leave empty | none |
+| `NEXT_TELEMETRY_DISABLED` | Set to `1` to turn off Next.js telemetry | `1` |
 
-# Overview
+## Running against a backend
 
-The Medusa Next.js Starter is built with:
-
-- [Next.js](https://nextjs.org/)
-- [Tailwind CSS](https://tailwindcss.com/)
-- [Typescript](https://www.typescriptlang.org/)
-- [Medusa](https://medusajs.com/)
-
-Features include:
-
-- Full ecommerce support:
-  - Product Detail Page
-  - Product Overview Page
-  - Product Collections
-  - Cart
-  - Checkout with Stripe
-  - User Accounts
-  - Order Details
-- Full Next.js 15 support:
-  - App Router
-  - Next fetching/caching
-  - Server Components
-  - Server Actions
-  - Streaming
-  - Static Pre-Rendering
-
-# Quickstart
-
-### Setting up the environment variables
-
-Navigate into your projects directory and get your environment variables ready:
-
-```shell
-cd storefront/
-cp .env.example .env.local
-```
-
-### Install dependencies
-
-Use npm (the repo uses npm workspaces). From the repo root, run `npm install`.
-
-```shell
-npm install
-```
-
-### Start developing
-
-You are now ready to start up your project.
-
-```shell
-npm run dev
-```
-
-### Open the code and start customizing
-
-Your site is now running at http://localhost:8000!
-
-# Payment integrations
-
-By default this starter supports the following payment integrations
-
-- [Stripe](https://stripe.com/)
-
-To enable the integrations you need to add the following to your `.env.local` file:
-
-```shell
-NEXT_PUBLIC_STRIPE_KEY=<your-stripe-public-key>
-```
-
-You'll also need to setup the integrations in your Medusa server. See the [Medusa documentation](https://docs.medusajs.com) for more information on how to configure [Stripe](https://docs.medusajs.com/resources/commerce-modules/payment/payment-provider/stripe#main).
-
-# Resources
-
-## Learn more about Medusa
-
-- [Website](https://www.medusajs.com/)
-- [GitHub](https://github.com/medusajs)
-- [Documentation](https://docs.medusajs.com/)
-
-## Learn more about Next.js
-
-- [Website](https://nextjs.org/)
-- [GitHub](https://github.com/vercel/next.js)
-- [Documentation](https://nextjs.org/docs)
+`npm run dev` and `npm run build` need `NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY` to be set (the app stops at start-up without it) and a running backend that has been seeded: the middleware fetches the regions from the backend, and the listings read the `garments` collection. Tests do not need either.
