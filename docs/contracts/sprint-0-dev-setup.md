@@ -123,21 +123,29 @@ The three garments belong to one product collection, title `Garments`, handle `g
 
 Each product also carries metadata `kind`: `"garment"` for the three garments, `"fit_kit"` and `"rush_add_on"` for the extras. Later sprints use this to find the extras without relying on handles.
 
-### Product images (added 10 Nov 2026, founder's direction)
+### Product images (added 10 Nov 2026, changed the same day, founder's direction)
 
-For local development the products use ready-made images from the web. Nothing is generated or drawn for this. The seed data holds one or two image URLs per product, marked as placeholder like the rest; the seed sets them as the product's thumbnail and images when the product has none.
+For local development the products use ready-made photos from a live store. Nothing is generated or drawn. The founder named [spized.com](https://www.spized.com/en) as the source, and said our own product shoot replaces them once the design is ready.
 
-The placeholders are Medusa's public demo product photos, from a host the storefront already allows (`medusa-public-images.s3.eu-west-1.amazonaws.com`):
+The seed data holds one or two image URLs per product, marked as placeholder like the rest. The seed sets them as the product's thumbnail and images only when the product has none, so an admin's own photos are never overwritten. The files are not copied into this repo; the data holds links only.
 
-| Product | Images |
-| --- | --- |
-| Jersey | `ls-black-front.png`, `ls-black-back.png` (changed 10 Nov: the white T-shirt photo was invisible on the storefront's light image background) |
-| T-Shirt | `tee-black-front.png`, `tee-black-back.png` |
-| Jacket | `sweatshirt-vintage-front.png`, `sweatshirt-vintage-back.png` |
-| Fit Kit | `sweatpants-gray-front.png` |
-| Rush Production | `shorts-vintage-front.png` |
+All URLs start with `https://www.spized.com/thumbnail/`. Seen on the site on 10 Nov 2026:
 
-These are stand-ins and do not show our garments. Real product photos are uploaded through the admin, or put into the seed data as URLs, before any public launch. Images taken from another store's site must not be used outside local development.
+| Product | Images (path after `/thumbnail/`) | Shows |
+| --- | --- | --- |
+| Jersey | `4b/cb/26/1744736603/abc184bc-ffaa-6972-d8f4-67ad4c530dd0_784006_600x600.webp?ts=1793783716` | Teal and navy jersey, front |
+| | `5a/6f/9d/1744736603/99ed42a2-57cd-9912-8d85-67c407751689_784006_600x600.webp?ts=1793799289` | Red, white and black jersey, front |
+| T-Shirt | `ec/18/b3/1752243175/e3ad4da2-a889-3963-c6e8-f7a0582cff6f_781001-V2_600x600.png?ts=1752243175` | Blue shirt, front |
+| | `18/c3/8b/1744797261/custom-football-jersey-red-white-chevron-pattern_600x600.webp?ts=1794311519` | Red and white shirt, front |
+| Jacket | `e9/e8/b6/1698000660/trainingsanzugjacke-herren-premium1-3_470x580.jpg?ts=1745265681` | Grey tracksuit jacket on a model |
+| | `0c/9e/d4/1701168696/trainingsjacke-damen-premium1-1_470x580.jpg?ts=1745265645` | White tracksuit jacket on a model |
+| Fit Kit | `74/0b/41/1731488347/fussball-trikot-herren-kurzarm-basic1-1_%281%29_470x580.jpg?ts=1745265613` | Plain white jersey on a model, front |
+| | `de/c0/3c/1731488347/fussball-trikot-herren-kurzarm-basic2-2_%281%29_320x400.jpg?ts=1745265613` | The same, back |
+| Rush Production | `https://medusa-public-images.s3.eu-west-1.amazonaws.com/shorts-vintage-front.png` (full URL; unchanged) | Not shown in any listing |
+
+**These photos belong to another store and carry its logo. They are for local development only:**
+- The storefront allows the host `www.spized.com` for images only when it is not a production build (`storefront/next.config.js`).
+- They must be replaced by our own product photos before anything is deployed where the public can see it. This is a launch blocker; it is listed in `docs/progress.md`.
 
 ### Sample prices (placeholders, per unit, same price for every size)
 
