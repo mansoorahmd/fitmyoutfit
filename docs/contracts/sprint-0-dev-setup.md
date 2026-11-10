@@ -117,7 +117,9 @@ All products are published, in the default sales channel, and made to order: **i
 
 Placeholder size list (option title `Size`), in this order: `YS`, `YM`, `YL`, `YXL`, `XS`, `S`, `M`, `L`, `XL`, `2XL`, `3XL`. The real list comes from the pattern maker's size charts.
 
-`fit-kit` and `rush-add-on` carry product metadata `kind: "fit_kit"` and `kind: "rush_add_on"`; the three garments carry `kind: "garment"`. The storefront uses this to keep the two extras out of the main product grid if it wants to.
+The three garments belong to one product collection, title `Garments`, handle `garments`. `fit-kit` and `rush-add-on` belong to no collection. The storefront's product listings show the `garments` collection only, so the two extras stay out of the main grid; they remain reachable by their own URLs.
+
+Each product also carries metadata `kind`: `"garment"` for the three garments, `"fit_kit"` and `"rush_add_on"` for the extras. Later sprints use this to find the extras without relying on handles.
 
 ### Sample prices (placeholders, per unit, same price for every size)
 
