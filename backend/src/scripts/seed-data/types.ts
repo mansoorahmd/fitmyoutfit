@@ -33,8 +33,9 @@ export type StoreSeed = {
    */
   name: string
   /**
-   * Currencies the store supports, exactly: the seed removes any other (such as Medusa's
-   * default `eur`). Must cover every region's currency.
+   * Currencies the store must support. The seed adds any that are missing and keeps
+   * currencies an admin added; it removes only Medusa's starter `eur`, and only while no region
+   * uses it. Must cover every seed region's currency.
    */
   supported_currencies: CurrencyCode[]
   default_currency_code: CurrencyCode

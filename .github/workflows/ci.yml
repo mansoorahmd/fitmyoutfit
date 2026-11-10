@@ -17,8 +17,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
-    # The backend integration tests create temporary databases on this PostgreSQL server
-    # and use Redis for the cache, event bus and workflow engine.
+    # The backend integration tests create temporary databases on this PostgreSQL server.
+    # They need no Redis: without REDIS_URL Medusa uses its in-memory modules.
     # The credentials are throwaway values for this CI job only.
     services:
       postgres:
@@ -33,15 +33,6 @@ jobs:
           --health-cmd "pg_isready -U medusa -d medusa"
           --health-interval 5s
           --health-timeout 5s
-          --health-retries 20
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 5s
-          --health-timeout 3s
           --health-retries 20
 
     env:

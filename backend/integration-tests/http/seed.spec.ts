@@ -2,6 +2,7 @@ import { medusaIntegrationTestRunner } from "@medusajs/test-utils"
 import type { MedusaContainer } from "@medusajs/framework/types"
 import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils"
 import {
+  createRegionsWorkflow,
   updateProductsWorkflow,
   updateRegionsWorkflow,
   updateStoresWorkflow,
@@ -194,6 +195,44 @@ medusaIntegrationTestRunner({
           "pkr",
           "usd",
         ])
+      })
+
+      it("keeps currencies an admin added on a re-run, and eur too while a region uses it", async () => {
+        const container = getContainer()
+        const storeModule = container.resolve(Modules.STORE)
+        const [record] = await storeModule.listStores({}, { relations: ["supported_currencies"] })
+        // An admin adds Canada (cad) and Germany (eur), each with its currency in the store.
+        await updateStoresWorkflow(container).run({
+          input: {
+            selector: { id: record.id },
+            update: {
+              supported_currencies: [
+                ...(record.supported_currencies ?? []).map((c) => ({
+                  currency_code: c.currency_code,
+                  is_default: c.is_default,
+                })),
+                { currency_code: "cad", is_default: false },
+                { currency_code: "eur", is_default: false },
+              ],
+            },
+          },
+        })
+        await createRegionsWorkflow(container).run({
+          input: {
+            regions: [
+              { name: "Canada", currency_code: "cad", countries: ["ca"] },
+              { name: "Germany", currency_code: "eur", countries: ["de"] },
+            ],
+          },
+        })
+
+        const rerun = await seedStore(container, adminOptions)
+        const [after] = await storeModule.listStores({}, { relations: ["supported_currencies"] })
+        const currencies = (after.supported_currencies ?? [])
+          .map((c) => `${c.currency_code}${c.is_default ? "*" : ""}`)
+          .sort()
+        expect(currencies).toEqual(["aed", "cad", "eur", "gbp", "pkr*", "usd"])
+        expect(rerun.repaired).toEqual([])
       })
 
       it("names the store FitMyOutfit, and keeps a name an admin sets later", async () => {
@@ -461,19 +500,22 @@ medusaIntegrationTestRunner({
         expect(typeof response.data.token).toBe("string")
       })
 
-      it("does not create the dev admin user when NODE_ENV is production", async () => {
-        const container = getContainer()
-        const result = await seedStore(container, {
-          adminEmail: "prod-admin@example.com",
-          adminPassword: "some-password",
-          nodeEnv: "production",
-        })
-        expect(result.created.adminUser).toBe(false)
-        const users = await container.resolve(Modules.USER).listUsers({
-          email: "prod-admin@example.com",
-        })
-        expect(users).toHaveLength(0)
-      })
+      it.each(["production", "prod", "PRODUCTION", "staging"])(
+        "does not create the dev admin user when NODE_ENV is %j",
+        async (nodeEnv) => {
+          const container = getContainer()
+          const result = await seedStore(container, {
+            adminEmail: "prod-admin@example.com",
+            adminPassword: "some-password",
+            nodeEnv,
+          })
+          expect(result.created.adminUser).toBe(false)
+          const users = await container.resolve(Modules.USER).listUsers({
+            email: "prod-admin@example.com",
+          })
+          expect(users).toHaveLength(0)
+        }
+      )
 
       // --- Repairs after an interrupted run ---
 
@@ -539,6 +581,54 @@ medusaIntegrationTestRunner({
         expect(await priced()).toEqual(Array(11).fill(3500))
         expect(await snapshot(container)).toEqual(clean)
         expect(rerun.repaired).toEqual(["jersey: prices"])
+      })
+
+      it("adds back the one currency's price a variant lost, and lists it as repaired", async () => {
+        const container = getContainer()
+        const pg = container.resolve(ContainerRegistrationKeys.PG_CONNECTION)
+        const query = container.resolve(ContainerRegistrationKeys.QUERY)
+        const { data } = await query.graph({
+          entity: "product_variant",
+          fields: ["id", "price_set.prices.id", "price_set.prices.currency_code"],
+          filters: { sku: "JERSEY-M" },
+        })
+        const pkr = (data as any[])[0].price_set.prices.find((p: any) => p.currency_code === "pkr")
+        // The row QA deleted by hand: JERSEY-M is now priced in gbp, aed and usd only.
+        await pg("price").where({ id: pkr.id }).delete()
+
+        const rerun = await seedStore(container, adminOptions)
+        expect(rerun.repaired).toEqual(["jersey: JERSEY-M prices pkr"])
+        expect(rerun.warnings).toEqual([])
+        // Same prices as a clean run, and the rush add-on still has none.
+        expect(await snapshot(container)).toEqual(clean)
+      })
+
+      it("restores the size value a variant lost, and lists it as repaired", async () => {
+        const container = getContainer()
+        const pg = container.resolve(ContainerRegistrationKeys.PG_CONNECTION)
+        const query = container.resolve(ContainerRegistrationKeys.QUERY)
+        const { data } = await query.graph({
+          entity: "product_variant",
+          fields: ["id", "options.id"],
+          filters: { sku: "TSHIRT-L" },
+        })
+        const variant = (data as any[])[0]
+        expect(variant.options).toHaveLength(1)
+        // The row QA deleted by hand: TSHIRT-L no longer has its size L.
+        await pg("product_variant_option").where({ variant_id: variant.id }).delete()
+        const { data: broken } = await query.graph({
+          entity: "product_variant",
+          fields: ["options.id"],
+          filters: { sku: "TSHIRT-L" },
+        })
+        expect((broken as any[])[0].options ?? []).toHaveLength(0)
+
+        const rerun = await seedStore(container, adminOptions)
+        expect(rerun.repaired).toEqual(["t-shirt: TSHIRT-L option Size L"])
+        expect(rerun.warnings).toEqual([])
+        expect(await snapshot(container)).toEqual(clean)
+        const third = await seedStore(container, adminOptions)
+        expect(third.repaired).toEqual([])
       })
 
       it("gives the rush variant back the empty price set a clean run gives it", async () => {
@@ -731,6 +821,7 @@ medusaIntegrationTestRunner({
           adminUser: false,
         })
         expect(second.repaired).toEqual([])
+        expect(second.warnings).toEqual([])
         expect(second.publishableKey).toBe(publishableKey)
         expect(await counts()).toEqual(before)
         expect(await snapshot(container)).toEqual(clean)

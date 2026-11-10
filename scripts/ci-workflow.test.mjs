@@ -16,6 +16,12 @@ test("CI does not set REDIS_URL: with it the backend integration tests run about
   assert.equal(setsRedisUrl, false);
 });
 
+test("CI starts no Redis service: nothing uses it", () => {
+  const code = workflow.split(/\r?\n/).filter((line) => !line.trim().startsWith("#"));
+  assert.equal(code.some((line) => /^\s*redis\s*:/.test(line)), false);
+  assert.equal(code.some((line) => /image:\s*redis/.test(line)), false);
+});
+
 test("CI still gives the integration tests their PostgreSQL connection", () => {
   for (const name of ["DB_HOST", "DB_PORT", "DB_USERNAME", "DB_PASSWORD"]) {
     assert.match(workflow, new RegExp(`^\\s*${name}\\s*:`, "m"), `${name} is missing`);

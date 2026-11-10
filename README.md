@@ -60,19 +60,19 @@ These are throwaway development values. Never use them anywhere else.
 All of it is placeholder data, kept in `backend/src/scripts/seed-data/` (one file per kind, each marked `placeholder: true` with a note on what the real input is). Replace the data, not the code.
 
 - 4 regions: Pakistan (PKR), United Kingdom (GBP), United Arab Emirates (AED), United States (USD). Region metadata `tax_final: false` is the data behind the "tax not final" label.
-- Store currencies: those four, PKR as default.
+- Store currencies: those four, PKR as default. A currency added in the admin is kept on a re-run; only Medusa's starter currency `eur` is removed, and only while no region uses it.
 - Products: `jersey`, `t-shirt`, `jacket` (11 size variants each, in the `garments` collection), plus `fit-kit` and `rush-add-on` (one variant each, no collection). Each has `metadata.kind`. Inventory is not managed (made to order).
 - Placeholder product images, as web URLs in `products.ts` (`images.urls`, marked `placeholder: true`): stand-in photos from spized.com for the jersey, T-shirt, jacket and fit kit, and a Medusa demo photo for the rush add-on. The seed sets the first URL as the thumbnail and all of them as the product's images, only when the product has no thumbnail and no images, so a photo set in the admin is never replaced. Nothing is downloaded or uploaded, and no image file is kept in the repo. **These photos belong to another store: local development only.** They must be replaced by our own product photos before anything is deployed where the public can see it. To change a picture, edit the URL in `products.ts` (on an existing database, remove the product's images in the admin first, or reset the database).
 - Sample prices in all four currencies for `jersey`, `t-shirt`, `jacket` and `fit-kit`. Amounts are in major units (3500 means Rs 3,500), as Medusa v2 stores them. Which products have fixed prices is data too (`has_fixed_prices` in `products.ts`).
 - Rush: `rush-add-on` has **no fixed prices**. Rush is priced as a percentage of the order, held in the store setting `rush_percentage` (placeholder `20`, in `seed-data/settings.ts`). The seed writes it into the Store's metadata only when it is missing, so after the first run the value lives in the database: change it in the admin under **Settings > Store > Metadata**. Code reads it with `readRushPercentage` (`backend/src/lib/settings/rush-percentage.ts`). The charge itself is Sprint 1.
 - The default sales channel and a publishable API key linked to it.
-- The local admin user (not when `NODE_ENV=production`).
+- The local admin user (only when `NODE_ENV` is unset, `development` or `test`).
 - The store's name, `FitMyOutfit` (only while the store still has Medusa's default name, so a name set in the admin is kept).
 - Minimum extras Medusa needs: the default shipping profile (created by Medusa's own migration). No stock location, shipping options, tax regions or payment providers yet: those are Sprint 1.
 
 The products are listed in the order of `products.ts` (jersey, t-shirt, jacket, fit-kit, rush-add-on) when no other order is asked for. Regions are recognised by their country code, so you can rename them in the admin.
 
-**An interrupted seed is repaired by the next run.** Medusa writes a product, its variants, prices, size order and links in separate steps, so a seed stopped half-way can leave a product without prices or with sizes out of order, or an admin user without a login. Each run checks those parts on their own and fills in only what is missing (it never overwrites a value an admin can edit). The exceptions are on purpose: the store's currencies are set to exactly the four above (Medusa's default `eur` is removed), and a store still named "Medusa Store" is renamed.
+**An interrupted seed is repaired by the next run.** Medusa writes a product, its variants, prices, size order and links in separate steps, so a seed stopped half-way can leave a product without prices or with sizes out of order, or an admin user without a login. Each run checks those parts on their own and fills in only what is missing (it never overwrites a value an admin can edit): a variant missing its price in one seed currency gets that price (its other prices are left as they are), and a seed variant that lost its size value gets it back. The run's last log line lists everything it repaired. What it cannot repair safely (for example a size value that another variant already has) it leaves alone and names in a warning. The exceptions are on purpose: the four seed currencies are always supported with PKR as the only default (Medusa's starter `eur` is removed while no region uses it), and a store still named "Medusa Store" is renamed. The rush add-on is never given prices.
 
 Check it: with the backend running,
 
@@ -116,7 +116,7 @@ The root `package.json` has one `overrides` entry: it lets `@medusajs/ui` (which
 
 Backend integration tests create and drop temporary databases on the PostgreSQL server (host `localhost`, port 5433 by default, user `medusa`). They never touch the `medusa` development database. Start `docker compose up -d` first. To point them elsewhere set `DB_HOST`, `DB_PORT`, `DB_USERNAME`, `DB_PASSWORD`, as the CI workflow does. Medusa also reads `backend/.env` in tests, so with `REDIS_URL` set there the tests use Redis, which makes them several times slower; CI has no `backend/.env` and sets no `REDIS_URL`, so there they use Medusa's in-memory modules. The tests use no network: image tests check the stored URLs only.
 
-**Production start.** With `NODE_ENV=production` the backend refuses to start when `JWT_SECRET`, `COOKIE_SECRET`, `S3_ACCESS_KEY_ID` or `S3_SECRET_ACCESS_KEY` is missing, or when any of them or `MEDUSA_ADMIN_PASSWORD` still has its dev value from `backend/.env.example` (`backend/src/lib/config/build-config.ts`). The seed creates no dev admin user in production.
+**Production start.** With any `NODE_ENV` other than `development` or `test` (or unset), so `production`, `prod` (Medusa's own production mode), `staging` and anything else, in any case, the backend refuses to start when `JWT_SECRET`, `COOKIE_SECRET`, `S3_ACCESS_KEY_ID` or `S3_SECRET_ACCESS_KEY` is missing, when `JWT_SECRET` or `COOKIE_SECRET` is shorter than 16 characters, when `DATABASE_URL` uses the dev database login `medusa:medusa`, or when any of these or `MEDUSA_ADMIN_PASSWORD` still has its dev value from `backend/.env.example` (compared ignoring case and surrounding spaces). It lists every problem and exits (`backend/src/lib/config/build-config.ts`; which `NODE_ENV` counts as what is in `node-env.ts` next to it). Medusa's `supersecret` fallback is used only in development and test. The seed creates the dev admin user only in development and test.
 
 ## Reset the database
 
@@ -129,7 +129,12 @@ npm run setup
 
 Stop the backend first. The compose project is shared by every git worktree, so this resets the database for all of them.
 
-**Databases seeded before 10 Nov 2026** still have fixed prices on `rush-add-on` (PKR 500, GBP 4, AED 15, USD 5), and products that already have images keep them (for example Medusa's demo photos): the seed does not delete prices or replace images, so a re-run only adds the `rush_percentage` setting, images on products that have none, and whatever an interrupted run left out. Reset the database as above to get the current data (rush with no fixed prices, the spized.com stand-in photos).
+**Databases seeded before 10 Nov 2026** still have fixed prices on `rush-add-on` (PKR 500, GBP 4, AED 15, USD 5), and products that already have images keep them (for example Medusa's demo photos): the seed does not delete prices or replace images, so a re-run only adds the `rush_percentage` setting, images on products that have none, and whatever an interrupted run left out. Their products also stay in a random order in the store (the order of `products.ts` comes from the product ids, which are chosen only when a product is created) until the database is reset. Reset it as above to get the current data (products in seed order, rush with no fixed prices, the spized.com stand-in photos):
+
+```
+docker compose exec postgres psql -U medusa -d postgres -c "DROP DATABASE medusa WITH (FORCE)" -c "CREATE DATABASE medusa"
+npm run setup
+```
 
 Wipe everything (PostgreSQL, Redis and MinIO volumes) and start over:
 

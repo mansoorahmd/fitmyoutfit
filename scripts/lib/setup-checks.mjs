@@ -16,37 +16,41 @@ export function hostAndPort(url, defaultPort) {
 }
 
 /**
- * The services setup must reach before it runs migrations, read from backend/.env.
+ * The services setup must reach before it runs migrations, read from backend/.env (or the shell).
  * PostgreSQL is always needed. Redis only when REDIS_URL is set (without it Medusa uses its
  * in-memory modules). Returns { services, problems }: problems are config errors to stop on.
+ * `sources` says where each variable's value came from ("backend/.env" when not given), so the
+ * messages point at the right place.
  */
-export function servicesToCheck(backendEnv) {
+export function servicesToCheck(backendEnv, sources = {}) {
   const services = [];
   const problems = [];
+  const from = (variable) => sources[variable] ?? "backend/.env";
   if (!backendEnv.DATABASE_URL) {
     problems.push("DATABASE_URL is not set in backend/.env");
   } else {
     const db = hostAndPort(backendEnv.DATABASE_URL, 5432);
-    if (!db) problems.push("DATABASE_URL in backend/.env is not a valid URL");
-    else services.push({ name: "PostgreSQL", variable: "DATABASE_URL", ...db });
+    if (!db) problems.push(`DATABASE_URL in ${from("DATABASE_URL")} is not a valid URL`);
+    else services.push({ name: "PostgreSQL", variable: "DATABASE_URL", source: from("DATABASE_URL"), ...db });
   }
   if (backendEnv.REDIS_URL) {
     const redis = hostAndPort(backendEnv.REDIS_URL, 6379);
-    if (!redis) problems.push("REDIS_URL in backend/.env is not a valid URL");
-    else services.push({ name: "Redis", variable: "REDIS_URL", ...redis });
+    if (!redis) problems.push(`REDIS_URL in ${from("REDIS_URL")} is not a valid URL`);
+    else services.push({ name: "Redis", variable: "REDIS_URL", source: from("REDIS_URL"), ...redis });
   }
   return { services, problems };
 }
 
 /** The message for a service that did not answer, with what to do about it. */
 export function unreachableMessage(service) {
+  const source = service.source ?? "backend/.env";
   const lines = [
-    `Cannot reach ${service.name} at ${service.host}:${service.port} (${service.variable} in backend/.env).`,
+    `Cannot reach ${service.name} at ${service.host}:${service.port} (${service.variable} in ${source}).`,
     `Start the services with "docker compose up -d" and wait until "docker compose ps" shows them healthy, then run "npm run setup" again.`,
-    `If you changed a host port in the root .env, update ${service.variable} in backend/.env to match.`,
+    `If you changed a host port in the root .env, update ${service.variable} in ${source} to match.`,
   ];
   if (service.name === "Redis") {
-    lines.push(`Or remove REDIS_URL from backend/.env to use Medusa's in-memory cache, event bus and workflow engine.`);
+    lines.push(`Or remove REDIS_URL from ${source} to use Medusa's in-memory cache, event bus and workflow engine.`);
   }
   return lines.join("\n");
 }

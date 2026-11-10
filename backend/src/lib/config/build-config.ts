@@ -3,6 +3,7 @@
  * No Medusa imports, so they can be unit tested without booting the app.
  * medusa-config.ts only calls `buildMedusaConfig`.
  */
+import { describeNodeEnv, isLocalNodeEnv } from "./node-env"
 
 export type Env = Record<string, string | undefined>
 
@@ -11,7 +12,7 @@ export type ModuleEntry = {
   options?: Record<string, unknown>
 }
 
-/** Secrets that have a dev-only fallback outside production. */
+/** Secrets that have a dev-only fallback, in development and test only. */
 const DEV_SECRET_FALLBACK = "supersecret"
 
 /**
@@ -43,6 +44,22 @@ const REQUIRED_IN_PRODUCTION = [
  */
 const NOT_DEV_IN_PRODUCTION = ["MEDUSA_ADMIN_PASSWORD"] as const
 
+/**
+ * Shortest JWT_SECRET and COOKIE_SECRET accepted outside development and test. A short secret
+ * can be guessed; 16 characters is a floor, not a recommendation (use 32+ random characters).
+ */
+export const MIN_SECRET_LENGTH = 16
+const MIN_LENGTH_IN_PRODUCTION = ["JWT_SECRET", "COOKIE_SECRET"] as const
+
+/**
+ * Database user and password pairs that are dev-only: the PostgreSQL in docker-compose.yml
+ * (POSTGRES_USER / POSTGRES_PASSWORD in the root .env.example, used by DATABASE_URL in
+ * backend/.env.example). Compared without regard to case.
+ */
+export const DEV_DATABASE_CREDENTIALS: readonly { user: string; password: string }[] = [
+  { user: "medusa", password: "medusa" },
+]
+
 export class ConfigError extends Error {}
 
 function clean(value: string | undefined): string | undefined {
@@ -50,27 +67,66 @@ function clean(value: string | undefined): string | undefined {
   return trimmed ? trimmed : undefined
 }
 
-export function isProduction(env: Env): boolean {
-  return clean(env.NODE_ENV) === "production"
+/**
+ * True when the production checks apply: every NODE_ENV other than unset, `development` and
+ * `test` (so `production`, `prod`, `staging` and typos all count). See node-env.ts.
+ */
+export function requiresProductionSecrets(env: Env): boolean {
+  return !isLocalNodeEnv(env.NODE_ENV)
+}
+
+/** Dev-only values are compared trimmed and without regard to case (`SUPERSECRET` is refused). */
+function isDevValue(name: string, value: string): boolean {
+  const normalized = value.trim().toLowerCase()
+  return (DEV_ONLY_VALUES[name] ?? []).some((dev) => dev.toLowerCase() === normalized)
+}
+
+/** True when DATABASE_URL logs in with a dev-only user and password (such as medusa:medusa). */
+export function usesDevDatabaseCredentials(databaseUrl: string | undefined): boolean {
+  const url = clean(databaseUrl)
+  if (!url) {
+    return false
+  }
+  let parsed: URL
+  try {
+    parsed = new URL(url)
+  } catch {
+    return false
+  }
+  const decode = (part: string) => {
+    try {
+      return decodeURIComponent(part)
+    } catch {
+      return part
+    }
+  }
+  const user = decode(parsed.username).trim().toLowerCase()
+  const password = decode(parsed.password).trim().toLowerCase()
+  return DEV_DATABASE_CREDENTIALS.some(
+    (dev) => dev.user.toLowerCase() === user && dev.password.toLowerCase() === password
+  )
 }
 
 /**
- * Problems with the secrets for a production start. Empty outside production, or when every
- * secret is set to something other than a dev-only value.
+ * Problems with the secrets for a start outside development and test. Empty in development and
+ * test, or when every secret is set, long enough, and not a dev-only value.
  */
 export function productionSecretProblems(env: Env): string[] {
-  if (!isProduction(env)) {
+  if (!requiresProductionSecrets(env)) {
     return []
   }
   const problems: string[] = []
-  const isDevValue = (name: string, value: string) =>
-    (DEV_ONLY_VALUES[name] ?? []).includes(value)
   for (const name of REQUIRED_IN_PRODUCTION) {
     const value = clean(env[name])
     if (!value) {
       problems.push(`${name} is not set`)
     } else if (isDevValue(name, value)) {
       problems.push(`${name} is a dev-only value (from .env.example)`)
+    } else if (
+      (MIN_LENGTH_IN_PRODUCTION as readonly string[]).includes(name) &&
+      value.length < MIN_SECRET_LENGTH
+    ) {
+      problems.push(`${name} is shorter than ${MIN_SECRET_LENGTH} characters`)
     }
   }
   for (const name of NOT_DEV_IN_PRODUCTION) {
@@ -78,6 +134,9 @@ export function productionSecretProblems(env: Env): string[] {
     if (value && isDevValue(name, value)) {
       problems.push(`${name} is a dev-only value (from .env.example)`)
     }
+  }
+  if (usesDevDatabaseCredentials(env.DATABASE_URL)) {
+    problems.push("DATABASE_URL uses the dev-only database user and password (from .env.example)")
   }
   return problems
 }
@@ -87,8 +146,9 @@ export function assertProductionSecrets(env: Env): void {
   const problems = productionSecretProblems(env)
   if (problems.length > 0) {
     throw new ConfigError(
-      `Refusing to start with NODE_ENV=production:\n- ${problems.join("\n- ")}\n` +
-        "Set real values in the production environment. The values in .env.example are for local development only."
+      `Refusing to start with NODE_ENV=${describeNodeEnv(env.NODE_ENV)}:\n- ${problems.join("\n- ")}\n` +
+        "Every NODE_ENV other than development and test needs real values. " +
+        "The values in .env.example are for local development only."
     )
   }
 }
@@ -98,8 +158,10 @@ function secret(env: Env, name: string): string {
   if (value) {
     return value
   }
-  if (isProduction(env)) {
-    throw new ConfigError(`${name} must be set in production`)
+  if (requiresProductionSecrets(env)) {
+    throw new ConfigError(
+      `${name} must be set when NODE_ENV is ${describeNodeEnv(env.NODE_ENV)} (only development and test have a fallback)`
+    )
   }
   return DEV_SECRET_FALLBACK
 }

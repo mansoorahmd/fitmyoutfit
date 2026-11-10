@@ -59,6 +59,20 @@ test("unreachableMessage says which service, where, and what to do", () => {
   assert.doesNotMatch(pg, /REDIS_URL/);
 });
 
+test("the unreachable and bad-URL messages name where the value came from (shell or backend/.env)", () => {
+  const fromShell = servicesToCheck(
+    { DATABASE_URL: "postgres://u:p@db:5434/x", REDIS_URL: "::" },
+    { DATABASE_URL: "your shell environment", REDIS_URL: "your shell environment" },
+  );
+  assert.deepEqual(fromShell.problems, ["REDIS_URL in your shell environment is not a valid URL"]);
+  const message = unreachableMessage(fromShell.services[0]);
+  assert.match(message, /\(DATABASE_URL in your shell environment\)/);
+  assert.match(message, /update DATABASE_URL in your shell environment to match/);
+  assert.doesNotMatch(message, /backend\/\.env/);
+  const fromFile = servicesToCheck({ DATABASE_URL: "postgres://db/x" }, { DATABASE_URL: "backend/.env" });
+  assert.match(unreachableMessage(fromFile.services[0]), /\(DATABASE_URL in backend\/\.env\)/);
+});
+
 test("hostAndPort falls back to the default port and returns null for a bad URL", () => {
   assert.deepEqual(hostAndPort("redis://cache", 6379), { host: "cache", port: 6379 });
   assert.equal(hostAndPort("nope", 1), null);
