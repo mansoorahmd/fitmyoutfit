@@ -583,6 +583,54 @@ medusaIntegrationTestRunner({
         expect(rerun.repaired).toEqual(["jersey: prices"])
       })
 
+      it("adds back the one currency's price a variant lost, and lists it as repaired", async () => {
+        const container = getContainer()
+        const pg = container.resolve(ContainerRegistrationKeys.PG_CONNECTION)
+        const query = container.resolve(ContainerRegistrationKeys.QUERY)
+        const { data } = await query.graph({
+          entity: "product_variant",
+          fields: ["id", "price_set.prices.id", "price_set.prices.currency_code"],
+          filters: { sku: "JERSEY-M" },
+        })
+        const pkr = (data as any[])[0].price_set.prices.find((p: any) => p.currency_code === "pkr")
+        // The row QA deleted by hand: JERSEY-M is now priced in gbp, aed and usd only.
+        await pg("price").where({ id: pkr.id }).delete()
+
+        const rerun = await seedStore(container, adminOptions)
+        expect(rerun.repaired).toEqual(["jersey: JERSEY-M prices pkr"])
+        expect(rerun.warnings).toEqual([])
+        // Same prices as a clean run, and the rush add-on still has none.
+        expect(await snapshot(container)).toEqual(clean)
+      })
+
+      it("restores the size value a variant lost, and lists it as repaired", async () => {
+        const container = getContainer()
+        const pg = container.resolve(ContainerRegistrationKeys.PG_CONNECTION)
+        const query = container.resolve(ContainerRegistrationKeys.QUERY)
+        const { data } = await query.graph({
+          entity: "product_variant",
+          fields: ["id", "options.id"],
+          filters: { sku: "TSHIRT-L" },
+        })
+        const variant = (data as any[])[0]
+        expect(variant.options).toHaveLength(1)
+        // The row QA deleted by hand: TSHIRT-L no longer has its size L.
+        await pg("product_variant_option").where({ variant_id: variant.id }).delete()
+        const { data: broken } = await query.graph({
+          entity: "product_variant",
+          fields: ["options.id"],
+          filters: { sku: "TSHIRT-L" },
+        })
+        expect((broken as any[])[0].options ?? []).toHaveLength(0)
+
+        const rerun = await seedStore(container, adminOptions)
+        expect(rerun.repaired).toEqual(["t-shirt: TSHIRT-L option Size L"])
+        expect(rerun.warnings).toEqual([])
+        expect(await snapshot(container)).toEqual(clean)
+        const third = await seedStore(container, adminOptions)
+        expect(third.repaired).toEqual([])
+      })
+
       it("gives the rush variant back the empty price set a clean run gives it", async () => {
         const container = getContainer()
         const query = container.resolve(ContainerRegistrationKeys.QUERY)
@@ -773,6 +821,7 @@ medusaIntegrationTestRunner({
           adminUser: false,
         })
         expect(second.repaired).toEqual([])
+        expect(second.warnings).toEqual([])
         expect(second.publishableKey).toBe(publishableKey)
         expect(await counts()).toEqual(before)
         expect(await snapshot(container)).toEqual(clean)

@@ -11,8 +11,14 @@
  *
  * What counts as "missing" is chosen so that an admin's edits are kept:
  * - variants: only a product with no variants at all gets the seed's variants;
- * - prices: only a variant with no price at all gets the seed's prices (a variant an admin
- *   priced, even in fewer currencies, is left alone); a variant with no price set gets one;
+ * - prices: a variant gets the seed's price for each seed currency it has no base price in (a
+ *   price with no price list and no rules, which is what the seed and the admin's price editor
+ *   write). A price that exists is never changed, so an amount an admin set stays. A variant
+ *   with no price set gets one. The rush add-on has no fixed prices, so it gets none;
+ * - option values: a seed variant (matched by SKU, then by title) with no value for one of its
+ *   product's options gets the seed's value back (its size, for the garments). When that is not
+ *   possible (the option lacks the value, another variant already has that combination, or the
+ *   variant is not a seed variant) the variant is left alone and a warning names it;
  * - size ranks: only when a size has no rank, or two sizes share one (an order an admin set,
  *   with distinct ranks, is kept);
  * - sales channel and shipping profile: only a product linked to none.
@@ -20,20 +26,35 @@
 import type { PriceTableSeed, ProductSeed } from "../seed-data/types"
 import { buildProductInput, buildSizeRanks, SIZE_OPTION, type VariantInput } from "./build-product-input"
 
-export type ExistingOptionValue = { value: string; rank?: number | null }
+export type ExistingOptionValue = { id?: string; value: string; rank?: number | null }
 export type ExistingOption = {
   id: string
   title: string
   values?: readonly (ExistingOptionValue | null)[] | null
 }
+/** One of a variant's option values (Medusa's variant.options). */
+export type ExistingVariantOptionValue = {
+  value?: string | null
+  /** The option this value belongs to. */
+  option_id?: string | null
+}
+export type ExistingPrice = {
+  id: string
+  currency_code?: string | null
+  /** Set on a price that belongs to a price list (a sale or override), not the base price. */
+  price_list_id?: string | null
+  /** Number of rules (such as a region) on the price; 0 or null for a base price. */
+  rules_count?: number | null
+}
 export type ExistingVariant = {
   id: string
+  sku?: string | null
   title?: string | null
   variant_rank?: number | null
-  options?: readonly ({ value?: string | null } | null)[] | null
+  options?: readonly (ExistingVariantOptionValue | null)[] | null
   price_set?: {
     id: string
-    prices?: readonly ({ id: string } | null)[] | null
+    prices?: readonly (ExistingPrice | null)[] | null
   } | null
 }
 export type ExistingSeededProduct = {
@@ -53,6 +74,30 @@ export type RepairContext = {
   shippingProfileId: string
 }
 
+export type PriceRepair = {
+  variantId: string
+  /** The variant's SKU (or title, or id), for the log. */
+  label: string
+  /** The variant's price set, or null when it has none (then one is created and linked). */
+  priceSetId: string | null
+  /** The prices to add: only currencies the variant has no base price in. */
+  prices: { amount: number; currency_code: string }[]
+  /** True when the variant already had a base price in some seed currencies. */
+  partial: boolean
+}
+
+export type OptionValueRepair = {
+  variantId: string
+  label: string
+  /**
+   * The variant's full option values, by option title, as Medusa's variant update takes them
+   * (it needs a value for every option of the product): the existing ones plus the restored ones.
+   */
+  options: Record<string, string>
+  /** Only the values that were missing, by option title, for the log. */
+  restored: Record<string, string>
+}
+
 export type ProductRepair = {
   productId: string
   handle: string
@@ -63,22 +108,24 @@ export type ProductRepair = {
   /** Variant ranks to write (display order of the size variants). */
   variantRanks: { id: string; variant_rank: number }[]
   /**
-   * Variants with no price set (any product), or with an empty one where the seed has prices:
-   * the prices to give them (none for a product without fixed prices: then only the price set).
+   * Variants with no price set (any product), or lacking a base price in a seed currency where
+   * the seed has prices: the prices to give them (none for a product without fixed prices: then
+   * only the price set).
    */
-  prices: {
-    variantId: string
-    /** The variant's price set, or null when it has none (then one is created and linked). */
-    priceSetId: string | null
-    prices: { amount: number; currency_code: string }[]
-  }[]
+  prices: PriceRepair[]
+  /** Seed variants that lost one of their option values (their size). */
+  optionValues: OptionValueRepair[]
   linkSalesChannel: boolean
   linkShippingProfile: boolean
+  /** Problems the seed cannot repair safely; logged as warnings, nothing is changed. */
+  warnings: string[]
 }
 
 function present<T>(items: readonly (T | null | undefined)[] | null | undefined): T[] {
   return (items ?? []).filter((item): item is T => item !== null && item !== undefined)
 }
+
+const lower = (text: string | null | undefined) => (text ?? "").trim().toLowerCase()
 
 /** True when every name has a rank and no two names share one. */
 function ranksComplete(names: string[], rankOf: (name: string) => number | null | undefined) {
@@ -99,6 +146,107 @@ function sizeOfVariant(variant: ExistingVariant, sizes: string[]): string | unde
   return variant.title && sizes.includes(variant.title) ? variant.title : undefined
 }
 
+function labelOf(variant: ExistingVariant): string {
+  return variant.sku || variant.title || variant.id
+}
+
+/** A base price: not part of a price list and without rules (what the seed writes). */
+function isBasePrice(price: ExistingPrice): boolean {
+  return !price.price_list_id && !price.rules_count
+}
+
+/** The variant's value for an option, or undefined when it has none. */
+function valueForOption(variant: ExistingVariant, option: ExistingOption): string | undefined {
+  const values = present(variant.options)
+  const byId = values.find((v) => !!v.option_id && v.option_id === option.id)
+  if (byId?.value) {
+    return byId.value
+  }
+  // Without option ids, a value counts when it is one of the option's values.
+  const optionValues = present(option.values).map((v) => v.value)
+  return values.find((v) => !v.option_id && !!v.value && optionValues.includes(v.value))?.value ?? undefined
+}
+
+/** The seed variant an existing variant stands for: same SKU, or else same title. */
+function seedVariantFor(
+  variant: ExistingVariant,
+  seedVariants: readonly VariantInput[]
+): VariantInput | undefined {
+  return (
+    (variant.sku ? seedVariants.find((s) => lower(s.sku) === lower(variant.sku)) : undefined) ??
+    (variant.title ? seedVariants.find((s) => s.title === variant.title) : undefined)
+  )
+}
+
+function planOptionValues(
+  product: ExistingSeededProduct,
+  variants: ExistingVariant[],
+  seedVariants: readonly VariantInput[],
+  repair: ProductRepair
+): void {
+  const options = present(product.options)
+  if (options.length === 0) {
+    return
+  }
+  const currentValues = (variant: ExistingVariant) =>
+    Object.fromEntries(
+      options
+        .map((option) => [option.title, valueForOption(variant, option)] as const)
+        .filter((entry): entry is readonly [string, string] => entry[1] !== undefined)
+    )
+  // Option combinations in use, including the ones this plan restores.
+  const combinations = new Map(variants.map((v) => [v.id, currentValues(v)]))
+  const sameCombination = (a: Record<string, string>, b: Record<string, string>) =>
+    options.every((o) => a[o.title] !== undefined && a[o.title] === b[o.title])
+
+  for (const variant of variants) {
+    const current = currentValues(variant)
+    const missing = options.filter((option) => current[option.title] === undefined)
+    if (missing.length === 0) {
+      continue
+    }
+    const label = labelOf(variant)
+    const missingTitles = missing.map((o) => o.title).join(", ")
+    const seedVariant = seedVariantFor(variant, seedVariants)
+    if (!seedVariant) {
+      repair.warnings.push(
+        `${product.handle}: variant ${label} has no ${missingTitles} value and is not a seed ` +
+          "variant, so the seed cannot tell which value it should have. Set it in the admin."
+      )
+      continue
+    }
+    const restored: Record<string, string> = {}
+    const problems: string[] = []
+    for (const option of missing) {
+      const value = seedVariant.options[option.title]
+      if (value === undefined) {
+        problems.push(`the seed has no ${option.title} value for it`)
+      } else if (!present(option.values).some((v) => v.value === value)) {
+        problems.push(`the ${option.title} option has no value ${value}`)
+      } else {
+        restored[option.title] = value
+      }
+    }
+    const full = { ...current, ...restored }
+    const taken = [...combinations.entries()].find(
+      ([id, combination]) => id !== variant.id && sameCombination(full, combination)
+    )
+    if (problems.length === 0 && taken) {
+      const other = variants.find((v) => v.id === taken[0])
+      problems.push(`another variant (${other ? labelOf(other) : taken[0]}) already has those values`)
+    }
+    if (problems.length > 0) {
+      repair.warnings.push(
+        `${product.handle}: variant ${label} has no ${missingTitles} value and was left as it is: ` +
+          `${problems.join("; ")}. Set it in the admin.`
+      )
+      continue
+    }
+    combinations.set(variant.id, full)
+    repair.optionValues.push({ variantId: variant.id, label, options: full, restored })
+  }
+}
+
 export function planProductRepair(
   product: ExistingSeededProduct,
   seed: ProductSeed,
@@ -111,8 +259,10 @@ export function planProductRepair(
     sizeRanks: null,
     variantRanks: [],
     prices: [],
+    optionValues: [],
     linkSalesChannel: present(product.sales_channels).length === 0,
     linkShippingProfile: !product.shipping_profile?.id,
+    warnings: [],
   }
 
   const seedInput = buildProductInput(seed, {
@@ -127,6 +277,8 @@ export function planProductRepair(
   if (variants.length === 0) {
     repair.createVariants = seedInput.variants.map((v) => ({ ...v, product_id: product.id }))
   }
+
+  planOptionValues(product, variants, seedInput.variants, repair)
 
   if (seed.has_sizes) {
     const sizeOption = present(product.options).find((o) => o.title === SIZE_OPTION)
@@ -163,13 +315,31 @@ export function planProductRepair(
   // price set, so prices entered for a variant without one would be dropped.
   const seedPrices = seed.has_fixed_prices ? (seedInput.variants[0]?.prices ?? []) : []
   for (const variant of variants) {
-    const hasPriceSet = !!variant.price_set?.id
-    const priceCount = present(variant.price_set?.prices).length
-    if (!hasPriceSet || (priceCount === 0 && seedPrices.length > 0)) {
+    const label = labelOf(variant)
+    if (!variant.price_set?.id) {
       repair.prices.push({
         variantId: variant.id,
-        priceSetId: variant.price_set?.id ?? null,
+        label,
+        priceSetId: null,
         prices: seedPrices.map((p) => ({ ...p })),
+        partial: false,
+      })
+      continue
+    }
+    const priced = new Set(
+      present(variant.price_set.prices)
+        .filter(isBasePrice)
+        .map((p) => lower(p.currency_code))
+        .filter((code) => code !== "")
+    )
+    const missing = seedPrices.filter((p) => !priced.has(lower(p.currency_code)))
+    if (missing.length > 0) {
+      repair.prices.push({
+        variantId: variant.id,
+        label,
+        priceSetId: variant.price_set.id,
+        prices: missing.map((p) => ({ ...p })),
+        partial: missing.length < seedPrices.length,
       })
     }
   }
@@ -180,13 +350,22 @@ export function planProductRepair(
 /** Short descriptions of what a repair changes, for the seed's log. Empty when nothing. */
 export function describeRepair(repair: ProductRepair): string[] {
   const parts: string[] = []
-  if (repair.createVariants.length > 0) parts.push(`${repair.handle}: variants`)
-  if (repair.sizeRanks) parts.push(`${repair.handle}: size ranks`)
-  if (repair.variantRanks.length > 0) parts.push(`${repair.handle}: variant ranks`)
-  if (repair.prices.some((p) => p.prices.length > 0)) parts.push(`${repair.handle}: prices`)
-  else if (repair.prices.length > 0) parts.push(`${repair.handle}: price set`)
-  if (repair.linkSalesChannel) parts.push(`${repair.handle}: sales channel`)
-  if (repair.linkShippingProfile) parts.push(`${repair.handle}: shipping profile`)
+  const h = repair.handle
+  if (repair.createVariants.length > 0) parts.push(`${h}: variants`)
+  for (const entry of repair.optionValues) {
+    const values = Object.entries(entry.restored).map(([title, value]) => `${title} ${value}`)
+    parts.push(`${h}: ${entry.label} option ${values.join(", ")}`)
+  }
+  if (repair.sizeRanks) parts.push(`${h}: size ranks`)
+  if (repair.variantRanks.length > 0) parts.push(`${h}: variant ranks`)
+  const whole = repair.prices.filter((p) => !p.partial)
+  if (whole.some((p) => p.prices.length > 0)) parts.push(`${h}: prices`)
+  else if (whole.length > 0) parts.push(`${h}: price set`)
+  for (const entry of repair.prices.filter((p) => p.partial)) {
+    parts.push(`${h}: ${entry.label} prices ${entry.prices.map((p) => p.currency_code).join(", ")}`)
+  }
+  if (repair.linkSalesChannel) parts.push(`${h}: sales channel`)
+  if (repair.linkShippingProfile) parts.push(`${h}: shipping profile`)
   return parts
 }
 

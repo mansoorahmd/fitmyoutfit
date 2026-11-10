@@ -81,6 +81,8 @@ export type SeedResult = {
    * complete store.
    */
   repaired: string[]
+  /** Problems found on seeded records that the seed left alone (also logged as warnings). */
+  warnings: string[]
 }
 
 export async function seedStore(
@@ -111,6 +113,7 @@ export async function seedStore(
     adminUser: false,
   }
   const repaired: string[] = []
+  const warnings: string[] = []
 
   // 1. Default sales channel
   let [salesChannel] = await salesChannelModule.listSalesChannels({
@@ -254,11 +257,16 @@ export async function seedStore(
       "options.values.value",
       "options.values.rank",
       "variants.id",
+      "variants.sku",
       "variants.title",
       "variants.variant_rank",
       "variants.options.value",
+      "variants.options.option_id",
       "variants.price_set.id",
       "variants.price_set.prices.id",
+      "variants.price_set.prices.currency_code",
+      "variants.price_set.prices.price_list_id",
+      "variants.price_set.prices.rules_count",
       "sales_channels.id",
       "shipping_profile.id",
     ],
@@ -281,6 +289,15 @@ export async function seedStore(
         input: { product_variants: repair.createVariants },
       })
     }
+    for (const entry of repair.optionValues) {
+      // Medusa's variant update takes the variant's values for every option of the product, by
+      // option title, and refuses a combination another variant already has.
+      await productModule.updateProductVariants(entry.variantId, { options: entry.options })
+    }
+    for (const warning of repair.warnings) {
+      logger.warn(`Seed: ${warning}`)
+    }
+    warnings.push(...repair.warnings)
     if (repair.sizeRanks) {
       await productModule.updateProductOptions(repair.sizeRanks.optionId, {
         ranks: repair.sizeRanks.ranks,
@@ -415,9 +432,10 @@ export async function seedStore(
 
   logger.info(
     `Seed done. Created: ${JSON.stringify(created)}. Repaired: ${JSON.stringify(repaired)}. ` +
+      (warnings.length > 0 ? `Left as they are (see the warnings): ${warnings.length}. ` : "") +
       "(Anything not listed already existed.)"
   )
-  return { publishableKey: key.token as string, created, repaired }
+  return { publishableKey: key.token as string, created, repaired, warnings }
 }
 
 async function seedRegions(
