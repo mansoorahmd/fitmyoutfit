@@ -268,7 +268,8 @@
               },
               "value": {
                 "type": "string",
-                "pattern": "^[0-9]{1,3}$"
+                "pattern": "^(?:[\\u0030-\\u0039]+|[\\u0660-\\u0669]+|[\\u06F0-\\u06F9]+)$",
+                "description": "A jersey number: one or more digits from one digit system (Western 0-9, Arabic-Indic ٠-٩ or Extended Arabic-Indic ۰-۹), kept as typed so \"07\" survives. This pattern checks the structure only. The largest number (99, so at most 2 digits) is data, not part of the pattern, and is enforced by validateDesign() from @fitmyoutfit/editor/design, as are the allowed digit systems when the rules are changed. Do not rely on this schema alone to accept a number layer."
               },
               "fontId": {
                 "type": "string",

@@ -4,6 +4,8 @@ import Ajv2020 from "ajv/dist/2020.js";
 import { describe, expect, it } from "vitest";
 import { createDesign } from "./create";
 import { getDesignJsonSchema, getProductJsonSchema } from "./json-schema";
+import { DEFAULT_JERSEY_NUMBER_RULES } from "./jersey-number-rules";
+import { JERSEY_NUMBER_VALUE_PATTERN } from "./schema";
 import { validateDesign, validateProductDefinition } from "./validate";
 import { fullDesign, loadPlaceholderProduct } from "../test/fixtures";
 
@@ -51,6 +53,14 @@ describe("JSON Schema and validateDesign agree", () => {
     ["unknown layer kind", copy((d) => (d.layers[0].kind = "sticker")), false],
     ["negative size", copy((d) => (d.layers[0].size.width = -1)), false],
     ["number layer with letters", copy((d) => (d.layers[1].value = "AB")), false],
+    ["number layer with Western digits", copy((d) => (d.layers[1].value = "07")), true],
+    ["number layer with Arabic-Indic digits", copy((d) => (d.layers[1].value = "٧")), true],
+    ["number layer with Extended Arabic-Indic digits", copy((d) => (d.layers[1].value = "۹۹")), true],
+    ["number layer mixing two digit systems (the pattern forbids it too)", copy((d) => (d.layers[1].value = "1٢")), false],
+    ["number layer with spaces", copy((d) => (d.layers[1].value = " 7")), false],
+    ["number layer with full-width digits", copy((d) => (d.layers[1].value = "７")), false],
+    ["number layer with a sign", copy((d) => (d.layers[1].value = "-1")), false],
+    ["number layer that is empty", copy((d) => (d.layers[1].value = "")), false],
     ["extra field on a layer", copy((d) => (d.layers[2].pixels = "AAAA")), false],
     ["extra top-level field", copy((d) => (d.thumbnail = "AAAA")), false],
     ["bad media type", copy((d) => (d.layers[2].asset.mediaType = "image/gif")), false],
@@ -72,6 +82,53 @@ describe("JSON Schema and validateDesign agree", () => {
   it.each(cases)("%s", (_name, doc, expected) => {
     expect(validateWithSchema(doc)).toBe(expected);
     expect(validateDesign(doc).ok).toBe(expected);
+  });
+});
+
+// The ONE place where the two are allowed to differ: the jersey number maximum.
+// The maximum is data (99 by default, and callers can pass other rules), which a
+// JSON Schema cannot express, so the schema's pattern only checks structure
+// (digits, from one digit system) and `validateDesign` enforces the maximum and
+// the length. Anything the schema rejects, `validateDesign` must reject too;
+// the reverse is not true for these values.
+describe("JSON Schema is looser than validateDesign for the jersey number maximum (documented difference)", () => {
+  const ajv = new Ajv2020({ strict: false, allErrors: true });
+  const validateWithSchema = ajv.compile(committed("design.schema.json") as object);
+  const full = fullDesign(createDesign(product));
+  const withNumber = (value: string) => {
+    const doc = JSON.parse(JSON.stringify(full)) as Record<string, any>;
+    doc.layers[1].value = value;
+    return doc;
+  };
+
+  it.each(["100", "007", "999", "1234", "٠٠٧", "۱۰۰", "0".repeat(50)])(
+    "%s: the schema accepts it, validateDesign rejects it as too long",
+    (value) => {
+      expect(validateWithSchema(withNumber(value))).toBe(true);
+      const result = validateDesign(withNumber(value));
+      expect(result.ok).toBe(false);
+      expect(!result.ok && result.errors[0]!.message).toContain("has more than 2 digits");
+    },
+  );
+
+  it("with a larger maximum passed in, validateDesign accepts what the schema always accepted", () => {
+    const rules = { ...DEFAULT_JERSEY_NUMBER_RULES, maxValue: 999 };
+    expect(validateDesign(withNumber("100"), { jerseyNumberRules: rules }).ok).toBe(true);
+  });
+
+  it("everything the schema rejects, validateDesign rejects too", () => {
+    for (const value of ["", " 7", "7 ", "-1", "1.5", "7a", "٧a", "1٢", "٧۷", "７"]) {
+      expect(validateWithSchema(withNumber(value))).toBe(false);
+      expect(validateDesign(withNumber(value)).ok).toBe(false);
+    }
+  });
+
+  it("the schema's description for the value says where the maximum is enforced", () => {
+    const schema = committed("design.schema.json") as any;
+    const number = schema.properties.layers.items.oneOf.find((l: any) => l.properties.kind.const === "number");
+    expect(number.properties.value.description).toContain("enforced by validateDesign()");
+    expect(number.properties.value.description).toContain("99");
+    expect(number.properties.value.pattern).toBe(JERSEY_NUMBER_VALUE_PATTERN);
   });
 });
 

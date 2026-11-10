@@ -82,7 +82,7 @@ One source of truth: the zod schemas in `src/design/schema.ts`. The TypeScript t
 Layer kinds: `text` and `number` (value, font, size, fill, alignment), and `logo` and `clipart` (an `asset` reference). Layers are listed bottom to top.
 
 - A `text` value is any Unicode text of 1 to 200 characters and is stored exactly as written: Latin, Arabic and Urdu names, mixed text such as `Ali علي 10`, and combining marks are all accepted. There is no normalisation, so `e` plus a combining acute and the single character `é` stay different values. (Text direction, alignment by reading direction and font fallback per script belong to the text-layer work in weeks 5 to 6.)
-- A `number` value is 1 to 3 ASCII digits (`"7"`, `"07"`, `"100"`). Four digits, letters and non-Western digits are rejected.
+- A `number` value is a jersey number: see "Jersey numbers" below. In short, a string of 1 or 2 digits worth 0 to 99, in English, Arabic or Urdu digits, one system per number, stored exactly as typed (`"7"`, `"07"`, `"٧"`).
 - `rotation` is any finite number of degrees. It is stored as given, not wrapped to 0 to 360 (`725.5` stays `725.5`). A value that is not a finite number is rejected.
 - `position` may lie outside the piece (negative, or beyond the piece size) and is accepted. Checking that layers stay inside their piece is not done yet (see "Deliberately left for later").
 
@@ -110,10 +110,52 @@ A colour is `{ "id": "<palette colour id>", "hex": "#RRGGBB" }`: a palette refer
 - `validateProductDefinition(input)` (also never throws), `assertValidDesign(input)`.
 - Edits, all immutable (they return a new document, never change the input, and throw `DesignError`, never a raw `TypeError`, with readable messages for invalid input, including a wrong argument such as `undefined` or `null`): `setZoneColor`, `addLayer`, `updateLayer`, `removeLayer`, `addFont`. `updateLayer` replaces nested objects (`position`, `size`) whole and cannot change `id` or `kind`.
   - A text or number layer must use a font listed in `design.fonts`: `addLayer` and `updateLayer` refuse an unknown `fontId`. Add the font first with `addFont`.
+  - A number layer's value must follow the jersey number rule (below), in `validateDesign` and in `addLayer` and `updateLayer`, with the same readable message. Pass `{ jerseyNumberRules }` (next to `{ product }`) to use other rules than the default data.
   - Pass `{ product }` as the last argument (`addLayer(design, layer, { product })`, `updateLayer(design, id, patch, { product })`, `setZoneColor(design, zone, colour, { product })`) to also refuse a `pieceId` or zone that the product does not have, or a product that is not the one the design is for. Without it only the document is checked, because the document does not carry the product's pieces.
   - **Fonts that no layer uses any more stay in `fonts`** after `removeLayer` or after a layer switches font. They are harmless, the next layer can reuse them, and nothing removes data behind the caller's back. A later "tidy up" step (for example when saving) can drop them.
 - A zone id may not be `__proto__`, `constructor` or `prototype`, and a `__proto__` key in a JSON document is a validation error rather than being dropped silently.
 - `getDesignJsonSchema()`, `getProductJsonSchema()`.
+
+## Jersey numbers
+
+The founders' rule (S0-3c), held as data and applied by one set of plain functions. The backend's roster checks use the same functions, so a number is judged the same way in the editor and at order time.
+
+- A jersey number is a string of digits worth **0 to 99**. The longest allowed string follows from the maximum: **2 digits**, counting leading zeros, so `"007"` is invalid.
+- Allowed digit systems: Western `0-9` (U+0030 to U+0039), Arabic-Indic `٠-٩` (U+0660 to U+0669) and Extended Arabic-Indic `۰-۹` (U+06F0 to U+06F9, the Urdu and Persian forms). **One number may not mix systems** (`"1٢"`, and `"٧۷"`, are invalid).
+- Leading zeros are allowed and do not change the value: `"07"` and `"7"` are both 7. The string is kept exactly as typed; digits are never converted to another system.
+- **The same number:** two numbers are the same when their values are equal, in any digit system and with or without leading zeros: `"7"`, `"07"`, `"٧"` and `"۷"`.
+- Nothing else: no signs, spaces, decimal points, full-width digits (`"７"`). Nothing is trimmed or normalised: `" 7"` is invalid. Empty is invalid.
+
+**The limits are data.** They live in `src/design/jersey-number-rules.ts` as `DEFAULT_JERSEY_NUMBER_RULES` (`{ maxValue: 99, digitSystems: [...] }`, each system being an id, a name and the code point of its zero). Every function below takes `rules` as an optional last argument and defaults to that data, so the backend can pass rules loaded from its own settings without a code change here. `checkJerseyNumberRules(rules)` returns a description of what is wrong with a rules object (or `null`); an unusable rules object makes the functions throw a `RangeError`.
+
+```ts
+import {
+  checkJerseyNumber, jerseyNumberValue, isSameJerseyNumber, findDuplicateJerseyNumbers,
+} from "@fitmyoutfit/editor/design"; // also from "@fitmyoutfit/editor"; no React or Three.js
+
+checkJerseyNumber("٠٧");   // { ok: true, value: 7, digitSystem: "arabic-indic" }
+checkJerseyNumber("100");  // { ok: false, error: '"100" has more than 2 digits (the largest jersey number is 99; leading zeros count)' }
+checkJerseyNumber("1٢");   // { ok: false, error: '"1٢" mixes two digit systems (Western (0-9) and Arabic-Indic (٠-٩)); use one system only' }
+jerseyNumberValue("07");   // 7  (null when invalid)
+isSameJerseyNumber("7", "۷"); // true
+
+// Roster check: one call over every player's number, as typed.
+const { duplicates, invalid } = findDuplicateJerseyNumbers(players.map((p) => p.number));
+// duplicates: [{ value: 7, indexes: [0, 3], numbers: ["7", "٧"] }]  (sorted by value; indexes are list positions)
+// invalid:    [{ index: 5, entry: "100", error: "..." }]
+```
+
+- `checkJerseyNumber(input: unknown, rules?)` returns `{ ok: true, value, digitSystem }` or `{ ok: false, error }`. It accepts any input and never throws for a bad number; `error` is a readable phrase that starts with the quoted number (or says what type it got).
+- `isValidJerseyNumber(input, rules?)`, `jerseyNumberValue(input, rules?)` (the value, or `null` when invalid), `jerseyNumberMaxLength(rules?)`.
+- `isSameJerseyNumber(a, b, rules?)`: true only when both are valid and their values are equal. An invalid entry is never "the same" as anything.
+- `findDuplicateJerseyNumbers(list, rules?)` returns `{ duplicates, invalid }`. **Invalid entries never crash it and never count as duplicates**, not even two identical invalid strings: they are listed in `invalid` (index, entry, reason) so the caller can show both problems. Without a list it throws a `TypeError`.
+- The error wording may be improved over time. Test on `ok`, not on the text, in the backend.
+
+### How the JSON Schema and the validation function divide the work
+
+A JSON Schema cannot say "at most N" where N is data, so `schema/design.schema.json` checks the **structure** of a number layer's value only: one or more digits, all from one of the three digit systems (that pattern also rules out mixing). **The maximum (99) and the length that follows from it are enforced by `validateDesign` and the edit functions**, with the rules you pass in. This is stated in the schema's `description` for the value. So a document can pass the schema and still be rejected by `validateDesign` (`"100"`); never the other way round. Treat `validateDesign` as the rule and the schema as a structural pre-check for other tools. A test (`json-schema.test.ts`) lists exactly where the two differ.
+
+Limit of "rules as data": rules can change the maximum or allow fewer digit systems. A digit system that is not one of the three in the default data is still refused by the schema's pattern, which is built from the default data. Adding a fourth system means adding it to the default data and regenerating the schema.
 
 ## Product definitions are data
 
@@ -128,7 +170,7 @@ A product definition (`samples/products/placeholder-jersey.json`, schema in `sch
 - Mapping SVG pattern panels onto the model as textures, and showing text, number and logo layers on the model (weeks 3 to 8).
 - Palette data, snapping a custom HEX to the nearest palette colour and its warning, templates, undo and redo.
 - Upload checks (file type, resolution, DPI), real font files and font metrics, text fitting.
-- Roster data and number or name binding for team orders; proof renders.
+- Roster data and number or name binding for team orders; proof renders. (The number rule and the duplicate check exist as plain functions; the roster itself does not.)
 - Migrations between `schemaVersion`s (only version 1 exists; other versions are rejected with a clear message).
 - Checks that layers lie inside their piece (today a layer may sit partly or wholly outside it), mirrored or rotated pieces in UV space, per-layer visibility or locking.
 - Saving, design versions ("every save creates a new version") and share links: backend concerns. `schemaVersion` is the format version only.
