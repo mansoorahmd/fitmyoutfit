@@ -2,6 +2,107 @@
 @import "tailwindcss/components";
 @import "tailwindcss/utilities";
 
+/*
+ * Brand tokens: direction A, "Matchday" (docs/design/03-direction.md,
+ * decision 007). Colours are RGB triplets so Tailwind can add opacity
+ * (tailwind.config.js maps each one as colors.brand.<token>). Components use
+ * the token classes only, never raw hex. Contrast ratios are in the spec.
+ */
+@layer base {
+  :root {
+    --c-bg: 255 255 255; /* #FFFFFF page */
+    --c-surface: 255 255 255; /* #FFFFFF cards, sheets */
+    --c-surface-alt: 243 245 249; /* #F3F5F9 image backgrounds, bands */
+    --c-ink: 11 21 48; /* #0B1530 text, 18.0:1 on white */
+    --c-ink-muted: 74 85 104; /* #4A5568 secondary text, 7.5:1 */
+    --c-inverse: 11 21 48; /* #0B1530 header, hero, footer */
+    --c-on-inverse: 255 255 255; /* #FFFFFF text on navy, 18.0:1 */
+    --c-on-inverse-muted: 184 194 214; /* #B8C2D6 secondary text on navy, 10.1:1 */
+    --c-primary: 200 16 46; /* #C8102E main button only */
+    --c-primary-hover: 165 13 38; /* #A50D26 */
+    --c-on-primary: 255 255 255; /* #FFFFFF label on primary, 5.9:1 */
+    --c-accent: 216 255 62; /* #D8FF3E small highlights on navy only */
+    --c-border: 201 209 222; /* #C9D1DE dividers only (1.5:1) */
+    --c-border-strong: 107 118 137; /* #6B7689 control and card outlines, 4.6:1 */
+    --c-success: 15 122 61; /* #0F7A3D */
+    --c-error: 180 35 24; /* #B42318 */
+    --c-focus: 37 99 235; /* #2563EB focus ring */
+
+    --radius-control: 4px;
+    --radius-card: 8px;
+    --radius-sheet: 16px;
+  }
+
+  body {
+    @apply bg-brand-bg text-brand-ink font-sans antialiased;
+  }
+
+  /* Focus ring: 2 px focus colour with a 2 px offset, on every focusable element. */
+  :focus-visible {
+    outline: 2px solid rgb(var(--c-focus));
+    outline-offset: 2px;
+  }
+
+  /* Motion: honour reduced motion everywhere (no slides, no fades). */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+/*
+ * Type scale (size/line-height in px at 360, 768 and 1280 px). Headings are
+ * Barlow Condensed in capitals; body text is Inter and is never condensed.
+ */
+@layer components {
+  .type-display,
+  .type-h1,
+  .type-h2,
+  .type-h3 {
+    @apply font-heading uppercase;
+    letter-spacing: 0.01em;
+  }
+
+  .type-display {
+    @apply font-extrabold text-[40px] leading-[44px] md:text-[56px] md:leading-[60px] xl:text-[72px] xl:leading-[76px];
+  }
+
+  .type-h1 {
+    @apply font-bold text-[32px] leading-[38px] md:text-[40px] md:leading-[46px] xl:text-[48px] xl:leading-[54px];
+  }
+
+  .type-h2 {
+    @apply font-bold text-[26px] leading-[32px] md:text-[30px] md:leading-[36px] xl:text-[36px] xl:leading-[42px];
+  }
+
+  .type-h3 {
+    @apply font-bold text-[20px] leading-[26px] md:text-[22px] md:leading-[28px];
+  }
+
+  .type-body-lg {
+    @apply font-sans text-[18px] leading-[28px] xl:text-[20px] xl:leading-[30px];
+  }
+
+  .type-body {
+    @apply font-sans text-[16px] leading-[24px];
+  }
+
+  .type-small {
+    @apply font-sans text-[14px] leading-[20px];
+  }
+
+  /* Never for prices, promises or controls. */
+  .type-caption {
+    @apply font-sans text-[12px] leading-[16px];
+  }
+}
+
 @layer utilities {
   /* Chrome, Safari and Opera */
   .no-scrollbar::-webkit-scrollbar {
@@ -50,8 +151,10 @@
 }
 
 @layer components {
+  /* Page gutter 16 / 24 / 32 px at 360 / 768 / 1280; content at most 1200 px wide. */
   .content-container {
-    @apply max-w-[1440px] w-full mx-auto px-6;
+    @apply w-full mx-auto px-4 md:px-6 xl:px-8;
+    max-width: calc(theme(maxWidth.content) + 2 * theme(spacing.8));
   }
 
   .contrast-btn {

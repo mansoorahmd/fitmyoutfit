@@ -1,5 +1,6 @@
 import { HttpTypes } from "@medusajs/types"
 import { NextRequest, NextResponse } from "next/server"
+import { urlHasCountryCode as hasCountryCode } from "@lib/util/url-country"
 
 const BACKEND_URL = process.env.MEDUSA_BACKEND_URL
 const PUBLISHABLE_API_KEY = process.env.NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY
@@ -116,8 +117,7 @@ export async function middleware(request: NextRequest) {
 
   const countryCode = regionMap && (await getCountryCode(request, regionMap))
 
-  const urlHasCountryCode =
-    countryCode && request.nextUrl.pathname.split("/")[1].includes(countryCode)
+  const urlHasCountryCode = hasCountryCode(request.nextUrl.pathname, countryCode)
 
   // if one of the country codes is in the url and the cache id is set, return next
   if (urlHasCountryCode && cacheIdCookie) {

@@ -57,3 +57,31 @@ export const getAddToCartState = ({
   }
   return { label: "Add to cart", disabled: false }
 }
+
+/**
+ * Values of a product's only option that cannot be bought: no variant has
+ * the value, or its variant is out of stock. The size selector shows these
+ * as unavailable (still visible and still selectable, so the button can say
+ * "Out of stock"). With several options availability depends on the other
+ * choices, so nothing is marked.
+ */
+export const getUnavailableOptionValues = (
+  product: Pick<HttpTypes.StoreProduct, "variants" | "options">
+): string[] => {
+  const options = product.options ?? []
+  if (options.length !== 1) {
+    return []
+  }
+  const [option] = options
+
+  return (option.values ?? [])
+    .map((v) => v.value)
+    .filter((value) => {
+      const variant = product.variants?.find((candidate) =>
+        candidate.options?.some(
+          (o) => o.option_id === option.id && o.value === value
+        )
+      )
+      return !variant || !isVariantPurchasable(variant)
+    })
+}

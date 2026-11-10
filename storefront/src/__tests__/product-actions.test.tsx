@@ -1,12 +1,14 @@
 import { fireEvent, render, screen } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 
+const { replace } = vi.hoisted(() => ({ replace: vi.fn() }))
+
 vi.mock("@lib/data/cart", () => ({ addToCart: vi.fn() }))
 vi.mock("next/navigation", () => ({
   useParams: () => ({ countryCode: "pk" }),
   usePathname: () => "/pk/products/jersey",
   useSearchParams: () => new URLSearchParams(),
-  useRouter: () => ({ replace: vi.fn() }),
+  useRouter: () => ({ replace }),
 }))
 // Not in view, so the mobile bar is shown alongside the main button
 vi.mock("@lib/hooks/use-in-view", () => ({ useIntersection: () => false }))
@@ -46,17 +48,32 @@ describe("product actions", () => {
     render(<ProductActions product={jersey()} region={region} />)
 
     expect(mainButton()).toHaveTextContent("Select a size")
-    expect(mainButton()).toBeDisabled()
+    expect(mainButton()).toHaveAttribute("aria-disabled", "true")
     expect(mobileButton()).toHaveTextContent("Select a size")
-    expect(mobileButton()).toBeDisabled()
+    expect(mobileButton()).toHaveAttribute("aria-disabled", "true")
     expect(screen.queryByText("Out of stock")).not.toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole("button", { name: "M" }))
+    fireEvent.click(screen.getByRole("radio", { name: "M" }))
 
     expect(mainButton()).toHaveTextContent("Add to cart")
-    expect(mainButton()).toBeEnabled()
+    expect(mainButton()).not.toHaveAttribute("aria-disabled")
     expect(mobileButton()).toHaveTextContent("Add to cart")
-    expect(mobileButton()).toBeEnabled()
+    expect(mobileButton()).not.toHaveAttribute("aria-disabled")
+  })
+
+  it("records the chosen size in the URL without scrolling the page", () => {
+    replace.mockClear()
+    render(<ProductActions product={jersey()} region={region} />)
+
+    fireEvent.click(screen.getByRole("radio", { name: "M" }))
+
+    expect(replace).toHaveBeenCalledWith(
+      "/pk/products/jersey?v_id=var_M",
+      { scroll: false }
+    )
+    for (const call of replace.mock.calls) {
+      expect(call[1]).toEqual({ scroll: false })
+    }
   })
 
   it("single-variant product shows Add to cart immediately", () => {
@@ -78,9 +95,9 @@ describe("product actions", () => {
     render(<ProductActions product={fitKit} region={region} />)
 
     expect(mainButton()).toHaveTextContent("Add to cart")
-    expect(mainButton()).toBeEnabled()
+    expect(mainButton()).not.toHaveAttribute("aria-disabled")
     expect(mobileButton()).toHaveTextContent("Add to cart")
-    expect(mobileButton()).toBeEnabled()
+    expect(mobileButton()).not.toHaveAttribute("aria-disabled")
   })
 
   it("managed inventory with zero stock shows Out of stock after selection", () => {
@@ -93,11 +110,14 @@ describe("product actions", () => {
 
     expect(mainButton()).toHaveTextContent("Select a size")
 
-    fireEvent.click(screen.getByRole("button", { name: "L" }))
+    // out of stock, so the chip is marked unavailable but can still be chosen
+    const large = screen.getByRole("radio", { name: "L, unavailable" })
+    fireEvent.click(large)
+    expect(large).toBeChecked()
 
     expect(mainButton()).toHaveTextContent("Out of stock")
-    expect(mainButton()).toBeDisabled()
+    expect(mainButton()).toHaveAttribute("aria-disabled", "true")
     expect(mobileButton()).toHaveTextContent("Out of stock")
-    expect(mobileButton()).toBeDisabled()
+    expect(mobileButton()).toHaveAttribute("aria-disabled", "true")
   })
 })

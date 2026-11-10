@@ -99,7 +99,9 @@ describe("ProductPreview (product card)", () => {
 })
 
 describe("OptionSelect (size options on the product page)", () => {
-  it("lists the Size values in the order the backend returned them", () => {
+  // S0-14: sizes are shown Youth then Adult, each in size order (see
+  // lib/util/sizes.ts). For the seeded jersey that is the backend's order.
+  it("lists every Size value, Youth then Adult, as radios", () => {
     const sizes = [
       "YS",
       "YM",
@@ -130,9 +132,9 @@ describe("OptionSelect (size options on the product page)", () => {
       />
     )
 
-    const buttons = within(screen.getByTestId("product-options")).getAllByRole(
-      "button"
+    const radios = within(screen.getByTestId("product-options")).getAllByRole(
+      "radio"
     )
-    expect(buttons.map((b) => b.textContent)).toEqual(sizes)
+    expect(radios.map((r) => (r as HTMLInputElement).value)).toEqual(sizes)
   })
 })

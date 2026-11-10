@@ -3,7 +3,25 @@
 // delivery time or guarantees. Placeholders are data: keep these strings here
 // and never write them into a component.
 
-export const homeContent = {
+/** A still of a real team kit for the hero (docs/design/03-direction.md). */
+export type HeroImage = {
+  src: string
+  alt: string
+}
+
+type HomeContent = {
+  headline: string
+  subline: string
+  button: { label: string; href: string }
+  /**
+   * Optional. There is no photo of our own kit yet, and stock or other
+   * stores' photos are not allowed, so this stays null and the hero is
+   * text only until the founders supply one.
+   */
+  heroImage: HeroImage | null
+}
+
+export const homeContent: HomeContent = {
   headline: "Design the kit. Drop the link.",
   subline:
     "Build your team's jersey in 3D, then share one link. Every player adds their own name, number and size.",
@@ -14,4 +32,5 @@ export const homeContent = {
     // the editor is embedded in the storefront.
     href: "/store",
   },
+  heroImage: null,
 }
