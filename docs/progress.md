@@ -14,20 +14,25 @@ The three coding tasks run in parallel, each in its own worktree, against [contr
 | # | Task | Owner | Status | Accepted when |
 | --- | --- | --- | --- | --- |
 | S0-1 | Root workspace, `docker-compose.yml` (PostgreSQL, Redis, MinIO), Medusa v2 backend, seed script, setup and dev commands, CI workflow | backend-dev | In progress | Seed creates the 4 regions, 5 products and sample prices from data files, and is idempotent. `npm run setup` works on an empty database. Lint, type-check and tests pass |
-| S0-2 | Next.js storefront from the Medusa starter, wired to the contract's environment variables | storefront-dev | In QA review (worker reported 10 Nov; branch `worktree-agent-ab58c40689e820697`). Not yet checked against a real backend | `/pk`, `/gb`, `/ae` and `/us` list the 3 garments with prices in the region's currency, and product pages offer the sizes. Lint, type-check and tests pass |
+| S0-2 | Next.js storefront from the Medusa starter, wired to the contract's environment variables | storefront-dev | QA verdict: changes needed. Back with the worker for fixes (S0-2b, which includes S0-7). Not yet checked against a real backend | `/pk`, `/gb`, `/ae` and `/us` list the 3 garments with prices in the region's currency, and product pages offer the sizes. Lint, type-check and tests pass |
 | S0-3 | Editor package scaffold: build, demo page, first draft of the design JSON type, schema and validator | editor-3d-dev | QA verdict: changes needed. Back with the worker for fixes (S0-3b) | Package builds standalone with no Medusa or Next.js imports. Demo page shows an orbitable placeholder. Lint, type-check and tests pass |
 | S0-4 | Three technical choices: email provider, hosting target, PDF library | coordinator | Done | Recorded in decisions 002, 003 and 005 (005 replaces 004) |
 | S0-5 | QA review of each branch, merge, root lockfile, full check from a clean database | qa-reviewer, coordinator | Not started | The "done when" above is seen working on `master` |
 | S0-6 | Rush as a percentage: drop the fixed rush prices from the seed, add the `rush_percentage` setting (placeholder 20) | backend-dev | Waiting for S0-1 | The setting is seeded as data and can be changed without a code change. `rush-add-on` has no fixed prices. Tests updated |
 | S0-3c | Jersey number rule in the editor's design format: 1 or 2 digits up to a maximum held as data (99), English or Arabic digits, no mixing | editor-3d-dev | Waiting for S0-3b | The rule is one exported plain function that the backend can reuse. Tests cover both digit sets, mixing, and the maximum |
-| S0-7 | Store name from one setting (`NEXT_PUBLIC_STORE_NAME`, default FitMyOutfit) in place of "Medusa Store" | storefront-dev | Waiting for S0-2 | The name shows in the header, footer and page titles, and comes from one place. Tests updated |
+| S0-7 | Store name from one setting (`NEXT_PUBLIC_STORE_NAME`, default FitMyOutfit) in place of "Medusa Store" | storefront-dev | In progress, as part of S0-2b | The name shows in the header, footer and page titles, and comes from one place. Tests updated |
 
 ## Done
 - S0-4: decisions [001 monorepo and tooling](decisions/001-monorepo-and-tooling.md), [002 email provider](decisions/002-email-provider.md), [003 hosting target](decisions/003-hosting-target.md) and [005 roster proof PDF through headless Chromium](decisions/005-pdf-via-headless-chromium.md). 005 replaces [004](decisions/004-pdf-library.md) after the founder allowed Arabic and Urdu names.
 - Contract for the local setup and seed data: [contracts/sprint-0-dev-setup.md](contracts/sprint-0-dev-setup.md).
 
 ## In progress
-- S0-1 is being built. S0-2 is with qa-reviewer. S0-3 is back with the worker after QA. Nothing is merged.
+- S0-1 is being built. S0-2 and S0-3 are back with their workers after QA. Nothing is merged.
+- S0-2 QA result (10 Nov): lint (0 errors, 3 warnings in starter code), type-check and 25 tests pass with no backend. QA ran the storefront against a stub server it wrote, not against Medusa, so the four region pages are still unproven against the real backend. Changes needed, sent back as S0-2b:
+  - Must fix: the garments collection lookup is cached with no expiry, so an empty result sticks. Opening the storefront before the seed, or reseeding, leaves "No products yet." on screen until `.next` is deleted.
+  - Should fix: the fit kit and rush add-on pages list each other and the garments under "Related products".
+  - Tidy: pin the `@medusajs/*` packages (the starter uses `latest`), remove unused starter leftovers, correct two wrong defaults.
+- QA's checklist for the integrated check against the real backend is kept for S0-5: API calls for regions, collection and products; the price table per region; size order on the product page; reseeding while the storefront runs; a cart smoke test.
 - Open points from S0-2: `next build` needs a running, seeded backend (CI runs lint, type-check and tests only, so this does not block CI); the starter leaves `@medusajs/*` at `latest`, to be pinned to the backend version; the storefront has not been run against a real backend yet.
 - S0-3 QA result (10 Nov): lint, type-check, 84 tests and the build pass, and QA saw the demo render, recolour and orbit in a headless browser. Changes needed before merge, sent back as S0-3b:
   - The `/design` entry can't be imported by the backend, which is CommonJS with Node16 module resolution.
