@@ -108,16 +108,23 @@ describe("planProductRepair", () => {
     expect(repair.prices).toEqual([])
   })
 
-  it("never prices the rush add-on, which has no fixed prices", () => {
+  it("never prices the rush add-on, but gives its variant the empty price set a clean run has", () => {
     const rush: ExistingSeededProduct = {
       id: "prod_r",
       handle: "rush-add-on",
       options: [],
-      variants: [{ id: "var_r", title: "Rush Production", price_set: null }],
+      variants: [{ id: "var_r", title: "Rush Production", price_set: { id: "pset_r", prices: [] } }],
       sales_channels: [{ id: "sc_1" }],
       shipping_profile: { id: "sp_1" },
     }
+    // As a clean run leaves it: an empty price set, so nothing to do.
     expect(describeRepair(planProductRepair(rush, seedFor("rush-add-on"), ctx))).toEqual([])
+
+    // Without a price set (the admin's price editor could not add prices later): create one, empty.
+    const withoutSet = { ...rush, variants: [{ id: "var_r", title: "Rush Production", price_set: null }] }
+    const repair = planProductRepair(withoutSet, seedFor("rush-add-on"), ctx)
+    expect(repair.prices).toEqual([{ variantId: "var_r", priceSetId: null, prices: [] }])
+    expect(describeRepair(repair)).toEqual(["rush-add-on: price set"])
   })
 
   it("creates the seed variants for a product left with none (interrupted before variants)", () => {

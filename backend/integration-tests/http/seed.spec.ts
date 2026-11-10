@@ -77,6 +77,7 @@ async function snapshot(container: MedusaContainer) {
       "variants.variant_rank",
       "variants.manage_inventory",
       "variants.options.value",
+      "variants.price_set.id",
       "variants.price_set.prices.currency_code",
       "variants.price_set.prices.amount",
     ],
@@ -107,6 +108,8 @@ async function snapshot(container: MedusaContainer) {
           variant_rank: v.variant_rank,
           manage_inventory: v.manage_inventory,
           options: (v.options ?? []).map((o: any) => o.value).sort(),
+          // A variant without a price set cannot be priced in the admin later, even with no prices.
+          has_price_set: !!v.price_set?.id,
           prices: (v.price_set?.prices ?? [])
             .map((pr: any) => `${pr.currency_code}:${pr.amount}`)
             .sort(),
@@ -534,6 +537,27 @@ medusaIntegrationTestRunner({
         expect(await priced()).toEqual(Array(11).fill(3500))
         expect(await snapshot(container)).toEqual(clean)
         expect(rerun.repaired).toEqual(["jersey: prices"])
+      })
+
+      it("gives the rush variant back the empty price set a clean run gives it", async () => {
+        const container = getContainer()
+        const query = container.resolve(ContainerRegistrationKeys.QUERY)
+        const link = container.resolve(ContainerRegistrationKeys.LINK)
+        const { data } = await query.graph({
+          entity: "product_variant",
+          fields: ["id", "price_set.id"],
+          filters: { sku: "RUSH" },
+        })
+        const rush = (data as any[])[0]
+        expect(rush.price_set?.id).toBeTruthy()
+        await link.dismiss({
+          [Modules.PRODUCT]: { variant_id: rush.id },
+          [Modules.PRICING]: { price_set_id: rush.price_set.id },
+        })
+
+        const rerun = await seedStore(container, adminOptions)
+        expect(await snapshot(container)).toEqual(clean)
+        expect(rerun.repaired).toEqual(["rush-add-on: price set"])
       })
 
       it("repairs a product an interrupted run left without variants or links", async () => {

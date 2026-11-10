@@ -12,7 +12,7 @@
  * What counts as "missing" is chosen so that an admin's edits are kept:
  * - variants: only a product with no variants at all gets the seed's variants;
  * - prices: only a variant with no price at all gets the seed's prices (a variant an admin
- *   priced, even in fewer currencies, is left alone);
+ *   priced, even in fewer currencies, is left alone); a variant with no price set gets one;
  * - size ranks: only when a size has no rank, or two sizes share one (an order an admin set,
  *   with distinct ranks, is kept);
  * - sales channel and shipping profile: only a product linked to none.
@@ -62,7 +62,10 @@ export type ProductRepair = {
   sizeRanks: { optionId: string; ranks: Record<string, number> } | null
   /** Variant ranks to write (display order of the size variants). */
   variantRanks: { id: string; variant_rank: number }[]
-  /** Variants with no price at all: the prices to give them. */
+  /**
+   * Variants with no price set (any product), or with an empty one where the seed has prices:
+   * the prices to give them (none for a product without fixed prices: then only the price set).
+   */
   prices: {
     variantId: string
     /** The variant's price set, or null when it has none (then one is created and linked). */
@@ -155,17 +158,19 @@ export function planProductRepair(
     }
   }
 
-  if (seed.has_fixed_prices) {
-    const seedPrices = seedInput.variants[0]?.prices ?? []
-    for (const variant of variants) {
-      const priceCount = present(variant.price_set?.prices).length
-      if (priceCount === 0 && seedPrices.length > 0) {
-        repair.prices.push({
-          variantId: variant.id,
-          priceSetId: variant.price_set?.id ?? null,
-          prices: seedPrices.map((p) => ({ ...p })),
-        })
-      }
+  // Every variant needs a price set, even one with no fixed price (the rush add-on): Medusa's
+  // update-variant workflow, which the admin uses to edit prices, only writes into an existing
+  // price set, so prices entered for a variant without one would be dropped.
+  const seedPrices = seed.has_fixed_prices ? (seedInput.variants[0]?.prices ?? []) : []
+  for (const variant of variants) {
+    const hasPriceSet = !!variant.price_set?.id
+    const priceCount = present(variant.price_set?.prices).length
+    if (!hasPriceSet || (priceCount === 0 && seedPrices.length > 0)) {
+      repair.prices.push({
+        variantId: variant.id,
+        priceSetId: variant.price_set?.id ?? null,
+        prices: seedPrices.map((p) => ({ ...p })),
+      })
     }
   }
 
@@ -178,7 +183,8 @@ export function describeRepair(repair: ProductRepair): string[] {
   if (repair.createVariants.length > 0) parts.push(`${repair.handle}: variants`)
   if (repair.sizeRanks) parts.push(`${repair.handle}: size ranks`)
   if (repair.variantRanks.length > 0) parts.push(`${repair.handle}: variant ranks`)
-  if (repair.prices.length > 0) parts.push(`${repair.handle}: prices`)
+  if (repair.prices.some((p) => p.prices.length > 0)) parts.push(`${repair.handle}: prices`)
+  else if (repair.prices.length > 0) parts.push(`${repair.handle}: price set`)
   if (repair.linkSalesChannel) parts.push(`${repair.handle}: sales channel`)
   if (repair.linkShippingProfile) parts.push(`${repair.handle}: shipping profile`)
   return parts
