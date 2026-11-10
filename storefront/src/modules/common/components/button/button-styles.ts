@@ -12,10 +12,13 @@ export type ButtonStyleOptions = {
   fullWidth?: boolean
 }
 
+// The focus ring's style is [outline-style:solid], not `outline`: the Button
+// passes these classes through clx, whose tailwind-merge 3 reads `outline` as
+// a width (the Tailwind 4 meaning) and drops it beside `outline-2`.
 const BASE =
   "relative inline-flex items-center justify-center gap-2 select-none " +
   "transition-colors duration-150 ease-out " +
-  "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-focus"
+  "focus-visible:[outline-style:solid] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-focus"
 
 // Filled and outlined buttons: 48 px tall, 4 px radius, condensed capitals at 18 px.
 const BLOCK =

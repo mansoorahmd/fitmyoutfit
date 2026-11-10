@@ -88,7 +88,13 @@ const OptionSelect: React.FC<OptionSelectProps> = ({
                           "cursor-pointer transition-colors duration-150 ease-out",
                           "hover:border-brand-ink",
                           "peer-checked:border-brand-ink peer-checked:bg-brand-ink peer-checked:text-brand-on-inverse",
-                          "peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-brand-focus",
+                          // The ring shows on the chip while its radio has
+                          // keyboard focus. The outline style is written as
+                          // [outline-style:solid], not `outline`: clx's
+                          // tailwind-merge 3 reads `outline` as a width (the
+                          // Tailwind 4 meaning) and drops it beside
+                          // `outline-2`, which left the chip with no ring.
+                          "peer-focus-visible:[outline-style:solid] peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-brand-focus",
                           "peer-disabled:cursor-not-allowed",
                           isUnavailable
                             ? "border-dashed border-brand-border-strong text-brand-ink-muted"
