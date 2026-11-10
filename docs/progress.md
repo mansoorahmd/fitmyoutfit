@@ -149,6 +149,9 @@ Assumptions the founders have not confirmed:
   - Databases seeded by the old code keep a random product order until reset; the README did not say so. The preview's `medusa` database is one of them.
   - Not fixed, accepted: orphaned price sets after an interrupted run, the `eur` price preference on a fresh database, "Repaired" wording on a fresh database.
 
+- **S0-10 reported (11 Nov); not merged yet.** The worker chose to give the backend its own install and lockfile; the root workspaces are the storefront and the editor, and a root `postinstall` installs the backend. It reports a clean install with root lint, type-check and tests passing, and the admin and storefront loading. The coordinator merged S0-10 and the backend branch into a local branch `integration-s0` (two small conflicts, in the root `package.json` and `README.md`, resolved by hand) and is running a clean `npm ci`, lint, type-check and tests on it. Master gets this branch only after that passes and the S0-1c fixes are in. Open from the report: ESLint is 9 everywhere, not 10 (Next.js's lint config does not support 10 yet, and npm marks 9 as unsupported); `npm audit` reports 10 findings in the root install, not yet reviewed.
+- **Workers cut off by a sign-in failure (11 Nov).** The S0-16 and S0-1c workers stopped when the Claude login session expired. S0-16's unfinished work was saved as a WIP commit on its branch and a new worker continues from it. S0-1c had changed nothing and was restarted. One empty locked worktree (`agent-a10db739873d42c09`) is left from a failed start; remove it at the end of the sprint.
+
 ## Blocked or waiting on founders
 
 - **Launch blocker: replace the stand-in product photos.** The development photos belong to spized.com and carry its logo. Our own product shoot must replace them before anything is deployed publicly. Founder to arrange the shoot once the design is ready.

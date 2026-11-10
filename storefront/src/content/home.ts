@@ -86,6 +86,22 @@ type HomeContent = {
 
 const HOW_IT_WORKS_ID = "how-team-orders-work"
 
+// Stand-in from the founder's reference site, for local development only
+// (docs/design/04-reference-spized.md). next.config.js allows its host in
+// non-production builds only.
+const DEV_HERO_IMAGE: HomeImage = {
+  src: "https://www.spized.com/thumbnail/ee/83/13/1787036820/header-trikot-selbst-gestalten-desktop_1920x1920.webp?ts=1789131738",
+  alt: "A player wearing a custom team jersey",
+}
+
+/**
+ * The hero image for a build. A production build gets null, so it shows the
+ * finished navy hero and never asks next/image for a host that
+ * next.config.js does not allow there. Our own photo replaces this later.
+ */
+export const heroImageFor = (nodeEnv: string | undefined): HomeImage | null =>
+  nodeEnv === "production" ? null : DEV_HERO_IMAGE
+
 export const homeContent: HomeContent = {
   headline: "Design the kit. Drop the link.",
   subline:
@@ -103,13 +119,8 @@ export const homeContent: HomeContent = {
     label: "How team orders work",
     href: `#${HOW_IT_WORKS_ID}`,
   },
-  // Stand-in from the founder's reference site, for local development only
-  // (docs/design/04-reference-spized.md). next.config.js allows this host in
-  // non-production builds only, so a production build must replace it.
-  heroImage: {
-    src: "https://www.spized.com/thumbnail/ee/83/13/1787036820/header-trikot-selbst-gestalten-desktop_1920x1920.webp?ts=1789131738",
-    alt: "A player wearing a custom team jersey",
-  },
+  // Development only: null in a production build (see heroImageFor).
+  heroImage: heroImageFor(process.env.NODE_ENV),
   promisesHeading: "What we promise",
   promises: [
     {

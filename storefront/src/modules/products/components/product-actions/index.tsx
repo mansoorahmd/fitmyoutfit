@@ -1,21 +1,26 @@
 "use client"
 
+import { productContent } from "@content/product"
 import { addToCart } from "@lib/data/cart"
-import { useIntersection } from "@lib/hooks/use-in-view"
 import {
   getAddToCartState,
   getUnavailableOptionValues,
   needsVariantSelection,
 } from "@lib/util/add-to-cart-state"
+import { getProductPrice } from "@lib/util/get-product-price"
+import {
+  chosenLabel,
+  isFullyInView,
+  stickyBarSummary,
+} from "@lib/util/sticky-buy-bar"
 import { HttpTypes } from "@medusajs/types"
 import { Button } from "@modules/common/components/button"
-import Divider from "@modules/common/components/divider"
 import OptionSelect from "@modules/products/components/product-actions/option-select"
 import { isEqual } from "lodash"
 import { useParams, usePathname, useSearchParams } from "next/navigation"
 import { useEffect, useMemo, useRef, useState } from "react"
 import ProductPrice from "../product-price"
-import MobileActions from "./mobile-actions"
+import StickyBuyBar, { useStickyBuyBar } from "./sticky-buy-bar"
 import { useRouter } from "next/navigation"
 
 type ProductActionsProps = {
@@ -33,8 +38,19 @@ const optionsAsKeymap = (
   }, {})
 }
 
+const prefersReducedMotion = () =>
+  typeof window.matchMedia === "function" &&
+  window.matchMedia("(prefers-reduced-motion: reduce)").matches
+
+/**
+ * The buy block (docs/design/03-direction.md, "Product page"): the price
+ * block, the size selector and the main button, plus the phone's sticky
+ * buy bar. Pressing either button with no size chosen shows "Choose a size"
+ * at the size selector and moves focus there; it never sits disabled.
+ */
 export default function ProductActions({
   product,
+  region,
   disabled,
 }: ProductActionsProps) {
   const router = useRouter()
@@ -49,6 +65,7 @@ export default function ProductActions({
         : {}
   )
   const [isAdding, setIsAdding] = useState(false)
+  const [sizeErrorShown, setSizeErrorShown] = useState(false)
   const countryCode = useParams().countryCode as string
 
   // If there is only 1 variant, preselect the options
@@ -105,17 +122,20 @@ export default function ProductActions({
     router.replace(pathname + "?" + params.toString(), { scroll: false })
   }, [selectedVariant, isValidVariant])
 
-  // label and enabled state of the main button, shared with the mobile bar
+  // label and state of the main button, shared with the sticky bar
   const needsSelection = needsVariantSelection(product, options)
   const addToCartState = getAddToCartState({
     variant: selectedVariant,
     isValidVariant,
     needsSelection,
   })
+  // The message clears itself once every option has a value.
+  const sizeError =
+    sizeErrorShown && needsSelection ? productContent.size.error : undefined
 
-  const actionsRef = useRef<HTMLDivElement>(null)
-
-  const inView = useIntersection(actionsRef, "0px")
+  const mainButtonRef = useRef<HTMLDivElement>(null)
+  const groupRefs = useRef<Record<string, HTMLDivElement | null>>({})
+  const showStickyBar = useStickyBuyBar(mainButtonRef)
 
   // add the selected variant to the cart
   const handleAddToCart = async () => {
@@ -135,64 +155,117 @@ export default function ProductActions({
     }
   }
 
+  // No size yet: show the message and take the customer to the first
+  // option without a value. It is scrolled into view only when it is not
+  // already wholly on screen (from the sticky bar it never is).
+  const askForSize = () => {
+    setSizeErrorShown(true)
+
+    const missing = (product.options ?? []).find((o) => !options[o.id])
+    const group = missing ? groupRefs.current[missing.id] : null
+    if (!group) {
+      return
+    }
+
+    const header = document.querySelector("header")
+    const headerBottom = header
+      ? Math.max(0, header.getBoundingClientRect().bottom)
+      : 0
+    const inView = isFullyInView(
+      group.getBoundingClientRect(),
+      headerBottom,
+      window.innerHeight
+    )
+    if (!inView && typeof group.scrollIntoView === "function") {
+      group.scrollIntoView({
+        block: "center",
+        behavior: prefersReducedMotion() ? "auto" : "smooth",
+      })
+    }
+    group.focus({ preventScroll: true })
+  }
+
+  const handlePress = () => {
+    if (addToCartState.asksForSize) {
+      askForSize()
+      return
+    }
+    handleAddToCart()
+  }
+
   const unavailableValues = useMemo(
     () => getUnavailableOptionValues(product),
     [product]
   )
 
+  const hasChoice = (product.variants?.length ?? 0) > 1
+
+  const { cheapestPrice, variantPrice } = getProductPrice({
+    product,
+    variantId: selectedVariant?.id,
+  })
+  const barPrice = (selectedVariant ? variantPrice : cheapestPrice)
+    ?.calculated_price
+  const barSummary = stickyBarSummary(
+    chosenLabel(product.options, options, hasChoice),
+    barPrice
+  )
+
+  const buttonDisabled = addToCartState.disabled || !!disabled
+
   return (
-    <>
-      <div className="flex flex-col gap-y-4" ref={actionsRef}>
-        <div>
-          {(product.variants?.length ?? 0) > 1 && (
-            <div className="flex flex-col gap-y-4">
-              {(product.options || []).map((option) => {
-                return (
-                  <div key={option.id}>
-                    <OptionSelect
-                      option={option}
-                      current={options[option.id]}
-                      updateOption={setOptionValue}
-                      title={option.title ?? ""}
-                      data-testid="product-options"
-                      disabled={!!disabled || isAdding}
-                      unavailable={unavailableValues}
-                    />
-                  </div>
-                )
-              })}
-              <Divider />
-            </div>
-          )}
+    <div className="flex flex-col gap-6">
+      <ProductPrice
+        product={product}
+        variant={selectedVariant}
+        region={region}
+        countryCode={countryCode}
+      />
+
+      {hasChoice && (
+        <div className="flex flex-col gap-y-6">
+          {(product.options || []).map((option) => (
+            <OptionSelect
+              key={option.id}
+              option={option}
+              current={options[option.id]}
+              updateOption={setOptionValue}
+              title={option.title ?? ""}
+              data-testid="product-options"
+              disabled={!!disabled || isAdding}
+              unavailable={unavailableValues}
+              error={!options[option.id] ? sizeError : undefined}
+              groupRef={(element) => {
+                groupRefs.current[option.id] = element
+              }}
+            />
+          ))}
         </div>
+      )}
 
-        <ProductPrice product={product} variant={selectedVariant} />
-
+      <div ref={mainButtonRef}>
         <Button
-          onClick={handleAddToCart}
-          disabled={addToCartState.disabled || !!disabled}
+          onClick={handlePress}
+          disabled={buttonDisabled}
           variant="primary"
           fullWidth
           isLoading={isAdding}
-          loadingText="Adding…"
+          loadingText={productContent.button.adding}
           data-testid="add-product-button"
         >
           {addToCartState.label}
         </Button>
-        <MobileActions
-          product={product}
-          variant={selectedVariant}
-          options={options}
-          unavailableValues={unavailableValues}
-          updateOptions={setOptionValue}
-          isValidVariant={isValidVariant}
-          needsSelection={needsSelection}
-          handleAddToCart={handleAddToCart}
-          isAdding={isAdding}
-          show={!inView}
-          optionsDisabled={!!disabled || isAdding}
-        />
       </div>
-    </>
+
+      <StickyBuyBar
+        show={showStickyBar}
+        summary={barSummary}
+        label={addToCartState.label}
+        loadingLabel={productContent.button.adding}
+        disabled={buttonDisabled}
+        isLoading={isAdding}
+        onPress={handlePress}
+      />
+    </div>
   )
 }
