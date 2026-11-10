@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Lint, type-check, test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    # The backend integration tests create temporary databases on this PostgreSQL server.
+    # They need no Redis: without REDIS_URL Medusa uses its in-memory modules.
+    # The credentials are throwaway values for this CI job only.
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: medusa
+          POSTGRES_PASSWORD: medusa
+          POSTGRES_DB: medusa
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U medusa -d medusa"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      # Read by backend/integration-tests/setup.js and @medusajs/test-utils.
+      DB_HOST: localhost
+      DB_PORT: "5432"
+      DB_USERNAME: medusa
+      DB_PASSWORD: medusa
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          # Two lockfiles: the root one (storefront and editor workspaces) and the backend's own.
+          cache-dependency-path: |
+            package-lock.json
+            backend/package-lock.json
+
+      # Installs the root workspaces, then the backend (root postinstall runs `npm ci` in backend/).
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type-check
+        run: npm run typecheck
+
+      - name: Test
+        run: npm run test

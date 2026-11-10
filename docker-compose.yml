@@ -1,0 +1,90 @@
+# Local development services: PostgreSQL, Redis and MinIO (S3-compatible file storage).
+# Everything here is DEV ONLY. The credentials are throwaway values; never reuse them anywhere real.
+#
+# Host ports can be changed with variables in the root .env file (see .env.example).
+# The container ports stay the same. The compose project name is fixed, so every git worktree
+# talks to the same containers and volumes.
+name: fitmyoutfit
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-medusa}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-medusa}
+      POSTGRES_DB: ${POSTGRES_DB:-medusa}
+    ports:
+      # 5433 on the host, because many dev machines already run PostgreSQL on 5432.
+      - "${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # MinIO publishes no official Docker images any more (minio/minio on Docker Hub and Quay are gone),
+  # so this uses the Chainguard build of MinIO. It is distroless: no shell, so the health check and
+  # the bucket setup below call the `mc` binary directly, with the `MC_HOST_local` alias variable.
+  minio:
+    image: cgr.dev/chainguard/minio:latest
+    restart: unless-stopped
+    command: ["server", "/data", "--address", ":9000", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MC_HOST_local: http://${MINIO_ROOT_USER:-minioadmin}:${MINIO_ROOT_PASSWORD:-minioadmin}@localhost:9000
+    ports:
+      - "${MINIO_API_PORT:-9100}:9000"
+      - "${MINIO_CONSOLE_PORT:-9101}:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "/usr/bin/mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+
+  # One-shot jobs: create the dev bucket, then allow anonymous downloads so file URLs
+  # such as http://localhost:9100/fitmyoutfit-dev/<file> open in a browser (dev only).
+  minio-create-bucket:
+    image: cgr.dev/chainguard/minio-client:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    restart: "no"
+    environment:
+      MC_HOST_local: http://${MINIO_ROOT_USER:-minioadmin}:${MINIO_ROOT_PASSWORD:-minioadmin}@minio:9000
+    command: ["mb", "--ignore-existing", "local/${MINIO_BUCKET:-fitmyoutfit-dev}"]
+
+  minio-public-read:
+    image: cgr.dev/chainguard/minio-client:latest
+    depends_on:
+      minio-create-bucket:
+        condition: service_completed_successfully
+    restart: "no"
+    environment:
+      MC_HOST_local: http://${MINIO_ROOT_USER:-minioadmin}:${MINIO_ROOT_PASSWORD:-minioadmin}@minio:9000
+    command: ["anonymous", "set", "download", "local/${MINIO_BUCKET:-fitmyoutfit-dev}"]
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:

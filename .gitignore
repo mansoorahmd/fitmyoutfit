@@ -11,3 +11,8 @@ coverage/
 .DS_Store
 .claude/worktrees/
 .claude/settings.local.json
+
+# Medusa local file provider output and admin build
+backend/static/
+backend/uploads/
+*.tsbuildinfo
