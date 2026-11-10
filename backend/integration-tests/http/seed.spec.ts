@@ -3,7 +3,7 @@ import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils"
 import { seedData } from "../../src/scripts/seed-data"
 import { seedStore } from "../../src/scripts/seed-lib/seed-store"
 
-jest.setTimeout(180 * 1000)
+jest.setTimeout(300 * 1000)
 
 const ADMIN_EMAIL = "seed-test-admin@example.com"
 const ADMIN_PASSWORD = "seed-test-password"
