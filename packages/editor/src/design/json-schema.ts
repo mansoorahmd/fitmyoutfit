@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { designSchema, productDefinitionSchema } from "./schema";
+import { designSchema, productDefinitionSchema } from "./schema.js";
 
 type JsonSchema = Record<string, unknown>;
 

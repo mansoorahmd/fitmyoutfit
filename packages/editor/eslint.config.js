@@ -25,4 +25,10 @@ export default tseslint.config(
     files: ["**/*.{js,mjs}"],
     languageOptions: { globals: { ...globals.node } },
   },
+  {
+    // CommonJS files: the consumer fixture that checks require() of the built package.
+    files: ["**/*.cjs"],
+    languageOptions: { sourceType: "commonjs", globals: { ...globals.node, ...globals.commonjs } },
+    rules: { "@typescript-eslint/no-require-imports": "off" },
+  },
 );

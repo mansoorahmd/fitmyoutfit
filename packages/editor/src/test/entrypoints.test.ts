@@ -12,7 +12,7 @@ function externalImports(file: string, seen = new Set<string>(), found = new Set
   for (const match of source.matchAll(/(?:\bfrom\s*|\bimport\s*\(?\s*)["']([^"']+)["']/g)) {
     const spec = match[1]!;
     if (spec.startsWith(".")) {
-      const base = resolve(dirname(file), spec);
+      const base = resolve(dirname(file), spec.replace(/\.js$/, ""));
       const candidates = [`${base}.ts`, `${base}.tsx`, resolve(base, "index.ts")];
       const target = candidates.find((c) => {
         try {

@@ -17,5 +17,6 @@
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["src", "demo", "scripts", "*.config.ts"]
+  "include": ["src", "demo", "scripts", "*.config.ts"],
+  "exclude": ["scripts/consumer-fixtures"]
 }

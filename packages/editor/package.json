@@ -22,8 +22,14 @@
       "import": "./dist/index.js"
     },
     "./design": {
-      "types": "./dist/types/design/index.d.ts",
-      "import": "./dist/design.js"
+      "import": {
+        "types": "./dist/types/design/index.d.ts",
+        "default": "./dist/design.js"
+      },
+      "require": {
+        "types": "./dist/cjs/types/index.d.ts",
+        "default": "./dist/cjs/design.cjs"
+      }
     },
     "./design.schema.json": "./schema/design.schema.json",
     "./product.schema.json": "./schema/product.schema.json",
@@ -31,13 +37,14 @@
   },
   "scripts": {
     "dev": "vite --config vite.demo.config.ts",
-    "build": "vite build --config vite.lib.config.ts && tsc -p tsconfig.build.json && node scripts/check-entrypoints.mjs",
+    "build": "vite build --config vite.lib.config.ts && tsc -p tsconfig.build.json && vite build --config vite.design-cjs.config.ts && tsc -p tsconfig.build.cjs.json && node scripts/write-cjs-package.mjs && node scripts/check-entrypoints.mjs",
     "build:demo": "vite build --config vite.demo.config.ts",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "generate:schema": "tsx scripts/generate-schema.ts",
-    "generate:model": "node scripts/generate-placeholder-jersey.mjs"
+    "generate:model": "node scripts/generate-placeholder-jersey.mjs",
+    "dev:lan": "vite --config vite.demo.config.ts --host"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.9",
@@ -45,8 +52,8 @@
     "zod": "^4.6.7"
   },
   "peerDependencies": {
-    "react": "^18 || ^19",
-    "react-dom": "^18 || ^19",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
     "three": ">=0.170.0"
   },
   "devDependencies": {

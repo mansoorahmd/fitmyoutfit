@@ -1,4 +1,4 @@
-import { DESIGN_SCHEMA_VERSION, type DesignDocument, type ProductDefinition } from "./schema";
+import { DESIGN_SCHEMA_VERSION, type DesignDocument, type ProductDefinition } from "./schema.js";
 
 /**
  * Creates an empty design for a product: every colour zone at the product's

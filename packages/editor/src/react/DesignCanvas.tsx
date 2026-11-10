@@ -2,7 +2,7 @@ import { Component, Suspense, useEffect, useMemo, type CSSProperties, type React
 import { Canvas, useThree } from "@react-three/fiber";
 import { OrbitControls, useGLTF } from "@react-three/drei";
 import { Box3, Vector3, type Material, type Mesh, type MeshStandardMaterial, type Object3D } from "three";
-import type { DesignDocument, ProductDefinition } from "../design/schema";
+import type { DesignDocument, ProductDefinition } from "../design/schema.js";
 
 export interface DesignCanvasProps {
   /** The design to show. The canvas only reads it; edit it with the functions from the design entry point. */
