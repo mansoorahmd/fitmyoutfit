@@ -1,11 +1,19 @@
 import { listProducts } from "@lib/data/products"
 import { HttpTypes } from "@medusajs/types"
-import { Text } from "@medusajs/ui"
 
+import { homeContent } from "@content/home"
+import {
+  productCardImageSizes,
+  productGridClasses,
+} from "@modules/products/components/product-grid/grid"
+import ProductCard from "@modules/products/components/product-preview"
 import EmptyProducts from "@modules/store/components/empty-products"
-import InteractiveLink from "@modules/common/components/interactive-link"
-import ProductPreview from "@modules/products/components/product-preview"
 
+/**
+ * "Choose your garment" on the home page: the garments collection as
+ * product cards, in the listing's grid (docs/design/03-direction.md,
+ * "Home page" 3).
+ */
 export default async function ProductRail({
   collection,
   region,
@@ -28,21 +36,30 @@ export default async function ProductRail({
   }
 
   return (
-    <div className="content-container py-12 small:py-24">
-      <div className="flex justify-between mb-8">
-        <Text className="txt-xlarge">{collection.title}</Text>
-        <InteractiveLink href={`/collections/${collection.handle}`}>
-          View all
-        </InteractiveLink>
-      </div>
-      <ul className="grid grid-cols-2 small:grid-cols-3 gap-x-6 gap-y-24 small:gap-y-36">
-        {pricedProducts &&
-          pricedProducts.map((product) => (
-            <li key={product.id}>
-              <ProductPreview product={product} region={region} isFeatured />
-            </li>
-          ))}
-      </ul>
-    </div>
+    <ul className={productGridClasses(pricedProducts.length)}>
+      {pricedProducts.map((product) => (
+        <li key={product.id}>
+          <ProductCard
+            product={product}
+            region={region}
+            imageSizes={productCardImageSizes(pricedProducts.length)}
+          />
+        </li>
+      ))}
+    </ul>
   )
 }
+
+/** The section around the rail, with its title. The rail or an empty state goes inside. */
+export const GarmentsSection = ({ children }: { children: React.ReactNode }) => (
+  <section
+    className="content-container flex flex-col gap-6 py-12 md:gap-8 xl:py-24"
+    aria-labelledby="home-garments-heading"
+    data-testid="home-garments"
+  >
+    <h2 id="home-garments-heading" className="type-h2 text-brand-ink">
+      {homeContent.garments.title}
+    </h2>
+    {children}
+  </section>
+)

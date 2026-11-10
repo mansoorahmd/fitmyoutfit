@@ -30,6 +30,13 @@ vi.mock("next/navigation", () => ({
   useParams: () => ({ countryCode: "pk" }),
 }))
 
+vi.mock("next/image", () => ({
+  default: ({ src, alt }: { src: string; alt: string }) => (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={src} alt={alt} />
+  ),
+}))
+
 // Product cards are covered in product-preview.test.tsx.
 vi.mock("@modules/products/components/product-preview", () => ({
   default: ({ product }: { product: { title: string } }) => (
@@ -66,7 +73,7 @@ function mockStoreApi({ collections }: { collections: unknown[] }) {
 /** The empty state: both the test id and the text a visitor sees. */
 function expectEmptyState() {
   expect(screen.getByTestId("empty-products")).toBeInTheDocument()
-  expect(screen.getByText("No products yet.")).toBeVisible()
+  expect(screen.getByText("No garments in this region yet")).toBeVisible()
 }
 
 const productCalls = () =>
@@ -184,6 +191,7 @@ describe("empty state when the garments collection is missing", () => {
 
     expectEmptyState()
     expect(screen.queryByText("View all")).not.toBeInTheDocument()
+    expect(screen.queryByText("Garments")).not.toBeInTheDocument()
   })
 
   it("store template without a collection id lists nothing", () => {

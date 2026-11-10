@@ -1,8 +1,15 @@
 import { listProductsWithSort } from "@lib/data/products"
 import { getRegion } from "@lib/data/regions"
-import ProductPreview from "@modules/products/components/product-preview"
+import { sortProducts } from "@lib/util/sort-products"
+import {
+  productCardImageSizes,
+  productGridClasses,
+  showsSort,
+} from "@modules/products/components/product-grid/grid"
+import ProductCard from "@modules/products/components/product-preview"
 import EmptyProducts from "@modules/store/components/empty-products"
 import { Pagination } from "@modules/store/components/pagination"
+import RefinementList from "@modules/store/components/refinement-list"
 import { SortOptions } from "@modules/store/components/refinement-list/sort-products"
 
 const PRODUCT_LIMIT = 12
@@ -56,7 +63,7 @@ export default async function PaginatedProducts({
     return null
   }
 
-  let {
+  const {
     response: { products, count },
   } = await listProductsWithSort({
     page,
@@ -71,16 +78,36 @@ export default async function PaginatedProducts({
 
   const totalPages = Math.ceil(count / PRODUCT_LIMIT)
 
+  // "Sort by" waits until there are more than 8 products. Until then the
+  // page neither shows it nor obeys a sortBy left in the URL: everything is
+  // on the first page, in the default order.
+  const sortVisible = showsSort(count)
+  const shown =
+    sortVisible || sortBy === "created_at" || !sortBy
+      ? products
+      : sortProducts([...products], "created_at")
+
   return (
     <>
+      {sortVisible && (
+        <div data-testid="store-sort">
+          <RefinementList sortBy={sortBy || "created_at"} />
+        </div>
+      )}
       <ul
-        className="grid grid-cols-2 w-full small:grid-cols-3 medium:grid-cols-4 gap-x-6 gap-y-8"
+        className={productGridClasses(shown.length)}
         data-testid="products-list"
       >
-        {products.map((p) => {
+        {shown.map((p, index) => {
           return (
             <li key={p.id}>
-              <ProductPreview product={p} region={region} />
+              <ProductCard
+                product={p}
+                region={region}
+                headingLevel={2}
+                imageSizes={productCardImageSizes(shown.length)}
+                priority={index === 0}
+              />
             </li>
           )
         })}

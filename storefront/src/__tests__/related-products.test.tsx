@@ -60,11 +60,32 @@ describe("related products", () => {
 
     const call = listProductsMock.mock.calls[0][0]
     expect(call.queryParams.collection_id).toEqual(["col_garments"])
-    expect(screen.getByText("Related products")).toBeInTheDocument()
+    expect(
+      screen.getByRole("heading", { level: 2, name: "Complete the kit" })
+    ).toBeInTheDocument()
+    expect(screen.queryByText("Related products")).not.toBeInTheDocument()
+    expect(
+      screen.queryByText(/You might also want to check out these products/)
+    ).not.toBeInTheDocument()
     expect(screen.getAllByTestId("card").map((c) => c.textContent)).toEqual([
       "T-Shirt",
       "Fit Kit",
       "Rush Production",
     ])
+  })
+
+  it("lays the cards out in the product grid, one column on phones for up to 3", async () => {
+    render(
+      (await RelatedProducts({
+        product: { ...jersey, collection_id: "col_garments", tags: [] } as any,
+        countryCode: "pk",
+      }))!
+    )
+
+    const grid = screen.getAllByTestId("card")[0].closest("ul")!
+    expect(grid.className.split(/\s+/)).toEqual(
+      expect.arrayContaining(["grid-cols-1", "md:grid-cols-3", "gap-4"])
+    )
+    expect(grid.className).not.toMatch(/(small|medium):/)
   })
 })

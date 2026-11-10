@@ -1,12 +1,19 @@
 import { Suspense } from "react"
 
+import { listingContent } from "@content/listing"
+import { isPakistan } from "@lib/util/home-regions"
 import SkeletonProductGrid from "@modules/skeletons/templates/skeleton-product-grid"
 import EmptyProducts from "@modules/store/components/empty-products"
-import RefinementList from "@modules/store/components/refinement-list"
 import { SortOptions } from "@modules/store/components/refinement-list/sort-products"
 
 import PaginatedProducts from "./paginated-products"
 
+/**
+ * The listing (`/store`, docs/design/03-direction.md, "Product listing"):
+ * the title "Team kit", in export regions the duty-paid note, then the grid.
+ * "Sort by" appears only once there are more than 8 products; the grid
+ * decides, because only it knows the count.
+ */
 const StoreTemplate = ({
   sortBy,
   page,
@@ -24,27 +31,31 @@ const StoreTemplate = ({
 
   return (
     <div
-      className="flex flex-col small:flex-row small:items-start py-6 content-container"
+      className="content-container flex flex-col gap-6 py-8 md:gap-8 md:py-12 xl:py-16"
       data-testid="category-container"
     >
-      <RefinementList sortBy={sort} />
-      <div className="w-full">
-        <div className="mb-8 text-2xl-semi">
-          <h1 data-testid="store-page-title">All products</h1>
-        </div>
-        {collectionId ? (
-          <Suspense fallback={<SkeletonProductGrid />}>
-            <PaginatedProducts
-              sortBy={sort}
-              page={pageNumber}
-              countryCode={countryCode}
-              collectionId={collectionId}
-            />
-          </Suspense>
-        ) : (
-          <EmptyProducts />
+      <header className="flex flex-col gap-2">
+        <h1 className="type-h1 text-brand-ink" data-testid="store-page-title">
+          {listingContent.title}
+        </h1>
+        {!isPakistan(countryCode) && (
+          <p className="type-body text-brand-ink-muted" data-testid="store-export-note">
+            {listingContent.exportNote}
+          </p>
         )}
-      </div>
+      </header>
+      {collectionId ? (
+        <Suspense fallback={<SkeletonProductGrid />}>
+          <PaginatedProducts
+            sortBy={sort}
+            page={pageNumber}
+            countryCode={countryCode}
+            collectionId={collectionId}
+          />
+        </Suspense>
+      ) : (
+        <EmptyProducts />
+      )}
     </div>
   )
 }
