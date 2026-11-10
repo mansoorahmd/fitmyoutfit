@@ -7,6 +7,6 @@ export default defineConfig({
   root: resolve(import.meta.dirname, "demo"),
   publicDir: resolve(import.meta.dirname, "samples"),
   plugins: [react()],
-  server: { port: 5173, host: true },
+  server: { port: 5173 },
   build: { outDir: resolve(import.meta.dirname, "dist-demo"), emptyOutDir: true },
 });
