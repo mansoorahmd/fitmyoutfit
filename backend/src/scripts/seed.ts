@@ -11,6 +11,8 @@ export default async function seed({ container }: ExecArgs) {
   const result = await seedStore(container, {
     adminEmail: process.env.MEDUSA_ADMIN_EMAIL,
     adminPassword: process.env.MEDUSA_ADMIN_PASSWORD,
+    // In production the dev admin user is never created.
+    nodeEnv: process.env.NODE_ENV,
   })
   console.log(`FITMYOUTFIT_PUBLISHABLE_KEY=${result.publishableKey}`)
 }

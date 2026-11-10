@@ -18,7 +18,7 @@
     "lint": "npm run lint --prefix backend && npm run lint --workspaces --if-present && npm run lint:scripts",
     "typecheck": "npm run typecheck --prefix backend && npm run typecheck --workspaces --if-present",
     "test": "npm run test --prefix backend && npm run test --workspaces --if-present && npm run test:scripts",
-    "lint:scripts": "node --check scripts/setup.mjs && node --check scripts/dev.mjs && node --check scripts/install-backend.mjs && node --check scripts/lib/env-file.mjs && node --check scripts/lib/env-file.test.mjs",
+    "lint:scripts": "eslint --config backend/eslint.scripts.config.mjs scripts",
     "test:scripts": "node --test \"scripts/**/*.test.mjs\""
   },
   "overrides": {

@@ -1,10 +1,13 @@
 // Small helpers for .env files. Plain functions with no side effects, tested in env-file.test.mjs.
 
-/** Parse KEY=value lines. Ignores comments and blank lines. Strips matching surrounding quotes. */
+/**
+ * Parse KEY=value lines. Ignores comments and blank lines. Strips matching surrounding quotes.
+ * A line may start with `export ` (shell style, as dotenv also accepts).
+ */
 export function parseEnv(content) {
   const result = {};
   for (const rawLine of content.split(/\r?\n/)) {
-    const line = rawLine.trim();
+    const line = rawLine.trim().replace(/^export\s+/, "");
     if (!line || line.startsWith("#")) continue;
     const eq = line.indexOf("=");
     if (eq === -1) continue;

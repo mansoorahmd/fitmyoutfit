@@ -2,18 +2,19 @@
 // `npm run setup`: prepare a fresh checkout for development. Safe to run again.
 //
 //   1. create missing .env files from the .env.example files
-//   2. check that PostgreSQL is reachable
+//   2. check that PostgreSQL (and Redis, when REDIS_URL is set) is reachable
 //   3. run the database migrations
 //   4. seed the placeholder store data and the local admin user
 //   5. write the publishable API key into storefront/.env.local (skipped if storefront/ is missing)
 //
-// Cross-platform: plain Node, no bash.
+// Cross-platform: plain Node, no bash. It prints the admin email, never the password.
 import { spawn } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync, copyFileSync } from "node:fs";
 import net from "node:net";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { extractPublishableKey, parseEnv, upsertEnvVar } from "./lib/env-file.mjs";
+import { adminLoginMessage, servicesToCheck, unreachableMessage } from "./lib/setup-checks.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const log = (message) => console.log(`[setup] ${message}`);
@@ -83,23 +84,18 @@ async function main() {
     warn("storefront/ does not exist yet: skipping storefront/.env.local");
   }
 
-  const backendEnv = parseEnv(readFileSync(backendEnvPath, "utf8"));
-
-  // 2. Database reachable?
-  if (!backendEnv.DATABASE_URL) fail("DATABASE_URL is not set in backend/.env");
-  let dbUrl;
-  try {
-    dbUrl = new URL(backendEnv.DATABASE_URL);
-  } catch {
-    fail("DATABASE_URL in backend/.env is not a valid URL");
+  // Medusa loads backend/.env without overriding variables already set in the shell, so a value
+  // from the shell wins here too.
+  const backendEnv = { ...parseEnv(readFileSync(backendEnvPath, "utf8")) };
+  for (const name of ["DATABASE_URL", "REDIS_URL", "MEDUSA_ADMIN_EMAIL", "MEDUSA_ADMIN_PASSWORD"]) {
+    if (process.env[name] !== undefined) backendEnv[name] = process.env[name];
   }
-  const dbHost = dbUrl.hostname || "localhost";
-  const dbPort = Number(dbUrl.port || 5432);
-  if (!(await canConnect(dbHost, dbPort))) {
-    fail(
-      `Cannot reach PostgreSQL at ${dbHost}:${dbPort}. Start the services with "docker compose up -d" ` +
-        `and wait until they are healthy ("docker compose ps"), then run this again.`,
-    );
+
+  // 2. PostgreSQL (and Redis, when REDIS_URL is set) reachable?
+  const { services, problems } = servicesToCheck(backendEnv);
+  if (problems.length > 0) fail(problems.join("\n"));
+  for (const service of services) {
+    if (!(await canConnect(service.host, service.port))) fail(unreachableMessage(service));
   }
 
   // 3. Migrations
@@ -132,9 +128,7 @@ async function main() {
 
   log("done.");
   log(`Publishable API key: ${publishableKey}`);
-  if (backendEnv.MEDUSA_ADMIN_EMAIL && backendEnv.MEDUSA_ADMIN_PASSWORD) {
-    log(`Admin login (dev only): ${backendEnv.MEDUSA_ADMIN_EMAIL} / ${backendEnv.MEDUSA_ADMIN_PASSWORD} at http://localhost:9000/app`);
-  }
+  log(adminLoginMessage(backendEnv));
   log("Next: npm run dev");
 }
 

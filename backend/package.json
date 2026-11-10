@@ -10,7 +10,6 @@
     "start": "medusa start",
     "migrate": "medusa db:migrate",
     "seed": "medusa exec ./src/scripts/seed.ts",
-    "images:placeholders": "node scripts/generate-placeholder-images.mjs",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "npm run test:unit && npm run test:integration:http",

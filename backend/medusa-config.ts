@@ -1,13 +1,7 @@
 import { loadEnv, defineConfig } from "@medusajs/framework/utils"
-import { buildHttpConfig, buildModules } from "./src/lib/config/build-config"
+import { buildMedusaConfig } from "./src/lib/config/build-config"
 
 loadEnv(process.env.NODE_ENV || "development", process.cwd())
 
-module.exports = defineConfig({
-  projectConfig: {
-    databaseUrl: process.env.DATABASE_URL,
-    redisUrl: process.env.REDIS_URL || undefined,
-    http: buildHttpConfig(process.env),
-  },
-  modules: buildModules(process.env),
-})
+// All logic, including the refusal of dev-only secrets in production, is in build-config.ts.
+module.exports = defineConfig(buildMedusaConfig(process.env))

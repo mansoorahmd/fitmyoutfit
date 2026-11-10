@@ -3,27 +3,15 @@
  * The seed calls `assertValidSeedData` before it writes anything, so a bad data file fails fast
  * with a readable list of problems instead of half-seeding the database.
  */
-import { existsSync } from "node:fs"
-import { join } from "node:path"
-import { SEED_IMAGES_DIR } from "../seed-data"
 import type { PlaceholderData, ProductKind, SeedData } from "../seed-data/types"
 import { readRushPercentage } from "../../lib/settings/rush-percentage"
-import { imageMimeType } from "./product-images"
+import { isHttpsUrl } from "./product-images"
 
 const CURRENCY_RE = /^[a-z]{3}$/
 const COUNTRY_RE = /^[a-z]{2}$/
 const HANDLE_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 const SKU_PREFIX_RE = /^[A-Z0-9]+$/
 const PRODUCT_KINDS: ProductKind[] = ["garment", "fit_kit", "rush_add_on"]
-/** A plain file name inside the images folder: no folders, no "..". */
-const IMAGE_FILE_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/
-
-export type ValidateOptions = {
-  /** Whether an image file exists in the seed images folder. Defaults to a disk check. */
-  imageExists?: (fileName: string) => boolean
-}
-
-const imageFileExists = (fileName: string) => existsSync(join(SEED_IMAGES_DIR, fileName))
 
 function duplicates(values: string[]): string[] {
   const seen = new Set<string>()
@@ -59,9 +47,8 @@ function checkPlaceholderMarker(
 }
 
 /** Returns a list of problems. An empty list means the data is valid. */
-export function validateSeedData(seed: SeedData, options: ValidateOptions = {}): string[] {
+export function validateSeedData(seed: SeedData): string[] {
   const problems: string[] = []
-  const imageExists = options.imageExists ?? imageFileExists
 
   for (const key of Object.keys(seed) as (keyof SeedData)[]) {
     checkPlaceholderMarker(key, seed[key] as PlaceholderData<unknown>, problems)
@@ -79,6 +66,9 @@ export function validateSeedData(seed: SeedData, options: ValidateOptions = {}):
   const prices = seed.prices.data
 
   // Store
+  if (typeof store.name !== "string" || store.name.trim() === "") {
+    problems.push("store: name must not be blank")
+  }
   if (store.supported_currencies.length === 0) {
     problems.push("store: supported_currencies must not be empty")
   }
@@ -206,20 +196,24 @@ export function validateSeedData(seed: SeedData, options: ValidateOptions = {}):
     if (product.has_sizes && sizes.length === 0) {
       problems.push(`products: "${product.handle}" needs sizes but the size list is empty`)
     }
-    if (typeof product.image !== "string" || product.image.trim() === "") {
-      problems.push(`products: "${product.handle}" names no image`)
-    } else if (!IMAGE_FILE_RE.test(product.image) || product.image.includes("..")) {
-      problems.push(
-        `products: "${product.handle}" image "${product.image}" must be a plain file name in seed-data/images`
-      )
-    } else if (!imageMimeType(product.image)) {
-      problems.push(
-        `products: "${product.handle}" image "${product.image}" must be a .png, .webp, .jpg or .jpeg file`
-      )
-    } else if (!imageExists(product.image)) {
-      problems.push(
-        `products: "${product.handle}" image "${product.image}" is not in seed-data/images`
-      )
+    const images = product.images
+    if (!images || !Array.isArray(images.urls)) {
+      problems.push(`products: "${product.handle}" needs images: { placeholder, urls }`)
+    } else {
+      if (images.placeholder !== true) {
+        problems.push(`products: "${product.handle}" images must be marked placeholder: true`)
+      }
+      if (images.urls.length === 0) {
+        problems.push(`products: "${product.handle}" needs at least one image URL`)
+      }
+      for (const url of images.urls) {
+        if (!isHttpsUrl(url)) {
+          problems.push(`products: "${product.handle}" image ${JSON.stringify(url)} must be an https URL`)
+        }
+      }
+      for (const url of duplicates(images.urls.filter((u) => typeof u === "string"))) {
+        problems.push(`products: "${product.handle}" image "${url}" is listed twice`)
+      }
     }
   }
 
@@ -287,8 +281,8 @@ export class SeedDataError extends Error {
   }
 }
 
-export function assertValidSeedData(seed: SeedData, options: ValidateOptions = {}): void {
-  const problems = validateSeedData(seed, options)
+export function assertValidSeedData(seed: SeedData): void {
+  const problems = validateSeedData(seed)
   if (problems.length > 0) {
     throw new SeedDataError(problems)
   }
