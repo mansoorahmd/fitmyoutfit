@@ -1,7 +1,7 @@
 /**
  * Plain functions that turn environment variables into Medusa configuration.
  * No Medusa imports, so they can be unit tested without booting the app.
- * medusa-config.ts only calls these.
+ * medusa-config.ts only calls `buildMedusaConfig`.
  */
 
 export type Env = Record<string, string | undefined>
@@ -14,6 +14,35 @@ export type ModuleEntry = {
 /** Secrets that have a dev-only fallback outside production. */
 const DEV_SECRET_FALLBACK = "supersecret"
 
+/**
+ * The dev-only values that must never reach production: the defaults committed in
+ * backend/.env.example, plus the fallback above. A unit test reads backend/.env.example and
+ * fails when a value there is missing from this list, so the two cannot drift apart.
+ * (The list lives in code, not in .env.example, because a production build has no
+ * .env.example to read.)
+ */
+export const DEV_ONLY_VALUES: Readonly<Record<string, readonly string[]>> = {
+  JWT_SECRET: ["dev-only-jwt-secret-change-in-production", DEV_SECRET_FALLBACK],
+  COOKIE_SECRET: ["dev-only-cookie-secret-change-in-production", DEV_SECRET_FALLBACK],
+  S3_ACCESS_KEY_ID: ["minioadmin"],
+  S3_SECRET_ACCESS_KEY: ["minioadmin"],
+  MEDUSA_ADMIN_PASSWORD: ["dev-admin-password"],
+}
+
+/** Must be set, and not to a dev-only value, in production. */
+const REQUIRED_IN_PRODUCTION = [
+  "JWT_SECRET",
+  "COOKIE_SECRET",
+  "S3_ACCESS_KEY_ID",
+  "S3_SECRET_ACCESS_KEY",
+] as const
+
+/**
+ * May be unset in production (the seed creates no dev admin there), but must not hold a
+ * dev-only value when it is set.
+ */
+const NOT_DEV_IN_PRODUCTION = ["MEDUSA_ADMIN_PASSWORD"] as const
+
 export class ConfigError extends Error {}
 
 function clean(value: string | undefined): string | undefined {
@@ -21,12 +50,55 @@ function clean(value: string | undefined): string | undefined {
   return trimmed ? trimmed : undefined
 }
 
+export function isProduction(env: Env): boolean {
+  return clean(env.NODE_ENV) === "production"
+}
+
+/**
+ * Problems with the secrets for a production start. Empty outside production, or when every
+ * secret is set to something other than a dev-only value.
+ */
+export function productionSecretProblems(env: Env): string[] {
+  if (!isProduction(env)) {
+    return []
+  }
+  const problems: string[] = []
+  const isDevValue = (name: string, value: string) =>
+    (DEV_ONLY_VALUES[name] ?? []).includes(value)
+  for (const name of REQUIRED_IN_PRODUCTION) {
+    const value = clean(env[name])
+    if (!value) {
+      problems.push(`${name} is not set`)
+    } else if (isDevValue(name, value)) {
+      problems.push(`${name} is a dev-only value (from .env.example)`)
+    }
+  }
+  for (const name of NOT_DEV_IN_PRODUCTION) {
+    const value = clean(env[name])
+    if (value && isDevValue(name, value)) {
+      problems.push(`${name} is a dev-only value (from .env.example)`)
+    }
+  }
+  return problems
+}
+
+/** Throws one ConfigError listing every problem, so a production start fails fast. */
+export function assertProductionSecrets(env: Env): void {
+  const problems = productionSecretProblems(env)
+  if (problems.length > 0) {
+    throw new ConfigError(
+      `Refusing to start with NODE_ENV=production:\n- ${problems.join("\n- ")}\n` +
+        "Set real values in the production environment. The values in .env.example are for local development only."
+    )
+  }
+}
+
 function secret(env: Env, name: string): string {
   const value = clean(env[name])
   if (value) {
     return value
   }
-  if (env.NODE_ENV === "production") {
+  if (isProduction(env)) {
     throw new ConfigError(`${name} must be set in production`)
   }
   return DEV_SECRET_FALLBACK
@@ -111,4 +183,20 @@ export function buildFileModules(env: Env): ModuleEntry[] {
 
 export function buildModules(env: Env): ModuleEntry[] {
   return [...buildRedisModules(env), ...buildFileModules(env)]
+}
+
+/**
+ * The whole Medusa configuration (what medusa-config.ts passes to `defineConfig`).
+ * In production it first refuses missing or dev-only secrets.
+ */
+export function buildMedusaConfig(env: Env) {
+  assertProductionSecrets(env)
+  return {
+    projectConfig: {
+      databaseUrl: env.DATABASE_URL,
+      redisUrl: clean(env.REDIS_URL),
+      http: buildHttpConfig(env),
+    },
+    modules: buildModules(env),
+  }
 }
