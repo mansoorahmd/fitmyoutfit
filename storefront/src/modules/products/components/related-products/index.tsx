@@ -12,6 +12,13 @@ export default async function RelatedProducts({
   product,
   countryCode,
 }: RelatedProductsProps) {
+  // A product with no collection and no tags (the fit kit, the rush add-on)
+  // has nothing to be related by. Without this check the query below would
+  // list every other product.
+  if (!product.collection_id && !product.tags?.length) {
+    return null
+  }
+
   const region = await getRegion(countryCode)
 
   if (!region) {
