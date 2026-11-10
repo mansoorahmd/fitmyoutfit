@@ -15,7 +15,7 @@ The three coding tasks run in parallel, each in its own worktree, against [contr
 | --- | --- | --- | --- | --- |
 | S0-1 | Root workspace, `docker-compose.yml` (PostgreSQL, Redis, MinIO), Medusa v2 backend, seed script, setup and dev commands, CI workflow | backend-dev | In progress | Seed creates the 4 regions, 5 products and sample prices from data files, and is idempotent. `npm run setup` works on an empty database. Lint, type-check and tests pass |
 | S0-2 | Next.js storefront from the Medusa starter, wired to the contract's environment variables | storefront-dev | In progress | `/pk`, `/gb`, `/ae` and `/us` list the 3 garments with prices in the region's currency, and product pages offer the sizes. Lint, type-check and tests pass |
-| S0-3 | Editor package scaffold: build, demo page, first draft of the design JSON type, schema and validator | editor-3d-dev | In progress | Package builds standalone with no Medusa or Next.js imports. Demo page shows an orbitable placeholder. Lint, type-check and tests pass |
+| S0-3 | Editor package scaffold: build, demo page, first draft of the design JSON type, schema and validator | editor-3d-dev | In QA review (worker reported 10 Nov; branch `worktree-agent-a9ccde12333187787`) | Package builds standalone with no Medusa or Next.js imports. Demo page shows an orbitable placeholder. Lint, type-check and tests pass |
 | S0-4 | Three technical choices: email provider, hosting target, PDF library | coordinator | Done | Recorded in decisions 002, 003 and 005 (005 replaces 004) |
 | S0-5 | QA review of each branch, merge, root lockfile, full check from a clean database | qa-reviewer, coordinator | Not started | The "done when" above is seen working on `master` |
 | S0-6 | Rush as a percentage: drop the fixed rush prices from the seed, add the `rush_percentage` setting (placeholder 20) | backend-dev | Waiting for S0-1 | The setting is seeded as data and can be changed without a code change. `rush-add-on` has no fixed prices. Tests updated |
@@ -26,7 +26,8 @@ The three coding tasks run in parallel, each in its own worktree, against [contr
 - Contract for the local setup and seed data: [contracts/sprint-0-dev-setup.md](contracts/sprint-0-dev-setup.md).
 
 ## In progress
-- S0-1, S0-2 and S0-3 (see the table).
+- S0-1 and S0-2 are being built. S0-3 is with qa-reviewer; not merged.
+- Open point from S0-3: `@react-three/fiber` 9 supports React 19 only, so the editor peer range `^18 || ^19` in the contract is wrong. To be changed to `^19` once QA confirms.
 
 ## Founder answers, 10 Nov 2026
 
