@@ -63,6 +63,12 @@ function mockStoreApi({ collections }: { collections: unknown[] }) {
   })
 }
 
+/** The empty state: both the test id and the text a visitor sees. */
+function expectEmptyState() {
+  expect(screen.getByTestId("empty-products")).toBeInTheDocument()
+  expect(screen.getByText("No products yet.")).toBeVisible()
+}
+
 const productCalls = () =>
   fetchMock.mock.calls.filter(([path]) => path === "/store/products")
 
@@ -151,7 +157,7 @@ describe("empty state when the garments collection is missing", () => {
 
     render(await Home({ params: Promise.resolve({ countryCode: "pk" }) }))
 
-    expect(screen.getByTestId("empty-products")).toBeInTheDocument()
+    expectEmptyState()
     expect(productCalls()).toHaveLength(0)
   })
 
@@ -164,15 +170,26 @@ describe("empty state when the garments collection is missing", () => {
     })
     render(element)
 
-    expect(screen.getByTestId("empty-products")).toBeInTheDocument()
+    expectEmptyState()
     expect(screen.queryByTestId("products-list")).not.toBeInTheDocument()
     expect(productCalls()).toHaveLength(0)
+  })
+
+  it("home page rail shows the empty state when the collection has no products", async () => {
+    fetchMock.mockImplementation(async () => ({ products: [], count: 0 }))
+
+    render(
+      await ProductRail({ collection: garments as any, region: region as any })
+    )
+
+    expectEmptyState()
+    expect(screen.queryByText("View all")).not.toBeInTheDocument()
   })
 
   it("store template without a collection id lists nothing", () => {
     render(<StoreTemplate countryCode="pk" />)
 
-    expect(screen.getByTestId("empty-products")).toBeInTheDocument()
+    expectEmptyState()
   })
 
   it("store listing shows the empty state when the collection has no products", async () => {
@@ -186,6 +203,6 @@ describe("empty state when the garments collection is missing", () => {
       })
     )
 
-    expect(screen.getByTestId("empty-products")).toBeInTheDocument()
+    expectEmptyState()
   })
 })
