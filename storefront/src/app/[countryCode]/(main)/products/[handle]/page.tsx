@@ -3,6 +3,7 @@ import { STORE_NAME } from "@lib/store-config"
 import { notFound } from "next/navigation"
 import { listProducts } from "@lib/data/products"
 import { getRegion, listRegions } from "@lib/data/regions"
+import { hasProductPage } from "@lib/util/product-kind"
 import ProductTemplate from "@modules/products/templates"
 import { HttpTypes } from "@medusajs/types"
 
@@ -24,12 +25,14 @@ export async function generateStaticParams() {
     const promises = countryCodes.map(async (country) => {
       const { response } = await listProducts({
         countryCode: country,
-        queryParams: { limit: 100, fields: "handle" },
+        // metadata for the kind: a product without a page of its own (the
+        // rush add-on) gets no static params either
+        queryParams: { limit: 100, fields: "handle,metadata" },
       })
 
       return {
         country,
-        products: response.products,
+        products: response.products.filter(hasProductPage),
       }
     })
 
@@ -84,7 +87,7 @@ export async function generateMetadata(props: Props): Promise<Metadata> {
     queryParams: { handle },
   }).then(({ response }) => response.products[0])
 
-  if (!product) {
+  if (!product || !hasProductPage(product)) {
     notFound()
   }
 
@@ -118,7 +121,9 @@ export default async function ProductPage(props: Props) {
 
   // Check before reading the product: an unknown handle used to crash in
   // getImagesForVariant and show "Application error" instead of not-found.
-  if (!pricedProduct) {
+  // A product with no page of its own (the rush add-on: a share of an order,
+  // never bought alone) is not found either, in every region.
+  if (!pricedProduct || !hasProductPage(pricedProduct)) {
     notFound()
   }
 

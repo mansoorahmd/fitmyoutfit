@@ -74,6 +74,27 @@ describe("related products", () => {
     ])
   })
 
+  it("never shows the rush add-on, found by its kind, even when it shares the collection", async () => {
+    listProductsMock.mockResolvedValue({
+      response: {
+        products: [
+          { ...jersey, metadata: { kind: "garment" } },
+          { ...tee, metadata: { kind: "garment" } },
+          { ...rush, metadata: { kind: "rush_add_on" } },
+        ],
+        count: 3,
+      },
+    })
+    render(
+      (await RelatedProducts({
+        product: { ...jersey, collection_id: "col_garments", tags: [] } as any,
+        countryCode: "pk",
+      }))!
+    )
+
+    expect(screen.getAllByTestId("card").map((c) => c.textContent)).toEqual(["T-Shirt"])
+  })
+
   it("lays the cards out in the product grid, one column on phones for up to 3", async () => {
     render(
       (await RelatedProducts({

@@ -1,4 +1,5 @@
 import { listProducts } from "@lib/data/products"
+import { listedOnly } from "@lib/util/product-kind"
 import { HttpTypes } from "@medusajs/types"
 
 import { homeContent } from "@content/home"
@@ -22,14 +23,16 @@ export default async function ProductRail({
   region: HttpTypes.StoreRegion
 }) {
   const {
-    response: { products: pricedProducts },
+    response: { products },
   } = await listProducts({
     regionId: region.id,
     queryParams: {
       collection_id: collection.id,
-      fields: "*variants.calculated_price",
+      // metadata for the kind: a kind never listed stays out (lib/util/product-kind)
+      fields: "*variants.calculated_price,+metadata",
     },
   })
+  const pricedProducts = listedOnly(products ?? [])
 
   if (!pricedProducts?.length) {
     return <EmptyProducts />

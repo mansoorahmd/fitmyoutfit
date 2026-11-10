@@ -68,4 +68,14 @@ describe("garment links", () => {
       { id: "p2", title: "T-Shirt", href: "/products/t-shirt", thumbnail: null },
     ])
   })
+
+  it("never links the rush add-on, found by its kind, wherever it is filed", () => {
+    expect(
+      toGarmentLinks([
+        { id: "p1", handle: "jersey", title: "Jersey", thumbnail: null, metadata: { kind: "garment" } },
+        { id: "p2", handle: "rush-add-on", title: "Rush", thumbnail: null, metadata: { kind: "rush_add_on" } },
+        { id: "p3", handle: "fast", title: "Fast", thumbnail: null, metadata: { kind: "rush_add_on" } },
+      ] as any).map((link) => link.id)
+    ).toEqual(["p1"])
+  })
 })

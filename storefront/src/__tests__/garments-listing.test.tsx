@@ -158,6 +158,40 @@ describe("listing queries are restricted to the garments collection", () => {
   })
 })
 
+describe("the rush add-on is never listed, even when filed in the garments collection", () => {
+  const rush = {
+    id: "prod_rush",
+    title: "Rush production",
+    handle: "rush-add-on",
+    created_at: "2026-11-09T00:00:00Z",
+    metadata: { kind: "rush_add_on" },
+  }
+  const garmentJersey = { ...jersey, metadata: { kind: "garment" } }
+
+  beforeEach(() => {
+    fetchMock.mockImplementation(async (path: string) => {
+      if (path === "/store/collections") return { collections: [garments] }
+      if (path === "/store/products") return { products: [garmentJersey, rush], count: 2 }
+      throw new Error(`Unexpected call to ${path}`)
+    })
+  })
+
+  it("store listing", async () => {
+    render(
+      await PaginatedProducts({ page: 1, countryCode: "pk", collectionId: garments.id })
+    )
+
+    expect(screen.getAllByTestId("card").map((c) => c.textContent)).toEqual(["Jersey"])
+  })
+
+  it("home page rail, which asks for the metadata", async () => {
+    render(await ProductRail({ collection: garments as any, region: region as any }))
+
+    expect(screen.getAllByTestId("card").map((c) => c.textContent)).toEqual(["Jersey"])
+    expect(productCalls()[0][1].query.fields).toContain("+metadata")
+  })
+})
+
 describe("empty state when the garments collection is missing", () => {
   it("home page renders an empty state and fetches no products", async () => {
     mockStoreApi({ collections: [] })

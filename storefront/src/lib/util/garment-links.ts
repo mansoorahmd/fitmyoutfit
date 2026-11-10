@@ -1,5 +1,7 @@
 import { HttpTypes } from "@medusajs/types"
 
+import { isListed } from "@lib/util/product-kind"
+
 /** A garment as the header and menu link to it. */
 export type GarmentLink = {
   id: string
@@ -11,13 +13,17 @@ export type GarmentLink = {
 
 /**
  * Links for the garments collection's products, in the backend's order.
- * Products without a handle cannot be linked to, so they are left out.
+ * Products without a handle cannot be linked to, so they are left out, and
+ * so is a kind that is never listed (the rush add-on, lib/util/product-kind).
  */
 export const toGarmentLinks = (
-  products: Pick<HttpTypes.StoreProduct, "id" | "handle" | "title" | "thumbnail">[]
+  products: Pick<
+    HttpTypes.StoreProduct,
+    "id" | "handle" | "title" | "thumbnail" | "metadata"
+  >[]
 ): GarmentLink[] =>
   products
-    .filter((product) => !!product.handle)
+    .filter((product) => !!product.handle && isListed(product))
     .map((product) => ({
       id: product.id,
       title: product.title ?? product.handle!,

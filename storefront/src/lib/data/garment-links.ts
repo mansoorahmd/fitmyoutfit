@@ -20,7 +20,8 @@ export const listGarmentLinks = async (
       countryCode,
       queryParams: {
         collection_id: [collection.id],
-        fields: "id,handle,title,thumbnail",
+        // metadata for the kind (lib/util/product-kind)
+        fields: "id,handle,title,thumbnail,metadata",
         limit: 12,
       },
     })
