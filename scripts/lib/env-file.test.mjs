@@ -7,6 +7,11 @@ test("parseEnv reads values, skips comments and strips quotes", () => {
   assert.deepEqual(parsed, { A: "1", B: "two words", C: "http://x:1/y=z" });
 });
 
+test("parseEnv reads lines with an `export ` prefix", () => {
+  const parsed = parseEnv("export A=1\n  export   B='two'\nexport_C=3\n");
+  assert.deepEqual(parsed, { A: "1", B: "two", export_C: "3" });
+});
+
 test("upsertEnvVar appends a missing key and keeps every other line", () => {
   const before = "# my file\nMEDUSA_BACKEND_URL=http://localhost:9000\nOTHER=keep me\n";
   const { content, changed } = upsertEnvVar(before, "NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY", "pk_1");
