@@ -1,14 +1,16 @@
 import repeat from "@lib/util/repeat"
+import { productGridClasses } from "@modules/products/components/product-grid/grid"
 import SkeletonProductPreview from "@modules/skeletons/components/skeleton-product-preview"
 
+/** The product grid while it loads. Three cards: the garments we sell today. */
 const SkeletonProductGrid = ({
-  numberOfProducts = 8,
+  numberOfProducts = 3,
 }: {
   numberOfProducts?: number
 }) => {
   return (
     <ul
-      className="grid grid-cols-2 small:grid-cols-3 medium:grid-cols-4 gap-x-6 gap-y-8 flex-1"
+      className={productGridClasses(numberOfProducts)}
       data-testid="products-list-loader"
     >
       {repeat(numberOfProducts).map((index) => (

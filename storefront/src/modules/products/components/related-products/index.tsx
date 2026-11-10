@@ -1,13 +1,22 @@
+import { listingContent } from "@content/listing"
 import { listProducts } from "@lib/data/products"
 import { getRegion } from "@lib/data/regions"
 import { HttpTypes } from "@medusajs/types"
-import Product from "../product-preview"
+import {
+  productCardImageSizes,
+  productGridClasses,
+} from "@modules/products/components/product-grid/grid"
+import ProductCard from "../product-preview"
 
 type RelatedProductsProps = {
   product: HttpTypes.StoreProduct
   countryCode: string
 }
 
+/**
+ * "Complete the kit" on the product page: the other products of the same
+ * collection (for a garment, the other two garments), as product cards.
+ */
 export default async function RelatedProducts({
   product,
   countryCode,
@@ -25,7 +34,6 @@ export default async function RelatedProducts({
     return null
   }
 
-  // edit this function to define your related products logic
   const queryParams: HttpTypes.StoreProductListParams = {}
   if (region?.id) {
     queryParams.region_id = region.id
@@ -54,23 +62,24 @@ export default async function RelatedProducts({
   }
 
   return (
-    <div className="product-page-constraint">
-      <div className="flex flex-col items-center text-center mb-16">
-        <span className="text-base-regular text-gray-600 mb-6">
-          Related products
-        </span>
-        <p className="text-2xl-regular text-ui-fg-base max-w-lg">
-          You might also want to check out these products.
-        </p>
-      </div>
-
-      <ul className="grid grid-cols-2 small:grid-cols-3 medium:grid-cols-4 gap-x-6 gap-y-8">
-        {products.map((product) => (
-          <li key={product.id}>
-            <Product region={region} product={product} />
+    <section
+      className="flex flex-col gap-6 md:gap-8"
+      aria-labelledby="related-products-heading"
+      data-testid="related-products"
+    >
+      <h2 id="related-products-heading" className="type-h2 text-brand-ink">
+        {listingContent.relatedTitle}
+      </h2>
+      <ul className={productGridClasses(products.length)}>
+        {products.map((related) => (
+          <li key={related.id}>
+            <ProductCard
+              product={related}
+              imageSizes={productCardImageSizes(products.length)}
+            />
           </li>
         ))}
       </ul>
-    </div>
+    </section>
   )
 }
