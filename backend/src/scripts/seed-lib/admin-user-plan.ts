@@ -6,6 +6,7 @@
  * stopped half-way can leave any of them missing, so each one is checked on every run.
  * An existing password is never changed (an admin may have changed it).
  */
+import { isLocalNodeEnv } from "../../lib/config/node-env"
 
 export type AdminUserState = {
   /** Id of the user with the admin email, or null when there is none. */
@@ -17,7 +18,8 @@ export type AdminUserState = {
 }
 
 export type AdminUserPlan =
-  | { skip: "production" }
+  /** NODE_ENV is not development or test (production, prod, staging, ...). */
+  | { skip: "not-local" }
   | {
       skip: null
       createUser: boolean
@@ -27,14 +29,19 @@ export type AdminUserPlan =
       link: boolean
     }
 
-/** The dev admin user is never created when NODE_ENV is production. */
+/**
+ * The dev admin user is created only in local development and tests (NODE_ENV unset,
+ * `development` or `test`). Never in production (`production` or `prod`, any case), and not in
+ * staging or any other environment either: there an admin is created on purpose, with
+ * `medusa user`, not from the dev defaults.
+ */
 export function devAdminAllowed(nodeEnv: string | undefined): boolean {
-  return (nodeEnv ?? "").trim() !== "production"
+  return isLocalNodeEnv(nodeEnv)
 }
 
 export function planAdminUser(state: AdminUserState, nodeEnv: string | undefined): AdminUserPlan {
   if (!devAdminAllowed(nodeEnv)) {
-    return { skip: "production" }
+    return { skip: "not-local" }
   }
   const createUser = state.userId === null
   const createLogin = state.authIdentityId === null

@@ -2,6 +2,7 @@ import { medusaIntegrationTestRunner } from "@medusajs/test-utils"
 import type { MedusaContainer } from "@medusajs/framework/types"
 import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils"
 import {
+  createRegionsWorkflow,
   updateProductsWorkflow,
   updateRegionsWorkflow,
   updateStoresWorkflow,
@@ -194,6 +195,44 @@ medusaIntegrationTestRunner({
           "pkr",
           "usd",
         ])
+      })
+
+      it("keeps currencies an admin added on a re-run, and eur too while a region uses it", async () => {
+        const container = getContainer()
+        const storeModule = container.resolve(Modules.STORE)
+        const [record] = await storeModule.listStores({}, { relations: ["supported_currencies"] })
+        // An admin adds Canada (cad) and Germany (eur), each with its currency in the store.
+        await updateStoresWorkflow(container).run({
+          input: {
+            selector: { id: record.id },
+            update: {
+              supported_currencies: [
+                ...(record.supported_currencies ?? []).map((c) => ({
+                  currency_code: c.currency_code,
+                  is_default: c.is_default,
+                })),
+                { currency_code: "cad", is_default: false },
+                { currency_code: "eur", is_default: false },
+              ],
+            },
+          },
+        })
+        await createRegionsWorkflow(container).run({
+          input: {
+            regions: [
+              { name: "Canada", currency_code: "cad", countries: ["ca"] },
+              { name: "Germany", currency_code: "eur", countries: ["de"] },
+            ],
+          },
+        })
+
+        const rerun = await seedStore(container, adminOptions)
+        const [after] = await storeModule.listStores({}, { relations: ["supported_currencies"] })
+        const currencies = (after.supported_currencies ?? [])
+          .map((c) => `${c.currency_code}${c.is_default ? "*" : ""}`)
+          .sort()
+        expect(currencies).toEqual(["aed", "cad", "eur", "gbp", "pkr*", "usd"])
+        expect(rerun.repaired).toEqual([])
       })
 
       it("names the store FitMyOutfit, and keeps a name an admin sets later", async () => {
@@ -461,19 +500,22 @@ medusaIntegrationTestRunner({
         expect(typeof response.data.token).toBe("string")
       })
 
-      it("does not create the dev admin user when NODE_ENV is production", async () => {
-        const container = getContainer()
-        const result = await seedStore(container, {
-          adminEmail: "prod-admin@example.com",
-          adminPassword: "some-password",
-          nodeEnv: "production",
-        })
-        expect(result.created.adminUser).toBe(false)
-        const users = await container.resolve(Modules.USER).listUsers({
-          email: "prod-admin@example.com",
-        })
-        expect(users).toHaveLength(0)
-      })
+      it.each(["production", "prod", "PRODUCTION", "staging"])(
+        "does not create the dev admin user when NODE_ENV is %j",
+        async (nodeEnv) => {
+          const container = getContainer()
+          const result = await seedStore(container, {
+            adminEmail: "prod-admin@example.com",
+            adminPassword: "some-password",
+            nodeEnv,
+          })
+          expect(result.created.adminUser).toBe(false)
+          const users = await container.resolve(Modules.USER).listUsers({
+            email: "prod-admin@example.com",
+          })
+          expect(users).toHaveLength(0)
+        }
+      )
 
       // --- Repairs after an interrupted run ---
 

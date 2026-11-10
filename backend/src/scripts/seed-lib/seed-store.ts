@@ -5,8 +5,9 @@
  * Safe to run again after a run that stopped half-way: every step checks the parts a
  * Medusa workflow writes separately (variants, prices, size ranks, links, payment providers,
  * the admin's login), not only whether a record with the handle or name exists.
- * It never overwrites a value an admin can edit, with two deliberate exceptions: the store's
- * currencies are set to exactly the seed list, and a store still named "Medusa Store" is renamed.
+ * It never overwrites a value an admin can edit, with these deliberate exceptions: the seed
+ * currencies are always supported with pkr as the only default, Medusa's starter currency eur is
+ * removed when no region uses it, and a store still named "Medusa Store" is renamed.
  */
 import type { MedusaContainer } from "@medusajs/framework/types"
 import { MedusaModule } from "@medusajs/framework/modules-sdk"
@@ -32,6 +33,7 @@ import {
   updateStoresWorkflow,
   upsertVariantPricesWorkflow,
 } from "@medusajs/medusa/core-flows"
+import { describeNodeEnv } from "../../lib/config/node-env"
 import { seedData as defaultSeedData } from "../seed-data"
 import type { SeedData } from "../seed-data/types"
 import { planAdminUser, type AdminUserPlan } from "./admin-user-plan"
@@ -53,7 +55,7 @@ export type SeedOptions = {
   /** Local admin user. Skipped (with a warning) when either value is missing. */
   adminEmail?: string
   adminPassword?: string
-  /** NODE_ENV. With "production" the dev admin user is never created. */
+  /** NODE_ENV. The dev admin user is created only when it is unset, development or test. */
   nodeEnv?: string
 }
 
@@ -122,7 +124,8 @@ export async function seedStore(
     created.salesChannel = true
   }
 
-  // 2. Store: exactly the seed currencies (with their price preferences), default sales channel, name
+  // 2. Store: the seed currencies (with their price preferences) and any an admin added, the
+  // default sales channel, the name. Medusa's starter eur goes, unless a region uses it.
   const [storeRecord] = await storeModule.listStores(
     {},
     { relations: ["supported_currencies"] }
@@ -131,12 +134,18 @@ export async function seedStore(
     attribute: "currency_code",
     value: store.supported_currencies,
   })
-  const currencyList = planStoreCurrencies(
-    storeRecord.supported_currencies,
-    store.supported_currencies,
-    store.default_currency_code,
-    currencyPreferences.map((p) => p.value)
-  )
+  const { data: regionCurrencyRows } = await query.graph({
+    entity: "region",
+    fields: ["currency_code"],
+  })
+  const currencyList = planStoreCurrencies(storeRecord.supported_currencies, {
+    wanted: store.supported_currencies,
+    defaultCode: store.default_currency_code,
+    regionCurrencies: (regionCurrencyRows as { currency_code?: string | null }[]).map(
+      (r) => r.currency_code
+    ),
+    withPricePreference: currencyPreferences.map((p) => p.value),
+  })
   const newName = planStoreName(storeRecord.name, store.name)
   const channelWrong = storeRecord.default_sales_channel_id !== salesChannel.id
   if (currencyList || newName || channelWrong) {
@@ -150,7 +159,9 @@ export async function seedStore(
         },
       },
     })
-    if (currencyList) repaired.push(`store: currencies ${store.supported_currencies.join(", ")}`)
+    if (currencyList) {
+      repaired.push(`store: currencies ${currencyList.map((c) => c.currency_code).join(", ")}`)
+    }
     if (newName) repaired.push(`store: name "${newName}"`)
   }
 
@@ -385,8 +396,11 @@ export async function seedStore(
       options.adminPassword,
       options.nodeEnv
     )
-    if (outcome.skip === "production") {
-      logger.info("NODE_ENV is production: the dev admin user is not created.")
+    if (outcome.skip === "not-local") {
+      logger.info(
+        `NODE_ENV is ${describeNodeEnv(options.nodeEnv)}, not development or test: ` +
+          "the dev admin user is not created."
+      )
     } else {
       created.adminUser = outcome.createUser
       if (!outcome.createUser && (outcome.createLogin || outcome.link)) {

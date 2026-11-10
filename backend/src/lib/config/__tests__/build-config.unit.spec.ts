@@ -8,7 +8,9 @@ import {
   buildRedisModules,
   ConfigError,
   DEV_ONLY_VALUES,
+  MIN_SECRET_LENGTH,
   productionSecretProblems,
+  usesDevDatabaseCredentials,
 } from "../build-config"
 
 /** KEY=value pairs from backend/.env.example (the committed dev defaults). */
@@ -104,9 +106,7 @@ describe("buildHttpConfig", () => {
   })
 
   it("requires real secrets in production", () => {
-    expect(() => buildHttpConfig({ NODE_ENV: "production" })).toThrow(
-      "JWT_SECRET must be set in production"
-    )
+    expect(() => buildHttpConfig({ NODE_ENV: "production" })).toThrow("JWT_SECRET must be set")
     const config = buildHttpConfig({
       NODE_ENV: "production",
       JWT_SECRET: "a",
@@ -152,8 +152,88 @@ describe("production secrets", () => {
   it("refuses the whole dev .env.example in production and lists every problem at once", () => {
     const env = { ...devValues, NODE_ENV: "production" }
     const problems = productionSecretProblems(env)
-    expect(problems).toHaveLength(5)
-    expect(() => buildMedusaConfig(env)).toThrow(/JWT_SECRET[\s\S]*MEDUSA_ADMIN_PASSWORD/)
+    expect(problems).toHaveLength(6)
+    expect(() => buildMedusaConfig(env)).toThrow(
+      /JWT_SECRET[\s\S]*MEDUSA_ADMIN_PASSWORD[\s\S]*DATABASE_URL/
+    )
+  })
+
+  // Medusa runs in production mode for "production" and "prod"; staging and anything else
+  // that is not development or test gets the same checks.
+  it.each(["prod", "PRODUCTION", " production ", "Prod", "staging", "qa"])(
+    "refuses the dev .env.example when NODE_ENV is %j",
+    (nodeEnv) => {
+      const env = { ...devValues, NODE_ENV: nodeEnv }
+      expect(productionSecretProblems(env)).toHaveLength(6)
+      expect(() => buildMedusaConfig(env)).toThrow(ConfigError)
+      expect(() => buildMedusaConfig(env)).toThrow(
+        `Refusing to start with NODE_ENV=${JSON.stringify(nodeEnv)}`
+      )
+    }
+  )
+
+  it.each(["prod", "staging"])(
+    "never falls back to Medusa's 'supersecret' when NODE_ENV is %j",
+    (nodeEnv) => {
+      expect(() => buildHttpConfig({ NODE_ENV: nodeEnv })).toThrow("JWT_SECRET must be set")
+      expect(() =>
+        buildMedusaConfig({ ...goodProductionEnv, NODE_ENV: nodeEnv, COOKIE_SECRET: undefined })
+      ).toThrow("COOKIE_SECRET is not set")
+    }
+  )
+
+  it.each([
+    ["JWT_SECRET", "SUPERSECRET"],
+    ["JWT_SECRET", " Dev-Only-JWT-Secret-Change-In-Production "],
+    ["COOKIE_SECRET", "SuperSecret"],
+    ["S3_ACCESS_KEY_ID", "MINIOADMIN"],
+    ["S3_SECRET_ACCESS_KEY", " minioadmin "],
+    ["MEDUSA_ADMIN_PASSWORD", "Dev-Admin-Password"],
+  ])("refuses %s=%j: dev values are compared trimmed and ignoring case", (name, value) => {
+    expect(() => buildMedusaConfig({ ...goodProductionEnv, [name]: value })).toThrow(
+      `${name} is a dev-only value`
+    )
+  })
+
+  it.each(["JWT_SECRET", "COOKIE_SECRET"])(
+    "refuses a %s shorter than 16 characters in production, and accepts 16",
+    (name) => {
+      expect(MIN_SECRET_LENGTH).toBe(16)
+      expect(() => buildMedusaConfig({ ...goodProductionEnv, [name]: "x".repeat(15) })).toThrow(
+        `${name} is shorter than 16 characters`
+      )
+      expect(() =>
+        buildMedusaConfig({ ...goodProductionEnv, [name]: ` ${"x".repeat(15)} ` })
+      ).toThrow(`${name} is shorter than 16 characters`)
+      expect(() =>
+        buildMedusaConfig({ ...goodProductionEnv, [name]: "x".repeat(16) })
+      ).not.toThrow()
+    }
+  )
+
+  it.each([
+    "postgres://medusa:medusa@localhost:5433/medusa",
+    "postgres://MEDUSA:Medusa@db.internal:5432/store",
+    "postgresql://medusa:%6Dedusa@db/store?sslmode=require",
+  ])("refuses the dev database user and password in production: %s", (url) => {
+    expect(usesDevDatabaseCredentials(url)).toBe(true)
+    expect(() => buildMedusaConfig({ ...goodProductionEnv, DATABASE_URL: url })).toThrow(
+      "DATABASE_URL uses the dev-only database user and password"
+    )
+  })
+
+  it("accepts other database credentials, and says nothing about an unset or odd DATABASE_URL", () => {
+    expect(usesDevDatabaseCredentials("postgres://medusa:real-password@db/medusa")).toBe(false)
+    expect(usesDevDatabaseCredentials("postgres://store:medusa@db/medusa")).toBe(false)
+    expect(usesDevDatabaseCredentials(undefined)).toBe(false)
+    expect(usesDevDatabaseCredentials("not a url")).toBe(false)
+    expect(
+      productionSecretProblems({ ...goodProductionEnv, DATABASE_URL: undefined })
+    ).toEqual([])
+  })
+
+  it("knows the database credentials in .env.example (the list cannot drift from the file)", () => {
+    expect(usesDevDatabaseCredentials(devValues.DATABASE_URL)).toBe(true)
   })
 
   it("refuses the built-in 'supersecret' fallback as a production secret", () => {
@@ -171,7 +251,10 @@ describe("production secrets", () => {
   it("accepts the dev values outside production", () => {
     expect(productionSecretProblems({ ...devValues, NODE_ENV: "development" })).toEqual([])
     expect(productionSecretProblems({ ...devValues, NODE_ENV: "test" })).toEqual([])
+    expect(productionSecretProblems({ ...devValues, NODE_ENV: " Development " })).toEqual([])
+    expect(productionSecretProblems({ ...devValues, NODE_ENV: undefined })).toEqual([])
     expect(() => buildMedusaConfig({ ...devValues, NODE_ENV: "development" })).not.toThrow()
+    expect(buildHttpConfig({}).jwtSecret).toBe("supersecret")
   })
 })
 

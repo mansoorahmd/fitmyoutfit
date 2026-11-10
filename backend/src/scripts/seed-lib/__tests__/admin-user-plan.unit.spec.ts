@@ -40,11 +40,18 @@ describe("planAdminUser", () => {
     expect(isNoop(plan)).toBe(true)
   })
 
-  it("never creates the dev admin when NODE_ENV is production", () => {
-    expect(planAdminUser(none, "production")).toEqual({ skip: "production" })
-    expect(planAdminUser(none, " production ")).toEqual({ skip: "production" })
-    expect(devAdminAllowed("production")).toBe(false)
-    expect(devAdminAllowed("development")).toBe(true)
-    expect(devAdminAllowed(undefined)).toBe(true)
-  })
+  it.each(["production", " production ", "prod", "PRODUCTION", "Prod", "staging", "qa"])(
+    "never creates the dev admin when NODE_ENV is %j",
+    (nodeEnv) => {
+      expect(planAdminUser(none, nodeEnv)).toEqual({ skip: "not-local" })
+      expect(devAdminAllowed(nodeEnv)).toBe(false)
+    }
+  )
+
+  it.each([undefined, "", "development", " Development ", "test"])(
+    "creates the dev admin when NODE_ENV is %j",
+    (nodeEnv) => {
+      expect(devAdminAllowed(nodeEnv)).toBe(true)
+    }
+  )
 })
