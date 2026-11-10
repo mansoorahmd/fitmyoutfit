@@ -207,6 +207,7 @@ const ImageGallery = ({
   return (
     <section
       className="flex flex-col gap-2 rounded-card lg:flex-row-reverse lg:items-start lg:justify-center lg:gap-4"
+      role="region"
       aria-roledescription="carousel"
       aria-label={`${productTitle} images`}
       tabIndex={0}
