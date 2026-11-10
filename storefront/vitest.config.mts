@@ -10,6 +10,7 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: [
+      { find: /^@content\//, replacement: `${src}/content/` },
       { find: /^@lib\//, replacement: `${src}/lib/` },
       { find: /^@modules\//, replacement: `${src}/modules/` },
       { find: /^types\//, replacement: `${src}/types/` },
