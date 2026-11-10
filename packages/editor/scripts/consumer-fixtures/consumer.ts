@@ -3,8 +3,17 @@
 // real consumer (the Medusa backend, for example) does, type-checks that import
 // under the consumer's own module settings, then runs it.
 import { readFileSync } from "node:fs";
-import { createDesign, validateDesign, validateProductDefinition } from "@fitmyoutfit/editor/design";
-import type { DesignDocument } from "@fitmyoutfit/editor/design";
+import {
+  DEFAULT_JERSEY_NUMBER_RULES,
+  checkJerseyNumber,
+  createDesign,
+  findDuplicateJerseyNumbers,
+  isSameJerseyNumber,
+  jerseyNumberValue,
+  validateDesign,
+  validateProductDefinition,
+} from "@fitmyoutfit/editor/design";
+import type { DesignDocument, JerseyNumberCheck, JerseyNumberRules } from "@fitmyoutfit/editor/design";
 
 const productPath = process.argv[2];
 if (!productPath) throw new Error("usage: node consumer.js <product.json>");
@@ -18,5 +27,14 @@ if (!good.ok) throw new Error("a freshly created design was rejected: " + good.e
 
 const bad = validateDesign({ schemaVersion: 1 });
 if (bad.ok || bad.errors.length === 0) throw new Error("an incomplete design was accepted");
+
+// The backend's roster check will call these on plain strings.
+const rules: JerseyNumberRules = DEFAULT_JERSEY_NUMBER_RULES;
+const seven: JerseyNumberCheck = checkJerseyNumber("٧", rules);
+if (!seven.ok || seven.value !== 7 || seven.digitSystem !== "arabic-indic") throw new Error("jersey number check failed");
+if (jerseyNumberValue("07") !== 7 || !isSameJerseyNumber("7", "۷") || isSameJerseyNumber("7", "70")) throw new Error("jersey number comparison failed");
+if (checkJerseyNumber("100").ok) throw new Error("a three-digit jersey number was accepted");
+const roster = findDuplicateJerseyNumbers(["7", "٧", "10", "x"]);
+if (roster.duplicates.length !== 1 || roster.duplicates[0]?.indexes.join() !== "0,1" || roster.invalid.length !== 1) throw new Error("duplicate check failed");
 
 console.log(`consumer OK: ${Object.keys(design.zones).length} zones, ${bad.errors.length} errors on the bad document`);
