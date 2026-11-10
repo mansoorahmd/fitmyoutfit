@@ -8,6 +8,9 @@ vi.mock("@content/home", () => ({
     headline: "Test headline from the content file",
     subline: "Test subline from the content file.",
     button: { label: "Test button label", href: "/test-destination" },
+    secondaryButton: { label: "Test secondary label", href: "/test-secondary" },
+    howItWorksLink: { label: "Test how link", href: "#test-section" },
+    heroImage: null,
   },
 }))
 
@@ -56,7 +59,19 @@ describe("home hero reads its copy from the content file", () => {
       screen.queryByText(/Ecommerce Starter Template/i)
     ).not.toBeInTheDocument()
     expect(screen.queryByText(/View on GitHub/i)).not.toBeInTheDocument()
-    expect(screen.getAllByRole("link")).toHaveLength(1)
+    expect(screen.getAllByRole("link")).toHaveLength(3)
+  })
+
+  it("renders the secondary button and the how-it-works link from the content file", () => {
+    render(<Hero />)
+
+    expect(
+      screen.getByRole("link", { name: "Test secondary label" })
+    ).toHaveAttribute("href", "/pk/test-secondary")
+    expect(screen.getByRole("link", { name: "Test how link" })).toHaveAttribute(
+      "href",
+      "/pk#test-section"
+    )
   })
 
   it("uses the subline as the home page meta description", () => {
