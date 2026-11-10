@@ -1,12 +1,13 @@
 import { Metadata } from "next"
 
+import { listingContent } from "@content/listing"
 import { getGarmentsCollection } from "@lib/data/collections"
 import { SortOptions } from "@modules/store/components/refinement-list/sort-products"
 import StoreTemplate from "@modules/store/templates"
 
 export const metadata: Metadata = {
-  title: "Store",
-  description: "Explore all of our products.",
+  title: listingContent.title,
+  description: listingContent.metaDescription,
 }
 
 type Params = {
