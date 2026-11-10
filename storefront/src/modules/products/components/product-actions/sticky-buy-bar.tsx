@@ -89,14 +89,19 @@ const StickyBuyBar = ({
   <div
     className={clx(
       "fixed inset-x-0 bottom-0 z-40 border-t border-brand-border bg-brand-surface pb-[env(safe-area-inset-bottom)] lg:hidden",
-      "transition-transform duration-200 ease-out",
-      show ? "translate-y-0" : "pointer-events-none translate-y-full"
+      // Visibility switches after the slide, so a hidden bar is never
+      // painted (not even in a full-page capture below the fold).
+      "transition-[transform,visibility] duration-200 ease-out",
+      show
+        ? "visible translate-y-0"
+        : "pointer-events-none invisible translate-y-full"
     )}
     inert={!show}
     data-visible={show ? "true" : "false"}
     data-testid="mobile-actions"
   >
-    <div className="content-container flex h-16 items-center justify-between gap-4">
+    {/* 63 px plus the 1 px top border: 64 px above the safe-area inset */}
+    <div className="content-container flex h-[63px] items-center justify-between gap-4">
       <p
         className="min-w-0 truncate type-body font-semibold text-brand-ink"
         data-testid="mobile-summary"
