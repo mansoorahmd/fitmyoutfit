@@ -13,7 +13,7 @@ The three coding tasks run in parallel, each in its own worktree, against [contr
 
 | # | Task | Owner | Status | Accepted when |
 | --- | --- | --- | --- | --- |
-| S0-1 | Root workspace, `docker-compose.yml` (PostgreSQL, Redis, MinIO), Medusa v2 backend, seed script, setup and dev commands, CI workflow | backend-dev | In progress | Seed creates the 4 regions, 5 products and sample prices from data files, and is idempotent. `npm run setup` works on an empty database. Lint, type-check and tests pass |
+| S0-1 | Root workspace, `docker-compose.yml` (PostgreSQL, Redis, MinIO), Medusa v2 backend, seed script, setup and dev commands, CI workflow | backend-dev | In QA review (worker reported 10 Nov; branch `worktree-agent-aeeb51ec26519d8ed`, Medusa 2.22.6) | Seed creates the 4 regions, 5 products and sample prices from data files, and is idempotent. `npm run setup` works on an empty database. Lint, type-check and tests pass |
 | S0-2 | Next.js storefront from the Medusa starter, wired to the contract's environment variables | storefront-dev | QA verdict: changes needed. Back with the worker for fixes (S0-2b, which includes S0-7). Not yet checked against a real backend | `/pk`, `/gb`, `/ae` and `/us` list the 3 garments with prices in the region's currency, and product pages offer the sizes. Lint, type-check and tests pass |
 | S0-3 | Editor package scaffold: build, demo page, first draft of the design JSON type, schema and validator | editor-3d-dev | **Done, merged to `master`** on 10 Nov after the QA fix round (S0-3b) | Package builds standalone with no Medusa or Next.js imports. Demo page shows an orbitable placeholder. Lint, type-check and tests pass |
 | S0-4 | Three technical choices: email provider, hosting target, PDF library | coordinator | Done | Recorded in decisions 002, 003 and 005 (005 replaces 004) |
@@ -29,7 +29,12 @@ The three coding tasks run in parallel, each in its own worktree, against [contr
 - Contract for the local setup and seed data: [contracts/sprint-0-dev-setup.md](contracts/sprint-0-dev-setup.md).
 
 ## In progress
-- S0-1 is being built. S0-2 is back with its worker after QA (S0-2b). S0-3 is merged; its follow-up S0-3c is being built.
+- S0-1 is with qa-reviewer. S0-2 is back with its worker after QA (S0-2b). S0-3 is merged; its follow-up S0-3c is being built.
+- S0-1, as the worker reports it (not yet verified by QA): root lint, type-check and tests pass (29 unit, 9 integration, 7 script tests); the seed is idempotent; a file upload reached the MinIO bucket; the store API returns the contract's prices per region. Deviations the worker reported:
+  - The MinIO images on Docker Hub and Quay could not be pulled, so compose uses Chainguard's MinIO images at `latest`, unpinned. QA is checking the claim.
+  - Medusa's migrations already create a publishable key, so the seed reuses it instead of creating a second.
+  - Medusa returns variants unordered. The seed fixes the order of the size option's values, which is what the storefront renders.
+  - The rush add-on still has the fixed prices from the first contract; that is follow-up S0-6.
 - S0-2 QA result (10 Nov): lint (0 errors, 3 warnings in starter code), type-check and 25 tests pass with no backend. QA ran the storefront against a stub server it wrote, not against Medusa, so the four region pages are still unproven against the real backend. Changes needed, sent back as S0-2b:
   - Must fix: the garments collection lookup is cached with no expiry, so an empty result sticks. Opening the storefront before the seed, or reseeding, leaves "No products yet." on screen until `.next` is deleted.
   - Should fix: the fit kit and rush add-on pages list each other and the garments under "Related products".
