@@ -4,12 +4,14 @@ import {
   canGoNext,
   canGoPrevious,
   clampIndex,
+  counterLabel,
   imageAlt,
   indexFromScroll,
   nextIndex,
   positionLabel,
   previousIndex,
   showImageLabel,
+  slideLoading,
 } from "@modules/products/components/image-gallery/gallery-index"
 
 describe("gallery index logic", () => {
@@ -62,5 +64,25 @@ describe("gallery index logic", () => {
     expect(indexFromScroll(600, 300, 3)).toBe(2)
     expect(indexFromScroll(900, 300, 3)).toBe(2)
     expect(indexFromScroll(100, 0, 3)).toBe(0)
+  })
+
+  it("writes the counter chip as \"2 / 5\"", () => {
+    expect(counterLabel(1, 5)).toBe("2 / 5")
+    expect(counterLabel(0, 2)).toBe("1 / 2")
+    expect(counterLabel(7, 2)).toBe("2 / 2")
+  })
+
+  it("loads the first image with priority and the rest lazily", () => {
+    expect(slideLoading(0, 0, false)).toBeUndefined()
+    expect(slideLoading(1, 0, false)).toBe("lazy")
+    expect(slideLoading(3, 0, false)).toBe("lazy")
+  })
+
+  it("loads the current image's neighbours at once after the visitor engages", () => {
+    expect(slideLoading(1, 0, true)).toBe("eager")
+    expect(slideLoading(2, 0, true)).toBe("lazy")
+    expect(slideLoading(2, 3, true)).toBe("eager")
+    expect(slideLoading(4, 3, true)).toBe("eager")
+    expect(slideLoading(0, 3, true)).toBeUndefined()
   })
 })

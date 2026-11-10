@@ -35,6 +35,27 @@ export const showImageLabel = (index: number, count: number): string =>
 export const imageAlt = (title: string, index: number, count: number): string =>
   `${title}, image ${index + 1} of ${count}`
 
+/** "2 / 5": the counter chip on the image (decorative; positionLabel is announced). */
+export const counterLabel = (index: number, count: number): string =>
+  `${clampIndex(index, count) + 1} / ${count}`
+
+/**
+ * How a slide's image loads. The first image has priority (and no loading
+ * attribute); the rest are lazy. Once the visitor has touched, clicked or
+ * focused the gallery, the current image's neighbours load at once, so the
+ * next swipe does not show an empty frame.
+ */
+export const slideLoading = (
+  index: number,
+  current: number,
+  engaged: boolean
+): "eager" | "lazy" | undefined => {
+  if (index === 0) {
+    return undefined
+  }
+  return engaged && Math.abs(index - current) <= 1 ? "eager" : "lazy"
+}
+
 /**
  * Which slide a scrolling container is showing, from its scroll position and
  * the width of one slide. Rounds to the nearest slide.

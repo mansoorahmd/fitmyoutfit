@@ -48,6 +48,13 @@ describe("brand colour usage", () => {
       "modules/layout/templates/footer",
       "modules/common/icons/garment-outline.tsx",
       "content",
+      // S0-16: the product page
+      "modules/products/components/image-gallery",
+      "modules/products/components/product-breadcrumb",
+      "modules/products/components/product-details",
+      "modules/products/components/product-facts",
+      "modules/products/components/product-price",
+      "modules/products/templates",
     ]
     const offenders = restyled
       .flatMap((entry) => {
@@ -84,6 +91,17 @@ describe("brand colour usage", () => {
       "modules/store/templates/index.tsx",
       "modules/store/templates/paginated-products.tsx",
       "modules/layout/templates/footer/index.tsx",
+      // S0-16
+      "modules/products/components/image-gallery/index.tsx",
+      "modules/products/components/product-actions/index.tsx",
+      "modules/products/components/product-actions/sticky-buy-bar.tsx",
+      "modules/products/components/product-breadcrumb/index.tsx",
+      "modules/products/components/product-details/index.tsx",
+      "modules/products/components/product-facts/index.tsx",
+      "modules/products/components/product-price/index.tsx",
+      "modules/products/templates/index.tsx",
+      "modules/products/templates/layout.ts",
+      "modules/products/templates/product-info/index.tsx",
     ]
     for (const file of files) {
       expect(fs.readFileSync(path.join(src, file), "utf8")).not.toMatch(

@@ -1,21 +1,22 @@
-import { fireEvent, render, screen } from "@testing-library/react"
-import { describe, expect, it, vi } from "vitest"
+import { act, fireEvent, render, screen, within } from "@testing-library/react"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-const { replace } = vi.hoisted(() => ({ replace: vi.fn() }))
+const { replace, addToCart } = vi.hoisted(() => ({
+  replace: vi.fn(),
+  addToCart: vi.fn(),
+}))
 
-vi.mock("@lib/data/cart", () => ({ addToCart: vi.fn() }))
+vi.mock("@lib/data/cart", () => ({ addToCart }))
 vi.mock("next/navigation", () => ({
   useParams: () => ({ countryCode: "pk" }),
   usePathname: () => "/pk/products/jersey",
   useSearchParams: () => new URLSearchParams(),
   useRouter: () => ({ replace }),
 }))
-// Not in view, so the mobile bar is shown alongside the main button
-vi.mock("@lib/hooks/use-in-view", () => ({ useIntersection: () => false }))
 
 import ProductActions from "@modules/products/components/product-actions"
 
-const region = { id: "reg_pk", currency_code: "pkr" } as any
+const region = { id: "reg_pk", currency_code: "pkr", metadata: { tax_final: false } } as any
 
 const sizeOption = {
   id: "opt_size",
@@ -29,57 +30,188 @@ const sizeVariant = (size: string, over: Record<string, unknown> = {}) => ({
   manage_inventory: false,
   allow_backorder: false,
   options: [{ option_id: "opt_size", value: size }],
+  calculated_price: {
+    calculated_amount: 3500,
+    original_amount: 3500,
+    currency_code: "pkr",
+    calculated_price: { price_list_type: null },
+  },
   ...over,
 })
 
 const jersey = (over: Record<string, unknown> = {}) =>
   ({
     id: "prod_jersey",
+    handle: "jersey",
     title: "Jersey",
+    metadata: { kind: "garment" },
     options: [sizeOption],
     variants: ["S", "M", "L"].map((s) => sizeVariant(s, over)),
   }) as any
 
 const mainButton = () => screen.getByTestId("add-product-button")
-const mobileButton = () => screen.getByTestId("mobile-cart-button")
+const barButton = () => screen.getByTestId("mobile-cart-button")
+const sizeGroup = () => screen.getByRole("radiogroup", { name: "Size" })
+
+beforeEach(() => {
+  replace.mockClear()
+  addToCart.mockReset()
+  addToCart.mockResolvedValue(undefined)
+})
+
+afterEach(() => {
+  vi.restoreAllMocks()
+})
 
 describe("product actions", () => {
-  it("made-to-order multi-size product: Select a size (disabled), then Add to cart after a size is clicked", () => {
+  it("shows an active red Add to cart before a size is chosen, never a disabled one", () => {
     render(<ProductActions product={jersey()} region={region} />)
 
-    expect(mainButton()).toHaveTextContent("Select a size")
-    expect(mainButton()).toHaveAttribute("aria-disabled", "true")
-    expect(mobileButton()).toHaveTextContent("Select a size")
-    expect(mobileButton()).toHaveAttribute("aria-disabled", "true")
+    for (const button of [mainButton(), barButton()]) {
+      expect(button).toHaveTextContent("Add to cart")
+      expect(button).not.toHaveAttribute("aria-disabled")
+    }
+    expect(mainButton()).toHaveClass("bg-brand-primary", "w-full")
+    expect(screen.queryByText("Select a size")).not.toBeInTheDocument()
     expect(screen.queryByText("Out of stock")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("option-error")).toBeNull()
+  })
 
+  it("pressing Add to cart with no size shows 'Choose a size' and moves focus to the sizes", () => {
+    render(<ProductActions product={jersey()} region={region} />)
+
+    fireEvent.click(mainButton())
+
+    expect(addToCart).not.toHaveBeenCalled()
+    const error = screen.getByTestId("option-error")
+    expect(error).toHaveTextContent("Choose a size")
+    expect(error).toHaveClass("text-brand-error")
+    // an icon as well as the colour
+    expect(error.querySelector("svg")).not.toBeNull()
+    expect(sizeGroup()).toHaveFocus()
+    expect(sizeGroup()).toHaveAttribute("aria-invalid", "true")
+    expect(sizeGroup()).toHaveAccessibleDescription("Choose a size")
+  })
+
+  it("the message goes once a size is chosen, and the label row reads 'Size: M'", () => {
+    render(<ProductActions product={jersey()} region={region} />)
+
+    expect(screen.getByTestId("option-label")).toHaveTextContent(/^Size$/)
+    fireEvent.click(mainButton())
     fireEvent.click(screen.getByRole("radio", { name: "M" }))
 
-    expect(mainButton()).toHaveTextContent("Add to cart")
-    expect(mainButton()).not.toHaveAttribute("aria-disabled")
-    expect(mobileButton()).toHaveTextContent("Add to cart")
-    expect(mobileButton()).not.toHaveAttribute("aria-disabled")
+    expect(screen.queryByTestId("option-error")).toBeNull()
+    expect(screen.getByTestId("option-label")).toHaveTextContent("Size: M")
+  })
+
+  it("with a size chosen, adds that size to the cart", async () => {
+    render(<ProductActions product={jersey()} region={region} />)
+
+    fireEvent.click(screen.getByRole("radio", { name: "M" }))
+    await act(async () => {
+      fireEvent.click(mainButton())
+    })
+
+    expect(addToCart).toHaveBeenCalledTimes(1)
+    expect(addToCart).toHaveBeenCalledWith({
+      variantId: "var_M",
+      quantity: 1,
+      countryCode: "pk",
+    })
+  })
+
+  it("the sticky bar's button adds the chosen size too", async () => {
+    render(<ProductActions product={jersey()} region={region} />)
+
+    fireEvent.click(screen.getByRole("radio", { name: "L" }))
+    await act(async () => {
+      fireEvent.click(barButton())
+    })
+
+    expect(addToCart).toHaveBeenCalledWith({
+      variantId: "var_L",
+      quantity: 1,
+      countryCode: "pk",
+    })
+  })
+
+  it("the sticky bar's button with no size scrolls to the sizes and shows the same message", () => {
+    const scrollIntoView = vi.fn()
+    Element.prototype.scrollIntoView = scrollIntoView
+    render(<ProductActions product={jersey()} region={region} />)
+
+    // the size group is far above the screen, as when the bar is showing
+    const group = sizeGroup()
+    vi.spyOn(group, "getBoundingClientRect").mockReturnValue({
+      top: -900,
+      bottom: -700,
+    } as DOMRect)
+
+    fireEvent.click(barButton())
+
+    expect(addToCart).not.toHaveBeenCalled()
+    expect(scrollIntoView).toHaveBeenCalledTimes(1)
+    expect(scrollIntoView.mock.calls[0][0]).toMatchObject({ block: "center" })
+    expect(screen.getByTestId("option-error")).toHaveTextContent("Choose a size")
+    expect(group).toHaveFocus()
+  })
+
+  it("the main button does not scroll the page when the sizes are already on screen", () => {
+    const scrollIntoView = vi.fn()
+    Element.prototype.scrollIntoView = scrollIntoView
+    render(<ProductActions product={jersey()} region={region} />)
+
+    fireEvent.click(mainButton())
+
+    expect(scrollIntoView).not.toHaveBeenCalled()
+  })
+
+  it("the sticky bar shows the price, then the size and the price", () => {
+    render(<ProductActions product={jersey()} region={region} />)
+    const summary = () => screen.getByTestId("mobile-summary").textContent
+
+    expect(summary()).toMatch(/^PKR\s3,500$/)
+    fireEvent.click(screen.getByRole("radio", { name: "M" }))
+    expect(summary()).toMatch(/^M · PKR\s3,500$/)
+  })
+
+  it("shows the price block: price, per piece and the tax note", () => {
+    render(<ProductActions product={jersey()} region={region} />)
+
+    const block = screen.getByTestId("price-block")
+    expect(within(block).getByTestId("product-price").textContent).toMatch(/^PKR\s3,500$/)
+    expect(block).toHaveTextContent("per piece")
+    expect(within(block).getByTestId("tax-note")).toHaveTextContent("Tax not final")
+    // Pakistan is not an export region
+    expect(within(block).queryByTestId("export-note")).toBeNull()
   })
 
   it("records the chosen size in the URL without scrolling the page", () => {
-    replace.mockClear()
     render(<ProductActions product={jersey()} region={region} />)
 
     fireEvent.click(screen.getByRole("radio", { name: "M" }))
 
-    expect(replace).toHaveBeenCalledWith(
-      "/pk/products/jersey?v_id=var_M",
-      { scroll: false }
-    )
+    expect(replace).toHaveBeenCalledWith("/pk/products/jersey?v_id=var_M", {
+      scroll: false,
+    })
     for (const call of replace.mock.calls) {
       expect(call[1]).toEqual({ scroll: false })
     }
   })
 
-  it("single-variant product shows Add to cart immediately", () => {
+  it("has no quantity field", () => {
+    render(<ProductActions product={jersey()} region={region} />)
+
+    expect(screen.queryByRole("spinbutton")).toBeNull()
+    expect(screen.queryByLabelText(/quantity/i)).toBeNull()
+  })
+
+  it("single-variant product shows Add to cart, no sizes, and adds at once", async () => {
     const fitKit = {
       id: "prod_kit",
+      handle: "fit-kit",
       title: "Fit kit",
+      metadata: { kind: "fit_kit" },
       options: [
         { id: "opt_kit", title: "Kit", values: [{ id: "v_k", value: "Default" }] },
       ],
@@ -94,10 +226,18 @@ describe("product actions", () => {
 
     render(<ProductActions product={fitKit} region={region} />)
 
+    expect(screen.queryByRole("radiogroup")).toBeNull()
     expect(mainButton()).toHaveTextContent("Add to cart")
     expect(mainButton()).not.toHaveAttribute("aria-disabled")
-    expect(mobileButton()).toHaveTextContent("Add to cart")
-    expect(mobileButton()).not.toHaveAttribute("aria-disabled")
+    expect(barButton()).not.toHaveAttribute("aria-disabled")
+    await act(async () => {
+      fireEvent.click(mainButton())
+    })
+    expect(addToCart).toHaveBeenCalledWith({
+      variantId: "var_kit",
+      quantity: 1,
+      countryCode: "pk",
+    })
   })
 
   it("managed inventory with zero stock shows Out of stock after selection", () => {
@@ -108,7 +248,7 @@ describe("product actions", () => {
       />
     )
 
-    expect(mainButton()).toHaveTextContent("Select a size")
+    expect(mainButton()).toHaveTextContent("Add to cart")
 
     // out of stock, so the chip is marked unavailable but can still be chosen
     const large = screen.getByRole("radio", { name: "L, unavailable" })
@@ -117,7 +257,9 @@ describe("product actions", () => {
 
     expect(mainButton()).toHaveTextContent("Out of stock")
     expect(mainButton()).toHaveAttribute("aria-disabled", "true")
-    expect(mobileButton()).toHaveTextContent("Out of stock")
-    expect(mobileButton()).toHaveAttribute("aria-disabled", "true")
+    expect(barButton()).toHaveTextContent("Out of stock")
+    expect(barButton()).toHaveAttribute("aria-disabled", "true")
+    fireEvent.click(mainButton())
+    expect(addToCart).not.toHaveBeenCalled()
   })
 })
