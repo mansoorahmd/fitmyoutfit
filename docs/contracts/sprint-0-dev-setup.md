@@ -72,6 +72,7 @@ Storefront (`storefront/.env.example`):
 | `NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY` | Empty in the example. Written into `storefront/.env.local` by the root setup script |
 | `NEXT_PUBLIC_BASE_URL` | `http://localhost:8000` |
 | `NEXT_PUBLIC_DEFAULT_REGION` | `pk` |
+| `NEXT_PUBLIC_STORE_NAME` | `FitMyOutfit` (added 10 Nov 2026, see "Store name" below) |
 
 If the Medusa starter needs other variables, keep its names and add them to `.env.example`.
 
@@ -129,9 +130,20 @@ Each product also carries metadata `kind`: `"garment"` for the three garments, `
 | T-Shirt | 2,000 | 14 | 60 | 18 |
 | Jacket | 7,500 | 45 | 190 | 55 |
 | Fit Kit (refundable deposit) | 5,000 | 30 | 130 | 40 |
-| Rush Production | 500 | 4 | 15 | 5 |
 
 Check the current Medusa v2 docs for how amounts are stored (major units or minor units) before writing them.
+
+### Rush price (changed 10 Nov 2026, after work started)
+
+The founder decided that rush is priced as **a percentage, not a fixed amount**. This replaces the fixed "Rush Production" prices that the first version of this contract listed (PKR 500, GBP 4, AED 15, USD 5). The backend worker started from that first version; the change is applied as follow-up task S0-6.
+
+- The `rush-add-on` product stays, as the line item that carries the rush charge on an order. It has **no fixed prices** in the seed.
+- The seed data holds a setting, `rush_percentage`, with the placeholder value **20**. It is stored where an admin can change it without a code change.
+- Working out the charge and adding it to a cart is Sprint 1. The placeholder assumption is that the percentage applies to the garments subtotal, not to the fit kit or shipping; the founders have not confirmed that.
+
+### Store name (added 10 Nov 2026)
+
+The store's name is **FitMyOutfit** for now, and may change. The storefront reads it from one place (`NEXT_PUBLIC_STORE_NAME`, default `FitMyOutfit`) and shows it wherever the starter says "Medusa Store". Applied as follow-up task S0-7.
 
 ### Sales channel and publishable key
 

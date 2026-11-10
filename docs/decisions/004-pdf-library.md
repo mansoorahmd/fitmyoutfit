@@ -1,5 +1,7 @@
 # 004: PDF library for the roster proof
 
+**Superseded by [005](005-pdf-via-headless-chromium.md)** on 10 Nov 2026, after the founder confirmed that jerseys can carry Arabic and Urdu names. Kept for the record.
+
 10 Nov 2026. Decided by the coordinator in Sprint 0. One of the three choices dev-plan.md asks Sprint 0 to settle.
 
 ## Context
