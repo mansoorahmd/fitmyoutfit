@@ -1,5 +1,6 @@
 import { Metadata } from "next"
 import { STORE_NAME } from "@lib/store-config"
+import { homeContent } from "@content/home"
 
 import FeaturedProducts from "@modules/home/components/featured-products"
 import Hero from "@modules/home/components/hero"
@@ -9,8 +10,7 @@ import { getRegion } from "@lib/data/regions"
 
 export const metadata: Metadata = {
   title: STORE_NAME,
-  description:
-    "A performant frontend ecommerce starter template with Next.js 15 and Medusa.",
+  description: homeContent.subline,
 }
 
 export default async function Home(props: {
