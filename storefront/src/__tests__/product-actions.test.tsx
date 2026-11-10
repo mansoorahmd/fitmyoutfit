@@ -1,12 +1,14 @@
 import { fireEvent, render, screen } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 
+const { replace } = vi.hoisted(() => ({ replace: vi.fn() }))
+
 vi.mock("@lib/data/cart", () => ({ addToCart: vi.fn() }))
 vi.mock("next/navigation", () => ({
   useParams: () => ({ countryCode: "pk" }),
   usePathname: () => "/pk/products/jersey",
   useSearchParams: () => new URLSearchParams(),
-  useRouter: () => ({ replace: vi.fn() }),
+  useRouter: () => ({ replace }),
 }))
 // Not in view, so the mobile bar is shown alongside the main button
 vi.mock("@lib/hooks/use-in-view", () => ({ useIntersection: () => false }))
@@ -57,6 +59,21 @@ describe("product actions", () => {
     expect(mainButton()).toBeEnabled()
     expect(mobileButton()).toHaveTextContent("Add to cart")
     expect(mobileButton()).toBeEnabled()
+  })
+
+  it("records the chosen size in the URL without scrolling the page", () => {
+    replace.mockClear()
+    render(<ProductActions product={jersey()} region={region} />)
+
+    fireEvent.click(screen.getByRole("button", { name: "M" }))
+
+    expect(replace).toHaveBeenCalledWith(
+      "/pk/products/jersey?v_id=var_M",
+      { scroll: false }
+    )
+    for (const call of replace.mock.calls) {
+      expect(call[1]).toEqual({ scroll: false })
+    }
   })
 
   it("single-variant product shows Add to cart immediately", () => {

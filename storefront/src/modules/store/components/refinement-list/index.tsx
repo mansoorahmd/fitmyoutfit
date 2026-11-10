@@ -28,7 +28,8 @@ const RefinementList = ({ sortBy, 'data-testid': dataTestId }: RefinementListPro
 
   const setQueryParams = (name: string, value: string) => {
     const query = createQueryString(name, value)
-    router.push(`${pathname}?${query}`)
+    // Re-sorting keeps the visitor where they are on the page.
+    router.push(`${pathname}?${query}`, { scroll: false })
   }
 
   return (

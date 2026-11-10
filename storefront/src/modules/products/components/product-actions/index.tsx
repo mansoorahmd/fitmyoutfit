@@ -99,7 +99,9 @@ export default function ProductActions({
       params.delete("v_id")
     }
 
-    router.replace(pathname + "?" + params.toString())
+    // Recording the chosen variant in the URL must not move the page. The
+    // default scrolls to the top, which lost the visitor's place on a phone.
+    router.replace(pathname + "?" + params.toString(), { scroll: false })
   }, [selectedVariant, isValidVariant])
 
   // label and enabled state of the main button, shared with the mobile bar

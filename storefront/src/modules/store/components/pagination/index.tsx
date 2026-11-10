@@ -24,6 +24,8 @@ export function Pagination({
   const handlePageChange = (newPage: number) => {
     const params = new URLSearchParams(searchParams)
     params.set("page", newPage.toString())
+    // Scrolls to the top on purpose: the buttons sit under the grid, and a
+    // new page of products should start at its first product.
     router.push(`${pathname}?${params.toString()}`)
   }
 
