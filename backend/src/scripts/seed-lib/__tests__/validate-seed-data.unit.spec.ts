@@ -195,7 +195,7 @@ describe("validateSeedData", () => {
       expect(product.images.placeholder).toBe(true)
       expect(product.images.urls.length).toBeGreaterThan(0)
       for (const url of product.images.urls) {
-        expect(url).toMatch(/^https:\/\/medusa-public-images\.s3\.eu-west-1\.amazonaws\.com\//)
+        expect(url).toMatch(/^https:\/\//)
       }
     }
     expect(validateSeedData(seedData).filter((p) => p.includes("image"))).toEqual([])

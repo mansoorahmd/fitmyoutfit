@@ -310,10 +310,12 @@ medusaIntegrationTestRunner({
           expect(product.thumbnail).toBe(urls[0])
           expect(product.images.map((i: any) => i.url)).toEqual(urls)
         }
+        // The contract's first jersey photo, query string included (no network: only the stored URL).
         const jersey = data.products.find((p: any) => p.handle === "jersey")
         expect(jersey.thumbnail).toBe(
-          "https://medusa-public-images.s3.eu-west-1.amazonaws.com/ls-black-front.png"
+          "https://www.spized.com/thumbnail/4b/cb/26/1744736603/abc184bc-ffaa-6972-d8f4-67ad4c530dd0_784006_600x600.webp?ts=1793783716"
         )
+        expect(jersey.images.map((i: any) => i.url)).toHaveLength(2)
       })
 
       it("gives a product without a picture its images again and never replaces an admin's photo", async () => {
@@ -714,7 +716,7 @@ medusaIntegrationTestRunner({
         const before = await counts()
         expect(before.region).toBe(4)
         expect(before.product).toBe(5)
-        expect(before.image).toBe(8)
+        expect(before.image).toBe(9)
 
         const second = await seedStore(container, adminOptions)
         expect(second.created).toEqual({
