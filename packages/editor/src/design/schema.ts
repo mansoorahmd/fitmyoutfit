@@ -14,6 +14,8 @@
  * right, Y downwards, rotation in degrees clockwise about the layer centre.
  */
 import { z } from "zod";
+import { DEFAULT_JERSEY_NUMBER_RULES } from "./jersey-number-rules.js";
+import { checkJerseyNumber } from "./jersey-number.js";
 
 /** Version of this document format. Not the version of a saved design. */
 export const DESIGN_SCHEMA_VERSION = 1 as const;
@@ -109,12 +111,41 @@ export const textLayerSchema = z.strictObject({
   ...textStyle,
 });
 
+/**
+ * The structural part of the jersey number rule, built from the default rules
+ * data: one or more digits, all from ONE of the allowed digit systems (so
+ * mixing is forbidden here too). It says nothing about length or size: the
+ * maximum is data, so `validateDesign` and the edit functions enforce it, with
+ * rules that can be passed in. See jersey-number.ts.
+ */
+export const JERSEY_NUMBER_VALUE_PATTERN = `^(?:${DEFAULT_JERSEY_NUMBER_RULES.digitSystems
+  .map((s) => {
+    const hex = (code: number) => code.toString(16).toUpperCase().padStart(4, "0");
+    // A backslash-u escape in the pattern text, so the JSON Schema stays plain ASCII.
+    return String.raw`[\u${hex(s.zero)}-\u${hex(s.zero + 9)}]+`;
+  })
+  .join("|")})$`;
+
+const NUMBER_VALUE_DESCRIPTION =
+  `A jersey number: one or more digits from one digit system (Western 0-9, Arabic-Indic ٠-٩ or Extended Arabic-Indic ۰-۹), kept as typed so "07" survives. ` +
+  `This pattern checks the structure only. The largest number (${DEFAULT_JERSEY_NUMBER_RULES.maxValue}, so at most ${String(DEFAULT_JERSEY_NUMBER_RULES.maxValue).length} digits) is data, not part of the pattern, ` +
+  `and is enforced by validateDesign() from @fitmyoutfit/editor/design, as are the allowed digit systems when the rules are changed. ` +
+  `Do not rely on this schema alone to accept a number layer.`;
+
 export const numberLayerSchema = z.strictObject({
   id,
   kind: z.literal("number"),
   ...placement,
-  /** One to three digits, kept as text so "00" and "07" survive. */
-  value: z.string().regex(/^[0-9]{1,3}$/, "must be 1 to 3 digits"),
+  value: z
+    .string()
+    .regex(new RegExp(JERSEY_NUMBER_VALUE_PATTERN), {
+      // The readable reason comes from the one rule function, so it is the same everywhere.
+      error: (issue) => {
+        const result = checkJerseyNumber(issue.input);
+        return result.ok ? "is not a valid jersey number" : result.error;
+      },
+    })
+    .describe(NUMBER_VALUE_DESCRIPTION),
   ...textStyle,
 });
 

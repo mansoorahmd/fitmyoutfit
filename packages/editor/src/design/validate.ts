@@ -4,8 +4,11 @@ import {
   designSchema,
   productDefinitionSchema,
   type DesignDocument,
+  type Layer,
   type ProductDefinition,
 } from "./schema.js";
+import { DEFAULT_JERSEY_NUMBER_RULES, type JerseyNumberRules } from "./jersey-number-rules.js";
+import { checkJerseyNumber, checkJerseyNumberRules } from "./jersey-number.js";
 
 export interface ValidationError {
   /** Where the problem is, for example `layers[2].position.x`. Empty for the document root. */
@@ -55,6 +58,27 @@ export function zodIssuesToErrors(issues: ReadonlyArray<z.core.$ZodIssue>, prefi
   return errors;
 }
 
+/**
+ * The part of the jersey number rule that the JSON Schema cannot hold (the
+ * maximum is data): a number layer's value must pass `checkJerseyNumber`.
+ * `path` names the layer, for example `layers[1]` or `layer`.
+ */
+export function jerseyNumberLayerErrors(
+  layer: Layer,
+  path: string,
+  rules: JerseyNumberRules = DEFAULT_JERSEY_NUMBER_RULES,
+): ValidationError[] {
+  if (layer.kind !== "number") return [];
+  const result = checkJerseyNumber(layer.value, rules);
+  return result.ok ? [] : [makeError(`${path}.value`, result.error)];
+}
+
+/** An error for rules that cannot be used, or null. Shared by `validateDesign` and the edit functions. */
+export function jerseyNumberRulesError(rules: unknown): ValidationError | null {
+  const problem = checkJerseyNumberRules(rules);
+  return problem ? makeError("", `cannot check number layers: ${problem}`) : null;
+}
+
 function checkSchemaVersion(input: unknown): ValidationError | null {
   if (typeof input !== "object" || input === null || Array.isArray(input)) return null;
   const version = (input as Record<string, unknown>).schemaVersion;
@@ -80,7 +104,7 @@ function checkReservedKeys(input: Record<string, unknown>): ValidationError[] {
   if (typeof zones !== "object" || zones === null || Array.isArray(zones)) return [];
   return Object.getOwnPropertyNames(zones)
     .filter((key) => key === "__proto__")
-    .map((key) => makeError(`zones.${key}`, `"${key}" is not allowed as a zone id`));
+    .map((key) => makeError(`zones.${key}`, "this name is reserved and cannot be used as a zone id"));
 }
 
 function parseWith<T>(
@@ -104,7 +128,7 @@ function parseWith<T>(
  * Rules that a JSON Schema cannot express: unique ids and references between
  * parts of the document.
  */
-function checkReferences(design: DesignDocument): ValidationError[] {
+function checkReferences(design: DesignDocument, rules: JerseyNumberRules): ValidationError[] {
   const errors: ValidationError[] = [];
 
   const fontIds = new Set<string>();
@@ -117,6 +141,7 @@ function checkReferences(design: DesignDocument): ValidationError[] {
   design.layers.forEach((layer, i) => {
     if (layerIds.has(layer.id)) errors.push(makeError(`layers[${i}].id`, `duplicate layer id "${layer.id}"`));
     layerIds.add(layer.id);
+    errors.push(...jerseyNumberLayerErrors(layer, `layers[${i}]`, rules));
     if ((layer.kind === "text" || layer.kind === "number") && !fontIds.has(layer.fontId)) {
       errors.push(
         makeError(`layers[${i}].fontId`, `font "${layer.fontId}" is not listed in 'fonts'; add it to the document`),
@@ -137,12 +162,12 @@ function checkAgainstProduct(design: DesignDocument, product: ProductDefinition)
   const zoneIds = new Set(product.zones.map((z) => z.id));
   for (const zoneId of Object.keys(design.zones)) {
     if (!zoneIds.has(zoneId)) {
-      errors.push(makeError(`zones.${zoneId}`, `product "${product.id}" has no colour zone "${zoneId}"`));
+      errors.push(makeError(`zones.${zoneId}`, `product "${product.id}" has no colour zone with this id`));
     }
   }
   for (const zone of product.zones) {
     if (!Object.prototype.hasOwnProperty.call(design.zones, zone.id)) {
-      errors.push(makeError(`zones.${zone.id}`, `missing colour for zone "${zone.id}"`));
+      errors.push(makeError(`zones.${zone.id}`, "this colour zone has no colour"));
     }
   }
   if (design.palette.id !== product.palette.id) {
@@ -162,6 +187,13 @@ function checkAgainstProduct(design: DesignDocument, product: ProductDefinition)
 export interface ValidateDesignOptions {
   /** When given, the design is also checked against this product's zones and pieces. */
   product?: ProductDefinition;
+  /**
+   * The jersey number rules for number layers (see jersey-number-rules.ts).
+   * Defaults to `DEFAULT_JERSEY_NUMBER_RULES`. Rules may change the maximum or
+   * allow fewer digit systems. Digit systems the schema does not know (it
+   * knows the three in the default data) are still refused by its pattern.
+   */
+  jerseyNumberRules?: JerseyNumberRules;
 }
 
 /**
@@ -174,9 +206,12 @@ export function validateDesign(
   options: ValidateDesignOptions = {},
 ): ValidationResult<DesignDocument> {
   try {
+    const rules = options.jerseyNumberRules ?? DEFAULT_JERSEY_NUMBER_RULES;
+    const rulesError = jerseyNumberRulesError(rules);
+    if (rulesError) return { ok: false, errors: [rulesError] };
     const parsed = parseWith(designSchema, input, "a design");
     if (!parsed.ok) return parsed;
-    const errors = checkReferences(parsed.value);
+    const errors = checkReferences(parsed.value, rules);
     if (options.product) errors.push(...checkAgainstProduct(parsed.value, options.product));
     return errors.length > 0 ? { ok: false, errors } : parsed;
   } catch (error) {

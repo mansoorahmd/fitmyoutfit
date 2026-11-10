@@ -26,7 +26,8 @@ import {
   type Layer,
   type ProductDefinition,
 } from "./schema.js";
-import { DesignError, zodIssuesToErrors } from "./validate.js";
+import { DEFAULT_JERSEY_NUMBER_RULES, type JerseyNumberRules } from "./jersey-number-rules.js";
+import { DesignError, jerseyNumberLayerErrors, jerseyNumberRulesError, zodIssuesToErrors } from "./validate.js";
 
 /**
  * Fields of a layer that can be changed. `id` and `kind` are fixed: to change
@@ -43,6 +44,19 @@ export type LayerPatch = Layer extends infer L
 export interface EditOptions {
   /** When given, the edit is also checked against this product's pieces and zones. */
   product?: ProductDefinition;
+  /**
+   * The jersey number rules for number layers. Defaults to
+   * `DEFAULT_JERSEY_NUMBER_RULES` (maximum 99, three digit systems).
+   */
+  jerseyNumberRules?: JerseyNumberRules;
+}
+
+/** The rules to use, or a DesignError when the given rules are unusable. */
+function requireRules(options: EditOptions | undefined, action: string): JerseyNumberRules {
+  const rules = options?.jerseyNumberRules ?? DEFAULT_JERSEY_NUMBER_RULES;
+  const problem = jerseyNumberRulesError(rules);
+  if (problem) throw new DesignError(`Cannot ${action}: ${problem.message}`);
+  return rules;
 }
 
 function describeValue(value: unknown): string {
@@ -144,10 +158,13 @@ export function setZoneColor(
 export function addLayer(design: DesignDocument, layer: Layer, options?: EditOptions): DesignDocument {
   requireDesign(design, "add layer");
   const product = requireProduct(options, "add layer");
+  const rules = requireRules(options, "add layer");
   const parsed = layerSchema.safeParse(layer);
   if (!parsed.success) {
     throw new DesignError("Invalid layer", zodIssuesToErrors(parsed.error.issues, "layer"));
   }
+  const numberErrors = jerseyNumberLayerErrors(parsed.data, "layer", rules);
+  if (numberErrors.length > 0) throw new DesignError("Invalid layer", numberErrors);
   if (design.layers.some((l) => l.id === parsed.data.id)) {
     throw new DesignError(`Cannot add layer: a layer with id "${parsed.data.id}" already exists`);
   }
@@ -165,6 +182,7 @@ export function updateLayer(
   requireDesign(design, "update layer");
   requireString(layerId, "update layer", "the layer id");
   const product = requireProduct(options, "update layer");
+  const rules = requireRules(options, "update layer");
   if (typeof patch !== "object" || patch === null || Array.isArray(patch)) {
     throw new DesignError(`Cannot update layer "${layerId}": the changes must be an object, got ${describeValue(patch)}`);
   }
@@ -181,6 +199,8 @@ export function updateLayer(
   if (!parsed.success) {
     throw new DesignError(`Invalid update for layer "${layerId}"`, zodIssuesToErrors(parsed.error.issues, "layer"));
   }
+  const numberErrors = jerseyNumberLayerErrors(parsed.data, "layer", rules);
+  if (numberErrors.length > 0) throw new DesignError(`Invalid update for layer "${layerId}"`, numberErrors);
   checkLayerReferences(design, parsed.data, product, `update layer "${layerId}"`);
   const layers = design.layers.slice();
   layers[index] = parsed.data;

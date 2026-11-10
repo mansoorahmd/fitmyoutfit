@@ -189,7 +189,7 @@ describe("D6: nothing is silently dropped from a map", () => {
     const result = validateDesign(doc);
     expect(result).toEqual({
       ok: false,
-      errors: [{ path: "zones.__proto__", message: 'zones.__proto__: "__proto__" is not allowed as a zone id' }],
+      errors: [{ path: "zones.__proto__", message: 'zones.__proto__: this name is reserved and cannot be used as a zone id' }],
     });
   });
 
@@ -217,7 +217,7 @@ describe("D6: nothing is silently dropped from a map", () => {
   it("does not let an inherited name stand in for a missing zone", () => {
     const odd = { ...product, zones: [...product.zones, { ...product.zones[0]!, id: "toString" }] };
     const errors = messages(empty, { product: odd });
-    expect(errors).toContain('zones.toString: missing colour for zone "toString"');
+    expect(errors).toContain('zones.toString: this colour zone has no colour');
   });
 });
 
@@ -250,15 +250,22 @@ describe("text layers accept any script", () => {
 });
 
 describe("number layers", () => {
-  it("rejects four digits with a readable message", () => {
-    expect(() => addLayer(withFont, numberWith("1234"))).toThrow("layer.value: must be 1 to 3 digits");
+  // The jersey number rule itself is tested in jersey-number.test.ts; the document tests are in jersey-number-layer.test.ts.
+  it("rejects four digits with a readable message (the rule is now: at most two digits, value 0 to 99)", () => {
+    expect(() => addLayer(withFont, numberWith("1234"))).toThrow('layer.value: "1234" has more than 2 digits');
     const doc = { ...withFont, layers: [numberWith("1234")] };
-    expect(messages(doc)).toEqual(["layers[0].value: must be 1 to 3 digits"]);
+    expect(messages(doc)).toEqual(['layers[0].value: "1234" has more than 2 digits (the largest jersey number is 99; leading zeros count)']);
   });
 
-  it("accepts one to three digits, keeping leading zeros", () => {
-    for (const value of ["7", "07", "007", "100", "999"]) {
+  it("accepts one or two digits, keeping leading zeros as typed", () => {
+    for (const value of ["7", "07", "00", "99"]) {
       expect(addLayer(withFont, numberWith(value)).layers[0]).toMatchObject({ value });
+    }
+  });
+
+  it("no longer accepts three digits", () => {
+    for (const value of ["100", "007", "999"]) {
+      expect(() => addLayer(withFont, numberWith(value))).toThrow(DesignError);
     }
   });
 });

@@ -73,7 +73,7 @@ describe("validateDesign: invalid documents", () => {
       }),
     );
     expect(errors.some((m) => m.startsWith("layers[0].size.width"))).toBe(true);
-    expect(errors.some((m) => m.startsWith("layers[1].value") && m.includes("1 to 3 digits"))).toBe(true);
+    expect(errors.some((m) => m.startsWith("layers[1].value") && m.includes("contains characters that are not digits"))).toBe(true);
   });
 
   it("reports an unknown layer kind", () => {
@@ -127,12 +127,12 @@ describe("validateDesign: against a product", () => {
 
   it("rejects a zone the product does not have", () => {
     const errors = messages(broken((d) => (d.zones.pockets = d.zones.body)), { product });
-    expect(errors).toContain('zones.pockets: product "placeholder-jersey" has no colour zone "pockets"');
+    expect(errors).toContain('zones.pockets: product "placeholder-jersey" has no colour zone with this id');
   });
 
   it("rejects a missing zone", () => {
     const errors = messages(broken((d) => delete d.zones.collar), { product });
-    expect(errors).toContain('zones.collar: missing colour for zone "collar"');
+    expect(errors).toContain('zones.collar: this colour zone has no colour');
   });
 
   it("rejects a layer on a pattern piece that does not exist", () => {
