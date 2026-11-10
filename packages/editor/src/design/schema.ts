@@ -27,6 +27,20 @@ const id = z
   .string()
   .regex(ID_PATTERN, "must be 1 to 64 characters: letters, digits, '-', '_' or '.', starting with a letter or digit");
 
+/**
+ * Zone ids are also used as object keys (`design.zones[zoneId]`), so the names
+ * that mean something special on a JavaScript object are not allowed.
+ * `__proto__` already fails ID_PATTERN; the other two are listed explicitly.
+ */
+export const RESERVED_KEYS = ["__proto__", "constructor", "prototype"] as const;
+export const ZONE_ID_PATTERN = /^(?!(?:__proto__|constructor|prototype)$)[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/;
+const zoneId = z
+  .string()
+  .regex(
+    ZONE_ID_PATTERN,
+    `must be 1 to 64 characters: letters, digits, '-', '_' or '.', starting with a letter or digit, and not one of: ${RESERVED_KEYS.join(", ")}`,
+  );
+
 const finite = z.number();
 
 export const paletteRefSchema = z.strictObject({
@@ -118,10 +132,23 @@ export const clipartLayerSchema = z.strictObject({
   asset: assetRefSchema,
 });
 
+const LAYER_KINDS = "text, number, logo, clipart";
+
 export const layerSchema = z.discriminatedUnion(
   "kind",
   [textLayerSchema, numberLayerSchema, logoLayerSchema, clipartLayerSchema],
-  { error: "'kind' must be one of: text, number, logo, clipart" },
+  {
+    error: (issue) => {
+      const input = issue.input;
+      if (typeof input !== "object" || input === null || Array.isArray(input)) {
+        return `must be a layer object with a 'kind' of ${LAYER_KINDS}`;
+      }
+      const kind = (input as Record<string, unknown>).kind;
+      return kind === undefined
+        ? `is required: one of ${LAYER_KINDS}`
+        : `${JSON.stringify(kind)} is not a layer kind; use one of ${LAYER_KINDS}`;
+    },
+  },
 );
 
 export const designSchema = z.strictObject({
@@ -130,7 +157,7 @@ export const designSchema = z.strictObject({
   product: z.strictObject({ id }),
   palette: paletteRefSchema,
   /** Zone id to colour. Holds one entry per colour zone of the product. */
-  zones: z.record(id, colorRefSchema),
+  zones: z.record(zoneId, colorRefSchema),
   /** Fonts used by text and number layers. */
   fonts: z.array(fontRefSchema),
   /** Bottom to top: later layers are drawn over earlier ones. */
@@ -161,7 +188,7 @@ export const pieceSchema = z.strictObject({
 });
 
 export const zoneSchema = z.strictObject({
-  id,
+  id: zoneId,
   name: z.string().min(1).max(100),
   /** Names of the materials in the model file that this zone colours. */
   materials: z.array(z.string().min(1)).min(1),

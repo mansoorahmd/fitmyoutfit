@@ -44,7 +44,7 @@
       "type": "object",
       "propertyNames": {
         "type": "string",
-        "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+        "pattern": "^(?!(?:__proto__|constructor|prototype)$)[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
       },
       "additionalProperties": {
         "type": "object",

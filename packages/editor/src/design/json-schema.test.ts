@@ -56,6 +56,15 @@ describe("JSON Schema and validateDesign agree", () => {
     ["bad media type", copy((d) => (d.layers[2].asset.mediaType = "image/gif")), false],
     ["bad id characters", copy((d) => (d.layers[0].id = "has space")), false],
     ["bad zone key", copy((d) => (d.zones["bad key!"] = d.zones.body)), false],
+    // JSON.parse makes "__proto__" an own key, like a document read from disk or a request body.
+    [
+      "__proto__ as a zone key",
+      JSON.parse(JSON.stringify(full).replace('"zones":{', '"zones":{"__proto__":{"id":"x","hex":"#000000"},')),
+      false,
+    ],
+    ["constructor as a zone key", copy((d) => (d.zones.constructor = d.zones.body)), false],
+    ["prototype as a zone key", copy((d) => (d.zones.prototype = d.zones.body)), false],
+    ["a harmless zone key like toString is just a name", copy((d) => (d.zones.toString = d.zones.body)), true],
     ["text layer without a fill", copy((d) => delete d.layers[0].fill), false],
     ["logo layer with text fields", copy((d) => (d.layers[2].fontId = "font-sans")), false],
   ];
