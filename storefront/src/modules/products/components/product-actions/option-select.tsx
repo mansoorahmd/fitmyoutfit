@@ -5,6 +5,7 @@ import { clx } from "@medusajs/ui"
 import React, { useId } from "react"
 
 import { groupOptionValues } from "@lib/util/sizes"
+import LineIcon from "@modules/home/components/line-icon"
 
 type OptionSelectProps = {
   option: HttpTypes.StoreProductOption
@@ -14,6 +15,10 @@ type OptionSelectProps = {
   disabled: boolean
   /** Values to show as unavailable (dashed, struck through, still selectable). */
   unavailable?: string[]
+  /** A message under the label ("Choose a size"), with an icon, in the error colour. */
+  error?: string
+  /** The radio group, so the main button can move focus to it. */
+  groupRef?: React.Ref<HTMLDivElement>
   "data-testid"?: string
 }
 
@@ -32,8 +37,11 @@ const OptionSelect: React.FC<OptionSelectProps> = ({
   "data-testid": dataTestId,
   disabled,
   unavailable = [],
+  error,
+  groupRef,
 }) => {
   const id = useId()
+  const errorId = `${id}-error`
   const groups = groupOptionValues(
     title,
     (option.values ?? []).map((v) => v.value)
@@ -41,14 +49,35 @@ const OptionSelect: React.FC<OptionSelectProps> = ({
 
   return (
     <div className="flex flex-col gap-y-3">
-      <p className="type-body font-semibold text-brand-ink" aria-hidden="true">
+      {/* "Size" before a choice, "Size: M" after */}
+      <p
+        className="type-body font-semibold text-brand-ink"
+        aria-hidden="true"
+        data-testid="option-label"
+      >
         {title}
         {current ? `: ${current}` : ""}
       </p>
+      {error && (
+        <p
+          id={errorId}
+          className="-mt-1 flex items-center gap-2 type-small font-semibold text-brand-error"
+          data-testid="option-error"
+        >
+          <LineIcon name="alert" className="h-5 w-5 shrink-0" />
+          {error}
+        </p>
+      )}
       <div
+        ref={groupRef}
         role="radiogroup"
         aria-label={title}
-        className="flex flex-col gap-y-4"
+        aria-describedby={error ? errorId : undefined}
+        aria-invalid={error ? true : undefined}
+        // Focusable by script only: the main button moves focus here when
+        // it is pressed with no size chosen.
+        tabIndex={-1}
+        className="flex flex-col gap-y-4 rounded-control"
         data-testid={dataTestId}
       >
         {groups.map((group) => {

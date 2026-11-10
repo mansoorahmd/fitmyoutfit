@@ -1,6 +1,7 @@
 import { listingContent } from "@content/listing"
 import { listProducts } from "@lib/data/products"
 import { getRegion } from "@lib/data/regions"
+import { hasRelatedProducts } from "@lib/util/product-page"
 import { HttpTypes } from "@medusajs/types"
 import {
   productCardImageSizes,
@@ -24,7 +25,7 @@ export default async function RelatedProducts({
   // A product with no collection and no tags (the fit kit, the rush add-on)
   // has nothing to be related by. Without this check the query below would
   // list every other product.
-  if (!product.collection_id && !product.tags?.length) {
+  if (!hasRelatedProducts(product)) {
     return null
   }
 

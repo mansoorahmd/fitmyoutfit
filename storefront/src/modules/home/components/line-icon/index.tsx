@@ -1,6 +1,7 @@
 import type { HomeIconName } from "@content/home"
+import type { ProductFactIcon } from "@content/product"
 
-type LineIconName = HomeIconName | "check"
+export type LineIconName = HomeIconName | ProductFactIcon | "check" | "alert"
 
 // 24 px line icons drawn here (no icon library). Strokes use currentColor, so
 // the icon takes the text colour of where it sits. Always decorative: the
@@ -47,7 +48,22 @@ const PATHS: Record<LineIconName, React.ReactNode> = {
       <path d="M12 11.25v10" />
     </>
   ),
+  // a tape measure laid flat, for the fit kit
+  "fit-kit": (
+    <>
+      <rect x="2.75" y="8.25" width="18.5" height="7.5" rx="1.25" />
+      <path d="M6.75 8.25v3M10.25 8.25v2M13.75 8.25v3M17.25 8.25v2" />
+    </>
+  ),
   check: <path d="M4.75 12.5l4.5 4.5 10-10" />,
+  // an exclamation mark in a circle, beside an error message
+  alert: (
+    <>
+      <circle cx="12" cy="12" r="8.25" />
+      <path d="M12 7.75v5" />
+      <path d="M12 16.25h.01" />
+    </>
+  ),
 }
 
 const LineIcon = ({

@@ -1,8 +1,14 @@
 import { HttpTypes } from "@medusajs/types"
 
 export type AddToCartState = {
-  label: "Select a size" | "Out of stock" | "Add to cart"
+  label: "Out of stock" | "Add to cart"
+  /** Shown as inactive, with the reason as its label; presses do nothing. */
   disabled: boolean
+  /**
+   * No size chosen yet. The button looks and works as usual, but a press
+   * shows "Choose a size" at the size selector instead of adding.
+   */
+  asksForSize: boolean
 }
 
 type AddToCartStateInput = {
@@ -37,25 +43,33 @@ export const needsVariantSelection = (
   return (product.options ?? []).some((option) => !selected[option.id])
 }
 
+const OUT_OF_STOCK: AddToCartState = {
+  label: "Out of stock",
+  disabled: true,
+  asksForSize: false,
+}
+
 /**
- * Decides the label and enabled state of the main add-to-cart button. Used by
- * both the desktop button and the mobile actions bar so they cannot drift.
- * The caller still adds its own disabling (busy state, `disabled` prop).
+ * Decides the label and state of the main add-to-cart button. Used by both
+ * the main button and the phone's sticky bar so they cannot drift. The
+ * caller still adds its own disabling (busy state, `disabled` prop).
+ *
+ * With no size chosen the button is not disabled: a disabled button that
+ * does nothing leaves the customer guessing (docs/design/03-direction.md,
+ * "Size selector", Error).
  */
 export const getAddToCartState = ({
   variant,
   isValidVariant,
   needsSelection,
 }: AddToCartStateInput): AddToCartState => {
-  if (!variant) {
-    return needsSelection
-      ? { label: "Select a size", disabled: true }
-      : { label: "Out of stock", disabled: true }
+  if (needsSelection) {
+    return { label: "Add to cart", disabled: false, asksForSize: true }
   }
-  if (!isValidVariant || !isVariantPurchasable(variant)) {
-    return { label: "Out of stock", disabled: true }
+  if (!variant || !isValidVariant || !isVariantPurchasable(variant)) {
+    return OUT_OF_STOCK
   }
-  return { label: "Add to cart", disabled: false }
+  return { label: "Add to cart", disabled: false, asksForSize: false }
 }
 
 /**

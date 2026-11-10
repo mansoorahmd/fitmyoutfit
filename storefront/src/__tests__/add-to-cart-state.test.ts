@@ -10,14 +10,14 @@ const variant = (over: Record<string, unknown> = {}) =>
   ({ id: "var_m", manage_inventory: false, ...over }) as any
 
 describe("getAddToCartState", () => {
-  it("asks for a size, disabled, when nothing is selected on a multi-variant product", () => {
+  it("asks for a size when nothing is selected, without looking disabled", () => {
     expect(
       getAddToCartState({
         variant: undefined,
         isValidVariant: false,
         needsSelection: true,
       })
-    ).toEqual({ label: "Select a size", disabled: true })
+    ).toEqual({ label: "Add to cart", disabled: false, asksForSize: true })
   })
 
   it("allows a made-to-order variant (inventory not managed)", () => {
@@ -27,7 +27,7 @@ describe("getAddToCartState", () => {
         isValidVariant: true,
         needsSelection: false,
       })
-    ).toEqual({ label: "Add to cart", disabled: false })
+    ).toEqual({ label: "Add to cart", disabled: false, asksForSize: false })
   })
 
   it("allows a managed variant when backorder is allowed", () => {
@@ -41,7 +41,7 @@ describe("getAddToCartState", () => {
         isValidVariant: true,
         needsSelection: false,
       })
-    ).toEqual({ label: "Add to cart", disabled: false })
+    ).toEqual({ label: "Add to cart", disabled: false, asksForSize: false })
   })
 
   it("allows a managed variant with stock above zero", () => {
@@ -51,7 +51,7 @@ describe("getAddToCartState", () => {
         isValidVariant: true,
         needsSelection: false,
       })
-    ).toEqual({ label: "Add to cart", disabled: false })
+    ).toEqual({ label: "Add to cart", disabled: false, asksForSize: false })
   })
 
   it("says out of stock for a managed variant with zero stock and no backorder", () => {
@@ -66,7 +66,7 @@ describe("getAddToCartState", () => {
           isValidVariant: true,
           needsSelection: false,
         })
-      ).toEqual({ label: "Out of stock", disabled: true })
+      ).toEqual({ label: "Out of stock", disabled: true, asksForSize: false })
     }
   })
 
@@ -77,7 +77,7 @@ describe("getAddToCartState", () => {
         isValidVariant: false,
         needsSelection: false,
       })
-    ).toEqual({ label: "Out of stock", disabled: true })
+    ).toEqual({ label: "Out of stock", disabled: true, asksForSize: false })
   })
 
   it("does not let a variant through when the selection is flagged invalid", () => {
@@ -87,7 +87,7 @@ describe("getAddToCartState", () => {
         isValidVariant: false,
         needsSelection: false,
       })
-    ).toEqual({ label: "Out of stock", disabled: true })
+    ).toEqual({ label: "Out of stock", disabled: true, asksForSize: false })
   })
 
   it("lets a single-variant product through with no selection needed", () => {
@@ -97,7 +97,7 @@ describe("getAddToCartState", () => {
         isValidVariant: true,
         needsSelection: false,
       })
-    ).toEqual({ label: "Add to cart", disabled: false })
+    ).toEqual({ label: "Add to cart", disabled: false, asksForSize: false })
   })
 })
 
