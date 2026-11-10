@@ -1,0 +1,140 @@
+# FitMyOutfit
+
+Custom apparel store where teams and clubs design jerseys, T-shirts and jackets in 3D and order them. Medusa v2 backend, Next.js storefront, and a 3D editor package. Project context is in [CLAUDE.md](CLAUDE.md), the plan in [dev-plan.md](dev-plan.md).
+
+| Folder | Contents |
+| --- | --- |
+| `backend/` | Medusa v2 (`@fitmyoutfit/backend`) |
+| `storefront/` | Next.js storefront (`@fitmyoutfit/storefront`) |
+| `packages/editor/` | 3D editor (`@fitmyoutfit/editor`) |
+| `scripts/` | Root setup and dev scripts (plain Node, work on Windows and Linux) |
+
+## Prerequisites
+
+- Node 20.19 or newer (22 recommended) and npm 10 or newer
+- Docker with Compose v2 (Docker Desktop on Windows and macOS)
+- Free host ports: 9000 (backend), 8000 (storefront), 5433 (PostgreSQL), 6379 (Redis), 9100 and 9101 (MinIO)
+
+## Quick start
+
+```
+docker compose up -d     # PostgreSQL, Redis, MinIO. Wait until `docker compose ps` shows them healthy
+npm install
+npm run setup            # safe to run again
+npm run dev              # backend on :9000, storefront on :8000
+```
+
+`npm run quickstart` runs `setup` and then `dev`.
+
+`npm run setup` does this, and skips whatever is already done:
+
+1. Creates `.env`, `backend/.env` and `storefront/.env.local` from the `.env.example` files, if missing. It never overwrites an existing file.
+2. Runs the database migrations.
+3. Seeds the placeholder store data and the local admin user (see below). The seed only creates what is missing, so values you edited in the admin survive a re-run.
+4. Writes the publishable API key into `storefront/.env.local` (only that one line; if `storefront/` does not exist yet it warns and skips).
+
+## Ports
+
+| Service | Host port | Notes |
+| --- | --- | --- |
+| Medusa backend and API | 9000 | Admin at <http://localhost:9000/app> |
+| Storefront | 8000 | |
+| PostgreSQL | 5433 | Not 5432, so it does not clash with a PostgreSQL already on your machine |
+| Redis | 6379 | |
+| MinIO S3 API | 9100 | Bucket `fitmyoutfit-dev`, created automatically |
+| MinIO console | 9101 | <http://localhost:9101>, login `minioadmin` / `minioadmin` |
+
+To change a host port, set it in the root `.env` (`POSTGRES_PORT`, `REDIS_PORT`, `MINIO_API_PORT`, `MINIO_CONSOLE_PORT`), update the matching URL in `backend/.env` (`DATABASE_URL`, `REDIS_URL`, `S3_ENDPOINT`, `S3_FILE_URL`), then run `docker compose up -d` again.
+
+## Local admin login (dev only)
+
+<http://localhost:9000/app> with the email and password from `backend/.env`. The defaults are:
+
+- Email: `admin@fitmyoutfit.local`
+- Password: `dev-admin-password`
+
+These are throwaway development values. Never use them anywhere else.
+
+## What the seed creates
+
+All of it is placeholder data, kept in `backend/src/scripts/seed-data/` (one file per kind, each marked `placeholder: true` with a note on what the real input is). Replace the data, not the code.
+
+- 4 regions: Pakistan (PKR), United Kingdom (GBP), United Arab Emirates (AED), United States (USD). Region metadata `tax_final: false` is the data behind the "tax not final" label.
+- Store currencies: those four, PKR as default.
+- Products: `jersey`, `t-shirt`, `jacket` (11 size variants each, in the `garments` collection), plus `fit-kit` and `rush-add-on` (one variant each, no collection). Each has `metadata.kind`. Inventory is not managed (made to order).
+- A placeholder image per product (thumbnail and one gallery image): flat drawings in `backend/src/scripts/seed-data/images/`, named by the `image` field in `products.ts`. The seed uploads them through Medusa's file module, so in local development they land in the MinIO bucket `fitmyoutfit-dev` (URLs `http://localhost:9100/fitmyoutfit-dev/...`); with the `S3_*` variables empty they go to `backend/static` instead. A product gets its image only when it has no thumbnail and no images, so a photo set in the admin is never replaced, and an older database without images is repaired by the next `npm run setup`. To change a picture, replace the file or name another one in `products.ts`. `npm run images:placeholders --prefix backend` regenerates the drawings (`backend/scripts/generate-placeholder-images.mjs`, no dependencies).
+- Sample prices in all four currencies for `jersey`, `t-shirt`, `jacket` and `fit-kit`. Amounts are in major units (3500 means Rs 3,500), as Medusa v2 stores them. Which products have fixed prices is data too (`has_fixed_prices` in `products.ts`).
+- Rush: `rush-add-on` has **no fixed prices**. Rush is priced as a percentage of the order, held in the store setting `rush_percentage` (placeholder `20`, in `seed-data/settings.ts`). The seed writes it into the Store's metadata only when it is missing, so after the first run the value lives in the database: change it in the admin under **Settings > Store > Metadata**. Code reads it with `readRushPercentage` (`backend/src/lib/settings/rush-percentage.ts`). The charge itself is Sprint 1.
+- The default sales channel and a publishable API key linked to it.
+- The local admin user.
+- Minimum extras Medusa needs: the default shipping profile (created by Medusa's own migration). No stock location, shipping options, tax regions or payment providers yet: those are Sprint 1.
+
+Check it: with the backend running,
+
+```
+curl -H "x-publishable-api-key: <key from storefront/.env.local>" http://localhost:9000/store/regions
+```
+
+## Commands
+
+| Command | What it does |
+| --- | --- |
+| `npm run setup` | Env files, migrations, seed, publishable key (idempotent) |
+| `npm run dev` | Backend and storefront together (a missing part is skipped) |
+| `npm run lint` | ESLint in the backend, storefront and editor, plus a syntax check of `scripts/` |
+| `npm run typecheck` | `tsc --noEmit` in the backend, storefront and editor |
+| `npm run test` | Tests in the backend, storefront and editor, plus `scripts/` tests |
+| `npm run build` | Production build of the backend, storefront and editor |
+
+Backend only: `npm run <script> --prefix backend` (`dev`, `build`, `migrate`, `seed`, `images:placeholders`, `test:unit`, `test:integration:http`). Storefront or editor only: `npm run <script> -w storefront` or `-w packages/editor`.
+
+## Installing and adding dependencies
+
+The backend is **not** an npm workspace. Medusa's admin runs on React 18 and the storefront and editor on React 19; in one shared install npm put React 18 at the root, where the storefront's libraries picked it up (see `docs/decisions/006-react-and-tool-versions.md`). So there are two installs, each with its own lockfile:
+
+| Folder | Lockfile | Contains |
+| --- | --- | --- |
+| repo root | `package-lock.json` | the workspaces `storefront` and `packages/editor` |
+| `backend/` | `backend/package-lock.json` | the backend only |
+
+A root `npm install` (or `npm ci`) does both: when the root install finishes, its `postinstall` script (`scripts/install-backend.mjs`) runs `npm install` (or `npm ci`) in `backend/`. `npm run install:backend` runs only the backend part.
+
+To add a dependency:
+
+```
+npm install <package> --prefix backend      # backend (updates backend/package-lock.json)
+npm install <package> -w storefront         # storefront (updates the root package-lock.json)
+npm install <package> -w packages/editor    # editor (updates the root package-lock.json)
+```
+
+The root `package.json` has one `overrides` entry: it lets `@medusajs/ui` (which declares React 18 as its peer) use the storefront's React 19, as Medusa's own storefront starter does. It does not reach the backend, whose install is separate. Keep its version equal to the storefront's `react`.
+
+Backend integration tests create and drop temporary databases on the PostgreSQL server (host `localhost`, port 5433 by default, user `medusa`). They never touch the `medusa` development database. Start `docker compose up -d` first. To point them elsewhere set `DB_HOST`, `DB_PORT`, `DB_USERNAME`, `DB_PASSWORD`, as the CI workflow does. Medusa also reads `backend/.env` in tests, so with the `S3_*` and `REDIS_URL` values set there the seed test uploads its images to MinIO and uses Redis; CI has no `backend/.env`, so there it uses the local file provider and in-memory modules.
+
+## Reset the database
+
+Drop and recreate only the Medusa database, keeping Redis and MinIO data:
+
+```
+docker compose exec postgres psql -U medusa -d postgres -c "DROP DATABASE medusa WITH (FORCE)" -c "CREATE DATABASE medusa"
+npm run setup
+```
+
+Stop the backend first. The compose project is shared by every git worktree, so this resets the database for all of them.
+
+**Databases seeded before 10 Nov 2026** still have fixed prices on `rush-add-on` (PKR 500, GBP 4, AED 15, USD 5): the seed never changes or deletes existing records, so a re-run only adds the `rush_percentage` setting and any missing product images. Reset the database as above to get the current data (rush with no fixed prices).
+
+Wipe everything (PostgreSQL, Redis and MinIO volumes) and start over:
+
+```
+docker compose down -v
+docker compose up -d
+npm run setup
+```
+
+## Notes
+
+- **MinIO image.** MinIO no longer publishes official Docker images (`minio/minio` is gone from Docker Hub and Quay). `docker-compose.yml` uses the Chainguard build, `cgr.dev/chainguard/minio:latest`, for local development only.
+- **File storage.** The backend uses Medusa's S3 file provider pointed at MinIO when the `S3_*` variables in `backend/.env` are set (path-style addressing is turned on automatically when `S3_ENDPOINT` is set). With them empty it falls back to local files in `backend/static`.
+- **Redis.** The cache, event bus and workflow engine use `REDIS_URL`. Remove it from `backend/.env` to run with Medusa's in-memory versions.
+- **CI.** `.github/workflows/ci.yml` runs `npm ci`, then root `lint`, `typecheck` and `test` on every push and pull request, with PostgreSQL and Redis service containers.
