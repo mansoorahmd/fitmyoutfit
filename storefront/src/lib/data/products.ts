@@ -6,6 +6,7 @@ import { HttpTypes } from "@medusajs/types"
 import { SortOptions } from "@modules/store/components/refinement-list/sort-products"
 import { getAuthHeaders, getCacheOptions } from "./cookies"
 import { getRegion, retrieveRegion } from "./regions"
+import { fetchShortCached } from "./short-cache"
 
 export const listProducts = async ({
   pageParam = 1,
@@ -49,40 +50,43 @@ export const listProducts = async ({
     ...(await getAuthHeaders()),
   }
 
-  const next = {
-    ...(await getCacheOptions("products")),
-  }
+  const { tags } = (await getCacheOptions("products")) as { tags?: string[] }
 
-  return sdk.client
-    .fetch<{ products: HttpTypes.StoreProduct[]; count: number }>(
-      `/store/products`,
-      {
-        method: "GET",
-        query: {
-          limit,
-          offset,
-          region_id: region?.id,
-          fields:
-            "*variants.calculated_price,+variants.inventory_quantity,*variants.images,+metadata,+tags,",
-          ...queryParams,
-        },
-        headers,
-        next,
-        cache: "force-cache",
-      }
-    )
-    .then(({ products, count }) => {
-      const nextPage = count > offset + limit ? pageParam + 1 : null
+  // Short cache, and an empty list is never reused: a listing fetched before
+  // the products were seeded, or for a collection id that no longer exists
+  // after a reseed, must not stick. See ./short-cache.ts.
+  return fetchShortCached(
+    (options) =>
+      sdk.client.fetch<{ products: HttpTypes.StoreProduct[]; count: number }>(
+        `/store/products`,
+        {
+          method: "GET",
+          query: {
+            limit,
+            offset,
+            region_id: region?.id,
+            fields:
+              "*variants.calculated_price,+variants.inventory_quantity,*variants.images,+metadata,+tags,",
+            ...queryParams,
+          },
+          headers,
+          ...options,
+        }
+      ),
+    ({ products }) => !products?.length,
+    tags
+  ).then(({ products, count }) => {
+    const nextPage = count > offset + limit ? pageParam + 1 : null
 
-      return {
-        response: {
-          products,
-          count,
-        },
-        nextPage: nextPage,
-        queryParams,
-      }
-    })
+    return {
+      response: {
+        products,
+        count,
+      },
+      nextPage: nextPage,
+      queryParams,
+    }
+  })
 }
 
 /**
