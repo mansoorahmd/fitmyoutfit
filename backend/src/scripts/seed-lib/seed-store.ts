@@ -1,8 +1,11 @@
 /**
  * Idempotent seed of the placeholder store data. Thin: it reads the data files, asks Medusa
  * what already exists, and creates only what is missing. It never overwrites or deletes
- * existing records, so values edited in the admin survive a re-run.
+ * existing records, so values edited in the admin survive a re-run. The one repair it makes:
+ * a seeded product with no picture at all gets its placeholder image.
  */
+import { existsSync, readFileSync } from "node:fs"
+import { join } from "node:path"
 import type { MedusaContainer } from "@medusajs/framework/types"
 import { MedusaModule } from "@medusajs/framework/modules-sdk"
 import {
@@ -19,11 +22,14 @@ import {
   createShippingProfilesWorkflow,
   createUsersWorkflow,
   linkSalesChannelsToApiKeyWorkflow,
+  updateProductsWorkflow,
   updateStoresWorkflow,
+  uploadFilesWorkflow,
 } from "@medusajs/medusa/core-flows"
-import { seedData as defaultSeedData } from "../seed-data"
+import { SEED_IMAGES_DIR, seedData as defaultSeedData } from "../seed-data"
 import type { SeedData } from "../seed-data/types"
 import { buildProductInput, buildSizeRanks, SIZE_OPTION } from "./build-product-input"
+import { imageMimeType, planPlaceholderImages, type ExistingProduct } from "./product-images"
 import { assertValidSeedData } from "./validate-seed-data"
 
 export type SeedOptions = {
@@ -31,6 +37,8 @@ export type SeedOptions = {
   /** Local admin user. Skipped (with a warning) when either value is missing. */
   adminEmail?: string
   adminPassword?: string
+  /** Folder with the product image files. Defaults to seed-data/images. */
+  imagesDir?: string
 }
 
 export type SeedResult = {
@@ -39,6 +47,8 @@ export type SeedResult = {
     regions: string[]
     collections: string[]
     products: string[]
+    /** Handles of the products that got their placeholder image in this run. */
+    images: string[]
     shippingProfile: boolean
     salesChannel: boolean
     publishableKey: boolean
@@ -51,7 +61,8 @@ export async function seedStore(
   options: SeedOptions = {}
 ): Promise<SeedResult> {
   const seed = options.seedData ?? defaultSeedData
-  assertValidSeedData(seed)
+  const imagesDir = options.imagesDir ?? SEED_IMAGES_DIR
+  assertValidSeedData(seed, { imageExists: (file) => existsSync(join(imagesDir, file)) })
 
   const logger = container.resolve(ContainerRegistrationKeys.LOGGER)
   const query = container.resolve(ContainerRegistrationKeys.QUERY)
@@ -66,6 +77,7 @@ export async function seedStore(
     regions: [],
     collections: [],
     products: [],
+    images: [],
     shippingProfile: false,
     salesChannel: false,
     publishableKey: false,
@@ -206,6 +218,39 @@ export async function seedStore(
         await productModule.updateProductOptions(sizeOption.id, { ranks })
       }
     }
+  }
+
+  // 6b. Placeholder images. Uploaded through the file module, the same path an admin upload
+  // takes (MinIO in local dev; Medusa's local file provider when S3 is not configured), and
+  // linked to every seeded product that has no thumbnail and no images. A product that has a
+  // picture is left alone, and nothing is uploaded for it.
+  const { data: pictureRows } = await query.graph({
+    entity: "product",
+    fields: ["id", "handle", "thumbnail", "images.id"],
+    filters: { handle: seed.products.data.map((p) => p.handle) },
+  })
+  const imagePlan = planPlaceholderImages(
+    pictureRows as unknown as ExistingProduct[],
+    seed.products.data
+  )
+  for (const entry of imagePlan) {
+    const { result: files } = await uploadFilesWorkflow(container).run({
+      input: {
+        files: [
+          {
+            filename: entry.image,
+            mimeType: imageMimeType(entry.image) as string,
+            content: readFileSync(join(imagesDir, entry.image)).toString("base64"),
+            access: "public",
+          },
+        ],
+      },
+    })
+    const url = files[0].url
+    await updateProductsWorkflow(container).run({
+      input: { products: [{ id: entry.productId, thumbnail: url, images: [{ url }] }] },
+    })
+    created.images.push(entry.handle)
   }
 
   // 7. Publishable API key, linked to the default sales channel. Medusa's migrations already create

@@ -1,5 +1,6 @@
 import { medusaIntegrationTestRunner } from "@medusajs/test-utils"
 import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils"
+import { updateProductsWorkflow } from "@medusajs/medusa/core-flows"
 import { seedData } from "../../src/scripts/seed-data"
 import { seedStore } from "../../src/scripts/seed-lib/seed-store"
 
@@ -17,6 +18,7 @@ medusaIntegrationTestRunner({
     describe("seed: placeholder store data", () => {
       let publishableKey: string
       let headers: Record<string, string>
+      let firstRunImages: string[]
 
       // The runner snapshots the database after this hook and restores it before every test,
       // so each test starts from the freshly seeded state.
@@ -27,6 +29,63 @@ medusaIntegrationTestRunner({
         })
         publishableKey = result.publishableKey
         headers = { "x-publishable-api-key": publishableKey }
+        firstRunImages = result.created.images
+      })
+
+      it("gives every product its placeholder image through the file module", async () => {
+        // No S3 variables in the tests, so this runs on Medusa's fallback file provider.
+        expect([...firstRunImages].sort()).toEqual(
+          seedData.products.data.map((p) => p.handle).sort()
+        )
+        const { data } = await api.get(
+          "/store/products?limit=50&fields=handle,thumbnail,*images",
+          { headers }
+        )
+        expect(data.products).toHaveLength(5)
+        for (const product of data.products) {
+          const file = seedData.products.data.find((p) => p.handle === product.handle)!.image
+          const stem = file.replace(/\.png$/, "")
+          expect(typeof product.thumbnail).toBe("string")
+          expect(product.thumbnail).toContain(stem)
+          expect(product.thumbnail).toMatch(/\.png$/)
+          expect(product.images).toHaveLength(1)
+          expect(product.images[0].url).toBe(product.thumbnail)
+        }
+      })
+
+      it("repairs a product without a picture and leaves a product with a photo alone", async () => {
+        const container = getContainer()
+        const productModule = container.resolve(Modules.PRODUCT)
+        const [jersey] = await productModule.listProducts({ handle: "jersey" })
+        const [jacket] = await productModule.listProducts({ handle: "jacket" })
+        const adminPhoto = "https://example.com/real-jacket-photo.jpg"
+        await updateProductsWorkflow(container).run({
+          input: {
+            products: [
+              { id: jersey.id, thumbnail: null, images: [] },
+              { id: jacket.id, thumbnail: adminPhoto, images: [{ url: adminPhoto }] },
+            ],
+          },
+        })
+
+        const rerun = await seedStore(container, {
+          adminEmail: ADMIN_EMAIL,
+          adminPassword: ADMIN_PASSWORD,
+        })
+        expect(rerun.created.images).toEqual(["jersey"])
+
+        const [jerseyAfter] = await productModule.listProducts(
+          { handle: "jersey" },
+          { relations: ["images"] }
+        )
+        expect(jerseyAfter.thumbnail).toMatch(/jersey.*\.png$/)
+        expect(jerseyAfter.images).toHaveLength(1)
+        const [jacketAfter] = await productModule.listProducts(
+          { handle: "jacket" },
+          { relations: ["images"] }
+        )
+        expect(jacketAfter.thumbnail).toBe(adminPhoto)
+        expect(jacketAfter.images?.map((i) => i.url)).toEqual([adminPhoto])
       })
 
       it("serves 4 regions with the right currencies, countries and tax_final metadata", async () => {
@@ -160,9 +219,11 @@ medusaIntegrationTestRunner({
           apiKey: await count("api_key"),
           user: await count("user"),
           price: await count("price"),
+          image: await count("product_image"),
         }
         expect(before.region).toBe(4)
         expect(before.product).toBe(5)
+        expect(before.image).toBe(5)
 
         const second = await seedStore(container, {
           adminEmail: ADMIN_EMAIL,
@@ -172,6 +233,7 @@ medusaIntegrationTestRunner({
           regions: [],
           collections: [],
           products: [],
+          images: [],
           shippingProfile: false,
           salesChannel: false,
           publishableKey: false,
@@ -187,6 +249,7 @@ medusaIntegrationTestRunner({
           apiKey: await count("api_key"),
           user: await count("user"),
           price: await count("price"),
+          image: await count("product_image"),
         }
         expect(after).toEqual(before)
       })

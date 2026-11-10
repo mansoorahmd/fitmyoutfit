@@ -62,6 +62,7 @@ All of it is placeholder data, kept in `backend/src/scripts/seed-data/` (one fil
 - 4 regions: Pakistan (PKR), United Kingdom (GBP), United Arab Emirates (AED), United States (USD). Region metadata `tax_final: false` is the data behind the "tax not final" label.
 - Store currencies: those four, PKR as default.
 - Products: `jersey`, `t-shirt`, `jacket` (11 size variants each, in the `garments` collection), plus `fit-kit` and `rush-add-on` (one variant each, no collection). Each has `metadata.kind`. Inventory is not managed (made to order).
+- A placeholder image per product (thumbnail and one gallery image): flat drawings in `backend/src/scripts/seed-data/images/`, named by the `image` field in `products.ts`. The seed uploads them through Medusa's file module, so in local development they land in the MinIO bucket `fitmyoutfit-dev` (URLs `http://localhost:9100/fitmyoutfit-dev/...`); with the `S3_*` variables empty they go to `backend/static` instead. A product gets its image only when it has no thumbnail and no images, so a photo set in the admin is never replaced, and an older database without images is repaired by the next `npm run setup`. To change a picture, replace the file or name another one in `products.ts`. `npm run images:placeholders -w backend` regenerates the drawings (`backend/scripts/generate-placeholder-images.mjs`, no dependencies).
 - Sample prices in all four currencies. Amounts are in major units (3500 means Rs 3,500), as Medusa v2 stores them.
 - The default sales channel and a publishable API key linked to it.
 - The local admin user.
@@ -84,9 +85,9 @@ curl -H "x-publishable-api-key: <key from storefront/.env.local>" http://localho
 | `npm run test` | Tests in every workspace, plus `scripts/` tests |
 | `npm run build` | Production build of every workspace |
 
-Backend only: `npm run <script> -w backend` (`dev`, `build`, `migrate`, `seed`, `test:unit`, `test:integration:http`).
+Backend only: `npm run <script> -w backend` (`dev`, `build`, `migrate`, `seed`, `images:placeholders`, `test:unit`, `test:integration:http`).
 
-Backend integration tests create and drop temporary databases on the PostgreSQL server (host `localhost`, port 5433 by default, user `medusa`). They never touch the `medusa` development database. Start `docker compose up -d` first. To point them elsewhere set `DB_HOST`, `DB_PORT`, `DB_USERNAME`, `DB_PASSWORD`, as the CI workflow does.
+Backend integration tests create and drop temporary databases on the PostgreSQL server (host `localhost`, port 5433 by default, user `medusa`). They never touch the `medusa` development database. Start `docker compose up -d` first. To point them elsewhere set `DB_HOST`, `DB_PORT`, `DB_USERNAME`, `DB_PASSWORD`, as the CI workflow does. Medusa also reads `backend/.env` in tests, so with the `S3_*` and `REDIS_URL` values set there the seed test uploads its images to MinIO and uses Redis; CI has no `backend/.env`, so there it uses the local file provider and in-memory modules.
 
 ## Reset the database
 

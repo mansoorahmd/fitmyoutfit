@@ -3,11 +3,13 @@ import type { PlaceholderData, ProductSeed } from "./types"
 /**
  * PLACEHOLDER DATA: launch products and their copy.
  * Real input: final product names and descriptions (product lead). Prices are in prices.ts, sizes in sizes.ts.
+ * Images: `image` names a file in ./images/. Those files are PLACEHOLDER drawings made by
+ * backend/scripts/generate-placeholder-images.mjs; real input is product photos.
  * All products are made to order, so inventory is not managed.
  */
 export const products: PlaceholderData<ProductSeed[]> = {
   placeholder: true,
-  note: "Three launch garments plus the two extras. Descriptions are placeholder text.",
+  note: "Three launch garments plus the two extras. Descriptions and images are placeholders.",
   data: [
     {
       handle: "jersey",
@@ -17,6 +19,7 @@ export const products: PlaceholderData<ProductSeed[]> = {
       collection_handle: "garments",
       has_sizes: true,
       sku_prefix: "JERSEY",
+      image: "jersey.png",
     },
     {
       handle: "t-shirt",
@@ -26,6 +29,7 @@ export const products: PlaceholderData<ProductSeed[]> = {
       collection_handle: "garments",
       has_sizes: true,
       sku_prefix: "TSHIRT",
+      image: "t-shirt.png",
     },
     {
       handle: "jacket",
@@ -35,6 +39,7 @@ export const products: PlaceholderData<ProductSeed[]> = {
       collection_handle: "garments",
       has_sizes: true,
       sku_prefix: "JACKET",
+      image: "jacket.png",
     },
     {
       handle: "fit-kit",
@@ -45,6 +50,7 @@ export const products: PlaceholderData<ProductSeed[]> = {
       collection_handle: null,
       has_sizes: false,
       sku_prefix: "FITKIT",
+      image: "fit-kit.png",
     },
     {
       handle: "rush-add-on",
@@ -55,6 +61,7 @@ export const products: PlaceholderData<ProductSeed[]> = {
       collection_handle: null,
       has_sizes: false,
       sku_prefix: "RUSH",
+      image: "rush-add-on.png",
     },
   ],
 }

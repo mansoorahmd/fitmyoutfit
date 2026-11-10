@@ -135,6 +135,40 @@ describe("validateSeedData", () => {
     expect(problems).toContain('store: currency "sek" has no region')
   })
 
+  it("finds every product's image file in seed-data/images (checked on disk)", () => {
+    for (const product of seedData.products.data) {
+      expect(product.image).toMatch(/\.png$/)
+    }
+    // The default check reads the real folder; the shipped data must pass it.
+    expect(validateSeedData(seedData).filter((p) => p.includes("image"))).toEqual([])
+  })
+
+  it("rejects a product that names no image, or a file that does not exist", () => {
+    const seed = clone()
+    seed.products.data[0].image = ""
+    seed.products.data[1].image = "missing.png"
+    const problems = validateSeedData(seed, { imageExists: (f) => f !== "missing.png" })
+    expect(problems).toContain('products: "jersey" names no image')
+    expect(problems).toContain('products: "t-shirt" image "missing.png" is not in seed-data/images')
+  })
+
+  it("rejects image paths outside the folder and formats next/image does not take as-is", () => {
+    const seed = clone()
+    seed.products.data[0].image = "../secret.png"
+    seed.products.data[1].image = "sub/t-shirt.png"
+    seed.products.data[2].image = "jacket.svg"
+    const problems = validateSeedData(seed, { imageExists: () => true })
+    expect(problems).toContain(
+      'products: "jersey" image "../secret.png" must be a plain file name in seed-data/images'
+    )
+    expect(problems).toContain(
+      'products: "t-shirt" image "sub/t-shirt.png" must be a plain file name in seed-data/images'
+    )
+    expect(problems).toContain(
+      'products: "jacket" image "jacket.svg" must be a .png, .webp, .jpg or .jpeg file'
+    )
+  })
+
   it("assertValidSeedData throws one error that lists every problem", () => {
     const seed = clone()
     seed.sizes.data = []

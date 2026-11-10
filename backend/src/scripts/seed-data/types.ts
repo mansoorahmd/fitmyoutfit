@@ -54,6 +54,13 @@ export type ProductSeed = {
   has_sizes: boolean
   /** Prefix for variant SKUs, for example JERSEY gives JERSEY-YS. */
   sku_prefix: string
+  /**
+   * File name of the product's placeholder image in seed-data/images/ (PNG, WebP or JPEG).
+   * The seed uploads it through Medusa's file module and sets it as the product's thumbnail,
+   * but only for a product that has no picture yet. To use another picture, replace the file
+   * or name another file here. No code change needed.
+   */
+  image: string
 }
 
 /** Per product handle, the price per unit in each currency (same price for every size). */
