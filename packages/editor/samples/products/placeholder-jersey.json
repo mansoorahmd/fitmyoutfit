@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "id": "placeholder-jersey",
+  "name": "Placeholder jersey (sample data, replace with the real product)",
+  "model": {
+    "url": "/models/placeholder-jersey.glb",
+    "format": "glb"
+  },
+  "palette": { "id": "placeholder-palette", "version": 1 },
+  "pieces": [
+    {
+      "id": "front",
+      "name": "Front",
+      "mesh": "front",
+      "width": 560,
+      "height": 700,
+      "uv": { "x": 0.02, "y": 0.02, "width": 0.448, "height": 0.56 }
+    },
+    {
+      "id": "back",
+      "name": "Back",
+      "mesh": "back",
+      "width": 560,
+      "height": 700,
+      "uv": { "x": 0.532, "y": 0.02, "width": 0.448, "height": 0.56 }
+    },
+    {
+      "id": "sleeve_left",
+      "name": "Left sleeve",
+      "mesh": "sleeve_left",
+      "width": 440,
+      "height": 220,
+      "uv": { "x": 0.02, "y": 0.62, "width": 0.46, "height": 0.23 }
+    },
+    {
+      "id": "sleeve_right",
+      "name": "Right sleeve",
+      "mesh": "sleeve_right",
+      "width": 440,
+      "height": 220,
+      "uv": { "x": 0.52, "y": 0.62, "width": 0.46, "height": 0.23 }
+    },
+    {
+      "id": "collar",
+      "name": "Collar",
+      "mesh": "collar",
+      "width": 480,
+      "height": 30,
+      "uv": { "x": 0.02, "y": 0.89, "width": 0.96, "height": 0.06 }
+    }
+  ],
+  "zones": [
+    {
+      "id": "body",
+      "name": "Body",
+      "materials": ["body"],
+      "defaultColor": { "id": "placeholder-white", "hex": "#FFFFFF" }
+    },
+    {
+      "id": "sleeves",
+      "name": "Sleeves",
+      "materials": ["sleeves"],
+      "defaultColor": { "id": "placeholder-navy", "hex": "#1B2A5C" }
+    },
+    {
+      "id": "collar",
+      "name": "Collar",
+      "materials": ["collar"],
+      "defaultColor": { "id": "placeholder-red", "hex": "#C8102E" }
+    }
+  ]
+}
