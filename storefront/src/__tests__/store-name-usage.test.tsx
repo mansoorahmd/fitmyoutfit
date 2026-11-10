@@ -18,7 +18,11 @@ vi.mock("@lib/data/collections", () => ({
   listCollections: async () => ({ collections: [], count: 0 }),
   getGarmentsCollection: async () => undefined,
 }))
-vi.mock("@lib/data/regions", () => ({ getRegion: async () => null }))
+vi.mock("@lib/data/regions", () => ({
+  getRegion: async () => null,
+  listRegions: async () => [],
+}))
+vi.mock("@lib/data/garment-links", () => ({ listGarmentLinks: async () => [] }))
 vi.mock("@modules/common/components/localized-client-link", () => ({
   default: ({ children, href, ...rest }: any) => (
     <a href={href} {...rest}>
@@ -41,7 +45,7 @@ describe("store name appears where the starter said Medusa Store", () => {
   })
 
   it("footer name and copyright line", async () => {
-    render(await Footer())
+    render(await Footer({ countryCode: "pk" }))
 
     expect(screen.getAllByText("Test Club Kits").length).toBeGreaterThan(0)
     expect(

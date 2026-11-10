@@ -6,16 +6,11 @@ vi.mock("@lib/store-config", () => ({
   DEFAULT_STORE_NAME: "FitMyOutfit",
 }))
 vi.mock("@lib/config", () => ({ sdk: { client: { fetch: vi.fn() } } }))
-vi.mock("@lib/data/categories", () => ({
-  listCategories: async () => [
-    { id: "pcat_1", name: "Jerseys", handle: "jerseys", parent_category: null },
+vi.mock("@lib/data/regions", () => ({ listRegions: async () => [] }))
+vi.mock("@lib/data/garment-links", () => ({
+  listGarmentLinks: async () => [
+    { id: "p1", title: "Jersey", href: "/products/jersey", thumbnail: null },
   ],
-}))
-vi.mock("@lib/data/collections", () => ({
-  listCollections: async () => ({
-    collections: [{ id: "pcol_1", title: "Garments", handle: "garments" }],
-    count: 1,
-  }),
 }))
 vi.mock("@modules/common/components/localized-client-link", () => ({
   default: ({ children, href, ...rest }: any) => (
@@ -36,7 +31,7 @@ function externalLinks(container: HTMLElement) {
 
 describe("footer has no Medusa promotion", () => {
   it("shows no Powered by line, Medusa column, GitHub or docs links", async () => {
-    const { container } = render(await Footer())
+    const { container } = render(await Footer({ countryCode: "pk" }))
 
     expect(screen.queryByText(/Powered by/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/Medusa/i)).not.toBeInTheDocument()
@@ -46,13 +41,13 @@ describe("footer has no Medusa promotion", () => {
     expect(externalLinks(container)).toHaveLength(0)
   })
 
-  it("keeps the categories and collections columns and the copyright line", async () => {
-    render(await Footer())
+  it("has no starter Categories or Collections columns, and keeps the copyright line", async () => {
+    render(await Footer({ countryCode: "pk" }))
 
-    expect(screen.getByText("Categories")).toBeInTheDocument()
-    expect(screen.getByText("Jerseys")).toBeInTheDocument()
-    expect(screen.getByText("Collections")).toBeInTheDocument()
-    expect(screen.getByText("Garments")).toBeInTheDocument()
+    expect(screen.queryByText("Categories")).not.toBeInTheDocument()
+    expect(screen.queryByText("Collections")).not.toBeInTheDocument()
+    expect(screen.queryByText("Garments")).not.toBeInTheDocument()
+    expect(screen.getByText("Jersey")).toBeInTheDocument()
     expect(
       screen.getByText(/Test Club Kits\. All rights reserved\./)
     ).toBeInTheDocument()

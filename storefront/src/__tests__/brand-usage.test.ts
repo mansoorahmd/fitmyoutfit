@@ -35,14 +35,30 @@ describe("brand colour usage", () => {
       "modules/layout/components/side-menu",
       "modules/layout/templates/nav",
       "modules/products/components/product-actions",
+      // S0-15: home page sections, product card and grid, listing, footer
+      "modules/home",
+      "modules/products/components/product-preview",
+      "modules/products/components/product-grid",
+      "modules/products/components/related-products",
+      "modules/skeletons/components/skeleton-product-preview",
+      "modules/skeletons/templates/skeleton-product-grid",
+      "modules/skeletons/templates/skeleton-related-products",
+      "modules/store/components/empty-products",
+      "modules/store/templates",
+      "modules/layout/templates/footer",
+      "modules/common/icons/garment-outline.tsx",
+      "content",
     ]
     const offenders = restyled
-      .flatMap((dir) => filesUnder(path.join(src, dir)))
+      .flatMap((entry) => {
+        const full = path.join(src, entry)
+        return fs.statSync(full).isDirectory() ? filesUnder(full) : [full]
+      })
       .filter((file) => /#[0-9a-fA-F]{3,8}\b/.test(fs.readFileSync(file, "utf8")))
       .map(relative)
 
     expect(offenders).toEqual([])
-  })
+  }, 30_000)
 
   it("uses no starter breakpoints (small:, medium:) in the restyled header and menu", () => {
     const files = [
@@ -51,6 +67,23 @@ describe("brand colour usage", () => {
       "modules/layout/components/region-selector/index.tsx",
       "modules/home/components/hero/index.tsx",
       "modules/products/components/product-actions/option-select.tsx",
+      // S0-15
+      "modules/home/components/promise-strip/index.tsx",
+      "modules/home/components/featured-products/product-rail/index.tsx",
+      "modules/home/components/how-it-works/index.tsx",
+      "modules/home/components/roster-proof/index.tsx",
+      "modules/home/components/sizing/index.tsx",
+      "modules/home/components/questions/index.tsx",
+      "modules/products/components/product-preview/index.tsx",
+      "modules/products/components/product-grid/grid.ts",
+      "modules/products/components/related-products/index.tsx",
+      "modules/skeletons/components/skeleton-product-preview/index.tsx",
+      "modules/skeletons/templates/skeleton-product-grid/index.tsx",
+      "modules/skeletons/templates/skeleton-related-products/index.tsx",
+      "modules/store/components/empty-products/index.tsx",
+      "modules/store/templates/index.tsx",
+      "modules/store/templates/paginated-products.tsx",
+      "modules/layout/templates/footer/index.tsx",
     ]
     for (const file of files) {
       expect(fs.readFileSync(path.join(src, file), "utf8")).not.toMatch(
