@@ -488,10 +488,10 @@ medusaIntegrationTestRunner({
         await pg("product_variant").whereIn("id", variantIds).update({ variant_rank: 0 })
 
         const rerun = await seedStore(container, adminOptions)
+        expect(await snapshot(container)).toEqual(clean)
         expect(rerun.repaired).toEqual(
           expect.arrayContaining(["jersey: size ranks", "jersey: variant ranks", "jacket: size ranks"])
         )
-        expect(await snapshot(container)).toEqual(clean)
       })
 
       it("repairs a product an interrupted run left without prices", async () => {
@@ -531,9 +531,9 @@ medusaIntegrationTestRunner({
         expect((await priced()).filter((amount: unknown) => amount === null).length).toBe(11)
 
         const rerun = await seedStore(container, adminOptions)
-        expect(rerun.repaired).toEqual(["jersey: prices"])
         expect(await priced()).toEqual(Array(11).fill(3500))
         expect(await snapshot(container)).toEqual(clean)
+        expect(rerun.repaired).toEqual(["jersey: prices"])
       })
 
       it("repairs a product an interrupted run left without variants or links", async () => {
@@ -569,6 +569,9 @@ medusaIntegrationTestRunner({
 
         const rerun = await seedStore(container, adminOptions)
         expect(rerun.created.products).toEqual([])
+        expect(await snapshot(container)).toEqual(clean)
+        const { data: after } = await api.get("/store/products?fields=handle", { headers })
+        expect(after.products.map((p: any) => p.handle)).toEqual(contractOrder)
         expect(rerun.repaired).toEqual(
           expect.arrayContaining([
             "t-shirt: variants",
@@ -576,9 +579,6 @@ medusaIntegrationTestRunner({
             "t-shirt: shipping profile",
           ])
         )
-        expect(await snapshot(container)).toEqual(clean)
-        const { data: after } = await api.get("/store/products?fields=handle", { headers })
-        expect(after.products.map((p: any) => p.handle)).toEqual(contractOrder)
       })
 
       it("repairs an admin user an interrupted run left without its login", async () => {
@@ -593,11 +593,11 @@ medusaIntegrationTestRunner({
         expect((await login()).status).toBe(401)
 
         const rerun = await seedStore(container, adminOptions)
-        expect(rerun.created.adminUser).toBe(false)
-        expect(rerun.repaired).toEqual(["admin user: login"])
         const response = await login()
         expect(response.status).toBe(200)
         expect(typeof response.data.token).toBe("string")
+        expect(rerun.created.adminUser).toBe(false)
+        expect(rerun.repaired).toEqual(["admin user: login"])
       })
 
       it("repairs regions and currencies an interrupted run left without provider or price preferences", async () => {
@@ -615,6 +615,7 @@ medusaIntegrationTestRunner({
         await pricing.deletePricePreferences(preferences.map((p) => p.id))
 
         const rerun = await seedStore(container, adminOptions)
+        expect(await snapshot(container)).toEqual(clean)
         expect(rerun.repaired).toEqual(
           expect.arrayContaining([
             "region Pakistan: payment provider",
@@ -622,7 +623,6 @@ medusaIntegrationTestRunner({
             "store: currencies pkr, gbp, aed, usd",
           ])
         )
-        expect(await snapshot(container)).toEqual(clean)
       })
 
       it("ends in the same state as a clean run after every kind of interruption at once", async () => {
