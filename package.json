@@ -1,0 +1,26 @@
+{
+  "name": "fitmyoutfit",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Custom apparel design platform: Medusa backend, Next.js storefront and 3D editor.",
+  "license": "UNLICENSED",
+  "workspaces": [
+    "backend",
+    "storefront",
+    "packages/*"
+  ],
+  "scripts": {
+    "setup": "node scripts/setup.mjs",
+    "dev": "node scripts/dev.mjs",
+    "quickstart": "npm run setup && npm run dev",
+    "build": "npm run build --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present && npm run lint:scripts",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present && npm run test:scripts",
+    "lint:scripts": "node --check scripts/setup.mjs && node --check scripts/dev.mjs && node --check scripts/lib/env-file.mjs && node --check scripts/lib/env-file.test.mjs",
+    "test:scripts": "node --test \"scripts/**/*.test.mjs\""
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
