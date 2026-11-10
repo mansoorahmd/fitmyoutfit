@@ -39,8 +39,8 @@ You may read anything. storefront-dev builds what you specify. If something can'
 - The store's name, logo and brand colours, unless the brief asks you to propose them.
 
 ### Images
-- Placeholder images must be free to use. Record the source and licence of each one in `docs/design/`.
-- Never take product photos from another store's site.
+- For local development the founder allows stand-in photos from a live store, as links in the seed data (see "Product images" in `docs/contracts/sprint-0-dev-setup.md`). Record the source of each one. Never copy the files into the repo.
+- Photos from another store must never reach a deployed site. Anything specified for launch uses our own photos or images that are free to use, with the source and licence recorded in `docs/design/`.
 
 ### Reviewing built pages
 - Look at the page, do not infer it. Take screenshots of the running storefront at phone width (360 to 390 px) and desktop width (1280 px or more), and open them.

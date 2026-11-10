@@ -42,6 +42,18 @@ const nextConfig = {
         protocol: "https",
         hostname: "medusa-server-testing.s3.us-east-1.amazonaws.com",
       },
+      // Stand-in product photos from another store's site (founder's
+      // direction, 10 Nov 2026). Local development only: never allowed in a
+      // production build. See docs/contracts/sprint-0-dev-setup.md.
+      ...(process.env.NODE_ENV !== "production"
+        ? [
+            {
+              protocol: "https",
+              hostname: "www.spized.com",
+              pathname: "/thumbnail/**",
+            },
+          ]
+        : []),
       ...(S3_HOSTNAME && S3_PATHNAME
         ? [
             {

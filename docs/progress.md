@@ -107,6 +107,8 @@ Assumptions the founders have not confirmed:
 - **The coordinator takes the decisions (10 Nov, late).** The founder said: "you are co founder ... and you also own the code so take decisions." From now on the coordinator chooses the storefront's look, the design direction and other product and code decisions without asking first, records each one here or in `docs/decisions/`, and tells the founder afterwards. Still asked first: prices and money terms, the customer promises in `critiques/DECISIONS.md`, and any edit to `plan.md` or `critiques/DECISIONS.md`.
 - **The storefront redesign is not waiting for Sprint 1 (10 Nov, late).** The founder saw the preview again and said the header and menu have no aesthetic. The coordinator picks the design direction as soon as S0-13 reports, and the redesign of the header, menu, home page, listing and product page starts straight after as task S0-14.
 
+- **Stand-in photos come from a live store (10 Nov, late).** The founder said: use photos from websites for development, our own product shoot comes once the design is ready, and named spized.com for photos and as the reference design. The photos are links in the seed data, never files in the repo, and the storefront allows that host only outside production builds. What the reference pages look like, and what we take from them: [04-reference-spized.md](design/04-reference-spized.md).
+
 ## Notes and known limits
 - **Verification rule, after the coordinator's miss on 10 Nov.** The coordinator told the founder that product images were working after checking only that the image links were in the page and loaded. One image was a white shirt on a near-white card, invisible in practice, and the home page was a large empty block; the founder found both. From now on, nothing visible is reported as ready until someone has opened a screenshot of the rendered page. Workers on visible changes are briefed to do the same. A desktop Chrome window can't be narrowed below about 500 px, so phone-width checks need real device emulation; a narrow window size only crops a wider layout.
 - **S0-1 QA result (10 Nov): changes needed.** What QA confirmed: root lint, type-check and tests pass (29 unit, 9 integration, 7 script tests); a clean `npm ci` and a backend build work; setup on an empty database works and is safe to re-run; the store API returns the contract's regions, products, prices and size order; a real upload reaches the storage bucket; CORS is correct. Must fix before merge (task S0-1b):
@@ -131,6 +133,8 @@ Assumptions the founders have not confirmed:
 - All prices and the size list in the seed are placeholders, stored as data.
 
 ## Blocked or waiting on founders
+
+- **Launch blocker: replace the stand-in product photos.** The development photos belong to spized.com and carry its logo. Our own product shoot must replace them before anything is deployed publicly. Founder to arrange the shoot once the design is ready.
 - Payment gateway applications under the UAE company: Stripe, PayPal, JazzCash, Easypaisa.
 - Draft size list and garment-measurement chart, needed in week 2.
 - First jersey 3D model with pattern panels, needed in week 3.
