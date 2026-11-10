@@ -250,7 +250,7 @@ export default function ProductActions({
           variant="primary"
           fullWidth
           isLoading={isAdding}
-          loadingText="Adding…"
+          loadingText={productContent.button.adding}
           data-testid="add-product-button"
         >
           {addToCartState.label}
@@ -261,6 +261,7 @@ export default function ProductActions({
         show={showStickyBar}
         summary={barSummary}
         label={addToCartState.label}
+        loadingLabel={productContent.button.adding}
         disabled={buttonDisabled}
         isLoading={isAdding}
         onPress={handlePress}

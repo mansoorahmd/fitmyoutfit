@@ -50,6 +50,10 @@ export const productContent = {
     /** Under the size label when the main button is pressed with no size. */
     error: "Choose a size",
   },
+  button: {
+    /** The main button's label while the size is being added to the cart. */
+    adding: "Adding…",
+  },
   facts: [
     {
       icon: "delivery",

@@ -63,6 +63,8 @@ type StickyBuyBarProps = {
   /** "M · PKR 3,500", or just the price before a size is chosen. */
   summary: string
   label: string
+  /** The label while adding ("Adding…"). */
+  loadingLabel: string
   disabled: boolean
   isLoading: boolean
   onPress: () => void
@@ -79,6 +81,7 @@ const StickyBuyBar = ({
   show,
   summary,
   label,
+  loadingLabel,
   disabled,
   isLoading,
   onPress,
@@ -104,7 +107,7 @@ const StickyBuyBar = ({
         onClick={onPress}
         disabled={disabled}
         isLoading={isLoading}
-        loadingText="Adding…"
+        loadingText={loadingLabel}
         className="min-w-[160px] shrink-0"
         data-testid="mobile-cart-button"
       >
