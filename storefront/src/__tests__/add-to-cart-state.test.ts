@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import {
   getAddToCartState,
+  getUnavailableOptionValues,
   needsVariantSelection,
 } from "@lib/util/add-to-cart-state"
 
@@ -125,5 +126,50 @@ describe("needsVariantSelection", () => {
     expect(
       needsVariantSelection({ variants: two, options: [sizeOption] }, { opt_size: "M" })
     ).toBe(false)
+  })
+})
+
+describe("getUnavailableOptionValues", () => {
+  const sizeOption = {
+    id: "opt_size",
+    title: "Size",
+    values: ["S", "M", "L"].map((value) => ({ id: `v_${value}`, value })),
+  } as any
+  const sized = (size: string, over: Record<string, unknown> = {}) =>
+    ({
+      id: `var_${size}`,
+      manage_inventory: false,
+      options: [{ option_id: "opt_size", value: size }],
+      ...over,
+    }) as any
+
+  it("marks nothing when every size is made to order", () => {
+    expect(
+      getUnavailableOptionValues({
+        options: [sizeOption],
+        variants: ["S", "M", "L"].map((s) => sized(s)),
+      })
+    ).toEqual([])
+  })
+
+  it("marks a size that is out of stock or has no variant", () => {
+    expect(
+      getUnavailableOptionValues({
+        options: [sizeOption],
+        variants: [
+          sized("S"),
+          sized("M", { manage_inventory: true, inventory_quantity: 0 }),
+        ],
+      })
+    ).toEqual(["M", "L"])
+  })
+
+  it("marks nothing when the product has several options", () => {
+    expect(
+      getUnavailableOptionValues({
+        options: [sizeOption, { id: "opt_colour", title: "Colour", values: [] }],
+        variants: [],
+      } as any)
+    ).toEqual([])
   })
 })

@@ -4,10 +4,11 @@ import { addToCart } from "@lib/data/cart"
 import { useIntersection } from "@lib/hooks/use-in-view"
 import {
   getAddToCartState,
+  getUnavailableOptionValues,
   needsVariantSelection,
 } from "@lib/util/add-to-cart-state"
 import { HttpTypes } from "@medusajs/types"
-import { Button } from "@medusajs/ui"
+import { Button } from "@modules/common/components/button"
 import Divider from "@modules/common/components/divider"
 import OptionSelect from "@modules/products/components/product-actions/option-select"
 import { isEqual } from "lodash"
@@ -122,18 +123,26 @@ export default function ProductActions({
 
     setIsAdding(true)
 
-    await addToCart({
-      variantId: selectedVariant.id,
-      quantity: 1,
-      countryCode,
-    })
-
-    setIsAdding(false)
+    try {
+      await addToCart({
+        variantId: selectedVariant.id,
+        quantity: 1,
+        countryCode,
+      })
+    } finally {
+      // never leave the button stuck on "Adding…"
+      setIsAdding(false)
+    }
   }
+
+  const unavailableValues = useMemo(
+    () => getUnavailableOptionValues(product),
+    [product]
+  )
 
   return (
     <>
-      <div className="flex flex-col gap-y-2" ref={actionsRef}>
+      <div className="flex flex-col gap-y-4" ref={actionsRef}>
         <div>
           {(product.variants?.length ?? 0) > 1 && (
             <div className="flex flex-col gap-y-4">
@@ -147,6 +156,7 @@ export default function ProductActions({
                       title={option.title ?? ""}
                       data-testid="product-options"
                       disabled={!!disabled || isAdding}
+                      unavailable={unavailableValues}
                     />
                   </div>
                 )
@@ -160,10 +170,11 @@ export default function ProductActions({
 
         <Button
           onClick={handleAddToCart}
-          disabled={addToCartState.disabled || !!disabled || isAdding}
+          disabled={addToCartState.disabled || !!disabled}
           variant="primary"
-          className="w-full h-10"
+          fullWidth
           isLoading={isAdding}
+          loadingText="Adding…"
           data-testid="add-product-button"
         >
           {addToCartState.label}
@@ -172,6 +183,7 @@ export default function ProductActions({
           product={product}
           variant={selectedVariant}
           options={options}
+          unavailableValues={unavailableValues}
           updateOptions={setOptionValue}
           isValidVariant={isValidVariant}
           needsSelection={needsSelection}

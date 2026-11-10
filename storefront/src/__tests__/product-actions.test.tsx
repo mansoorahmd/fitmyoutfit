@@ -48,24 +48,24 @@ describe("product actions", () => {
     render(<ProductActions product={jersey()} region={region} />)
 
     expect(mainButton()).toHaveTextContent("Select a size")
-    expect(mainButton()).toBeDisabled()
+    expect(mainButton()).toHaveAttribute("aria-disabled", "true")
     expect(mobileButton()).toHaveTextContent("Select a size")
-    expect(mobileButton()).toBeDisabled()
+    expect(mobileButton()).toHaveAttribute("aria-disabled", "true")
     expect(screen.queryByText("Out of stock")).not.toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole("button", { name: "M" }))
+    fireEvent.click(screen.getByRole("radio", { name: "M" }))
 
     expect(mainButton()).toHaveTextContent("Add to cart")
-    expect(mainButton()).toBeEnabled()
+    expect(mainButton()).not.toHaveAttribute("aria-disabled")
     expect(mobileButton()).toHaveTextContent("Add to cart")
-    expect(mobileButton()).toBeEnabled()
+    expect(mobileButton()).not.toHaveAttribute("aria-disabled")
   })
 
   it("records the chosen size in the URL without scrolling the page", () => {
     replace.mockClear()
     render(<ProductActions product={jersey()} region={region} />)
 
-    fireEvent.click(screen.getByRole("button", { name: "M" }))
+    fireEvent.click(screen.getByRole("radio", { name: "M" }))
 
     expect(replace).toHaveBeenCalledWith(
       "/pk/products/jersey?v_id=var_M",
@@ -95,9 +95,9 @@ describe("product actions", () => {
     render(<ProductActions product={fitKit} region={region} />)
 
     expect(mainButton()).toHaveTextContent("Add to cart")
-    expect(mainButton()).toBeEnabled()
+    expect(mainButton()).not.toHaveAttribute("aria-disabled")
     expect(mobileButton()).toHaveTextContent("Add to cart")
-    expect(mobileButton()).toBeEnabled()
+    expect(mobileButton()).not.toHaveAttribute("aria-disabled")
   })
 
   it("managed inventory with zero stock shows Out of stock after selection", () => {
@@ -110,11 +110,14 @@ describe("product actions", () => {
 
     expect(mainButton()).toHaveTextContent("Select a size")
 
-    fireEvent.click(screen.getByRole("button", { name: "L" }))
+    // out of stock, so the chip is marked unavailable but can still be chosen
+    const large = screen.getByRole("radio", { name: "L, unavailable" })
+    fireEvent.click(large)
+    expect(large).toBeChecked()
 
     expect(mainButton()).toHaveTextContent("Out of stock")
-    expect(mainButton()).toBeDisabled()
+    expect(mainButton()).toHaveAttribute("aria-disabled", "true")
     expect(mobileButton()).toHaveTextContent("Out of stock")
-    expect(mobileButton()).toBeDisabled()
+    expect(mobileButton()).toHaveAttribute("aria-disabled", "true")
   })
 })
