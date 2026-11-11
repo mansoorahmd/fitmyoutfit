@@ -126,9 +126,9 @@ These came from [05-m1-pages.md](../design/05-m1-pages.md), section 12. They are
 - **Rush days.** `delivery_days_rush` must be lower than `delivery_days_standard`; otherwise the setting is invalid and is reported like any other invalid setting.
 - **Completing twice.** Completing a cart that has already become an order returns that order and never creates a second one. QA saw this hold, including three completions at once; it needs a test of its own.
 
-### 8.1 As built (S1-1b, corrected in S1-1c after QA's review; S1-1c is in QA review since 12 Nov, not merged yet)
+### 8.1 As built (S1-1b, corrected in S1-1c; accepted by QA and merged on 12 Nov)
 
-The storefront checkout (S1-4) and account pages (S1-5) are built against these. If QA changes any of them, this section is corrected first.
+The storefront checkout (S1-4) and account pages (S1-5) are built against these. The reasons are in [decision 010](../decisions/010-order-metadata-and-cash-collection.md).
 
 - **Rules route.** `delivery_promise` has `"applies": "standard"` (or `"rush"` once the rush charge exists). The storefront shows the date of the option named by `applies`.
 - **The promised date of an order.** The server writes `metadata.delivery_promise` on the order after it is created. It is based on the order's creation date in Asia/Karachi plus the days setting at that moment, never on anything sent by the storefront. This happens for every order, however it was placed (the complete route, a payment provider's webhook, a converted draft order). Once kept, it does not change when the settings change.
@@ -147,7 +147,8 @@ The storefront checkout (S1-4) and account pages (S1-5) are built against these.
   - Completing a cart that has already become an order returns that same order (`type: "order"`), also for several completions at once.
 - **Cart metadata.** `POST /store/carts` and `POST /store/carts/:id` answer HTTP 400 (`type: "invalid_data"`) when `metadata` contains `delivery_promise` or any key starting with `cod_`, whatever the value (including `null`). The storefront never sends these keys.
 - **Order metadata written by staff.** `cod_slip_reference` and `cod_collected_at` (UTC) are written when staff record the courier's slip (`GET` and `POST /admin/orders/:id/cash-collection`, admin sign-in only). The payment is captured first, and the slip is recorded once. Who captured is kept in Medusa's own capture record, not in the order's metadata. The storefront does not read these keys in M1.
-- **Open, for when a real gateway is connected (M3).** A payment provider's webhook completes the cart without the store route. If the completion hook refuses at that moment (below the minimum, cash on delivery not allowed, an invalid setting), the customer has paid and no order exists. The checks must have passed before the payment is started, and a refused webhook completion needs a refund or an alert. Not decided yet.
+- **Open, for when a real gateway is connected (M3).** A payment provider's webhook completes the cart without the store route. QA saw it: a UK cart of 9 with an "authorized" webhook gives no order, and a later "captured" webhook still captures the money. The checks must pass before the payment is started, and a refused completion after payment needs a refund or an alert. Not decided yet. Cash on delivery and the placeholder payment have no webhook.
+- **Planned change (S1-1d).** The cash-collection record moves from the order's metadata into a table of its own, so `cod_slip_reference` and `cod_collected_at` will no longer appear in a customer's `GET /store/orders`.
 
 ## 9. Not in this contract
 

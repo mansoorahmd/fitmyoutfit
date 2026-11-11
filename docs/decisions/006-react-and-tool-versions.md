@@ -19,7 +19,7 @@ The first two rows are forced by Medusa. The last two are our own doing.
 
 - **Everything we write for customers uses one React: 19.** That is the storefront and the editor.
 - **React 18 stays, confined to the backend's admin.** It is Medusa's dependency, not ours. We do not force the admin onto React 19 with an override: Medusa does not declare support for it, and a broken admin would stop order handling.
-- **Vite 5 stays** for the same reason: it belongs to Medusa's admin bundler.
+- **Vite 7.3.8 since 12 Nov (task S1-7).** The backend's own dev dependency was Vite 5.4.21, which had a high audit finding; Medusa 2.22.6's admin bundler already used Vite 7 and its admin plugin accepts Vite 5, 6 or 7, not 8. The admin was checked in development and in a production build. (Earlier text: "Vite 5 stays".)
 - **We remove the duplicates that are ours.** All three workspaces use the same TypeScript version and the same ESLint major version. Target: the TypeScript version the backend already uses (5.9), and ESLint 10 if the storefront's Next.js lint rules support it, otherwise the newest major that all three support. Task S0-10.
 - **Rule from now on:** a worker may not introduce a second version of a tool or library that another workspace already uses, unless a dependency forces it. Forced duplicates are added to the table above with the reason.
 
