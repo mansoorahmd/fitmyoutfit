@@ -22,7 +22,7 @@ function lintAs(filename, code) {
 }
 
 test(
-  "lint:scripts forbids console.* and process.stdout / stderr in setup.mjs and scripts/lib/, except the output helper",
+  "lint:scripts forbids console.* and process.stdout / stderr in setup.mjs, dev.mjs and scripts/lib/, except the output helper",
   { timeout: 120_000 },
   () => {
     const leak = "export function f(env) {\n  console.log(env.MEDUSA_ADMIN_PASSWORD);\n}\n";
@@ -33,10 +33,37 @@ test(
     const lib = lintAs("scripts/lib/anything.mjs", write);
     assert.equal(lib.code, 1, lib.output);
     assert.match(lib.output, /no-restricted-properties/);
-    // The one output helper may write; dev.mjs and the tests are not covered by the rule.
+    // dev.mjs reads PORT from backend/.env, next to the admin password: covered too (QA, fourth review).
+    const dev = lintAs("scripts/dev.mjs", leak);
+    assert.equal(dev.code, 1, dev.output);
+    assert.match(dev.output, /no-console/);
+    const devWrite = lintAs("scripts/dev.mjs", write);
+    assert.equal(devWrite.code, 1, devWrite.output);
+    assert.match(devWrite.output, /no-restricted-properties/);
+    // The one output helper may write; the tests are not covered by the rule.
     assert.equal(lintAs("scripts/lib/output.mjs", write).code, 0);
-    assert.equal(lintAs("scripts/dev.mjs", leak).code, 0);
     assert.equal(lintAs("scripts/lib/anything.test.mjs", leak).code, 0);
+  },
+);
+
+test(
+  "lint:scripts refuses the .env parser in dev.mjs, which may hold only the PORT from backend/.env",
+  { timeout: 120_000 },
+  () => {
+    const parse = [
+      'import { readFileSync } from "node:fs";',
+      'import { parseEnv } from "./lib/env-file.mjs";',
+      'export const env = parseEnv(readFileSync("backend/.env", "utf8"));',
+      "",
+    ].join("\n");
+    const dev = lintAs("scripts/dev.mjs", parse);
+    assert.equal(dev.code, 1, dev.output);
+    assert.match(dev.output, /no-restricted-imports/);
+    // setup.mjs needs the whole file (the database URL, and the password to hide it).
+    assert.equal(lintAs("scripts/setup.mjs", parse).code, 0);
+    // The real dev.mjs passes.
+    const real = lintAs("scripts/dev.mjs", readFileSync(path.join(root, "scripts", "dev.mjs"), "utf8"));
+    assert.equal(real.code, 0, real.output);
   },
 );
 

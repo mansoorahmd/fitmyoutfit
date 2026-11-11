@@ -9,8 +9,10 @@ import globals from "globals"
 
 /**
  * setup.mjs handles the admin password, so everything it prints must go through the `out` / `err`
- * functions runSetup is given (which hide the password and which the tests capture). In setup.mjs
- * and its helpers in scripts/lib/, only scripts/lib/output.mjs may write to the terminal.
+ * functions runSetup is given (which hide the password and which the tests capture). dev.mjs reads
+ * PORT from backend/.env, which holds the admin password too, so it prints only through the same
+ * helpers. In setup.mjs, dev.mjs and the helpers in scripts/lib/, only scripts/lib/output.mjs may
+ * write to the terminal.
  */
 const noDirectOutput = {
   "no-console": "error",
@@ -43,8 +45,27 @@ export default [
     },
   },
   {
-    files: ["scripts/setup.mjs", "scripts/lib/**/*.mjs"],
+    files: ["scripts/setup.mjs", "scripts/dev.mjs", "scripts/lib/**/*.mjs"],
     ignores: ["scripts/lib/output.mjs", "**/*.test.mjs"],
     rules: noDirectOutput,
+  },
+  {
+    // dev.mjs may hold only the PORT from backend/.env (scripts/lib/ports.mjs reads it), never the
+    // parsed file with the admin password in it.
+    files: ["scripts/dev.mjs"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "./lib/env-file.mjs",
+              message:
+                "dev.mjs must not parse backend/.env (it holds MEDUSA_ADMIN_PASSWORD). Use readBackendEnvFilePort from ./lib/ports.mjs.",
+            },
+          ],
+        },
+      ],
+    },
   },
 ]

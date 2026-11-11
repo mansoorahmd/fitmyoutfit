@@ -62,7 +62,7 @@ export function unreachableMessage(service) {
  * The admin URL uses the backend's port: `backendEnv.PORT` (setup puts the shell's PORT there
  * when it is set, else backend/.env's), else 9000.
  */
-export function adminLoginMessage(backendEnv, adminUrl = `${localUrl(backendPort({}, backendEnv))}/app`) {
+export function adminLoginMessage(backendEnv, adminUrl = `${localUrl(backendPort({}, backendEnv.PORT))}/app`) {
   if (!backendEnv.MEDUSA_ADMIN_EMAIL || !backendEnv.MEDUSA_ADMIN_PASSWORD) {
     return "No local admin user: set MEDUSA_ADMIN_EMAIL and MEDUSA_ADMIN_PASSWORD in backend/.env and run setup again.";
   }

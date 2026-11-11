@@ -2,8 +2,9 @@
 // terminals, logs and screenshots). These tests run the real setup flow (runSetup in setup.mjs)
 // in a throwaway folder with a known password, with fake migrations and seed that print the
 // password themselves, and check every character setup writes to stdout and stderr.
-// One test runs setup.mjs as a real child process and reads the process's whole stdout and
-// stderr, so a print that does not go through `out` / `err` (a stray console.log) fails too.
+// Three tests run setup.mjs as a real child process and read the process's whole stdout and
+// stderr, so a print that does not go through `out` / `err` (a stray console.log) fails too: the
+// success path, the path without storefront/, and a failing migration.
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import {
@@ -149,8 +150,10 @@ test("a failing seed or an unreachable database prints no password either", asyn
  * A copy of setup.mjs and its helpers in a throwaway checkout, with a backend/package.json whose
  * `migrate` and `seed` scripts are fake: they print the password on stdout and stderr, and the
  * seed prints a publishable key. `npm run migrate --prefix backend` then runs them for real.
+ * - `storefront: false` leaves storefront/ out (setup then skips storefront/.env.local).
+ * - `migrateCode` is the fake migration's exit code (not 0: setup stops with "migrations failed").
  */
-function makeChildCheckout(dbPort) {
+function makeChildCheckout(dbPort, { storefront = true, migrateCode = 0 } = {}) {
   const root = realpathSync(mkdtempSync(path.join(os.tmpdir(), "fmo-setup-child-")));
   const scriptsDir = path.join(root, "scripts");
   mkdirSync(path.join(scriptsDir, "lib"), { recursive: true });
@@ -162,7 +165,7 @@ function makeChildCheckout(dbPort) {
   }
   const backend = path.join(root, "backend");
   mkdirSync(backend);
-  mkdirSync(path.join(root, "storefront"));
+  if (storefront) mkdirSync(path.join(root, "storefront"));
   writeFileSync(path.join(root, ".env.example"), "POSTGRES_PORT=5433\n");
   writeFileSync(
     path.join(backend, ".env.example"),
@@ -173,7 +176,9 @@ function makeChildCheckout(dbPort) {
       "",
     ].join("\n"),
   );
-  writeFileSync(path.join(root, "storefront", ".env.example"), "MEDUSA_BACKEND_URL=http://localhost:9000\n");
+  if (storefront) {
+    writeFileSync(path.join(root, "storefront", ".env.example"), "MEDUSA_BACKEND_URL=http://localhost:9000\n");
+  }
   const half = Math.floor(PASSWORD.length / 2);
   writeFileSync(
     path.join(backend, "fake-migrate.mjs"),
@@ -181,6 +186,7 @@ function makeChildCheckout(dbPort) {
       `process.stdout.write(${JSON.stringify(`migrating with ${PASSWORD.slice(0, half)}`)});`,
       `setTimeout(() => process.stdout.write(${JSON.stringify(`${PASSWORD.slice(half)} done\n`)}), 50);`,
       `process.stderr.write(${JSON.stringify(`warn: login ${PASSWORD}\n`)});`,
+      `process.exitCode = ${migrateCode};`,
       "",
     ].join("\n"),
   );
@@ -242,16 +248,34 @@ function runSetupProcess(root, env) {
   });
 }
 
+/**
+ * Run setup.mjs as a child process in a checkout made by makeChildCheckout(port, options), with
+ * something listening on `port` for setup's "is PostgreSQL reachable?" check (no database is
+ * needed), and hand its exit code, stdout and stderr to `check`.
+ */
+async function withSetupProcess(options, check) {
+  const server = net.createServer((socket) => socket.destroy());
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const root = makeChildCheckout(server.address().port, options);
+  try {
+    await check(root, await runSetupProcess(root, cleanChildEnv()));
+  } finally {
+    server.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+/** Neither stdout nor stderr holds the password. */
+function assertNoPassword({ stdout, stderr }) {
+  assert.ok(!stdout.includes(PASSWORD), `the password was printed on stdout:\n${stdout}`);
+  assert.ok(!stderr.includes(PASSWORD), `the password was printed on stderr:\n${stderr}`);
+}
+
 test(
   "setup.mjs run as a real process never prints the admin password on stdout or stderr",
   { timeout: 300_000 },
   async () => {
-    // Something listening, for setup's "is PostgreSQL reachable?" check. No database is needed.
-    const server = net.createServer((socket) => socket.destroy());
-    await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
-    const root = makeChildCheckout(server.address().port);
-    try {
-      const { code, stdout, stderr } = await runSetupProcess(root, cleanChildEnv());
+    await withSetupProcess({}, async (root, { code, stdout, stderr }) => {
       const everything = `${stdout}\n${stderr}`;
       assert.equal(code, 0, everything);
       // Setup really ran the fake commands and finished.
@@ -262,12 +286,43 @@ test(
       assert.match(readFileSync(path.join(root, "storefront", ".env.local"), "utf8"), /pk_child_456/);
       // The admin URL uses the default backend port.
       assert.match(stdout, /http:\/\/localhost:9000\/app/);
-      assert.ok(!stdout.includes(PASSWORD), `the password was printed on stdout:\n${stdout}`);
-      assert.ok(!stderr.includes(PASSWORD), `the password was printed on stderr:\n${stderr}`);
-    } finally {
-      server.close();
-      rmSync(root, { recursive: true, force: true });
-    }
+      assertNoPassword({ stdout, stderr });
+    });
+  },
+);
+
+// QA, fourth review: a print of the password only on these two paths passed every test.
+test(
+  "setup.mjs run as a real process without storefront/ prints no password",
+  { timeout: 300_000 },
+  async () => {
+    await withSetupProcess({ storefront: false }, async (root, { code, stdout, stderr }) => {
+      const everything = `${stdout}\n${stderr}`;
+      assert.equal(code, 0, everything);
+      // Setup took the path without a storefront and finished.
+      assert.match(stderr, /storefront\/ does not exist yet/);
+      assert.match(stdout, /\[setup\] done\./);
+      assert.match(stdout, /pk_child_456/);
+      assert.ok(everything.includes(REDACTED));
+      assert.doesNotMatch(stdout, /wrote NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY/);
+      assertNoPassword({ stdout, stderr });
+    });
+  },
+);
+
+test(
+  "setup.mjs run as a real process with a failing migration prints no password",
+  { timeout: 300_000 },
+  async () => {
+    await withSetupProcess({ migrateCode: 1 }, async (_root, { code, stdout, stderr }) => {
+      const everything = `${stdout}\n${stderr}`;
+      assert.equal(code, 1, everything);
+      // Setup echoed the migration's output (hidden), stopped there and never seeded.
+      assert.match(stdout, /migrating with \[hidden\] done/);
+      assert.match(stderr, /\[setup\] ERROR: migrations failed/);
+      assert.doesNotMatch(everything, /seeding placeholder data|pk_child_456/);
+      assertNoPassword({ stdout, stderr });
+    });
   },
 );
 

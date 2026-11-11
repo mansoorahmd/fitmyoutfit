@@ -1,17 +1,27 @@
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { test } from "node:test";
-import { backendPort, devChildEnv, devUrlLines, localUrl, storefrontPort } from "./ports.mjs";
+import {
+  backendPort,
+  devChildEnv,
+  devUrlLines,
+  localUrl,
+  readBackendEnvFilePort,
+  storefrontPort,
+} from "./ports.mjs";
 
 test("backendPort: PORT from the shell wins over backend/.env, and the default is 9000", () => {
-  assert.equal(backendPort({}, {}), "9000");
-  assert.equal(backendPort({}, { PORT: "9005" }), "9005");
-  assert.equal(backendPort({ PORT: "9007" }, { PORT: "9005" }), "9007");
+  assert.equal(backendPort({}, undefined), "9000");
+  assert.equal(backendPort({}, "9005"), "9005");
+  assert.equal(backendPort({ PORT: "9007" }, "9005"), "9007");
   assert.equal(backendPort({ PORT: " 9008 " }), "9008");
 });
 
 test("backendPort: a blank PORT counts as unset", () => {
-  assert.equal(backendPort({ PORT: "" }, { PORT: "9005" }), "9005");
-  assert.equal(backendPort({ PORT: "  " }, { PORT: "" }), "9000");
+  assert.equal(backendPort({ PORT: "" }, "9005"), "9005");
+  assert.equal(backendPort({ PORT: "  " }, ""), "9000");
 });
 
 test("storefrontPort: STOREFRONT_PORT from the shell, default 8000; the backend's PORT does not count", () => {
@@ -39,8 +49,8 @@ test("devChildEnv gives the backend its PORT: the shell's, else backend/.env's, 
     STOREFRONT_PORT: "8006",
     PORT: "9000",
   });
-  assert.equal(devChildEnv("backend", {}, { PORT: "9005" }).PORT, "9005");
-  assert.equal(devChildEnv("backend", { PORT: "9007" }, { PORT: "9005" }).PORT, "9007");
+  assert.equal(devChildEnv("backend", {}, "9005").PORT, "9005");
+  assert.equal(devChildEnv("backend", { PORT: "9007" }, "9005").PORT, "9007");
 });
 
 test("devUrlLines prints both ports, only for the parts that started", () => {
@@ -50,7 +60,21 @@ test("devUrlLines prints both ports, only for the parts that started", () => {
     "storefront: http://localhost:8006",
   ]);
   assert.deepEqual(devUrlLines(["storefront"], {}), ["storefront: http://localhost:8000"]);
-  assert.deepEqual(devUrlLines(["backend"], {}, { PORT: "9001" }), [
+  assert.deepEqual(devUrlLines(["backend"], {}, "9001"), [
     "backend:    http://localhost:9001 (admin at http://localhost:9001/app)",
   ]);
+});
+
+test("readBackendEnvFilePort returns only PORT from backend/.env, never the rest of the file", () => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), "fmo-ports-test-"));
+  try {
+    const file = path.join(dir, ".env");
+    assert.equal(readBackendEnvFilePort(file), undefined);
+    writeFileSync(file, "MEDUSA_ADMIN_PASSWORD=Known-Test-Pass-4711\nPORT=9005\n");
+    assert.equal(readBackendEnvFilePort(file), "9005");
+    writeFileSync(file, "MEDUSA_ADMIN_PASSWORD=Known-Test-Pass-4711\n");
+    assert.equal(readBackendEnvFilePort(file), undefined);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

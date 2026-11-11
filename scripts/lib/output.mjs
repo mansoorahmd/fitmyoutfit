@@ -1,4 +1,4 @@
-// The one place in scripts/setup.mjs and scripts/lib/ that writes to the terminal.
+// The one place in scripts/setup.mjs, scripts/dev.mjs and scripts/lib/ that writes to the terminal.
 // ESLint (backend/eslint.scripts.config.mjs) forbids console.* and process.stdout / process.stderr
 // in those files everywhere else, so everything setup prints goes through the `out` / `err`
 // functions it is given, which setup-output.test.mjs captures. setup-output.test.mjs also runs
