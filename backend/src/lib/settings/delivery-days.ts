@@ -23,7 +23,8 @@ function readDays(
 }
 
 /**
- * Returns both values (whole numbers, 1 or more), or one readable error naming every problem.
+ * Returns both values (whole numbers, 1 or more, with rush lower than standard: paid rush must
+ * deliver sooner), or one readable error naming every problem and every key involved.
  */
 export function readDeliveryDays(
   settings: Readonly<Record<string, unknown>> | null | undefined
@@ -31,6 +32,15 @@ export function readDeliveryDays(
   const standard = readDays(settings, DELIVERY_DAYS_STANDARD_KEY)
   const rush = readDays(settings, DELIVERY_DAYS_RUSH_KEY)
   if (standard.ok && rush.ok) {
+    if (!(rush.value < standard.value)) {
+      return {
+        ok: false,
+        error:
+          `${DELIVERY_DAYS_RUSH_KEY} in the store's metadata must be lower than ` +
+          `${DELIVERY_DAYS_STANDARD_KEY}, got ${DELIVERY_DAYS_RUSH_KEY} ${rush.value} and ` +
+          `${DELIVERY_DAYS_STANDARD_KEY} ${standard.value}.`,
+      }
+    }
     return { ok: true, value: { standard: standard.value, rush: rush.value } }
   }
   const errors = [standard, rush].flatMap((r) => (r.ok ? [] : [r.error]))

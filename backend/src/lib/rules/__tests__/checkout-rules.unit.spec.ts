@@ -15,6 +15,7 @@ function input(overrides: Partial<CheckoutRulesInput> = {}): CheckoutRulesInput 
     total: 56,
     storeSettings,
     baseDate: "2026-11-11",
+    deliverySpeed: "standard",
     ...overrides,
   }
 }
@@ -35,9 +36,30 @@ describe("evaluateCheckoutRules", () => {
           based_on: "2026-11-11",
           standard: { days: 15, date: "2026-11-26" },
           rush: { days: 10, date: "2026-11-21" },
+          applies: "standard",
         },
       },
     })
+  })
+
+  it("passes on which delivery date applies", () => {
+    const rush = evaluateCheckoutRules(input({ deliverySpeed: "rush" }))
+    expect(rush.ok && rush.value.delivery_promise.applies).toBe("rush")
+  })
+
+  it("counts a product with no kind towards the minimum (QA defect D1)", () => {
+    const result = evaluateCheckoutRules(input({ lines: [{ quantity: 9 }, { quantity: 1, kind: "fit_kit" }] }))
+    expect(result.ok && result.value.minimum_quantity).toEqual({ required: 10, counted: 9, ok: false })
+  })
+
+  it("reports rush days that are not lower than standard days as an invalid setting", () => {
+    const result = evaluateCheckoutRules(
+      input({ storeSettings: { ...storeSettings, delivery_days_rush: 20 } })
+    )
+    expect(result.ok).toBe(false)
+    expect(!result.ok && result.error).toContain(
+      "delivery_days_rush in the store's metadata must be lower than delivery_days_standard"
+    )
   })
 
   it("offers cash on delivery for a Pakistan cart of 1 T-shirt", () => {

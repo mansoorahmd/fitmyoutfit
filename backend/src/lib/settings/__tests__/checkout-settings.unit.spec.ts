@@ -67,6 +67,28 @@ describe("readDeliveryDays", () => {
     })
   })
 
+  it("refuses rush days that are not lower than standard days, naming both keys", () => {
+    expect(readDeliveryDays({ delivery_days_standard: 15, delivery_days_rush: 15 })).toEqual({
+      ok: false,
+      error:
+        "delivery_days_rush in the store's metadata must be lower than delivery_days_standard, " +
+        "got delivery_days_rush 15 and delivery_days_standard 15.",
+    })
+    expect(readDeliveryDays({ delivery_days_standard: "10", delivery_days_rush: "12" }).ok).toBe(false)
+    expect(readDeliveryDays({ delivery_days_standard: 2, delivery_days_rush: 1 })).toEqual({
+      ok: true,
+      value: { standard: 2, rush: 1 },
+    })
+  })
+
+  it("compares the days as numbers, not as text", () => {
+    // As text "9" sorts after "15"; as numbers 9 is lower.
+    expect(readDeliveryDays({ delivery_days_standard: "15", delivery_days_rush: "9" })).toEqual({
+      ok: true,
+      value: { standard: 15, rush: 9 },
+    })
+  })
+
   it("reports every problem at once", () => {
     const result = readDeliveryDays({ delivery_days_rush: 0 })
     expect(result.ok).toBe(false)
