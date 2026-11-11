@@ -3,7 +3,7 @@
  * No Medusa imports, so they can be unit tested without booting the app.
  * medusa-config.ts only calls `buildMedusaConfig`.
  */
-import { effectiveDatabaseLogin } from "./database-login"
+import { databaseUrlReadings, effectiveDatabaseLogin, type DatabaseLogin } from "./database-login"
 import { describeNodeEnv, isLocalNodeEnv } from "./node-env"
 
 export type Env = Record<string, string | undefined>
@@ -80,46 +80,96 @@ export function requiresProductionSecrets(env: Env): boolean {
 }
 
 /**
- * Whether a value is one of the dev-only values for its variable (`"is"`), has one inside it
- * (`"contains"`: a dev value with something added before or after, such as
- * `dev-only-jwt-secret-change-in-production1`), or neither (`undefined`). Compared trimmed and
- * without regard to case, so `SUPERSECRET` and ` MinioAdmin ` count too.
+ * A dev value shorter than this counts only when a secret is exactly that value, not when a secret
+ * merely contains it. A long random secret contains a given 8-character string by chance with a
+ * probability of about one in a billion or less, but it could well contain a short word, so a short
+ * dev value added to DEV_ONLY_VALUES later must not start refusing real secrets. (Every dev value
+ * today is 10 characters or longer, so today every one of them is also looked for inside secrets.)
  */
-export function devValueMatch(name: string, value: string): "is" | "contains" | undefined {
+export const MIN_CONTAINED_DEV_VALUE_LENGTH = 8
+
+/** How a value matches the dev-only values, and whose dev values it matches. */
+export type DevValueMatch = {
+  /** `"is"`: the value is a dev value; `"contains"`: it has one inside it. */
+  kind: "is" | "contains"
+  /** The variables whose dev value matched (a dev value can belong to more than one). */
+  variables: string[]
+}
+
+/**
+ * Whether `value` is a dev-only value of any variable in `devValues` (`"is"`), has one inside it
+ * (`"contains"`: a dev value with something added before or after, such as
+ * `dev-only-jwt-secret-change-in-production1`), or neither (`undefined`). The dev values of every
+ * variable count, so a dev value moved to another variable (the dev COOKIE_SECRET as JWT_SECRET) is
+ * caught too. Compared trimmed and without regard to case, so `SUPERSECRET` and ` MinioAdmin `
+ * count. Dev values shorter than MIN_CONTAINED_DEV_VALUE_LENGTH count only as `"is"`.
+ */
+export function devValueMatch(
+  value: string,
+  devValues: Readonly<Record<string, readonly string[]>> = DEV_ONLY_VALUES
+): DevValueMatch | undefined {
   const normalized = value.trim().toLowerCase()
-  const devValues = (DEV_ONLY_VALUES[name] ?? []).map((dev) => dev.toLowerCase())
-  if (devValues.includes(normalized)) {
-    return "is"
+  const entries = Object.entries(devValues).flatMap(([variable, values]) =>
+    values.map((dev) => ({ variable, dev: dev.trim().toLowerCase() }))
+  ).filter(({ dev }) => dev !== "")
+  const whose = (matches: { variable: string }[]) => [
+    ...new Set(matches.map(({ variable }) => variable)),
+  ]
+  const exact = entries.filter(({ dev }) => dev === normalized)
+  if (exact.length > 0) {
+    return { kind: "is", variables: whose(exact) }
   }
-  if (devValues.some((dev) => normalized.includes(dev))) {
-    return "contains"
+  const inside = entries.filter(
+    ({ dev }) => dev.length >= MIN_CONTAINED_DEV_VALUE_LENGTH && normalized.includes(dev)
+  )
+  if (inside.length > 0) {
+    return { kind: "contains", variables: whose(inside) }
   }
   return undefined
 }
 
 function devValueProblem(name: string, value: string): string | undefined {
-  switch (devValueMatch(name, value)) {
-    case "is":
-      return `${name} is a dev-only value (from .env.example)`
-    case "contains":
-      return `${name} contains a dev-only value (from .env.example)`
-    default:
-      return undefined
+  const match = devValueMatch(value)
+  if (!match) {
+    return undefined
   }
+  // Name the other variable when the value is not this variable's own dev value. Never the value.
+  const own = match.variables.includes(name)
+  const verb = match.kind === "is" ? "is" : "contains"
+  return own
+    ? `${name} ${verb} a dev-only value (from .env.example)`
+    : `${name} ${verb} the dev-only value of ${match.variables.join(" and ")} (from .env.example)`
+}
+
+/**
+ * The logins pg could use for `databaseUrl`, one per reading of it (as given, trimmed, and after
+ * Medusa's `ssl_mode` rewrite: databaseUrlReadings in database-login.ts). A reading pg cannot parse
+ * gives no login.
+ */
+function possibleDatabaseLogins(databaseUrl: string | undefined, env: Env): DatabaseLogin[] {
+  return databaseUrlReadings(databaseUrl)
+    .map((reading) => effectiveDatabaseLogin(reading || undefined, env))
+    .filter((login): login is DatabaseLogin => login !== null)
+}
+
+function isDevDatabaseUser(user: string | undefined): boolean {
+  const normalized = user?.trim().toLowerCase()
+  return (
+    normalized !== undefined &&
+    DEV_DATABASE_CREDENTIALS.some((dev) => dev.user.toLowerCase() === normalized)
+  )
 }
 
 /**
  * True when the backend would log in to PostgreSQL with a dev-only user and password (such as
  * medusa / medusa), wherever pg would take them from: the user and password in DATABASE_URL, its
  * `user` and `password` query parameters (which win), or PGUSER / PGPASSWORD (see
- * database-login.ts). DATABASE_URL is read as given and also trimmed; either reading counts.
- * Compared trimmed, percent-decoded and without regard to case.
+ * database-login.ts). DATABASE_URL is read as given, trimmed, and after Medusa's `ssl_mode`
+ * rewrite; any reading counts. Compared trimmed, percent-decoded and without regard to case.
  */
 export function usesDevDatabaseCredentials(databaseUrl: string | undefined, env: Env = {}): boolean {
-  const readings = [...new Set([databaseUrl, clean(databaseUrl)])]
-  return readings.some((reading) => {
-    const login = effectiveDatabaseLogin(reading || undefined, env)
-    if (!login?.user || !login.password) {
+  return possibleDatabaseLogins(databaseUrl, env).some((login) => {
+    if (!login.user || !login.password) {
       return false
     }
     const user = login.user.trim().toLowerCase()
@@ -128,6 +178,22 @@ export function usesDevDatabaseCredentials(databaseUrl: string | undefined, env:
       (dev) => dev.user.toLowerCase() === user && dev.password.toLowerCase() === password
     )
   })
+}
+
+/**
+ * True when the backend would log in as a dev-only database user (such as `medusa`) with no
+ * password in DATABASE_URL or PGPASSWORD (in any reading, as above). pg would then take the
+ * password from a pgpass file (PGPASSFILE, ~/.pgpass, or on Windows
+ * %APPDATA%\postgresql\pgpass.conf even with no variable set), which this check does not read, so
+ * the dev user counts only with an explicit password.
+ */
+export function usesDevDatabaseUserWithoutPassword(
+  databaseUrl: string | undefined,
+  env: Env = {}
+): boolean {
+  return possibleDatabaseLogins(databaseUrl, env).some(
+    (login) => isDevDatabaseUser(login.user) && !login.password
+  )
 }
 
 /**
@@ -160,10 +226,23 @@ export function productionSecretProblems(env: Env): string[] {
       problems.push(devProblem)
     }
   }
+  if (env.DATABASE_URL?.includes("#")) {
+    problems.push(
+      "DATABASE_URL contains a '#'. Medusa and the PostgreSQL driver read the part after it " +
+        "differently, so it is refused: write a '#' in the password as %23"
+    )
+  }
   if (usesDevDatabaseCredentials(env.DATABASE_URL, env)) {
     problems.push(
       "DATABASE_URL uses the dev-only database user and password (from .env.example), " +
         "in the URL, its user / password parameters, or PGUSER / PGPASSWORD"
+    )
+  } else if (usesDevDatabaseUserWithoutPassword(env.DATABASE_URL, env)) {
+    problems.push(
+      "DATABASE_URL logs in as the dev-only database user (from .env.example) with no password " +
+        "in DATABASE_URL or PGPASSWORD, so the PostgreSQL driver would take one from a pgpass " +
+        "file, which is not checked: give the password explicitly in DATABASE_URL or PGPASSWORD, " +
+        "or use a different database user"
     )
   }
   return problems

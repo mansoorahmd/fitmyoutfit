@@ -3,8 +3,13 @@
  * (node-postgres, which Medusa uses through knex) works it out. Plain TypeScript, no imports, so
  * the production checks in build-config.ts can use it before anything connects.
  *
- * Medusa hands DATABASE_URL to pg unchanged, as `connectionString` (@medusajs/utils,
- * create-pg-connection.js; with DATABASE_URL unset, Medusa uses
+ * Medusa does NOT hand DATABASE_URL to pg unchanged. Before it creates the connection it removes
+ * its own `ssl_mode` query parameter (@medusajs/framework, database/pg-connection-loader.js, and the
+ * same code in @medusajs/utils, modules-sdk/load-module-database-config.js); see medusaClientUrl
+ * below. That rewrite can change the login: its `[^&]*` also eats a `#`, so in
+ * `...?ssl_mode=disable#&password=medusa` the `password` parameter moves out of the fragment (where
+ * pg ignores it) into the query (where it wins). The result goes to pg as `connectionString`
+ * (@medusajs/utils, create-pg-connection.js; with DATABASE_URL unset, Medusa uses
  * `postgres://localhost/medusa-starter-default`). pg then decides, in this order:
  *
  * 1. pg-connection-string `parse()`: a string starting with `/` is a Unix socket path and has no
@@ -18,10 +23,13 @@
  *    `PGPASSWORD`; a user still empty is the operating-system user (`USERNAME` on Windows, `USER`
  *    elsewhere).
  *
- * Not covered: a password pg reads from a pgpass file (`PGPASSFILE`, `~/.pgpass`) when none is
- * given any other way, and `databaseDriverOptions.dynamicPassword` (our config sets none).
+ * Not covered: a password pg reads from a pgpass file (`PGPASSFILE`, `~/.pgpass`, on Windows
+ * `%APPDATA%\postgresql\pgpass.conf`) when none is given any other way (build-config.ts refuses the
+ * dev user without an explicit password instead of reading those files), and
+ * `databaseDriverOptions.dynamicPassword` (our config sets none).
  *
- * The unit tests compare this with what the installed pg actually resolves.
+ * The unit tests compare this with what the installed pg actually resolves, and medusaClientUrl
+ * with the rewrite in the installed Medusa.
  */
 import type { Env } from "./build-config"
 
@@ -79,6 +87,43 @@ export function connectionStringLogin(
     user: lastParam(url, "user") || decode(url.username),
     password: lastParam(url, "password") || decode(url.password),
   }
+}
+
+/**
+ * The database URL as Medusa hands it to pg: every `ssl_mode` query parameter removed, with the
+ * same pattern and replacement as @medusajs/framework's pg-connection-loader.js (and
+ * @medusajs/utils' load-module-database-config.js). A unit test runs the rewrite found in the
+ * installed files against this one, so a Medusa upgrade that changes it fails there.
+ */
+export function medusaClientUrl(databaseUrl: string): string {
+  return databaseUrl.replace(
+    /(\?|&)ssl_mode=[^&]*(&|$)/gi,
+    (_match: string, prefix: string, suffix: string) => {
+      if (prefix === "?" && suffix === "&") {
+        return "?"
+      }
+      if (prefix === "?" && suffix === "") {
+        return ""
+      }
+      if (prefix === "&") {
+        return suffix
+      }
+      return ""
+    }
+  )
+}
+
+/**
+ * Every way DATABASE_URL may be read before pg sees it: as given, trimmed, and each of those after
+ * Medusa's rewrite (medusaClientUrl). A check that looks at all of them cannot be fooled by a
+ * difference between what it reads and what pg gets. Undefined stays undefined.
+ */
+export function databaseUrlReadings(databaseUrl: string | undefined): (string | undefined)[] {
+  if (databaseUrl === undefined) {
+    return [undefined]
+  }
+  const asGiven = [databaseUrl, databaseUrl.trim()]
+  return [...new Set([...asGiven, ...asGiven.map(medusaClientUrl)])]
 }
 
 /**
