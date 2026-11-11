@@ -127,6 +127,8 @@ describe("accountOrderView (05, 9.4)", () => {
   it("cash on delivery, collected (the store API says captured): paid", () => {
     expect(isPaid(orderPkCollected)).toBe(true)
     expect(isPaid(orderPkDue)).toBe(false)
+    // the order's own status is enough, even without the payments
+    expect(isPaid({ payment_status: "captured" })).toBe(true)
     expect(isPaid({ payment_status: "authorized", payment_collections: [{ payments: [{ captured_at: "2026-11-11" }] }] })).toBe(true)
     expect(isPaid({ payment_status: "authorized", payment_collections: [] })).toBe(false)
     expect(accountOrderView({ order: orderPkCollected, promise }).paymentLine).toBe("cod_paid")
