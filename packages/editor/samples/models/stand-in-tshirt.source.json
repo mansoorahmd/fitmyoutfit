@@ -1,5 +1,5 @@
 {
-  "about": "Where samples/models/stand-in-tshirt.glb and samples/products/stand-in-tshirt.json come from, and how they are made. Read by scripts/process-stand-in-model.ts. A stand-in until our own pattern-based models arrive.",
+  "about": "Where samples/models/stand-in-tshirt.glb and samples/products/stand-in-tshirt.json come from, and how they are made. Read by scripts/process-stand-in-model.ts (it picks this record by the source file's SHA-256). A stand-in until our own pattern-based models arrive. Each piece is a whole source mesh (sourceMesh); CLO's UVs are millimetres.",
   "source": {
     "title": "Garment 3D",
     "author": "Prashant Verma",
@@ -14,7 +14,9 @@
   "output": {
     "model": "samples/models/stand-in-tshirt.glb",
     "modelUrl": "/models/stand-in-tshirt.glb",
-    "product": "samples/products/stand-in-tshirt.json"
+    "product": "samples/products/stand-in-tshirt.json",
+    "copyright": "Garment 3D by Prashant Verma, Copyright (c) 2021 Prashant Verma, MIT License, https://github.com/prashant3285/garment . Processed for FitMyOutfit by packages/editor/scripts/process-stand-in-model.ts: outer cloth surface only, textures and materials removed, UVs repacked, normals and ambient occlusion recomputed.",
+    "generator": "FitMyOutfit packages/editor/scripts/process-stand-in-model.ts (glTF-Transform)"
   },
   "product": {
     "id": "stand-in-tshirt",
