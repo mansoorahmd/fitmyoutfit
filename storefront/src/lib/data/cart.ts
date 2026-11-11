@@ -509,6 +509,28 @@ export async function placeOrder(cartId?: string) {
 }
 
 /**
+ * Moves the visitor's cart to the region of the URL's country, the same
+ * cart update the region selector makes (updateRegion, below), without
+ * leaving the page. For a cart page or checkout opened under another
+ * region's URL: the page then shows the cart in that region (prices,
+ * currency and delivery; Medusa drops an address and a delivery method
+ * that belong to the old region). False when nothing could be moved.
+ */
+export async function moveCartToRegion(countryCode: string): Promise<boolean> {
+  const cartId = await getCartId()
+  const region = await getRegion(countryCode)
+  if (!cartId || !region) {
+    return false
+  }
+  try {
+    await updateCart({ region_id: region.id })
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
  * Updates the countrycode param and revalidates the regions cache
  * @param regionId
  * @param countryCode
