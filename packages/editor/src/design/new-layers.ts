@@ -21,6 +21,11 @@ type TextLayer = Extract<Layer, { kind: "text" }>;
 type NumberLayer = Extract<Layer, { kind: "number" }>;
 type LogoLayer = Extract<Layer, { kind: "logo" }>;
 
+/** Rounds down to 0.001 mm. */
+function floor3(value: number): number {
+  return Math.floor(value * 1000) / 1000;
+}
+
 /** The first free id of the form `<prefix>-<n>` (n from 1). */
 export function nextLayerId(design: DesignDocument, prefix: string): string {
   const taken = new Set(design.layers.map((l) => l.id));
@@ -131,7 +136,8 @@ export function newLogoLayer(product: ProductDefinition, options: NewLogoOptions
     kind: "logo",
     pieceId: piece.id,
     position: options.position ?? pieceCentre(piece),
-    size: { width: round3(width), height: round3(height) },
+    // Rounded down, so the first size never falls below the minimum DPI by rounding.
+    size: { width: floor3(width), height: floor3(height) },
     rotation: 0,
     asset: { ...asset },
   };

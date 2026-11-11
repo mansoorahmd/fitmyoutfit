@@ -124,4 +124,15 @@ describe("a small logo stretched large gets the DPI warning, and loses it when m
     design = updateLayer(design, "logo-1", scaleLayer(design.layers[0]!, 0.25), { product });
     expect(logoLayerWarnings(design.layers[0]!)).toEqual([]);
   });
+
+  // Found in the demo: 200 px at its sharp width (33.8667 mm) was stored as 33.867 mm, 149.9993 DPI, and warned.
+  it("a logo placed at exactly its sharp size is not warned because of rounding, even after resizing back and forth", () => {
+    const asset = { assetId: "small", mediaType: "image/png" as const, width: 200, height: 200 };
+    let layer = newLogoLayer(product, { id: "logo-1", pieceId: "front", asset });
+    expect(logoLayerWarnings(layer)).toEqual([]);
+    for (let k = 0; k < 4; k++) layer = { ...layer, ...scaleLayer(layer, 1.25) };
+    expect(logoLayerWarnings(layer)[0]!.message).toContain("prints at 61 DPI");
+    for (let k = 0; k < 4; k++) layer = { ...layer, ...scaleLayer(layer, 1 / 1.25) };
+    expect(logoLayerWarnings(layer)).toEqual([]);
+  });
 });

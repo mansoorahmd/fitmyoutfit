@@ -273,6 +273,14 @@ export function maxPrintWidthMm(imageWidthPx: number, minDpi: number = DEFAULT_U
 }
 
 /**
+ * How far (DPI) below the minimum still counts as reaching it. Sizes are
+ * stored rounded to 0.001 mm, which moves the DPI by less than 0.01; without
+ * this a logo placed at exactly its sharp size could read 149.999 DPI and be
+ * warned. It is not a print rule, so it is not part of the limits.
+ */
+export const DPI_ROUNDING_TOLERANCE = 0.01;
+
+/**
  * Warnings for a placed logo layer, from the design data alone (the asset
  * reference holds the pixel size): today the resolution at the placed size.
  * Call it again after every resize; the backend can call it at order time.
@@ -281,14 +289,14 @@ export function logoLayerWarnings(layer: Layer, limits: UploadLimits = DEFAULT_U
   if (layer.kind !== "logo") return [];
   const { minDpi } = usableLimits(limits);
   const dpi = logoLayerDpi(layer);
-  if (dpi >= minDpi) return [];
+  if (dpi >= minDpi - DPI_ROUNDING_TOLERANCE) return [];
   const printed = logoPrintSize(layer.size, layer.asset.width, layer.asset.height);
   return [
     {
       code: "resolution",
       severity: "warning",
       message:
-        `At ${Math.round(printed.width)} x ${Math.round(printed.height)} mm this logo prints at ${Math.round(dpi)} DPI, ` +
+        `At ${Math.round(printed.width)} x ${Math.round(printed.height)} mm this logo prints at ${Math.floor(dpi)} DPI, ` +
         `below the ${minDpi} DPI needed for a sharp print. Make it smaller than ${Math.floor(maxPrintWidthMm(layer.asset.width, minDpi))} mm wide, or upload a larger image.`,
     },
   ];
