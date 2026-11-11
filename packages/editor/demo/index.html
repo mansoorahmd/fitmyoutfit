@@ -6,7 +6,40 @@
     <title>FitMyOutfit editor demo</title>
     <style>
       html, body, #root { height: 100%; margin: 0; }
-      body { font: 14px system-ui, sans-serif; }
+      body { font: 14px system-ui, sans-serif; color: #1d2330; background: #fff; }
+      .demo { display: flex; flex-direction: column; height: 100%; }
+      .demo-header { padding: 10px 14px; border-bottom: 1px solid #dde2ea; display: flex; flex-wrap: wrap; gap: 4px 16px; align-items: baseline; }
+      .demo-header h1 { font-size: 16px; margin: 0; }
+      .status-ok { color: #1a7f37; }
+      .status-bad { color: #b42318; }
+      .demo-main { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 380px; }
+      .viewer { position: relative; min-height: 0; background: #eef1f5; }
+      .viewer-hint { position: absolute; left: 10px; bottom: 8px; font-size: 12px; color: #5b6475; pointer-events: none; }
+      .panel { overflow-y: auto; border-left: 1px solid #dde2ea; padding: 12px 14px 24px; }
+      .panel h2 { font-size: 14px; margin: 4px 0 10px; }
+      .zones { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+      .zone-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+      .zone-chip { width: 16px; height: 16px; border-radius: 4px; border: 1px solid #8a93a3; }
+      .zone-name { font-weight: 600; }
+      .zone-hex { color: #5b6475; font-size: 12px; font-variant-numeric: tabular-nums; }
+      .swatches { display: flex; flex-wrap: wrap; gap: 8px; }
+      .swatch { width: 34px; height: 34px; border-radius: 50%; border: 1px solid #8a93a3; padding: 0; cursor: pointer; }
+      .swatch[aria-pressed="true"] { outline: 3px solid #0a66ff; outline-offset: 2px; }
+      .swatch:focus-visible { outline: 3px solid #0a66ff; outline-offset: 2px; }
+      details { margin-top: 16px; }
+      summary { cursor: pointer; font-weight: 600; }
+      .flat-pattern { width: 100%; max-width: 360px; aspect-ratio: 1; display: block; margin-top: 8px; background: repeating-conic-gradient(#f2f4f7 0 25%, #fff 0 50%) 0 0 / 16px 16px; border: 1px solid #dde2ea; }
+      .note { color: #5b6475; font-size: 12px; margin: 6px 0 0; }
+      pre.json { margin: 8px 0 0; padding: 8px; max-height: 260px; overflow: auto; background: #f6f8fa; font-size: 11px; }
+      @media (max-width: 760px) {
+        .demo { height: auto; min-height: 100%; }
+        .demo-main { display: block; }
+        .viewer { height: 58vh; height: 58svh; }
+        .panel { border-left: 0; border-top: 1px solid #dde2ea; overflow: visible; }
+        .demo-header h1 { font-size: 15px; }
+        .swatches { gap: 7px; }
+        .swatch { width: 37px; height: 37px; }
+      }
     </style>
   </head>
   <body>

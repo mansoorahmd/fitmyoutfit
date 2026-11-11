@@ -1,0 +1,15 @@
+{
+  "id": "placeholder-palette",
+  "version": 1,
+  "note": "Placeholder colours for the demo only. Not print-tested. The real palette (E3) replaces this file.",
+  "colors": [
+    { "id": "placeholder-white", "name": "White", "hex": "#FFFFFF" },
+    { "id": "placeholder-black", "name": "Black", "hex": "#111111" },
+    { "id": "placeholder-navy", "name": "Navy", "hex": "#1B2A5C" },
+    { "id": "placeholder-red", "name": "Red", "hex": "#C8102E" },
+    { "id": "placeholder-green", "name": "Green", "hex": "#0B6B3A" },
+    { "id": "placeholder-gold", "name": "Gold", "hex": "#F2B705" },
+    { "id": "placeholder-sky", "name": "Sky blue", "hex": "#5B9BD5" },
+    { "id": "placeholder-grey", "name": "Grey", "hex": "#8C8C8C" }
+  ]
+}
