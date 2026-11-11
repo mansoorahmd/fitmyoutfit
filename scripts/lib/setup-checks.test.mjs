@@ -17,6 +17,13 @@ test("adminLoginMessage names the email and where the password is set, never the
   assert.doesNotMatch(message, /dev-admin-password/);
 });
 
+test("adminLoginMessage points at the backend's port: PORT, else 9000", () => {
+  const login = { MEDUSA_ADMIN_EMAIL: "a@b.test", MEDUSA_ADMIN_PASSWORD: "pw-not-shown" };
+  assert.match(adminLoginMessage(login), /at http:\/\/localhost:9000\/app:/);
+  assert.match(adminLoginMessage({ ...login, PORT: "9005" }), /at http:\/\/localhost:9005\/app:/);
+  assert.doesNotMatch(adminLoginMessage({ ...login, PORT: "9005" }), /9000/);
+});
+
 test("adminLoginMessage explains how to get an admin when none is configured", () => {
   assert.match(adminLoginMessage({}), /set MEDUSA_ADMIN_EMAIL and MEDUSA_ADMIN_PASSWORD/);
 });

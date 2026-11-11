@@ -1,5 +1,6 @@
 // Plain helpers for scripts/setup.mjs: which services to check, the messages it prints.
 // No side effects; tested in setup-checks.test.mjs.
+import { backendPort, localUrl } from "./ports.mjs";
 
 /**
  * Host and port of a service URL such as postgres://u:p@localhost:5433/db or redis://localhost:6379.
@@ -58,8 +59,10 @@ export function unreachableMessage(service) {
 /**
  * The closing note about the local admin login. Names the email and where the password is set,
  * never the password itself (setup output ends up in terminals, logs and screenshots).
+ * The admin URL uses the backend's port: `backendEnv.PORT` (setup puts the shell's PORT there
+ * when it is set, else backend/.env's), else 9000.
  */
-export function adminLoginMessage(backendEnv, adminUrl = "http://localhost:9000/app") {
+export function adminLoginMessage(backendEnv, adminUrl = `${localUrl(backendPort({}, backendEnv.PORT))}/app`) {
   if (!backendEnv.MEDUSA_ADMIN_EMAIL || !backendEnv.MEDUSA_ADMIN_PASSWORD) {
     return "No local admin user: set MEDUSA_ADMIN_EMAIL and MEDUSA_ADMIN_PASSWORD in backend/.env and run setup again.";
   }

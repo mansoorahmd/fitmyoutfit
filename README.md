@@ -11,7 +11,7 @@ Custom apparel store where teams and clubs design jerseys, T-shirts and jackets 
 
 ## Prerequisites
 
-- Node 20.19 or newer (22 recommended) and npm 10 or newer
+- Node 22 or newer and npm 10 or newer (`engines` says `>=22`; we develop and run CI on Node 22, and `npm run test:scripts` needs Node 21 or newer)
 - Docker with Compose v2 (Docker Desktop on Windows and macOS)
 - Free host ports: 9000 (backend), 8000 (storefront), 5433 (PostgreSQL), 6379 (Redis), 9100 and 9101 (MinIO)
 
@@ -21,7 +21,7 @@ Custom apparel store where teams and clubs design jerseys, T-shirts and jackets 
 docker compose up -d     # PostgreSQL, Redis, MinIO. Wait until `docker compose ps` shows them healthy
 npm install
 npm run setup            # safe to run again
-npm run dev              # backend on :9000, storefront on :8000
+npm run dev              # backend on :9000, storefront on :8000 (see Ports to change them)
 ```
 
 `npm run quickstart` runs `setup` and then `dev`.
@@ -30,7 +30,7 @@ npm run dev              # backend on :9000, storefront on :8000
 
 1. Creates `.env`, `backend/.env` and `storefront/.env.local` from the `.env.example` files, if missing. It never overwrites an existing file.
 2. Runs the database migrations.
-3. Seeds the placeholder store data and the local admin user (see below). The seed only creates what is missing, so values you edited in the admin survive a re-run.
+3. Seeds the placeholder store data and the local admin user (see below). The seed only creates what is missing and does not change a value that is set, but a re-run does put back some things that were deleted: see "What a re-run puts back" below.
 4. Writes the publishable API key into `storefront/.env.local` (only that one line; if `storefront/` does not exist yet it warns and skips).
 
 ## Ports
@@ -46,9 +46,25 @@ npm run dev              # backend on :9000, storefront on :8000
 
 To change a host port, set it in the root `.env` (`POSTGRES_PORT`, `REDIS_PORT`, `MINIO_API_PORT`, `MINIO_CONSOLE_PORT`), update the matching URL in `backend/.env` (`DATABASE_URL`, `REDIS_URL`, `S3_ENDPOINT`, `S3_FILE_URL`), then run `docker compose up -d` again.
 
+To move the backend or the storefront:
+
+| Variable | Default | Port of | Where to set it |
+| --- | --- | --- | --- |
+| `PORT` | 9000 | Backend, API and admin | In the shell, or in `backend/.env` (a value in the shell wins) |
+| `STOREFRONT_PORT` | 8000 | Storefront | In the shell (not read from any `.env` file) |
+
+`PORT` in `backend/.env` counts for every way of starting the backend, not only `npm run dev`: Medusa's CLI loads `backend/.env` before it reads `PORT`, so a plain `medusa develop` or `medusa start` in `backend/` follows it too. `STOREFRONT_PORT` is read by the storefront's own `npm run dev` and `npm run start` (`storefront/scripts/next-with-port.mjs`), from the environment only.
+
+`npm run dev` hands each part its port (the storefront gets `STOREFRONT_PORT` and not `PORT`) and prints both URLs; `npm run setup` prints the admin URL with the backend's port. The two parts find each other through settings that do **not** follow these variables, so when you change either port, change these to match:
+
+- `storefront/.env.local`: `MEDUSA_BACKEND_URL` (the backend's URL) and `NEXT_PUBLIC_BASE_URL` (the storefront's).
+- `backend/.env`: `STORE_CORS` (the storefront's URL), `ADMIN_CORS` (the backend's) and `AUTH_CORS` (both).
+
+Then restart `npm run dev`.
+
 ## Local admin login (dev only)
 
-<http://localhost:9000/app> with the email and password from `backend/.env`. The defaults are:
+<http://localhost:9000/app> (or the port in `PORT`) with the email and password from `backend/.env`. The defaults are:
 
 - Email: `admin@fitmyoutfit.local`
 - Password: `dev-admin-password`
@@ -72,7 +88,16 @@ All of it is placeholder data, kept in `backend/src/scripts/seed-data/` (one fil
 
 The products are listed in the order of `products.ts` (jersey, t-shirt, jacket, fit-kit, rush-add-on) when no other order is asked for. Regions are recognised by their country code, so you can rename them in the admin.
 
-**An interrupted seed is repaired by the next run.** Medusa writes a product, its variants, prices, size order and links in separate steps, so a seed stopped half-way can leave a product without prices or with sizes out of order, or an admin user without a login. Each run checks those parts on their own and fills in only what is missing (it never overwrites a value an admin can edit): a variant missing its price in one seed currency gets that price (its other prices are left as they are), and a seed variant that lost its size value gets it back. The run's last log line lists everything it repaired. What it cannot repair safely (for example a size value that another variant already has) it leaves alone and names in a warning. The exceptions are on purpose: the four seed currencies are always supported with PKR as the only default (Medusa's starter `eur` is removed while no region uses it), and a store still named "Medusa Store" is renamed. The rush add-on is never given prices.
+**An interrupted seed is repaired by the next run.** Medusa writes a product, its variants, prices, size order and links in separate steps, so a seed stopped half-way can leave a product without prices or with sizes out of order, or an admin user without a login. Each run checks those parts on their own and fills in what is missing. It does not change a value that is set (an edited price, name, metadata value or photo stays as it is). The run's last log line lists everything it repaired. What it cannot repair safely (for example a size value that another variant already has) it leaves alone and names in a warning. The rush add-on is never given prices.
+
+**What a re-run puts back.** "Missing" includes things an admin deleted on purpose. A re-run of `npm run setup` (or `npm run seed --prefix backend`) puts back:
+
+- a price in one of the four seed currencies that was deleted from a seed variant (its other prices are left as they are);
+- a seed variant's lost size value, and the size order when it is incomplete;
+- the four seed currencies (PKR, GBP, AED, USD) in the store, with PKR as the only default;
+- and it removes Medusa's starter currency `eur` from the store, while no region uses it.
+
+It also re-creates a deleted seed product (by handle), seed region (by country code), the `garments` collection, the default sales channel, the `rush_percentage` setting, the placeholder photos of a product that has no photo left, and, in development, the local admin user; and it renames a store still called "Medusa Store". To keep a deletion, remove the item from the seed data in `backend/src/scripts/seed-data/` as well.
 
 Check it: with the backend running,
 
@@ -116,7 +141,18 @@ The root `package.json` has one `overrides` entry: it lets `@medusajs/ui` (which
 
 Backend integration tests create and drop temporary databases on the PostgreSQL server (host `localhost`, port 5433 by default, user `medusa`). They never touch the `medusa` development database. Start `docker compose up -d` first. To point them elsewhere set `DB_HOST`, `DB_PORT`, `DB_USERNAME`, `DB_PASSWORD`, as the CI workflow does. Medusa also reads `backend/.env` in tests, so with `REDIS_URL` set there the tests use Redis, which makes them several times slower; CI has no `backend/.env` and sets no `REDIS_URL`, so there they use Medusa's in-memory modules. The tests use no network: image tests check the stored URLs only.
 
-**Production start.** With any `NODE_ENV` other than `development` or `test` (or unset), so `production`, `prod` (Medusa's own production mode), `staging` and anything else, in any case, the backend refuses to start when `JWT_SECRET`, `COOKIE_SECRET`, `S3_ACCESS_KEY_ID` or `S3_SECRET_ACCESS_KEY` is missing, when `JWT_SECRET` or `COOKIE_SECRET` is shorter than 16 characters, when `DATABASE_URL` uses the dev database login `medusa:medusa`, or when any of these or `MEDUSA_ADMIN_PASSWORD` still has its dev value from `backend/.env.example` (compared ignoring case and surrounding spaces). It lists every problem and exits (`backend/src/lib/config/build-config.ts`; which `NODE_ENV` counts as what is in `node-env.ts` next to it). Medusa's `supersecret` fallback is used only in development and test. The seed creates the dev admin user only in development and test.
+**Production start.** With any `NODE_ENV` other than `development` or `test` (or unset), so `production`, `prod` (Medusa's own production mode), `staging` and anything else, in any case, the backend refuses to start, lists every problem and exits (`backend/src/lib/config/build-config.ts`; which `NODE_ENV` counts as what is in `node-env.ts` next to it). It refuses:
+
+- `JWT_SECRET`, `COOKIE_SECRET`, `S3_ACCESS_KEY_ID` or `S3_SECRET_ACCESS_KEY` missing.
+- `JWT_SECRET`, `COOKIE_SECRET` or `S3_SECRET_ACCESS_KEY` shorter than 16 characters. A self-hosted MinIO accepts a secret key of 8 characters; in production the backend needs 16 or more.
+- Any of these, or `MEDUSA_ADMIN_PASSWORD`, that is or contains a dev value from `backend/.env.example`, of any variable: the dev JWT secret given as `COOKIE_SECRET` counts too, and so does a dev value with something added before or after. Compared ignoring case and surrounding spaces. (A dev value shorter than 8 characters would count only as the whole value, so a long random secret is never refused because a short word happens to be inside it; today every dev value is 10 characters or longer.)
+- A `DATABASE_URL` with a `#` in it. Write a `#` in the password as `%23`.
+- The dev database login `medusa` / `medusa`, wherever the PostgreSQL driver (`pg`) would take it from: the user and password in `DATABASE_URL`, its `user` and `password` query parameters (which win over them), and `PGUSER` / `PGPASSWORD` (`backend/src/lib/config/database-login.ts`). `DATABASE_URL` is checked as given and also as Medusa rewrites it before `pg` sees it (Medusa removes its own `ssl_mode` parameter; a unit test checks that our copy of that rewrite still matches the installed Medusa).
+- The dev database user `medusa` with no password in `DATABASE_URL` or `PGPASSWORD`. `pg` would then take the password from a pgpass file (`PGPASSFILE`, `~/.pgpass`, or on Windows `%APPDATA%\postgresql\pgpass.conf` even with no variable set), which is not checked. Give the password explicitly, or use a different database user.
+
+Medusa's `supersecret` fallback is used only in development and test. The seed creates the dev admin user only in development and test.
+
+`medusa start` (and so `npm run start --prefix backend`) sets `NODE_ENV=production` itself when it is unset, and loads `backend/.env`, so with the dev `backend/.env` it refuses to start: that is intended. For local work use `npm run dev`.
 
 ## Reset the database
 
@@ -148,5 +184,5 @@ npm run setup
 
 - **MinIO image.** MinIO no longer publishes official Docker images (`minio/minio` is gone from Docker Hub and Quay). `docker-compose.yml` uses the Chainguard build, `cgr.dev/chainguard/minio:latest`, for local development only.
 - **File storage.** The backend uses Medusa's S3 file provider pointed at MinIO when the `S3_*` variables in `backend/.env` are set (path-style addressing is turned on automatically when `S3_ENDPOINT` is set). With them empty it falls back to local files in `backend/static`.
-- **Redis.** The cache, event bus and workflow engine use `REDIS_URL`. Remove it from `backend/.env` to run with Medusa's in-memory versions.
+- **Redis.** The cache, event bus and workflow engine use `REDIS_URL`. To run without Redis (Medusa's in-memory versions), remove the `REDIS_URL` line from `backend/.env` or comment it out. Setting it empty in the shell (`REDIS_URL=`) is not enough on Windows: Windows drops empty environment variables, so the value in `backend/.env` is used.
 - **CI.** `.github/workflows/ci.yml` runs `npm ci`, then root `lint`, `typecheck` and `test` on every push and pull request, with a PostgreSQL service container. The test job sets no `REDIS_URL` (with it the integration tests ran about eight times slower).
