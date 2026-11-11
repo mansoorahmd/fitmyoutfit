@@ -7,7 +7,7 @@ Written by the coordinator before Sprint 0 work started. The three workers build
 | Item | Value |
 | --- | --- |
 | Package manager | npm workspaces (see [decision 001](../decisions/001-monorepo-and-tooling.md)) |
-| Node | 22 or newer. `engines` is `>=22` in the storefront; the root and backend follow with S0-18, and the editor package still says `>=20` until its one-line change |
+| Node | 22 or newer; `engines` is `>=22` in the root, backend, storefront and editor |
 | Language | TypeScript everywhere |
 | Workspaces | `storefront`, `packages/*`. The backend has its own install and lockfile in `backend/`, installed by the root `postinstall` (changed 11 Nov, [decision 006](../decisions/006-react-and-tool-versions.md)) |
 | Package names | `@fitmyoutfit/backend`, `@fitmyoutfit/storefront`, `@fitmyoutfit/editor` |
