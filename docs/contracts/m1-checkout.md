@@ -126,6 +126,25 @@ These came from [05-m1-pages.md](../design/05-m1-pages.md), section 12. They are
 - **Rush days.** `delivery_days_rush` must be lower than `delivery_days_standard`; otherwise the setting is invalid and is reported like any other invalid setting.
 - **Completing twice.** Completing a cart that has already become an order returns that order and never creates a second one. QA saw this hold, including three completions at once; it needs a test of its own.
 
+### 8.1 As built in S1-1b (in QA review on 11 Nov, not merged yet)
+
+The storefront checkout (task S1-4) is built against these. If QA changes any of them, this section is corrected first.
+
+- **Rules route.** `delivery_promise` gains `"applies": "standard"` (or `"rush"` once the rush charge exists). The storefront shows the date of the option named by `applies`.
+- **The promised date of an order.** `GET /store/orders/:id/delivery-promise` (publishable key) answers:
+
+  ```json
+  { "delivery_promise": { "date": "2026-11-26", "days": 15, "based_on": "2026-11-11", "applies": "standard" } }
+  ```
+
+  - `delivery_promise` is `null` for an order placed before the date was kept. An unknown order: 404.
+  - As with Medusa's own `GET /store/orders/:id`, knowing the order id is what gives access.
+  - It is a route of its own because Medusa's `GET /store/orders/:id` and the complete route do not return the order's `metadata`.
+- **Completing a cart.** `POST /store/carts/:id/complete` writes the promise into the cart just before the order is created; the storefront sends nothing extra.
+  - HTTP 409 with `type: "conflict"` means "complete again": the cart was changed, or was already being completed, at that moment. The storefront completes once more, and if that fails too it shows the "check my order" state. Medusa replaces the message with a generic one, so the storefront does not show it.
+  - Completing a cart that has already become an order returns that same order (`type: "order"`), also for several completions at once.
+- **Order metadata written by staff.** `cod_slip_reference`, `cod_collected_at` (UTC time) and `cod_collected_by` are written when staff mark the cash as collected (`GET` and `POST /admin/orders/:id/cash-collection`, admin sign-in only). A cart cannot carry these keys into an order. The storefront does not read them in M1.
+
 ## 9. Not in this contract
 
 - The rush charge in the cart (a later M1 task).
