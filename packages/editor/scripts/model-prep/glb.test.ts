@@ -85,6 +85,14 @@ describe("worldMatrices", () => {
     expect(m[2]).toBeCloseTo(-1, 9);
   });
 
+  it("refuses a node that two parents share (its world matrix would be ambiguous)", () => {
+    const json = structuredClone(glb.json);
+    const childIndex = json.nodes!.findIndex((n) => n.name === "piece");
+    json.nodes!.push({ name: "second parent", children: [childIndex] });
+    json.scenes![0]!.nodes!.push(json.nodes!.length - 1);
+    expect(() => worldMatrices(json)).toThrow(/cycle/);
+  });
+
   it("refuses a cycle in the node hierarchy", () => {
     const json = structuredClone(glb.json);
     const childIndex = json.nodes!.findIndex((n) => n.name === "piece");

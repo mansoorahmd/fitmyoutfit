@@ -23,13 +23,16 @@ const body = [
   { x: 0, y: 55 },
 ];
 
-// A sleeve: cap on top, slanted short sides, a straight hem at y = 180 from x = 25 to x = 395.
+// A sleeve: cap on top, slanted short sides that turn steeply into the hem near the bottom
+// (as on the stand-in's sleeves), a straight hem at y = 180 from x = 25 to x = 395.
 const sleeve = [
   { x: 0, y: 100 },
   { x: 210, y: 0 },
   { x: 420, y: 100 },
+  { x: 400, y: 165 },
   { x: 395, y: 180 },
   { x: 25, y: 180 },
+  { x: 20, y: 165 },
 ];
 
 const inside = (polygon: Array<{ x: number; y: number }>, p: { x: number; y: number }) => pointInPolylines([{ points: polygon, closed: true }], p);
