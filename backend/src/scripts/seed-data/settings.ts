@@ -2,16 +2,21 @@ import type { PlaceholderData, StoreSettingsSeed } from "./types"
 
 /**
  * PLACEHOLDER DATA: store-wide settings, stored in the Store's metadata.
- * Real input: the founders' rush percentage. Sprint 1 adds more settings here (cash-on-delivery
- * limit, minimum quantities).
+ * Real input: the founders' rush percentage, cash-on-delivery limit and delivery promise.
+ * The minimum quantity is per region, in regions.ts.
  *
  * The seed writes a setting only when the Store's metadata does not have it yet. After that, the
  * value lives in the database: change it in the admin (Settings > Store > Metadata), not here.
  */
 export const settings: PlaceholderData<StoreSettingsSeed> = {
   placeholder: true,
-  note: "Placeholder rush percentage until the founders confirm it.",
+  note: "Placeholder rush percentage, cash-on-delivery limit and delivery days until the founders confirm them.",
   data: {
     rush_percentage: 20,
+    // Largest cart total, in PKR (major units: 20000 = Rs 20,000), payable by cash on delivery.
+    cod_max_total: 20000,
+    // Calendar days from proof approval to delivery, standard and with paid rush.
+    delivery_days_standard: 15,
+    delivery_days_rush: 10,
   },
 }

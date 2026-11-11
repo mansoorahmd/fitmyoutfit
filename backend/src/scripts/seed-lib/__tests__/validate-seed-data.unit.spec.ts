@@ -226,6 +226,81 @@ describe("validateSeedData", () => {
     )
   })
 
+  it("matches the M1 checkout contract: settings, minimums and payment providers", () => {
+    expect(seedData.settings.data).toMatchObject({
+      cod_max_total: 20000,
+      delivery_days_standard: 15,
+      delivery_days_rush: 10,
+    })
+    const byCountry = Object.fromEntries(
+      seedData.regions.data.map((r) => [r.country_codes[0], r])
+    )
+    expect(byCountry.pk.metadata.min_garment_quantity).toBe(1)
+    expect(byCountry.pk.payment_providers).toEqual(["pp_system_default", "pp_cod_cod"])
+    for (const country of ["gb", "ae", "us"]) {
+      expect(byCountry[country].metadata.min_garment_quantity).toBe(10)
+      expect(byCountry[country].payment_providers).toEqual(["pp_system_default"])
+    }
+  })
+
+  it("rejects invalid checkout settings and region settings", () => {
+    const seed = clone()
+    ;(seed.settings.data as Record<string, unknown>).cod_max_total = "lots"
+    delete (seed.settings.data as Partial<typeof seed.settings.data>).delivery_days_rush
+    seed.regions.data[1].metadata.min_garment_quantity = 0
+    seed.regions.data[2].payment_providers = []
+    seed.regions.data[3].payment_providers = ["stripe", "pp_system_default", "pp_system_default"]
+    const problems = validateSeedData(seed)
+    expect(problems).toContain(
+      'settings: cod_max_total in the store\'s metadata must be a number, 0 or more, got "lots".'
+    )
+    expect(problems.some((p) => p.startsWith("settings: delivery_days_rush is not set"))).toBe(true)
+    expect(problems).toContain(
+      'regions: min_garment_quantity in the metadata of the region "United Kingdom" must not be below 1, got 0.'
+    )
+    expect(problems).toContain('regions: "United Arab Emirates" needs at least one payment provider')
+    expect(problems).toContain(
+      'regions: "United States" payment provider "stripe" must look like pp_<identifier>_<id>'
+    )
+    expect(problems).toContain(
+      'regions: "United States" payment provider "pp_system_default" is listed twice'
+    )
+  })
+
+  it("rejects size charts that miss a product, a size or a measurement", () => {
+    const seed = clone()
+    delete seed.sizeCharts.data.jacket
+    seed.sizeCharts.data["rush-add-on"] = seed.sizeCharts.data.jersey
+    seed.sizeCharts.data.jersey.rows.pop()
+    seed.sizeCharts.data["t-shirt"].rows[0].values.chest = -1
+    seed.sizeCharts.data["t-shirt"].rows[1].values.waist = 30
+    ;(seed.sizeCharts.data["fit-kit"] as { unit: string }).unit = "in"
+    const problems = validateSeedData(seed)
+    expect(problems).toContain('sizeCharts: "jacket" needs a size chart')
+    expect(problems).toContain('sizeCharts: "rush-add-on" is a rush_add_on, which has no size chart')
+    expect(problems).toContain(
+      'sizeCharts: "jersey" rows must be the sizes YS, YM, YL, YXL, XS, S, M, L, XL, 2XL, 3XL in that order'
+    )
+    expect(problems).toContain('sizeCharts: "t-shirt" size YS chest must be a number above zero')
+    expect(problems).toContain('sizeCharts: "t-shirt" size YM has a value for unknown column "waist"')
+    expect(problems).toContain('sizeCharts: "fit-kit" unit must be "cm"')
+  })
+
+  it("rejects shipping data without an option for every region, or with a bad one", () => {
+    const seed = clone()
+    const options = seed.shipping.data.options
+    options.pop()
+    options[0].amount = -1
+    options[1].region_country_code = "fr"
+    options[2].service_zone_name = options[0].service_zone_name
+    const problems = validateSeedData(seed)
+    expect(problems).toContain('shipping: option for "pk" amount must be a number, 0 or more')
+    expect(problems).toContain('shipping: option for "fr" does not match a seed region\'s country')
+    expect(problems).toContain('shipping: service zone name "Pakistan" is used twice')
+    expect(problems).toContain('shipping: region "United Kingdom" has no shipping option')
+    expect(problems).toContain('shipping: region "United States" has no shipping option')
+  })
+
   it("assertValidSeedData throws one error that lists every problem", () => {
     const seed = clone()
     seed.sizes.data = []

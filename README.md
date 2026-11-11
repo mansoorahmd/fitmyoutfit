@@ -75,16 +75,20 @@ These are throwaway development values. Never use them anywhere else.
 
 All of it is placeholder data, kept in `backend/src/scripts/seed-data/` (one file per kind, each marked `placeholder: true` with a note on what the real input is). Replace the data, not the code.
 
-- 4 regions: Pakistan (PKR), United Kingdom (GBP), United Arab Emirates (AED), United States (USD). Region metadata `tax_final: false` is the data behind the "tax not final" label.
+- 4 regions: Pakistan (PKR), United Kingdom (GBP), United Arab Emirates (AED), United States (USD). Region metadata `tax_final: false` is the data behind the "tax not final" label, and `min_garment_quantity` is the minimum order (Pakistan 1, the other three 10; see "Checkout rules" below).
+- Payment providers per region (`payment_providers` in `regions.ts`): Medusa's placeholder `pp_system_default` in all four, and cash on delivery `pp_cod_cod` in Pakistan only.
 - Store currencies: those four, PKR as default. A currency added in the admin is kept on a re-run; only Medusa's starter currency `eur` is removed, and only while no region uses it.
 - Products: `jersey`, `t-shirt`, `jacket` (11 size variants each, in the `garments` collection), plus `fit-kit` and `rush-add-on` (one variant each, no collection). Each has `metadata.kind`. Inventory is not managed (made to order).
 - Placeholder product images, as web URLs in `products.ts` (`images.urls`, marked `placeholder: true`): stand-in photos from spized.com for the jersey, T-shirt, jacket and fit kit, and a Medusa demo photo for the rush add-on. The seed sets the first URL as the thumbnail and all of them as the product's images, only when the product has no thumbnail and no images, so a photo set in the admin is never replaced. Nothing is downloaded or uploaded, and no image file is kept in the repo. **These photos belong to another store: local development only.** They must be replaced by our own product photos before anything is deployed where the public can see it. To change a picture, edit the URL in `products.ts` (on an existing database, remove the product's images in the admin first, or reset the database).
 - Sample prices in all four currencies for `jersey`, `t-shirt`, `jacket` and `fit-kit`. Amounts are in major units (3500 means Rs 3,500), as Medusa v2 stores them. Which products have fixed prices is data too (`has_fixed_prices` in `products.ts`).
-- Rush: `rush-add-on` has **no fixed prices**. Rush is priced as a percentage of the order, held in the store setting `rush_percentage` (placeholder `20`, in `seed-data/settings.ts`). The seed writes it into the Store's metadata only when it is missing, so after the first run the value lives in the database: change it in the admin under **Settings > Store > Metadata**. Code reads it with `readRushPercentage` (`backend/src/lib/settings/rush-percentage.ts`). The charge itself is Sprint 1.
+- Rush: `rush-add-on` has **no fixed prices**. Rush is priced as a percentage of the order, held in the store setting `rush_percentage` (placeholder `20`, in `seed-data/settings.ts`). The seed writes it into the Store's metadata only when it is missing, so after the first run the value lives in the database: change it in the admin under **Settings > Store > Metadata**. Code reads it with `readRushPercentage` (`backend/src/lib/settings/rush-percentage.ts`). The charge itself is a later M1 task.
+- Store settings for checkout, in the Store's metadata like `rush_percentage`: `cod_max_total` 20000, `delivery_days_standard` 15, `delivery_days_rush` 10 (see "Checkout rules" below).
+- Size charts: a draft garment-measurement chart (the garment laid flat, in cm, all eleven sizes) in `metadata.size_chart` of the jersey, T-shirt, jacket and fit kit (`seed-data/size-charts.ts`, marked `draft: true`; the fit kit carries the jersey's chart). Written only on a product that has none, so a chart edited in the admin is kept.
+- Shipping (`seed-data/shipping.ts`): one stock location, "Lahore hub", linked to Medusa's manual fulfillment provider and the default sales channel; one shipping fulfillment set on it with a service zone per region (the region's countries); and one shipping option per zone: "Delivery in Pakistan" PKR 250, and "Shipping & duties included" at 0 with `data.ddp: true` in the UK, UAE and US (the one duty-paid line). Amounts are in major units. An option renamed or re-priced in the admin is kept.
 - The default sales channel and a publishable API key linked to it.
 - The local admin user (only when `NODE_ENV` is unset, `development` or `test`).
 - The store's name, `FitMyOutfit` (only while the store still has Medusa's default name, so a name set in the admin is kept).
-- Minimum extras Medusa needs: the default shipping profile (created by Medusa's own migration). No stock location, shipping options, tax regions or payment providers yet: those are Sprint 1.
+- Minimum extras Medusa needs: the default shipping profile (created by Medusa's own migration). No tax regions yet.
 
 The products are listed in the order of `products.ts` (jersey, t-shirt, jacket, fit-kit, rush-add-on) when no other order is asked for. Regions are recognised by their country code, so you can rename them in the admin.
 
@@ -97,13 +101,33 @@ The products are listed in the order of `products.ts` (jersey, t-shirt, jacket, 
 - the four seed currencies (PKR, GBP, AED, USD) in the store, with PKR as the only default;
 - and it removes Medusa's starter currency `eur` from the store, while no region uses it.
 
-It also re-creates a deleted seed product (by handle), seed region (by country code), the `garments` collection, the default sales channel, the `rush_percentage` setting, the placeholder photos of a product that has no photo left, and, in development, the local admin user; and it renames a store still called "Medusa Store". To keep a deletion, remove the item from the seed data in `backend/src/scripts/seed-data/` as well.
+It also re-creates a deleted seed product (by handle), seed region (by country code), the `garments` collection, the default sales channel, a deleted store setting (`rush_percentage`, `cod_max_total`, `delivery_days_standard`, `delivery_days_rush`), a deleted region metadata key (`tax_final`, `min_garment_quantity`), a seed payment provider removed from its region (for example cash on delivery from Pakistan; a provider an admin added is kept), the size chart of a product that has none, the stock location (when there is none at all), its links to the manual fulfillment provider and the default sales channel, the shipping fulfillment set, a region's service zone (matched by country) and a zone's shipping option (when the zone has none), the placeholder photos of a product that has no photo left, and, in development, the local admin user; and it renames a store still called "Medusa Store". To keep a deletion, remove the item from the seed data in `backend/src/scripts/seed-data/` as well.
+
+The run's last log line (`Seed done. Created: ... Repaired: ...`) lists what it wrote: `settings` and `regionSettings` are settings that were missing, `sizeCharts`, `serviceZones` and `shippingOptions` what it added; a payment provider linked to an existing region counts as repaired. A second run lists nothing.
 
 Check it: with the backend running,
 
 ```
 curl -H "x-publishable-api-key: <key from storefront/.env.local>" http://localhost:9000/store/regions
 ```
+
+## Checkout rules (M1)
+
+The contract is [docs/contracts/m1-checkout.md](docs/contracts/m1-checkout.md). Every value below is a placeholder setting, kept in the database after the first seed run; change it in the admin, not in code:
+
+| Setting | Where (admin) | Placeholder | Meaning |
+| --- | --- | --- | --- |
+| `cod_max_total` | Settings > Store > Metadata | 20000 | Largest cart total, in PKR (major units: 20000 = Rs 20,000), payable by cash on delivery |
+| `delivery_days_standard` | Settings > Store > Metadata | 15 | Calendar days from proof approval to delivery |
+| `delivery_days_rush` | Settings > Store > Metadata | 10 | The same, with paid rush |
+| `min_garment_quantity` | Settings > Regions > the region > Metadata | Pakistan 1, others 10 | Fewest garment pieces in one order |
+
+A number typed as text ("20000") is accepted. A missing or invalid value makes the checkout-rules route, cart completion and choosing cash on delivery fail with HTTP 500 and a message naming the key and where to set it (checkout stops rather than guessing a rule). The Store's metadata is saved as a whole, so keep the other keys when you edit one.
+
+- **The rules** are plain TypeScript in `backend/src/lib/rules/` (minimum quantity, cash on delivery, delivery promise), with the setting readers in `backend/src/lib/settings/`. The minimum counts pieces of products whose `metadata.kind` is `garment`; a cart with no garment (a fit kit alone) passes. Cash on delivery is available when the region has the country `pk` and the cart total is at or below `cod_max_total`. The delivery promise counts calendar days from today's date in Asia/Karachi.
+- **`GET /store/carts/:id/checkout-rules`** (publishable key) returns the three results as JSON for the storefront.
+- **Enforced in the backend:** completing a cart below the minimum, or with cash on delivery when it is not available, is refused with HTTP 400 (`type: "not_allowed"`) before any order or payment is made (a `completeCartWorkflow` validate hook, `backend/src/workflows/hooks/`). Choosing cash on delivery is refused the same way (a middleware on `POST /store/payment-collections/:id/payment-sessions`, `backend/src/api/middlewares.ts`).
+- **Cash on delivery** is a payment provider in `backend/src/modules/cod`, registered in `backend/src/lib/config/build-config.ts`; Medusa names it `pp_cod_cod`. A session is authorized at once; capture the payment in the admin when the cash is collected. Which regions offer it is seed data (`payment_providers` in `regions.ts`), but the rule refuses it outside Pakistan even if an admin links it to another region.
 
 ## Commands
 

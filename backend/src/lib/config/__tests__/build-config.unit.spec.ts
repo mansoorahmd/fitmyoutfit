@@ -16,6 +16,7 @@ import {
   usesDevDatabaseCredentials,
   usesDevDatabaseUserWithoutPassword,
 } from "../build-config"
+import { COD_PAYMENT_PROVIDER_ID, COD_PROVIDER_IDENTIFIER } from "../../../modules/cod/constants"
 
 /** KEY=value pairs from backend/.env.example (the committed dev defaults). */
 function readEnvExample(): Record<string, string> {
@@ -513,8 +514,16 @@ describe("buildMedusaConfig", () => {
 })
 
 describe("buildModules", () => {
-  it("combines redis and file modules", () => {
+  it("combines redis, file and payment modules", () => {
     const modules = buildModules({ ...s3Env, REDIS_URL: "redis://x:6379" })
-    expect(modules).toHaveLength(4)
+    expect(modules).toHaveLength(5)
+  })
+
+  it("always registers cash on delivery so that Medusa names it pp_cod_cod", () => {
+    const payment = buildModules({}).find((m) => m.resolve === "@medusajs/medusa/payment")
+    const providers = (payment?.options?.providers ?? []) as { resolve: string; id: string }[]
+    expect(providers).toEqual([{ resolve: "./src/modules/cod", id: "cod" }])
+    expect(`pp_${COD_PROVIDER_IDENTIFIER}_${providers[0].id}`).toBe(COD_PAYMENT_PROVIDER_ID)
+    expect(COD_PAYMENT_PROVIDER_ID).toBe("pp_cod_cod")
   })
 })

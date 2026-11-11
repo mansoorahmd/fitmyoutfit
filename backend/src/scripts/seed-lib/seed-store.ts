@@ -20,14 +20,19 @@ import {
 import {
   createApiKeysWorkflow,
   createCollectionsWorkflow,
+  createLocationFulfillmentSetWorkflow,
   createPricePreferencesWorkflow,
   createProductsWorkflow,
   createProductVariantsWorkflow,
   createRegionsWorkflow,
   createSalesChannelsWorkflow,
+  createServiceZonesWorkflow,
+  createShippingOptionsWorkflow,
   createShippingProfilesWorkflow,
+  createStockLocationsWorkflow,
   createUsersWorkflow,
   linkSalesChannelsToApiKeyWorkflow,
+  linkSalesChannelsToStockLocationWorkflow,
   updateProductsWorkflow,
   updateRegionsWorkflow,
   updateStoresWorkflow,
@@ -45,7 +50,18 @@ import {
   planProductRepair,
   type ExistingSeededProduct,
 } from "./product-repair-plan"
-import { DEFAULT_PAYMENT_PROVIDER, planRegions, type ExistingRegion } from "./region-plan"
+import { planRegions, type ExistingRegion } from "./region-plan"
+import {
+  buildShippingOptionInput,
+  hasLink,
+  MANUAL_FULFILLMENT_PROVIDER,
+  pickShippingSet,
+  pickStockLocation,
+  planServiceZones,
+  planShippingOptions,
+  type ExistingStockLocation,
+} from "./shipping-plan"
+import { planSizeCharts, type ProductWithMetadata } from "./size-chart-plan"
 import { planStoreCurrencies, planStoreName } from "./store-plan"
 import { missingStoreSettings } from "./store-settings"
 import { assertValidSeedData } from "./validate-seed-data"
@@ -66,11 +82,24 @@ export type SeedResult = {
     regions: string[]
     /** Store metadata settings written in this run (only ones that were missing). */
     settings: string[]
+    /**
+     * Region metadata settings written in this run on regions that already existed, as
+     * "<seed region name>: <key>" (a region created in this run gets its metadata with it).
+     */
+    regionSettings: string[]
     collections: string[]
     products: string[]
     /** Handles of the products that got their placeholder images in this run. */
     images: string[]
+    /** Handles of the products that got their placeholder size chart in this run. */
+    sizeCharts: string[]
     shippingProfile: boolean
+    stockLocation: boolean
+    fulfillmentSet: boolean
+    /** Names of the service zones created in this run. */
+    serviceZones: string[]
+    /** Seed names of the regions that got their shipping option in this run. */
+    shippingOptions: string[]
     salesChannel: boolean
     publishableKey: boolean
     adminUser: boolean
@@ -104,10 +133,16 @@ export async function seedStore(
   const created: SeedResult["created"] = {
     regions: [],
     settings: [],
+    regionSettings: [],
     collections: [],
     products: [],
     images: [],
+    sizeCharts: [],
     shippingProfile: false,
+    stockLocation: false,
+    fulfillmentSet: false,
+    serviceZones: [],
+    shippingOptions: [],
     salesChannel: false,
     publishableKey: false,
     adminUser: false,
@@ -185,7 +220,7 @@ export async function seedStore(
   // 3. Regions, matched by country code (an admin may rename them)
   await seedRegions(container, seed, created, repaired)
 
-  // 4. Default shipping profile (products need one; shipping options come in Sprint 1)
+  // 4. Default shipping profile (products and the shipping options need one)
   const shippingProfiles = await fulfillmentModule.listShippingProfiles({ type: "default" })
   let shippingProfile = shippingProfiles[0]
   if (!shippingProfile) {
@@ -368,6 +403,34 @@ export async function seedStore(
     created.images = imagePlan.map((entry) => entry.handle)
   }
 
+  // 6d. Placeholder size charts (metadata.size_chart), only on a product that has none, so a
+  // chart edited in the admin is kept. The rest of the product's metadata is kept as it is.
+  const { data: metadataRows } = await query.graph({
+    entity: "product",
+    fields: ["id", "handle", "metadata"],
+    filters: { handle: Object.keys(seed.sizeCharts.data) },
+  })
+  const chartPlan = planSizeCharts(
+    metadataRows as unknown as ProductWithMetadata[],
+    seed.sizeCharts.data
+  )
+  if (chartPlan.length > 0) {
+    await updateProductsWorkflow(container).run({
+      input: {
+        products: chartPlan.map((entry) => ({ id: entry.productId, metadata: entry.metadata })),
+      },
+    })
+    created.sizeCharts = chartPlan.map((entry) => entry.handle)
+  }
+
+  // 6e. Shipping: stock location, fulfillment set, a service zone and a shipping option per region.
+  await seedShipping(container, seed, {
+    salesChannelId: salesChannel.id,
+    shippingProfileId: shippingProfile.id,
+    created,
+    repaired,
+  })
+
   // 7. Publishable API key, linked to the default sales channel. Medusa's migrations already create
   // a "Default Publishable API Key" linked to the default channel, so reuse an existing key
   // (preferring one already linked) and only create one when the store has none.
@@ -449,7 +512,7 @@ async function seedRegions(
 
   const { data: regionRows } = await query.graph({
     entity: "region",
-    fields: ["id", "name", "countries.iso_2", "payment_providers.id"],
+    fields: ["id", "name", "metadata", "countries.iso_2", "payment_providers.id"],
   })
   const plan = planRegions(regionRows as unknown as ExistingRegion[], seed.regions.data)
 
@@ -461,21 +524,31 @@ async function seedRegions(
           currency_code: region.currency_code,
           countries: region.country_codes,
           metadata: region.metadata,
-          payment_providers: [DEFAULT_PAYMENT_PROVIDER],
+          payment_providers: region.payment_providers,
         })),
       },
     })
     created.regions = plan.create.map((r) => r.name)
   }
 
-  for (const entry of plan.linkPaymentProvider) {
+  // Seed payment providers a region lacks (an interrupted create, or cash on delivery on a
+  // Pakistan seeded before it existed). The region keeps any provider an admin linked.
+  for (const entry of plan.linkPaymentProviders) {
     await updateRegionsWorkflow(container).run({
       input: {
         selector: { id: entry.regionId },
-        update: { payment_providers: [DEFAULT_PAYMENT_PROVIDER] },
+        update: { payment_providers: entry.providers },
       },
     })
-    repaired.push(`region ${entry.seedName}: payment provider`)
+    repaired.push(`region ${entry.seedName}: payment providers ${entry.added.join(", ")}`)
+  }
+
+  // Region settings (min_garment_quantity, ...) a region lacks. A value that is set is kept.
+  for (const entry of plan.addMetadata) {
+    await updateRegionsWorkflow(container).run({
+      input: { selector: { id: entry.regionId }, update: { metadata: entry.metadata } },
+    })
+    created.regionSettings.push(...entry.added.map((key) => `${entry.seedName}: ${key}`))
   }
 
   // Each region has a price preference (tax-inclusive or not), written by the same workflow
@@ -504,6 +577,144 @@ async function seedRegions(
     if (!lacking.every((r) => created.regions.includes(r.name ?? ""))) {
       repaired.push(...lacking.map((r) => `region ${r.name}: price preference`))
     }
+  }
+}
+
+const STOCK_LOCATION_FIELDS = [
+  "id",
+  "name",
+  "created_at",
+  "sales_channels.id",
+  "fulfillment_providers.id",
+  "fulfillment_sets.id",
+  "fulfillment_sets.name",
+  "fulfillment_sets.type",
+  "fulfillment_sets.service_zones.id",
+  "fulfillment_sets.service_zones.name",
+  "fulfillment_sets.service_zones.geo_zones.type",
+  "fulfillment_sets.service_zones.geo_zones.country_code",
+  "fulfillment_sets.service_zones.shipping_options.id",
+  "fulfillment_sets.service_zones.shipping_options.rules.attribute",
+  "fulfillment_sets.service_zones.shipping_options.rules.value",
+]
+
+/**
+ * One stock location (linked to the manual fulfillment provider and the default sales channel),
+ * one shipping fulfillment set on it, and per region a service zone with one shipping option.
+ * Each part is checked on its own, so a run that stopped half-way is completed by the next one;
+ * the decisions are in shipping-plan.ts.
+ */
+async function seedShipping(
+  container: MedusaContainer,
+  seed: SeedData,
+  ctx: {
+    salesChannelId: string
+    shippingProfileId: string
+    created: SeedResult["created"]
+    repaired: string[]
+  }
+): Promise<void> {
+  const query = container.resolve(ContainerRegistrationKeys.QUERY)
+  const link = container.resolve(ContainerRegistrationKeys.LINK)
+  const fulfillmentModule = container.resolve(Modules.FULFILLMENT)
+  const shipping = seed.shipping.data
+  const { created, repaired } = ctx
+
+  const loadLocation = async (id?: string): Promise<ExistingStockLocation | null> => {
+    const { data } = await query.graph({
+      entity: "stock_location",
+      fields: STOCK_LOCATION_FIELDS,
+      ...(id ? { filters: { id } } : {}),
+    })
+    const rows = data as unknown as ExistingStockLocation[]
+    return id ? (rows[0] ?? null) : pickStockLocation(rows, shipping.stock_location.name)
+  }
+
+  let location = await loadLocation()
+  if (!location) {
+    const { result } = await createStockLocationsWorkflow(container).run({
+      input: {
+        locations: [
+          { name: shipping.stock_location.name, address: { ...shipping.stock_location.address } },
+        ],
+      },
+    })
+    location = { id: result[0].id, name: result[0].name }
+    created.stockLocation = true
+  }
+  const locationId = location.id
+
+  if (!hasLink(location.fulfillment_providers, MANUAL_FULFILLMENT_PROVIDER)) {
+    await link.create({
+      [Modules.STOCK_LOCATION]: { stock_location_id: locationId },
+      [Modules.FULFILLMENT]: { fulfillment_provider_id: MANUAL_FULFILLMENT_PROVIDER },
+    })
+    if (!created.stockLocation) repaired.push("stock location: fulfillment provider")
+  }
+  if (!hasLink(location.sales_channels, ctx.salesChannelId)) {
+    await linkSalesChannelsToStockLocationWorkflow(container).run({
+      input: { id: locationId, add: [ctx.salesChannelId] },
+    })
+    if (!created.stockLocation) repaired.push("stock location: sales channel")
+  }
+
+  if (!pickShippingSet(location, shipping.fulfillment_set_name)) {
+    // Fulfillment set names are unique: a set with the seed's name that lost its link to the
+    // location is linked again instead of created.
+    const [orphan] = await fulfillmentModule.listFulfillmentSets({
+      name: shipping.fulfillment_set_name,
+    })
+    if (orphan) {
+      await link.create({
+        [Modules.STOCK_LOCATION]: { stock_location_id: locationId },
+        [Modules.FULFILLMENT]: { fulfillment_set_id: orphan.id },
+      })
+      repaired.push("fulfillment set: stock location")
+    } else {
+      await createLocationFulfillmentSetWorkflow(container).run({
+        input: {
+          location_id: locationId,
+          fulfillment_set_data: { name: shipping.fulfillment_set_name, type: "shipping" },
+        },
+      })
+      created.fulfillmentSet = true
+    }
+  }
+
+  const currentSet = async () => {
+    const reloaded = await loadLocation(locationId)
+    const set = reloaded ? pickShippingSet(reloaded, shipping.fulfillment_set_name) : null
+    if (!set) {
+      throw new Error(`Seed: the stock location ${locationId} has no shipping fulfillment set`)
+    }
+    return set
+  }
+
+  let set = await currentSet()
+  const zones = planServiceZones(set, shipping, seed.regions.data)
+  if (zones.length > 0) {
+    await createServiceZonesWorkflow(container).run({
+      input: {
+        data: zones.map((zone) => ({
+          name: zone.name,
+          fulfillment_set_id: set.id,
+          geo_zones: zone.countryCodes.map((country_code) => ({
+            type: "country" as const,
+            country_code,
+          })),
+        })),
+      },
+    })
+    created.serviceZones = zones.map((zone) => zone.name)
+    set = await currentSet()
+  }
+
+  const options = planShippingOptions(set, shipping, seed.regions.data)
+  if (options.length > 0) {
+    await createShippingOptionsWorkflow(container).run({
+      input: options.map((entry) => buildShippingOptionInput(entry, ctx.shippingProfileId)),
+    })
+    created.shippingOptions = options.map((entry) => entry.regionName)
   }
 }
 
