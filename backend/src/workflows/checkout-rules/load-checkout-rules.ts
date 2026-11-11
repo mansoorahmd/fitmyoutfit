@@ -14,9 +14,9 @@ import {
   type CheckoutRules,
 } from "../../lib/rules/checkout-rules"
 import {
+  appliedDeliverySpeed,
   calendarDateIn,
   DELIVERY_TIME_ZONE,
-  type DeliverySpeed,
 } from "../../lib/rules/delivery-promise"
 
 type Metadata = Record<string, unknown> | null | undefined
@@ -37,15 +37,6 @@ type CartRow = {
 export type LoadedCheckoutRules = {
   rules: CheckoutRules
   cart: { id: string; currencyCode: string; total: number }
-}
-
-/**
- * Which delivery date applies to the cart. Always "standard" for now: the rush charge is a later
- * M1 task (S1-6), which answers this from the cart (for example from a rush line) and changes
- * nothing else. The route, the completion check and the date kept on the order all follow it.
- */
-function cartDeliverySpeed(): DeliverySpeed {
-  return "standard"
 }
 
 function toNumber(value: unknown): number {
@@ -114,7 +105,8 @@ export async function loadCheckoutRules(
     total,
     storeSettings,
     baseDate: calendarDateIn(now, DELIVERY_TIME_ZONE),
-    deliverySpeed: cartDeliverySpeed(),
+    // The same answer the order's kept promise uses (workflows/delivery-promise/).
+    deliverySpeed: appliedDeliverySpeed(),
   })
   if (!result.ok) {
     throw new MedusaError(

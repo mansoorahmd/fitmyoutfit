@@ -2,7 +2,9 @@
  * M1 checkout, through the store API: docs/contracts/m1-checkout.md, section 7 (the five proofs),
  * section 6 (the checkout-rules route and how refusals look) and section 8 (the S1-1b additions:
  * products with no kind, which date applies, the date kept on the order, completing twice, rush
- * days, and cash on delivery recorded as collected through the admin route).
+ * days, and cash on delivery recorded as collected through the admin route), with the S1-1c fixes
+ * after QA's review (the promise written on the order by the server, reserved metadata keys
+ * refused at the door, cash captured before the slip is written).
  */
 import { medusaIntegrationTestRunner } from "@medusajs/test-utils"
 import type { MedusaContainer } from "@medusajs/framework/types"
@@ -15,6 +17,9 @@ import {
 } from "@medusajs/medusa/core-flows"
 import { calendarDateIn, addCalendarDays } from "../../src/lib/rules/delivery-promise"
 import { seedStore } from "../../src/scripts/seed-lib/seed-store"
+import keepDeliveryPromiseOnPlacedOrder from "../../src/subscribers/order-placed-delivery-promise"
+import { keepOrderDeliveryPromise } from "../../src/workflows/delivery-promise/keep-order-delivery-promise"
+import { replaceOrderMetadataKey } from "../../src/workflows/order-metadata/write-order-metadata"
 
 jest.setTimeout(300 * 1000)
 
@@ -24,6 +29,8 @@ const ADMIN_EMAIL = "checkout-test-admin@example.com"
 const ADMIN_PASSWORD = "checkout-test-password"
 
 type Line = { handle: string; size?: string; quantity: number }
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 medusaIntegrationTestRunner({
   testSuite: ({ api, getContainer }) => {
@@ -70,26 +77,28 @@ medusaIntegrationTestRunner({
 
       const allow = { validateStatus: () => true }
 
-      async function createCart(country: string, lines: Line[]) {
+      const address = (country: string) => ({
+        first_name: "Test",
+        last_name: "Organizer",
+        address_1: "1 Test Road",
+        city: "Test City",
+        postal_code: "12345",
+        country_code: country,
+      })
+
+      async function createCart(country: string, lines: Line[], requestHeaders = headers) {
         const { data } = await api.post(
           "/store/carts",
           {
             region_id: regionIds[country],
             email: "organizer@example.com",
-            shipping_address: {
-              first_name: "Test",
-              last_name: "Organizer",
-              address_1: "1 Test Road",
-              city: "Test City",
-              postal_code: "12345",
-              country_code: country,
-            },
+            shipping_address: address(country),
             items: lines.map((line) => ({
               variant_id: variantIds[line.size ? `${line.handle}/${line.size}` : line.handle],
               quantity: line.quantity,
             })),
           },
-          { headers }
+          { headers: requestHeaders }
         )
         return data.cart as { id: string; total: number; currency_code: string }
       }
@@ -164,6 +173,40 @@ medusaIntegrationTestRunner({
         return (data[0] as any).metadata as Record<string, unknown>
       }
 
+      /**
+       * The order's metadata once the order-placed subscriber has written the promise. The
+       * subscriber runs just after the order is created, so it may not have run when the
+       * completion answers.
+       */
+      async function metadataOncePlaced(orderId: string, timeoutMs = 10000) {
+        const until = Date.now() + timeoutMs
+        for (;;) {
+          const metadata = await orderMetadata(getContainer(), orderId)
+          if (metadata?.delivery_promise || Date.now() > until) {
+            return metadata
+          }
+          await sleep(50)
+        }
+      }
+
+      async function sql(statement: string, bindings: unknown[] = []) {
+        const knex = getContainer().resolve(ContainerRegistrationKeys.PG_CONNECTION) as any
+        return (await knex.raw(statement, bindings)).rows as any[]
+      }
+
+      /** Overwrite an order's metadata and creation time directly, standing in for another time. */
+      async function rewriteOrder(orderId: string, change: { createdAt?: string; metadata?: Record<string, unknown> }) {
+        if (change.createdAt) {
+          await sql(`UPDATE "order" SET created_at = ? WHERE id = ?`, [change.createdAt, orderId])
+        }
+        if (change.metadata) {
+          await sql(`UPDATE "order" SET metadata = CAST(? AS jsonb) WHERE id = ?`, [JSON.stringify(change.metadata), orderId])
+        }
+      }
+
+      const readPromise = (orderId: string) =>
+        api.get(`/store/orders/${orderId}/delivery-promise`, { headers, ...allow })
+
       /** A Pakistan order of 1 T-shirt paid by cash on delivery. Returns the order id. */
       async function placeCashOnDeliveryOrder(): Promise<string> {
         const cart = await createCart("pk", [{ handle: "t-shirt", size: "M", quantity: 1 }])
@@ -171,6 +214,7 @@ medusaIntegrationTestRunner({
         expect((await choosePayment(cart.id, COD)).status).toBe(200)
         const response = await complete(cart.id)
         expect(response.data.type).toBe("order")
+        await metadataOncePlaced(response.data.order.id)
         return response.data.order.id
       }
 
@@ -250,7 +294,7 @@ medusaIntegrationTestRunner({
         expect(payments.map((p: any) => p.provider_id)).toEqual([COD])
 
         // Section 8: the order keeps the date that was promised, as placed.
-        expect(await orderMetadata(getContainer(), response.data.order.id)).toEqual({
+        expect(await metadataOncePlaced(response.data.order.id)).toEqual({
           delivery_promise: promisedToday(),
         })
       })
@@ -524,69 +568,300 @@ medusaIntegrationTestRunner({
           // `fields` for the order), so the confirmation page reads the order.
           expect(completed.data.order.metadata).toBeUndefined()
           const orderId = completed.data.order.id
-          expect(await orderMetadata(getContainer(), orderId)).toEqual({
-            delivery_promise: promisedToday(),
-          })
-          // Medusa's own order route leaves metadata out, even when asked for it...
+          // The route answers at once, whether or not the order-placed subscriber has run yet.
+          const { data } = await readPromise(orderId)
+          expect(data).toEqual({ delivery_promise: promisedToday() })
+          expect(await metadataOncePlaced(orderId)).toEqual({ delivery_promise: promisedToday() })
+          // Medusa's own order route leaves metadata out, even when asked for it.
           const medusa = await api.get(`/store/orders/${orderId}?fields=+metadata`, { headers })
           expect(medusa.data.order.metadata).toBeUndefined()
-          // ...so the confirmation and account pages read the promise from this route.
-          const { data } = await api.get(`/store/orders/${orderId}/delivery-promise`, { headers })
-          expect(data).toEqual({ delivery_promise: promisedToday() })
 
           const withoutKey = await api.get(`/store/orders/${orderId}/delivery-promise`, allow)
           expect(withoutKey.status).toBe(400)
-          const unknown = await api.get("/store/orders/order_unknown/delivery-promise", { headers, ...allow })
+          const unknown = await readPromise("order_unknown")
           expect(unknown.status).toBe(404)
         })
 
-        it("replaces a promise and staff-only keys a customer wrote on the cart", async () => {
-          const cart = await createCart("pk", [{ handle: "t-shirt", size: "M", quantity: 1 }])
-          await api.post(
-            `/store/carts/${cart.id}`,
-            {
-              metadata: {
-                team: "Lahore Lions",
-                delivery_promise: { date: "2026-11-12", days: 1, based_on: today(), applies: "rush" },
-                cod_slip_reference: "forged",
-                cod_collected_by: "someone",
-              },
-            },
-            { headers }
-          )
-          await addShipping(cart.id)
-          expect((await choosePayment(cart.id, COD)).status).toBe(200)
-          const response = await complete(cart.id)
-          expect(response.data.type).toBe("order")
-          expect(await orderMetadata(getContainer(), response.data.order.id)).toEqual({
-            team: "Lahore Lions",
-            delivery_promise: promisedToday(),
-            cod_slip_reference: null,
-            cod_collected_by: null,
-          })
-        })
-
-        it("refuses to create an order without the promise, when the cart is completed some other way", async () => {
+        it("gives a webhook-completed order (completeCartWorkflow called directly) its promise", async () => {
           const container = getContainer()
           const cart = await createCart("pk", [{ handle: "t-shirt", size: "M", quantity: 1 }])
           await addShipping(cart.id)
           expect((await choosePayment(cart.id, COD)).status).toBe(200)
           const before = await orderCount(container)
-          // Medusa's workflow directly, without the store route (and so without its middleware).
-          const { errors } = await completeCartWorkflow(container).run({
+          // As a payment provider's webhook does (Medusa's completeCartAfterPaymentStep): the
+          // workflow directly, without the store route and its middlewares.
+          const { result, errors } = await completeCartWorkflow(container).run({
             input: { id: cart.id },
             throwOnError: false,
           })
-          expect(errors[0]?.error?.message).toMatch(/no promised delivery date/)
-          expect(await orderCount(container)).toBe(before)
-          expect((await paymentState(container, cart.id)).payments).toBe(0)
+          expect(errors).toEqual([])
+          expect(await orderCount(container)).toBe(before + 1)
+          const orderId = result.id
+          // Shortly after, from the order-placed subscriber...
+          expect((await metadataOncePlaced(orderId)).delivery_promise).toEqual(promisedToday())
+          // ...and through the read route.
+          expect((await readPromise(orderId)).data).toEqual({ delivery_promise: promisedToday() })
+        })
 
-          // Through the store route the same cart completes, with its promise.
-          const response = await complete(cart.id)
-          expect(response.data.type).toBe("order")
-          expect((await orderMetadata(container, response.data.order.id)).delivery_promise).toEqual(
-            promisedToday()
+        it("gives an order its promise at once through the read route, before any subscriber", async () => {
+          const cart = await createCart("pk", [{ handle: "t-shirt", size: "M", quantity: 1 }])
+          await addShipping(cart.id)
+          expect((await choosePayment(cart.id, COD)).status).toBe(200)
+          const orderId = (await complete(cart.id)).data.order.id
+          await metadataOncePlaced(orderId)
+          // As if the subscriber had not run (or the order was placed before the promise was kept).
+          await rewriteOrder(orderId, { metadata: { team: "Lahore Lions" } })
+          const { status, data } = await readPromise(orderId)
+          expect(status).toBe(200)
+          expect(data).toEqual({ delivery_promise: promisedToday() })
+          expect(await orderMetadata(getContainer(), orderId)).toEqual({
+            team: "Lahore Lions",
+            delivery_promise: promisedToday(),
+          })
+        })
+
+        it("bases the promise on the order's creation date in Asia/Karachi, just before and just after midnight", async () => {
+          const orderId = await placeCashOnDeliveryOrder()
+          // 23:59:59 on 11 Nov in Karachi (UTC+5), then 00:00:00.5 on 12 Nov.
+          for (const [createdAt, basedOn, date] of [
+            ["2026-11-11T18:59:59.000Z", "2026-11-11", "2026-11-26"],
+            ["2026-11-11T19:00:00.500Z", "2026-11-12", "2026-11-27"],
+          ]) {
+            // The read route on an order without a promise...
+            await rewriteOrder(orderId, { createdAt, metadata: {} })
+            expect((await readPromise(orderId)).data.delivery_promise).toEqual({
+              date,
+              days: 15,
+              based_on: basedOn,
+              applies: "standard",
+            })
+            // ...and the placement check on one carrying today's promise copied from a cart.
+            await rewriteOrder(orderId, { metadata: { delivery_promise: promisedToday() } })
+            await keepDeliveryPromiseOnPlacedOrder({
+              event: { name: "order.placed", data: { id: orderId } },
+              container: getContainer(),
+            } as any)
+            expect((await orderMetadata(getContainer(), orderId)).delivery_promise).toEqual({
+              date,
+              days: 15,
+              based_on: basedOn,
+              applies: "standard",
+            })
+          }
+        })
+
+        it("never rewrites a valid kept promise, also when the days setting changes later", async () => {
+          const container = getContainer()
+          const orderId = await placeCashOnDeliveryOrder()
+          const kept = (await orderMetadata(container, orderId)).delivery_promise
+          expect(kept).toEqual(promisedToday())
+          const previous = await setStoreMetadata(container, { delivery_days_standard: 12 })
+          try {
+            expect((await readPromise(orderId)).data).toEqual({ delivery_promise: kept })
+            // An older valid promise (another base date) is kept as well.
+            const older = { date: "2026-11-25", days: 15, based_on: "2026-11-10", applies: "standard" }
+            await rewriteOrder(orderId, { metadata: { delivery_promise: older } })
+            expect((await readPromise(orderId)).data).toEqual({ delivery_promise: older })
+            expect((await orderMetadata(container, orderId)).delivery_promise).toEqual(older)
+            // A new order gets the new setting.
+            const newOrder = await placeCashOnDeliveryOrder()
+            expect((await readPromise(newOrder)).data.delivery_promise).toMatchObject({ days: 12 })
+          } finally {
+            await setStoreMetadata(container, { delivery_days_standard: previous?.delivery_days_standard })
+          }
+        })
+
+        it("answers 500 naming the key when no promise is kept and the settings are invalid, and never invents one", async () => {
+          const container = getContainer()
+          const orderId = await placeCashOnDeliveryOrder()
+          const kept = (await orderMetadata(container, orderId)).delivery_promise
+          const previous = await setStoreMetadata(container, { delivery_days_standard: "" })
+          try {
+            // A valid kept promise needs no setting.
+            expect((await readPromise(orderId)).data).toEqual({ delivery_promise: kept })
+            await rewriteOrder(orderId, { metadata: {} })
+            const response = await readPromise(orderId)
+            expect(response.status).toBe(500)
+            expect(response.data.message).toContain("delivery_days_standard")
+            expect((await orderMetadata(container, orderId)).delivery_promise).toBeUndefined()
+          } finally {
+            await setStoreMetadata(container, { delivery_days_standard: previous?.delivery_days_standard })
+          }
+          expect((await readPromise(orderId)).data).toEqual({ delivery_promise: promisedToday() })
+        })
+
+        it("leaves one correct value when several runs keep the promise at once, and keeps other keys", async () => {
+          const container = getContainer()
+          const orderId = await placeCashOnDeliveryOrder()
+          await rewriteOrder(orderId, { metadata: { team: "Lahore Lions" } })
+          const results = await Promise.all([
+            ...Array.from({ length: 4 }, async (): Promise<unknown> => (await readPromise(orderId)).data.delivery_promise),
+            ...Array.from({ length: 4 }, (): Promise<unknown> => keepOrderDeliveryPromise(container, orderId, "server_answer_only")),
+          ])
+          for (const result of results) {
+            expect(result).toEqual(promisedToday())
+          }
+          expect(await orderMetadata(container, orderId)).toEqual({
+            team: "Lahore Lions",
+            delivery_promise: promisedToday(),
+          })
+        })
+
+        it("writes a key only if it still holds what was read (compare-and-set)", async () => {
+          const container = getContainer()
+          const orderId = await placeCashOnDeliveryOrder()
+          const stale = { date: "2026-11-25", days: 15, based_on: "2026-11-10", applies: "standard" }
+          expect(await replaceOrderMetadataKey(container, orderId, "delivery_promise", stale, { forged: true })).toBe(false)
+          expect((await orderMetadata(container, orderId)).delivery_promise).toEqual(promisedToday())
+          expect(
+            await replaceOrderMetadataKey(container, orderId, "delivery_promise", promisedToday(), stale)
+          ).toBe(true)
+          expect((await orderMetadata(container, orderId)).delivery_promise).toEqual(stale)
+        })
+
+        it("gives a converted draft order the server's promise, not one written on the draft", async () => {
+          const { data: draft } = await api.post(
+            "/admin/draft-orders",
+            {
+              email: "organizer@example.com",
+              region_id: regionIds.pk,
+              shipping_address: address("pk"),
+              items: [{ variant_id: variantIds["t-shirt/M"], quantity: 1 }],
+              metadata: {
+                delivery_promise: { date: "2026-11-13", days: 1, based_on: "2026-11-12", applies: "standard" },
+              },
+            },
+            { headers: adminHeaders }
           )
+          const draftId = draft.draft_order.id
+          // A draft is not an order yet.
+          expect((await readPromise(draftId)).status).toBe(404)
+          const converted = await api.post(`/admin/draft-orders/${draftId}/convert-to-order`, {}, { headers: adminHeaders })
+          expect(converted.status).toBe(200)
+          const metadata = await (async () => {
+            const until = Date.now() + 10000
+            for (;;) {
+              const current = await orderMetadata(getContainer(), draftId)
+              if ((current?.delivery_promise as any)?.days !== 1 || Date.now() > until) {
+                return current
+              }
+              await sleep(50)
+            }
+          })()
+          // Based on the order's creation date, which for a draft is when the draft was created.
+          expect(metadata.delivery_promise).toEqual(promisedToday())
+          expect((await readPromise(draftId)).data).toEqual({ delivery_promise: promisedToday() })
+        })
+      })
+
+      describe("keys a customer may not write in a cart's metadata", () => {
+        const forged = { date: addCalendarDays(today(), 14), days: 15, based_on: addCalendarDays(today(), -1), applies: "standard" }
+
+        it("refuses them when a cart is created, whatever the value, and takes other keys", async () => {
+          for (const metadata of [
+            { delivery_promise: forged },
+            { delivery_promise: null },
+            { cod_slip_reference: "forged" },
+            { cod_collected_at: null },
+            { cod_collected_by: "someone" },
+            { cod_anything: 1 },
+            { team: "Lahore Lions", delivery_promise: "2026-11-13" },
+          ]) {
+            const response = await api.post(
+              "/store/carts",
+              { region_id: regionIds.pk, metadata },
+              { headers, ...allow }
+            )
+            expect({ metadata, status: response.status, type: response.data.type }).toEqual({
+              metadata,
+              status: 400,
+              type: "invalid_data",
+            })
+            expect(response.data.message).toMatch(/^A cart's metadata may not contain .+: the store writes these on the order\.$/)
+          }
+          const ok = await api.post(
+            "/store/carts",
+            { region_id: regionIds.pk, metadata: { team: "Lahore Lions" } },
+            { headers, ...allow }
+          )
+          expect(ok.status).toBe(200)
+        })
+
+        it("refuses them when a cart is updated, and leaves the cart as it was", async () => {
+          const cart = await createCart("pk", [{ handle: "t-shirt", size: "M", quantity: 1 }])
+          for (const metadata of [
+            { delivery_promise: forged },
+            { delivery_promise: null },
+            { cod_slip_reference: "forged", team: "A" },
+            { cod_collected_at: "2026-11-12T00:00:00Z" },
+          ]) {
+            const response = await api.post(`/store/carts/${cart.id}`, { metadata }, { headers, ...allow })
+            expect({ metadata, status: response.status, type: response.data.type }).toEqual({
+              metadata,
+              status: 400,
+              type: "invalid_data",
+            })
+          }
+          const updated = await api.post(
+            `/store/carts/${cart.id}`,
+            { metadata: { team: "Lahore Lions" } },
+            { headers, ...allow }
+          )
+          expect(updated.status).toBe(200)
+          const query = getContainer().resolve(ContainerRegistrationKeys.QUERY)
+          const { data } = await query.graph({ entity: "cart", fields: ["metadata"], filters: { id: cart.id } })
+          expect((data[0] as any).metadata).toEqual({ team: "Lahore Lions" })
+
+          // A line item's own metadata does not become the order's, and is left alone.
+          const item = await api.post(
+            `/store/carts/${cart.id}/line-items`,
+            { variant_id: variantIds["t-shirt/L"], quantity: 1, metadata: { delivery_promise: "note" } },
+            { headers, ...allow }
+          )
+          expect(item.status).toBe(200)
+          await addShipping(cart.id)
+          expect((await choosePayment(cart.id, COD)).status).toBe(200)
+          const order = (await complete(cart.id)).data.order
+          expect(await metadataOncePlaced(order.id)).toEqual({
+            team: "Lahore Lions",
+            delivery_promise: promisedToday(),
+          })
+        })
+
+        it("still refuses, at completion, a cart that carries a staff-only key some other way", async () => {
+          const container = getContainer()
+          const cart = await createCart("pk", [{ handle: "t-shirt", size: "M", quantity: 1 }])
+          // Past the door: the cart module directly.
+          await container.resolve(Modules.CART).updateCarts(cart.id, {
+            metadata: { cod_slip_reference: "forged" },
+          })
+          await addShipping(cart.id)
+          expect((await choosePayment(cart.id, COD)).status).toBe(200)
+          await expectRefused(cart.id, /The cart must not carry cod_slip_reference\./)
+        })
+
+        it("never lets a promise planted during completion reach the order (QA's race, D1)", async () => {
+          const plants: number[] = []
+          for (let i = 0; i < 12; i++) {
+            const cart = await createCart("pk", [{ handle: "t-shirt", size: "M", quantity: 1 }])
+            await addShipping(cart.id)
+            expect((await choosePayment(cart.id, COD)).status).toBe(200)
+            const [completed, planted] = await Promise.all([
+              complete(cart.id),
+              (async () => {
+                await sleep((i % 4) * 3)
+                return api.post(
+                  `/store/carts/${cart.id}`,
+                  { metadata: { delivery_promise: { ...forged, note: "forged-by-customer" } } },
+                  { headers, ...allow }
+                )
+              })(),
+            ])
+            plants.push(planted.status)
+            expect(completed.data.type).toBe("order")
+            expect((await metadataOncePlaced(completed.data.order.id)).delivery_promise).toEqual(promisedToday())
+          }
+          expect(new Set(plants)).toEqual(new Set([400]))
         })
       })
 

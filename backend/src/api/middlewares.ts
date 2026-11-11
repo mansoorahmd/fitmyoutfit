@@ -7,8 +7,9 @@
  * Completion is checked again by workflows/hooks/complete-cart-checkout-rules.ts, because the cart
  * can change after the payment method was chosen.
  *
- * The promised delivery date is written into the cart just before it is completed, so the order
- * keeps it (keepDeliveryPromiseBeforeCompletion, below).
+ * Keys only the server or staff write on an order (the promised delivery date, cash on delivery
+ * collected) are refused when a customer sends them in a cart's metadata, because Medusa copies a
+ * cart's metadata into the order (refuseReservedCartMetadata, below).
  */
 import {
   defineMiddlewares,
@@ -18,7 +19,7 @@ import {
 } from "@medusajs/framework/http"
 import { ContainerRegistrationKeys, MedusaError } from "@medusajs/framework/utils"
 import { COD_PAYMENT_PROVIDER_ID } from "../modules/cod/constants"
-import { keepDeliveryPromiseOnCart } from "../workflows/checkout-rules/keep-delivery-promise"
+import { reservedKeysIn, reservedKeysMessage } from "../lib/rules/order-metadata"
 import { assertCheckoutAllowed } from "../workflows/checkout-rules/load-checkout-rules"
 
 export async function refuseUnavailableCashOnDelivery(
@@ -53,22 +54,23 @@ export async function refuseUnavailableCashOnDelivery(
 }
 
 /**
- * Before POST /store/carts/:id/complete: writes the promised delivery date into the cart's
- * metadata, which Medusa copies into the order when it creates it (see
- * workflows/checkout-rules/keep-delivery-promise.ts). Runs after Medusa's publishable-key check.
- * An unknown or completed cart is left to Medusa's route.
+ * Before POST /store/carts and POST /store/carts/:id: refuses (HTTP 400, `type: "invalid_data"`) a
+ * body whose `metadata` contains a key only the server or staff write on an order
+ * (`delivery_promise`, or any `cod_` key), whatever its value, null included. These are the only
+ * store routes that write a cart's metadata in Medusa v2.22.6; the line-item routes write the
+ * items' own metadata, which does not become the order's. Other keys pass as before.
  */
-export async function keepDeliveryPromiseBeforeCompletion(
+export async function refuseReservedCartMetadata(
   req: MedusaRequest,
   _res: MedusaResponse,
   next: MedusaNextFunction
 ): Promise<void> {
-  try {
-    await keepDeliveryPromiseOnCart(req.scope, req.params.id)
-    return next()
-  } catch (error) {
-    return next(error)
+  const metadata = (req.body as { metadata?: unknown } | undefined)?.metadata
+  const reserved = reservedKeysIn(metadata)
+  if (reserved.length > 0) {
+    return next(new MedusaError(MedusaError.Types.INVALID_DATA, reservedKeysMessage(reserved)))
   }
+  return next()
 }
 
 export default defineMiddlewares({
@@ -79,9 +81,14 @@ export default defineMiddlewares({
       middlewares: [refuseUnavailableCashOnDelivery],
     },
     {
-      matcher: "/store/carts/:id/complete",
+      matcher: "/store/carts",
       method: ["POST"],
-      middlewares: [keepDeliveryPromiseBeforeCompletion],
+      middlewares: [refuseReservedCartMetadata],
+    },
+    {
+      matcher: "/store/carts/:id",
+      method: ["POST"],
+      middlewares: [refuseReservedCartMetadata],
     },
   ],
 })
