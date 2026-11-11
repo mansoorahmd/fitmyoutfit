@@ -98,7 +98,7 @@ describe("rules can be passed to validateDesign and the edit functions", () => {
   });
 
   it("number rules apply to number layers only: a text layer may hold any text", () => {
-    const text = addLayer(withFont, { ...numberLayer(), id: "t", kind: "text", value: "100 TIGERS" } as Layer);
+    const text = addLayer(withFont, { ...numberLayer(), id: "t", kind: "text", value: "100 TIGERS", direction: "auto" } as Layer);
     expect(text.layers[0]).toMatchObject({ value: "100 TIGERS" });
   });
 

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { designSchema, productDefinitionSchema } from "./schema.js";
+import { fontCatalogSchema } from "./font-catalog.js";
 
 type JsonSchema = Record<string, unknown>;
 
@@ -21,4 +22,9 @@ export function getProductJsonSchema(): JsonSchema {
     "https://fitmyoutfit.example/schemas/product.schema.json",
     "FitMyOutfit product definition",
   );
+}
+
+/** JSON Schema (draft 2020-12) for a font catalogue. */
+export function getFontCatalogJsonSchema(): JsonSchema {
+  return build(fontCatalogSchema, "https://fitmyoutfit.example/schemas/font-catalog.schema.json", "FitMyOutfit font catalogue");
 }

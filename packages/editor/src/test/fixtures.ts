@@ -1,10 +1,19 @@
 import placeholderJersey from "../../samples/products/placeholder-jersey.json";
+import placeholderFonts from "../../samples/fonts/placeholder-fonts.json";
 import { validateProductDefinition } from "../design/validate";
+import { validateFontCatalog, type FontCatalog } from "../design/font-catalog";
 import type { ColorRef, DesignDocument, Layer, ProductDefinition } from "../design/schema";
 
 /** The placeholder product definition, validated, as shipped in samples/. */
 export function loadPlaceholderProduct(): ProductDefinition {
   const result = validateProductDefinition(placeholderJersey);
+  if (!result.ok) throw new Error(result.errors.map((e) => e.message).join("\n"));
+  return result.value;
+}
+
+/** The placeholder font catalogue, validated, as shipped in samples/. */
+export function loadPlaceholderFonts(): FontCatalog {
+  const result = validateFontCatalog(placeholderFonts);
   if (!result.ok) throw new Error(result.errors.map((e) => e.message).join("\n"));
   return result.value;
 }
@@ -21,6 +30,7 @@ export function textLayer(overrides: Partial<Extract<Layer, { kind: "text" }>> =
     size: { width: 400, height: 80 },
     rotation: 0,
     value: "TIGERS",
+    direction: "auto",
     fontId: "font-sans",
     fontSize: 60,
     fill: RED,
@@ -53,7 +63,7 @@ export function logoLayer(): Layer {
     position: { x: 120, y: 100 },
     size: { width: 90, height: 90 },
     rotation: 15,
-    asset: { assetId: "upload-abc123", mediaType: "image/svg+xml" },
+    asset: { assetId: "upload-abc123", mediaType: "image/png", width: 600, height: 600 },
   };
 }
 
@@ -65,7 +75,7 @@ export function clipartLayer(): Layer {
     position: { x: 220, y: 110 },
     size: { width: 60, height: 60 },
     rotation: -30,
-    asset: { assetId: "clipart-star", mediaType: "image/png" },
+    asset: { assetId: "clipart-star", mediaType: "image/svg+xml", width: 64, height: 64 },
   };
 }
 

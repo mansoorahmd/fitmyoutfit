@@ -13,8 +13,11 @@
  * edits cannot check them on their own. Pass `{ product }` as the last
  * argument to also refuse a piece or zone the product does not have.
  *
- * Undo and redo are not built here; they come later and will sit on top of
- * these functions.
+ * Text: the value of a text layer is normalised to Unicode NFC by `addLayer`
+ * and `updateLayer`, so names typed in different ways compare equal.
+ *
+ * Undo and redo sit on top of these functions (see state/history.ts): every
+ * edit returns a new document, so the history only keeps documents.
  */
 import {
   colorRefSchema,
@@ -27,7 +30,22 @@ import {
   type ProductDefinition,
 } from "./schema.js";
 import { DEFAULT_JERSEY_NUMBER_RULES, type JerseyNumberRules } from "./jersey-number-rules.js";
-import { DesignError, jerseyNumberLayerErrors, jerseyNumberRulesError, zodIssuesToErrors } from "./validate.js";
+import {
+  DesignError,
+  fontFallbackErrors,
+  jerseyNumberLayerErrors,
+  jerseyNumberRulesError,
+  zodIssuesToErrors,
+} from "./validate.js";
+import { normalizeText } from "./text.js";
+
+/** A text layer's value in NFC; any other input is passed on unchanged for the schema to judge. */
+function normalizeLayerInput(input: unknown): unknown {
+  if (typeof input !== "object" || input === null) return input;
+  const layer = input as { kind?: unknown; value?: unknown };
+  if (layer.kind === "text" && typeof layer.value === "string") return { ...layer, value: normalizeText(layer.value) };
+  return input;
+}
 
 /**
  * Fields of a layer that can be changed. `id` and `kind` are fixed: to change
@@ -159,7 +177,7 @@ export function addLayer(design: DesignDocument, layer: Layer, options?: EditOpt
   requireDesign(design, "add layer");
   const product = requireProduct(options, "add layer");
   const rules = requireRules(options, "add layer");
-  const parsed = layerSchema.safeParse(layer);
+  const parsed = layerSchema.safeParse(normalizeLayerInput(layer));
   if (!parsed.success) {
     throw new DesignError("Invalid layer", zodIssuesToErrors(parsed.error.issues, "layer"));
   }
@@ -195,7 +213,7 @@ export function updateLayer(
   if (forbidden.length > 0) {
     throw new DesignError(`Cannot update layer "${layerId}": '${forbidden.join("', '")}' cannot be changed. Remove the layer and add a new one instead.`);
   }
-  const parsed = layerSchema.safeParse({ ...current, ...patch });
+  const parsed = layerSchema.safeParse(normalizeLayerInput({ ...current, ...patch }));
   if (!parsed.success) {
     throw new DesignError(`Invalid update for layer "${layerId}"`, zodIssuesToErrors(parsed.error.issues, "layer"));
   }
@@ -217,13 +235,39 @@ export function removeLayer(design: DesignDocument, layerId: string): DesignDocu
   return { ...design, layers: design.layers.filter((l) => l.id !== layerId) };
 }
 
-/** Adds a font to the document, or replaces the font with the same id. */
+/**
+ * Moves a layer to another place in the stack (0 is the bottom). `toIndex` is
+ * the layer's index after the move and is clamped to the stack, so "one up"
+ * is `index + 1` and "to the top" is `layers.length - 1`.
+ */
+export function moveLayer(design: DesignDocument, layerId: string, toIndex: number): DesignDocument {
+  requireDesign(design, "move layer");
+  requireString(layerId, "move layer", "the layer id");
+  if (typeof toIndex !== "number" || !Number.isInteger(toIndex)) {
+    throw new DesignError(`Cannot move layer "${layerId}": the new position must be a whole number, got ${describeValue(toIndex)}`);
+  }
+  const from = design.layers.findIndex((l) => l.id === layerId);
+  if (from < 0) throw new DesignError(`Cannot move layer: no layer with id "${layerId}"`);
+  const to = Math.max(0, Math.min(design.layers.length - 1, toIndex));
+  if (to === from) return design;
+  const layers = design.layers.slice();
+  const [layer] = layers.splice(from, 1);
+  layers.splice(to, 0, layer!);
+  return { ...design, layers };
+}
+
+/**
+ * Adds a font to the document, or replaces the font with the same id. Its
+ * `fallbackFontIds` must name fonts the document already has.
+ */
 export function addFont(design: DesignDocument, font: FontRef): DesignDocument {
   requireDesign(design, "add font");
   const parsed = fontRefSchema.safeParse(font);
   if (!parsed.success) {
     throw new DesignError("Invalid font", zodIssuesToErrors(parsed.error.issues, "font"));
   }
+  const fallbackErrors = fontFallbackErrors(parsed.data, new Set(design.fonts.map((f) => f.id)), "font");
+  if (fallbackErrors.length > 0) throw new DesignError("Invalid font", fallbackErrors);
   const exists = design.fonts.some((f) => f.id === parsed.data.id);
   const fonts = exists ? design.fonts.map((f) => (f.id === parsed.data.id ? parsed.data : f)) : [...design.fonts, parsed.data];
   return { ...design, fonts };

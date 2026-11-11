@@ -17,9 +17,18 @@ import { z } from "zod";
 import { DEFAULT_JERSEY_NUMBER_RULES } from "./jersey-number-rules.js";
 import { checkJerseyNumber } from "./jersey-number.js";
 import { MAX_PATH_LENGTH, SVG_PATH_PATTERN, parseSvgPath } from "./svg-path.js";
+import { TEXT_ALIGNS, TEXT_DIRECTIONS, isNormalizedText } from "./text.js";
 
-/** Version of this document format. Not the version of a saved design. */
-export const DESIGN_SCHEMA_VERSION = 1 as const;
+/**
+ * Version of the design document format. Not the version of a saved design.
+ * Version 2 (step E2): text alignment by reading direction (start, center,
+ * end), a text direction, NFC text, font fallbacks, and asset references that
+ * carry the image's pixel size. Version 1 documents are refused (none were
+ * ever saved in production).
+ */
+export const DESIGN_SCHEMA_VERSION = 2 as const;
+/** Version of the product definition format. It did not change in E2. */
+export const PRODUCT_SCHEMA_VERSION = 1 as const;
 
 /** Stable identifier: letters, digits, dash, underscore, dot. */
 export const ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/;
@@ -46,6 +55,15 @@ const zoneId = z
 
 const finite = z.number();
 
+/** An enum whose message lists the choices, and says "missing" when the field is absent. */
+function choice<const T extends readonly [string, ...string[]]>(values: T) {
+  const list = values.map((v) => JSON.stringify(v)).join(", ");
+  return z.enum(values, {
+    error: (issue) =>
+      issue.input === undefined ? `is required but missing (one of ${list})` : `must be one of ${list}`,
+  });
+}
+
 export const paletteRefSchema = z.strictObject({
   /** Palette identifier, for example "fmo-print-2026". */
   id,
@@ -67,21 +85,62 @@ export const sizeSchema = z.strictObject({
   height: finite.positive(),
 });
 
+/**
+ * A font family name as it goes into a CSS font string: printable characters
+ * without quotes, backslashes, semicolons, braces or angle brackets.
+ */
+export const FONT_FAMILY_PATTERN = /^[^"'\\;{}<>\p{Cc}]{1,100}$/u;
+
 export const fontRefSchema = z.strictObject({
   /** Id that text and number layers use in `fontId`. */
   id,
-  family: z.string().min(1).max(100),
+  /** The font family name, exactly as the font files declare it, for example "Noto Sans Arabic". */
+  family: z
+    .string()
+    .regex(
+      FONT_FAMILY_PATTERN,
+      "must be a font family name of 1 to 100 characters, without quotes, backslashes, semicolons, braces or angle brackets",
+    ),
   weight: z.number().int().min(1).max(1000).optional(),
   style: z.enum(["normal", "italic"]).optional(),
   /** Reference to the font file in asset storage. Omitted for built-in fonts. */
   assetId: id.optional(),
+  /**
+   * Other fonts of this document (their ids), tried in order for characters
+   * this font does not have: an Arabic font after a Latin one, so a name such
+   * as "Ali علي" prints with known fonts only. Part of the document because the
+   * proof and the production file must use the same fonts as the preview.
+   */
+  fallbackFontIds: z.array(id).max(8).optional(),
 });
 
-export const assetRefSchema = z.strictObject({
-  /** Id of the file in asset storage (customer upload or clipart library). */
+/** Image formats an asset reference may name. SVG is for curated clipart only; customer logos are raster (see upload-checks.ts). */
+export const ASSET_MEDIA_TYPES = ["image/png", "image/jpeg", "image/webp", "image/svg+xml"] as const;
+/** Image formats a customer's logo may have: the ones the upload checks accept. */
+export const LOGO_MEDIA_TYPES = ["image/png", "image/jpeg", "image/webp"] as const;
+export type LogoMediaType = (typeof LOGO_MEDIA_TYPES)[number];
+
+const pixelCount = z.number().int().min(1).max(100_000);
+
+const assetRefFields = {
+  /** Id of the file in asset storage (customer upload or clipart library). The bytes are never in the design. */
   assetId: id,
+  /** Width of the image in pixels (for SVG: its declared size). The print resolution (DPI) check uses it. */
+  width: pixelCount,
+  /** Height of the image in pixels. */
+  height: pixelCount,
+};
+
+export const assetRefSchema = z.strictObject({
+  ...assetRefFields,
   /** SVG stays SVG. Raster sources are kept as the original file, never re-encoded. */
-  mediaType: z.enum(["image/svg+xml", "image/png", "image/jpeg"]),
+  mediaType: z.enum(ASSET_MEDIA_TYPES),
+});
+
+/** A customer's uploaded logo: one of the raster formats the upload checks accept. */
+export const logoAssetRefSchema = z.strictObject({
+  ...assetRefFields,
+  mediaType: z.enum(LOGO_MEDIA_TYPES),
 });
 
 /** Where a layer sits on a pattern piece, in pattern-piece coordinates (mm). */
@@ -98,17 +157,44 @@ const placement = {
 
 const textStyle = {
   fontId: id,
-  /** Em size in mm. */
+  /** Em size in mm. Resizing a text or number layer scales this and `size` together. */
   fontSize: finite.positive(),
   fill: colorRefSchema,
-  align: z.enum(["left", "center", "right"]),
+  /**
+   * Where the line sits across the layer box, by reading direction: "start" is
+   * the left edge for left-to-right text and the right edge for right-to-left
+   * text. Vertically the line is centred on the box.
+   */
+  align: choice(TEXT_ALIGNS),
 };
+
+/** One line: no line breaks, tabs or other control characters. */
+const ONE_LINE = /^[^\p{Cc}]*$/u;
+
+/** The longest text value, in UTF-16 code units. */
+export const MAX_TEXT_LENGTH = 200;
 
 export const textLayerSchema = z.strictObject({
   id,
   kind: z.literal("text"),
   ...placement,
-  value: z.string().min(1).max(200),
+  /**
+   * One line of text in any script (Latin, Arabic, Urdu, mixed), in Unicode
+   * NFC. Stored as text plus a font reference, never as a picture or outlines.
+   */
+  value: z
+    .string()
+    .min(1)
+    .max(MAX_TEXT_LENGTH)
+    .regex(ONE_LINE, "must be one line of text: no line breaks, tabs or other control characters")
+    .refine((value) => value.trim().length > 0, "must contain a visible character, not only spaces")
+    .refine(isNormalizedText, "must be in Unicode normal form NFC (the edit functions normalise text; or use normalizeText())")
+    .describe(
+      `One line of text in any script, 1 to ${MAX_TEXT_LENGTH} UTF-16 code units. It must also be in Unicode NFC and hold a visible character, ` +
+        "which this schema cannot check: validateDesign() from @fitmyoutfit/editor/design does.",
+    ),
+  /** Reading direction. "auto" follows the first strong letter of the text (Unicode bidi rules P2 and P3). */
+  direction: choice(TEXT_DIRECTIONS),
   ...textStyle,
 });
 
@@ -150,11 +236,16 @@ export const numberLayerSchema = z.strictObject({
   ...textStyle,
 });
 
+/**
+ * A customer's logo: a reference to the uploaded file (id, pixel size, type),
+ * never its bytes. It is drawn as large as fits inside `size` while keeping the
+ * image's proportions, centred in the box.
+ */
 export const logoLayerSchema = z.strictObject({
   id,
   kind: z.literal("logo"),
   ...placement,
-  asset: assetRefSchema,
+  asset: logoAssetRefSchema,
 });
 
 export const clipartLayerSchema = z.strictObject({
@@ -282,7 +373,7 @@ export const zoneSchema = z.strictObject({
 });
 
 export const productDefinitionSchema = z.strictObject({
-  schemaVersion: z.literal(DESIGN_SCHEMA_VERSION, { error: `must be ${DESIGN_SCHEMA_VERSION}, the format version this code understands` }),
+  schemaVersion: z.literal(PRODUCT_SCHEMA_VERSION, { error: `must be ${PRODUCT_SCHEMA_VERSION}, the format version this code understands` }),
   id,
   name: z.string().min(1).max(200),
   model: z.strictObject({
@@ -302,6 +393,7 @@ export type Point = z.infer<typeof pointSchema>;
 export type Size = z.infer<typeof sizeSchema>;
 export type FontRef = z.infer<typeof fontRefSchema>;
 export type AssetRef = z.infer<typeof assetRefSchema>;
+export type LogoAssetRef = z.infer<typeof logoAssetRefSchema>;
 export type TextLayer = z.infer<typeof textLayerSchema>;
 export type NumberLayer = z.infer<typeof numberLayerSchema>;
 export type LogoLayer = z.infer<typeof logoLayerSchema>;

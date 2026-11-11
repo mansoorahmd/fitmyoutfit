@@ -1,9 +1,11 @@
 import type { z } from "zod";
 import {
   DESIGN_SCHEMA_VERSION,
+  PRODUCT_SCHEMA_VERSION,
   designSchema,
   productDefinitionSchema,
   type DesignDocument,
+  type FontRef,
   type Layer,
   type ProductDefinition,
 } from "./schema.js";
@@ -80,15 +82,15 @@ export function jerseyNumberRulesError(rules: unknown): ValidationError | null {
   return problem ? makeError("", `cannot check number layers: ${problem}`) : null;
 }
 
-function checkSchemaVersion(input: unknown): ValidationError | null {
+function checkSchemaVersion(input: unknown, expected: number): ValidationError | null {
   if (typeof input !== "object" || input === null || Array.isArray(input)) return null;
   const version = (input as Record<string, unknown>).schemaVersion;
-  if (typeof version === "number" && Number.isInteger(version) && version !== DESIGN_SCHEMA_VERSION) {
+  if (typeof version === "number" && Number.isInteger(version) && version !== expected) {
     return makeError(
       "schemaVersion",
-      version > DESIGN_SCHEMA_VERSION
-        ? `this document uses format version ${version}, which is newer than the version this code understands (${DESIGN_SCHEMA_VERSION}); update the editor package`
-        : `format version ${version} is not supported (this code understands ${DESIGN_SCHEMA_VERSION}); no migration exists for it`,
+      version > expected
+        ? `this document uses format version ${version}, which is newer than the version this code understands (${expected}); update the editor package`
+        : `format version ${version} is not supported (this code understands ${expected}); no migration exists for it`,
     );
   }
   return null;
@@ -108,21 +110,40 @@ function checkReservedKeys(input: Record<string, unknown>): ValidationError[] {
     .map((key) => makeError(`zones.${key}`, "this name is reserved and cannot be used as a zone id"));
 }
 
-function parseWith<T>(
+/** Parses with a zod schema into readable errors. `version` is the format version to expect, if the format has one. */
+export function parseWith<T>(
   schema: z.ZodType<T>,
   input: unknown,
   what: string,
+  version: number | null,
 ): ValidationResult<T> {
   if (typeof input !== "object" || input === null || Array.isArray(input)) {
     return { ok: false, errors: [makeError("", `${what} must be a JSON object`)] };
   }
-  const versionError = checkSchemaVersion(input);
+  const versionError = version === null ? null : checkSchemaVersion(input, version);
   if (versionError) return { ok: false, errors: [versionError] };
   const reserved = what === "a design" ? checkReservedKeys(input as Record<string, unknown>) : [];
   if (reserved.length > 0) return { ok: false, errors: reserved };
   const result = schema.safeParse(input);
   if (!result.success) return { ok: false, errors: zodIssuesToErrors(result.error.issues) };
   return { ok: true, value: result.data };
+}
+
+/**
+ * A font's fallbacks must be other fonts of the document, each listed once.
+ * Shared by `validateDesign` and `addFont`.
+ */
+export function fontFallbackErrors(font: FontRef, fontIds: ReadonlySet<string>, path: string): ValidationError[] {
+  const errors: ValidationError[] = [];
+  const seen = new Set<string>();
+  (font.fallbackFontIds ?? []).forEach((fallback, k) => {
+    const at = `${path}.fallbackFontIds[${k}]`;
+    if (fallback === font.id) errors.push(makeError(at, `a font cannot be its own fallback ("${fallback}")`));
+    else if (seen.has(fallback)) errors.push(makeError(at, `"${fallback}" is listed twice`));
+    else if (!fontIds.has(fallback)) errors.push(makeError(at, `font "${fallback}" is not listed in 'fonts'; add it first`));
+    seen.add(fallback);
+  });
+  return errors;
 }
 
 /**
@@ -137,6 +158,7 @@ function checkReferences(design: DesignDocument, rules: JerseyNumberRules): Vali
     if (fontIds.has(font.id)) errors.push(makeError(`fonts[${i}].id`, `duplicate font id "${font.id}"`));
     fontIds.add(font.id);
   });
+  design.fonts.forEach((font, i) => errors.push(...fontFallbackErrors(font, fontIds, `fonts[${i}]`)));
 
   const layerIds = new Set<string>();
   design.layers.forEach((layer, i) => {
@@ -210,7 +232,7 @@ export function validateDesign(
     const rules = options.jerseyNumberRules ?? DEFAULT_JERSEY_NUMBER_RULES;
     const rulesError = jerseyNumberRulesError(rules);
     if (rulesError) return { ok: false, errors: [rulesError] };
-    const parsed = parseWith(designSchema, input, "a design");
+    const parsed = parseWith(designSchema, input, "a design", DESIGN_SCHEMA_VERSION);
     if (!parsed.ok) return parsed;
     const errors = checkReferences(parsed.value, rules);
     if (options.product) errors.push(...checkAgainstProduct(parsed.value, options.product));
@@ -245,7 +267,7 @@ export function validateProductDefinition(input: unknown): ValidationResult<Prod
 }
 
 function checkProductDefinition(input: unknown): ValidationResult<ProductDefinition> {
-  const parsed = parseWith(productDefinitionSchema, input, "a product definition");
+  const parsed = parseWith(productDefinitionSchema, input, "a product definition", PRODUCT_SCHEMA_VERSION);
   if (!parsed.ok) return parsed;
   const errors: ValidationError[] = [];
   const dupes = (ids: string[], label: string) => {
