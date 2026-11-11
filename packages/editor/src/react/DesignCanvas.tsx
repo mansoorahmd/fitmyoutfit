@@ -329,8 +329,7 @@ function ModelView({
     [zones, product],
   );
   useEffect(() => {
-    drawPatternTexture(inside.ctx, product, zonesOnly, { size: inside.size });
-    inside.texture.needsUpdate = true;
+    redrawPattern(inside, product, zonesOnly, null, null);
     invalidate();
   }, [zonesOnly, product, inside, invalidate]);
 
