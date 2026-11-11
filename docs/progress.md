@@ -150,6 +150,10 @@ The entries below are the review history of M0, kept for reference.
 | How is a cash-on-delivery payment recorded once the courier has the cash? | The courier provides a slip against the order number | Staff mark the payment as collected in the admin against the order number, and the slip reference is kept on the order (task S1-1b) |
 | Is the cash-on-delivery limit compared with the total including delivery and tax? | Keep it the same as ordinary retail stores on Shopify do today | The limit is compared with the full order total, as the backend does now. The coordinator also uses this as the default for similar retail checkout questions |
 | Start editor step E2? | "ok" (read by the coordinator as yes; the founder was told so) | E2 started 11 Nov |
+| Courier slip reference: loose rule or a fixed format? | "okay do as is" | The loose rule stays: up to 64 characters with at least one letter or digit |
+| Hide the staff member's id from customers and leave the slip reference visible? | "okay do as is" | The staff id is taken out of what a customer can read; the slip reference stays visible. Done after the S1-1b review |
+| Urdu font in the editor demo (Naskh or Nastaliq)? | "okay do as is" (read by the coordinator as: keep the current font; the founder was told so) | Noto Sans Arabic stays for now; Nastaliq can be added later |
+| Start editor step E3? | "okay do as is" (read by the coordinator as yes; the founder was told so) | E3 starts when a worker slot is free |
 
 Following the Shopify default above, the coordinator chose: "Tax not final" is shown in the cart and at checkout, and not on the order confirmation or account pages, where the total is what the customer pays. The founder was told and can reverse it.
 
