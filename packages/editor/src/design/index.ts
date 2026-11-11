@@ -14,6 +14,7 @@ export * from "./json-schema.js";
 export * from "./svg-path.js";
 export * from "./pattern.js";
 export * from "./placement.js";
+export * from "./new-layers.js";
 export * from "./font-catalog.js";
 export * from "./image-file.js";
 export * from "./upload-checks.js";

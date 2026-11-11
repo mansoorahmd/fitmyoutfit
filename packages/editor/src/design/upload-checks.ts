@@ -120,7 +120,7 @@ function usableLimits(limits: UploadLimits): UploadLimits {
  * Never throws for a bad file; throws a `RangeError` for unusable limits.
  */
 export function checkLogoFile(bytes: Uint8Array, limits: UploadLimits = DEFAULT_UPLOAD_LIMITS): LogoFileCheck {
-  const { acceptedTypes, maxFileBytes, maxSidePx, maxPixels, minSidePx } = usableLimits(limits);
+  const { acceptedTypes, maxSidePx, maxPixels, minSidePx } = usableLimits(limits);
   const issues: UploadIssue[] = [];
   const error = (code: UploadIssueCode, message: string) => issues.push({ code, severity: "error", message });
 
@@ -128,9 +128,8 @@ export function checkLogoFile(bytes: Uint8Array, limits: UploadLimits = DEFAULT_
     error("damaged", "The file could not be read.");
     return { ok: false, issues };
   }
-  if (bytes.length > maxFileBytes) {
-    error("file-size", `The file is ${formatBytes(bytes.length)}; the largest accepted is ${formatBytes(maxFileBytes)}.`);
-  }
+  const tooBig = fileSizeIssue(bytes.length, limits);
+  if (tooBig) issues.push(tooBig);
   const read = readImageHeader(bytes);
   if (!read.ok) {
     const damaged = read.error.includes("damaged") || read.error.includes("cut short") || read.error.includes("does not state");
@@ -153,6 +152,20 @@ export function checkLogoFile(bytes: Uint8Array, limits: UploadLimits = DEFAULT_
   if (header.animated) error("animated", "Animated images are not accepted: only one frame would print. Upload a still image.");
   if (!header.alphaChannel) issues.push(noTransparencyWarning(header.mediaType));
   return { ok: !issues.some((i) => i.severity === "error"), header, issues };
+}
+
+/**
+ * The file-size check on its own, from the size in bytes, so a caller can
+ * refuse a huge file before reading it.
+ */
+export function fileSizeIssue(byteLength: number, limits: UploadLimits = DEFAULT_UPLOAD_LIMITS): UploadIssue | null {
+  const { maxFileBytes } = usableLimits(limits);
+  if (byteLength <= maxFileBytes) return null;
+  return {
+    code: "file-size",
+    severity: "error",
+    message: `The file is ${formatBytes(byteLength)}; the largest accepted is ${formatBytes(maxFileBytes)}.`,
+  };
 }
 
 function capitalise(text: string): string {

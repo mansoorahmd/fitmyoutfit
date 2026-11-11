@@ -3,7 +3,7 @@
  * with node:zlib, with CRCs, so any decoder opens them) and the headers of
  * JPEG and WebP files, which is all the upload checks read.
  */
-import { deflateSync } from "node:zlib";
+import { deflateSync, inflateSync } from "node:zlib";
 
 const CRC_TABLE = (() => {
   const table = new Uint32Array(256);
@@ -124,4 +124,41 @@ export function rgba(width: number, height: number, pixel: (x: number, y: number
     for (let x = 0; x < width; x++) out.set(pixel(x, y), (y * width + x) * 4);
   }
   return out;
+}
+
+/**
+ * Decodes a PNG made by `makePng` (8-bit RGB or RGBA, filter 0) into RGBA,
+ * standing in for the browser's decoder in tests. Throws for anything else.
+ */
+export function decodeTestPng(bytes: Uint8Array): { rgba: Uint8ClampedArray; width: number; height: number } {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let offset = 8;
+  let width = 0;
+  let height = 0;
+  let colourType = 6;
+  const data: Uint8Array[] = [];
+  while (offset + 8 <= bytes.length) {
+    const length = view.getUint32(offset);
+    const type = String.fromCharCode(...bytes.subarray(offset + 4, offset + 8));
+    const body = bytes.subarray(offset + 8, offset + 8 + length);
+    if (body.length !== length) throw new Error("cut short");
+    if (type === "IHDR") {
+      width = view.getUint32(offset + 8);
+      height = view.getUint32(offset + 12);
+      colourType = bytes[offset + 17]!;
+    } else if (type === "IDAT") data.push(body);
+    offset += 12 + length;
+  }
+  const raw = inflateSync(concat(data));
+  const channels = colourType === 6 ? 4 : 3;
+  const out = new Uint8ClampedArray(width * height * 4);
+  for (let y = 0; y < height; y++) {
+    const row = y * (1 + width * channels);
+    if (raw[row] !== 0) throw new Error("only filter 0 is supported");
+    for (let x = 0; x < width; x++) {
+      const p = row + 1 + x * channels;
+      out.set([raw[p]!, raw[p + 1]!, raw[p + 2]!, channels === 4 ? raw[p + 3]! : 255], (y * width + x) * 4);
+    }
+  }
+  return { rgba: out, width, height };
 }
