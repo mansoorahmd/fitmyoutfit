@@ -3,6 +3,9 @@
 // A part that does not exist yet (or has no `dev` script) is skipped with a note,
 // so this works in a checkout that has only some of the parts.
 //
+// When a child exits on its own, with any code, dev stops the other one and exits non-zero, naming
+// the child that ended; Ctrl+C stops both and exits 0 (scripts/lib/dev-supervisor.mjs).
+//
 // Ports (scripts/lib/ports.mjs): the backend listens on PORT (from the shell, else backend/.env,
 // else 9000), the storefront on STOREFRONT_PORT (from the shell, else 8000). Each child gets its
 // port in its environment, and dev prints both URLs.
@@ -15,6 +18,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { createDevSupervisor } from "./lib/dev-supervisor.mjs";
 import { writeStderr, writeStdout } from "./lib/output.mjs";
 import { devChildEnv, devUrlLines, readBackendEnvFilePort } from "./lib/ports.mjs";
 
@@ -31,8 +35,6 @@ const targets = [
   { name: "backend", dir: "backend" },
   { name: "storefront", dir: "storefront" },
 ];
-
-const children = [];
 
 function hasDevScript(dir) {
   const pkgPath = path.join(root, dir, "package.json");
@@ -53,10 +55,11 @@ function killTree(child) {
   }
 }
 
-function shutdown(code) {
-  for (const child of children) killTree(child);
-  process.exit(code);
-}
+const supervisor = createDevSupervisor({
+  kill: killTree,
+  exit: (code) => process.exit(code),
+  warn,
+});
 
 /** Pass a child's output on through `write` (writeStdout / writeStderr), each line prefixed. */
 function prefixLines(name, stream, write) {
@@ -86,11 +89,7 @@ for (const target of targets) {
   });
   prefixLines(target.name, child.stdout, writeStdout);
   prefixLines(target.name, child.stderr, writeStderr);
-  child.on("exit", (code) => {
-    warn(`${target.name} exited with code ${code}; stopping the others`);
-    shutdown(code ?? 1);
-  });
-  children.push(child);
+  supervisor.add(target.name, child);
   started.push(target.name);
 }
 
@@ -101,5 +100,5 @@ if (started.length === 0) {
 for (const line of devUrlLines(started, process.env, backendFilePort)) say(line);
 say(`started: ${started.join(", ")}. Press Ctrl+C to stop.`);
 
-process.on("SIGINT", () => shutdown(0));
-process.on("SIGTERM", () => shutdown(0));
+process.on("SIGINT", () => supervisor.stop());
+process.on("SIGTERM", () => supervisor.stop());

@@ -146,7 +146,7 @@ The panel shows only on an order paid by cash on delivery whose payment is still
 | Command | What it does |
 | --- | --- |
 | `npm run setup` | Env files, migrations, seed, publishable key (idempotent) |
-| `npm run dev` | Backend and storefront together (a missing part is skipped) |
+| `npm run dev` | Backend and storefront together (a missing part is skipped). If either one exits by itself, with any exit code, dev stops the other and exits non-zero, naming the one that ended; Ctrl+C stops both and exits 0 |
 | `npm run lint` | ESLint in the backend, storefront and editor, and in `scripts/` |
 | `npm run typecheck` | `tsc --noEmit` in the backend, storefront and editor |
 | `npm run test` | Tests in the backend, storefront and editor, plus `scripts/` tests |
