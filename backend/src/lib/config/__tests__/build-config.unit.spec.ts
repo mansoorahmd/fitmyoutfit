@@ -8,6 +8,7 @@ import {
   buildModules,
   buildRedisModules,
   ConfigError,
+  DATABASE_URL_NOT_SET,
   DEV_ONLY_VALUES,
   devValueMatch,
   MIN_CONTAINED_DEV_VALUE_LENGTH,
@@ -347,15 +348,69 @@ describe("production secrets", () => {
     )
   })
 
-  it("accepts other database credentials, and says nothing about an unset or odd DATABASE_URL", () => {
+  it("accepts other database credentials, and finds no dev login in an unset or odd DATABASE_URL", () => {
     expect(usesDevDatabaseCredentials("postgres://medusa:real-password@db/medusa")).toBe(false)
     expect(usesDevDatabaseCredentials("postgres://store:medusa@db/medusa")).toBe(false)
     expect(usesDevDatabaseCredentials(undefined)).toBe(false)
     expect(usesDevDatabaseCredentials("not a url")).toBe(false)
-    expect(
-      productionSecretProblems({ ...goodProductionEnv, DATABASE_URL: undefined })
-    ).toEqual([])
+    // An unset DATABASE_URL is refused on its own (below), not as a dev login.
+    expect(productionSecretProblems({ ...goodProductionEnv, DATABASE_URL: undefined })).toEqual([
+      DATABASE_URL_NOT_SET,
+    ])
   })
+
+  // S1-7: with DATABASE_URL unset Medusa takes the database from MEDUSA_DATABASE_URL, a
+  // per-module <MODULE>_DATABASE_URL or the PG* variables, which the checks here do not read.
+  it.each([
+    ["unset", undefined],
+    ["empty", ""],
+    ["a space", " "],
+    ["spaces, a tab and a line break", "  \t\r\n "],
+  ] as [string, string | undefined][])(
+    "refuses to start outside development and test when DATABASE_URL is %s",
+    (_label, value) => {
+      const env = {
+        ...goodProductionEnv,
+        DATABASE_URL: value,
+        MEDUSA_DATABASE_URL: "postgres://store:real-password@db:5432/medusa",
+        PRODUCT_DATABASE_URL: "postgres://store:real-password@db:5432/medusa",
+      }
+      expect(productionSecretProblems(env)).toEqual([DATABASE_URL_NOT_SET])
+      expect(() => buildMedusaConfig(env)).toThrow(ConfigError)
+      expect(() => buildMedusaConfig(env)).toThrow("DATABASE_URL is not set")
+      for (const nodeEnv of ["prod", "staging", " Production "]) {
+        expect(productionSecretProblems({ ...env, NODE_ENV: nodeEnv })).toEqual([
+          DATABASE_URL_NOT_SET,
+        ])
+      }
+    }
+  )
+
+  it("says what to set when DATABASE_URL is missing, and never echoes the fallback's value", () => {
+    const fallback = "postgres://store:s3cret-fallback-pw@db:5432/medusa"
+    let message = ""
+    try {
+      buildMedusaConfig({ ...goodProductionEnv, DATABASE_URL: undefined, MEDUSA_DATABASE_URL: fallback })
+    } catch (error) {
+      message = (error as Error).message
+    }
+    expect(message).toContain(
+      "DATABASE_URL is not set. Set it to the production database's connection string, " +
+        "postgres://<user>:<password>@<host>:<port>/<database>"
+    )
+    expect(message).toContain("MEDUSA_DATABASE_URL")
+    expect(message).not.toContain("s3cret-fallback-pw")
+  })
+
+  it.each([undefined, "", "   "])(
+    "leaves an unset or blank DATABASE_URL (%j) alone in development and test",
+    (value) => {
+      for (const nodeEnv of [undefined, "", "development", "test", " Test "]) {
+        expect(productionSecretProblems({ NODE_ENV: nodeEnv, DATABASE_URL: value })).toEqual([])
+        expect(() => buildMedusaConfig({ NODE_ENV: nodeEnv, DATABASE_URL: value })).not.toThrow()
+      }
+    }
+  )
 
   // QA, third review: the dev login reached pg other ways than user:password@ in the URL.
   it.each([
