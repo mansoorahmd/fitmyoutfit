@@ -1,6 +1,6 @@
 # Store development plan
 
-10 Nov 2026. This plan covers only the code for the online store: the shop, team orders and the 3D editor. Production, factory and logistics work is left out and comes after the store is ready.
+10 Nov 2026. This plan covers only the code for the online store: the shop, team orders and the 3D editor. Production, factory and logistics work is left out and comes after the store is ready. Relabelled from weeks to milestones on 11 Nov 2026; the tasks and "Done when" lines are unchanged.
 
 Inputs: plan.md and the founder decisions in critiques/DECISIONS.md.
 
@@ -15,6 +15,23 @@ A store for **teams and clubs** in **Pakistan, the UK, the UAE and the US**, sel
 5. We promise **delivery within 15 days of proof approval**, or 10 days with paid rush.
 
 Single pieces can be bought **in Pakistan only**. Other markets have a minimum quantity.
+
+## Milestones
+
+Work is planned by milestone, not by week (founder's choice, 11 Nov 2026). A milestone is finished when its "Done when" line is met, whatever the date. The work stops at the end of each milestone for a summary to the founder, and the next one starts on the founder's yes.
+
+| Milestone | What |
+| --- | --- |
+| M0 | Setup |
+| M1 | Basic store |
+| M2 | Team orders, backend |
+| M3 | Team orders, storefront and payments |
+| E1 to E5 | The 3D editor, in five steps |
+| M4 | Integration and hardening |
+
+- **Order:** M0, M1, M2, M3, then M4.
+- **The editor steps** run alongside M1 to M3, in order from E1 to E5. M4 starts when both M3 and E5 are done.
+- **Older names:** M0 to M3 were called Sprint 0 to Sprint 3. Task numbers such as S0-12, and notes written before 11 Nov 2026, keep those names.
 
 ## Team
 
@@ -37,7 +54,7 @@ Single pieces can be bought **in Pakistan only**. Other markets have a minimum q
 
 **Rule:** every placeholder must be stored as data (a seed file or admin setting), never hard-coded, so the real version can be dropped in without code changes.
 
-## Sprint 0 (week 1): setup. Owner: BE, with FE helping
+## M0 Setup (was Sprint 0). Owner: BE, with FE helping
 
 - [ ] Monorepo with three parts:
 
@@ -53,14 +70,14 @@ Single pieces can be bought **in Pakistan only**. Other markets have a minimum q
   - **Extra products:** a fit kit and a rush add-on.
   - **A sample price list for each region.**
 - [ ] Continuous integration (CI) that runs lint, type-checking and tests on every push.
-- [ ] Settle three choices in Sprint 0:
+- [ ] Settle three choices in M0:
   - **Email provider**, used for team-link invites, reminders and proof emails.
   - **Hosting target.**
   - **PDF library**, used for the roster proof.
 
 **Done when:** a new developer can run `docker compose up` plus one command, and see the storefront with the 3 products in all 4 regions.
 
-## Sprint 1 (weeks 2–3): basic store. FE leads, BE supports
+## M1 Basic store (was Sprint 1). FE leads, BE supports
 
 - [ ] **Region selection.** The region is detected from the visitor's country and can be switched by hand. Prices show in the local currency.
 - [ ] **Product pages** with the size chart. Show it as a garment-measurement table stored on the product, not a body chart.
@@ -75,7 +92,7 @@ Single pieces can be bought **in Pakistan only**. Other markets have a minimum q
 - A Pakistan customer can buy 1 T-shirt with cash on delivery.
 - A UK customer is blocked below the minimum and can check out at 10 or more.
 
-## Sprint 2 (weeks 4–5): team orders backend. BE leads
+## M2 Team orders backend (was Sprint 2). BE leads
 
 Build a custom Medusa module, `team-order`, with three models:
 
@@ -103,7 +120,7 @@ Tasks:
 
 **Done when:** a test team of 20 can go from open, to close, to a signed proof, using API tests only.
 
-## Sprint 3 (weeks 6–7): team orders storefront and payments. FE leads; BE owns payments
+## M3 Team orders storefront and payments (was Sprint 3). FE leads; BE owns payments
 
 - [ ] **Organizer dashboard.** Shows who has submitted, who hasn't and who has no size, with a copy-link button and a close-now button.
 - [ ] **Player page,** reached from the shared link. Mobile first, entry takes under a minute, and it previews the player's name and number on the design.
@@ -125,7 +142,7 @@ Tasks:
 7. balance
 8. marked shipped
 
-## 3D editor track (weeks 3–12, in parallel). 3D leads
+## 3D editor track: steps E1 to E5, alongside M1 to M3. 3D leads
 
 Stack: React with Three.js (react-three-fiber), in `packages/editor`. The storefront embeds it on the product page and the team-order page.
 
@@ -134,13 +151,13 @@ Stack: React with Three.js (react-three-fiber), in `packages/editor`. The storef
 - Renders and proofs are generated from the JSON.
 - Production files are generated from the same JSON later, so it must keep vector data and never flatten it.
 
-| Weeks | Deliverable |
+| Step | Deliverable |
 | --- | --- |
-| 3–4 | Load the GLB model and orbit the camera. Map 2D SVG pattern panels to the 3D model as textures. Change colour per zone. |
-| 5–6 | Text, numbers and logo upload. Upload checks: file type, resolution, transparency, and a warning below a minimum DPI. Undo and redo. |
-| 7–8 | **Palette:** customers pick print-tested colours. A custom HEX value snaps to the nearest palette colour, with a visible warning that shows both colours. **Templates:** load a template and change its text and colours. |
-| 9–10 | Roster preview: switch the 3D view between players, showing each name and number. Font metrics give a real maximum length per field, which the roster checks then use. |
-| 11–12 | Proof renders: front, back and side PNGs from the JSON, uploaded to storage and attached to the proof. Measure performance on a mid-range Android phone. |
+| E1 | Load the GLB model and orbit the camera. Map 2D SVG pattern panels to the 3D model as textures. Change colour per zone. |
+| E2 | Text, numbers and logo upload. Upload checks: file type, resolution, transparency, and a warning below a minimum DPI. Undo and redo. |
+| E3 | **Palette:** customers pick print-tested colours. A custom HEX value snaps to the nearest palette colour, with a visible warning that shows both colours. **Templates:** load a template and change its text and colours. |
+| E4 | Roster preview: switch the 3D view between players, showing each name and number. Font metrics give a real maximum length per field, which the roster checks then use. |
+| E5 | Proof renders: front, back and side PNGs from the JSON, uploaded to storage and attached to the proof. Measure performance on a mid-range Android phone. |
 
 - [ ] Save the design JSON through a backend `design` module with versions. Every save creates a new version, and proofs refer to a version.
 - [ ] Share link for a design, read-only.
@@ -149,7 +166,7 @@ Stack: React with Three.js (react-three-fiber), in `packages/editor`. The storef
 - A coach builds a team design from a template and previews 3 players without help, in a user test.
 - The proof PNG matches the 3D view.
 
-## Week 13 onward: integration and hardening (all developers)
+## M4 Integration and hardening, after M3 and E5 (all developers)
 
 - [ ] Replace placeholders as the real inputs arrive: the real 3D models, the real gateway(s), the real prices and the real templates.
 - [ ] Payment providers:
@@ -165,13 +182,15 @@ Stack: React with Three.js (react-three-fiber), in `packages/editor`. The storef
 - The claims and remake flow behind the 7-day guarantee. Until then admin handles claims by hand.
 - Company accounts, AI design assist, storefronts for creators and brands, fundraising.
 
-## Inputs the developers need from others, and by when
+## Inputs the developers need from others, and for which milestone
 
-| Needed by | What | From |
+| Needed at the start of | What | From |
 | --- | --- | --- |
-| Week 2 | Size list and garment-measurement chart per product, even if draft | Pattern maker |
-| Week 3 | One real jersey GLB model with UV-mapped pattern panels | 3D artist and pattern maker |
-| Week 4 | Sample prices per region and the minimum quantity for export | Founders |
-| Week 6 | Gateway status for the UAE company: approved, pending or refused | Founders |
-| Week 7 | Print-tested colour palette (HEX values) and 10 templates | Graphic designer |
-| Week 10 | T-shirt and jacket GLB models | 3D artist |
+| M1 | Size list and garment-measurement chart per product, even if draft | Pattern maker |
+| E1 | One real jersey GLB model with UV-mapped pattern panels | 3D artist and pattern maker |
+| M2 | Sample prices per region and the minimum quantity for export | Founders |
+| M3 | Gateway status for the UAE company: approved, pending or refused | Founders |
+| E3 | Print-tested colour palette (HEX values) and 10 templates | Graphic designer |
+| E5 | T-shirt and jacket GLB models | 3D artist |
+
+Until an input arrives, work goes on with the placeholder listed above, and the milestone is not held up.

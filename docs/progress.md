@@ -61,7 +61,7 @@ The three coding tasks run in parallel, each in its own worktree, against [contr
   - The React peer range must be `^19.0.0`. The contract was wrong and is corrected.
   - Edit functions can produce a document that refers to an unknown font or pattern piece.
   - Three low-severity validation gaps.
-- Noted for the editor's text-layer task (weeks 5 to 6), from QA's Arabic and Urdu probe. The design format accepts Arabic and Urdu text today, but:
+- Noted for the editor's text-layer task (editor step E2), from QA's Arabic and Urdu probe. The design format accepts Arabic and Urdu text today, but:
   - it has no text-direction field, and alignment is left/right rather than start/end;
   - a font has one family, with no fallback per script;
   - text is not Unicode-normalised, which matters when comparing names;
