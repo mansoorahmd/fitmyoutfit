@@ -64,6 +64,20 @@ export const DEV_DATABASE_CREDENTIALS: readonly { user: string; password: string
   { user: "medusa", password: "medusa" },
 ]
 
+/**
+ * The problem reported when DATABASE_URL is unset, empty or only spaces outside development and
+ * test. Why it is refused rather than left to Medusa (@medusajs/framework and @medusajs/utils
+ * 2.22.6): our config hands Medusa `databaseUrl: undefined`, so its main connection gets no
+ * connection string and pg falls back to PGHOST / PGUSER / PGPASSWORD / PGDATABASE (or
+ * localhost:5432 as the operating-system user), while the module loader and the migrations read
+ * MEDUSA_DATABASE_URL, then a per-module <MODULE>_DATABASE_URL (PRODUCT_DATABASE_URL, ...)
+ * instead (utils, load-module-database-config.js). None of those is what the checks below read.
+ */
+export const DATABASE_URL_NOT_SET =
+  "DATABASE_URL is not set. Set it to the production database's connection string, " +
+  "postgres://<user>:<password>@<host>:<port>/<database>. MEDUSA_DATABASE_URL, " +
+  "<MODULE>_DATABASE_URL and the PG* variables are not used in its place"
+
 export class ConfigError extends Error {}
 
 function clean(value: string | undefined): string | undefined {
@@ -226,6 +240,9 @@ export function productionSecretProblems(env: Env): string[] {
     if (devProblem) {
       problems.push(devProblem)
     }
+  }
+  if (!clean(env.DATABASE_URL)) {
+    problems.push(DATABASE_URL_NOT_SET)
   }
   if (env.DATABASE_URL?.includes("#")) {
     problems.push(
