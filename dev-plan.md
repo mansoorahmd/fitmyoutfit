@@ -155,7 +155,7 @@ Stack: React with Three.js (react-three-fiber), in `packages/editor`. The storef
 | --- | --- |
 | E1 | Load the GLB model and orbit the camera. Map 2D SVG pattern panels to the 3D model as textures. Change colour per zone. |
 | E2 | Text, numbers and logo upload. Upload checks: file type, resolution, transparency, and a warning below a minimum DPI. Undo and redo. |
-| E3 | **Palette:** customers pick print-tested colours. A custom HEX value snaps to the nearest palette colour, with a visible warning that shows both colours. **Templates:** load a template and change its text and colours. |
+| E3 | **Palette:** customers pick print-tested colours. A custom HEX value snaps to the nearest palette colour, with a visible warning that shows both colours. **Templates:** load a template and change its text and colours. Built in two parts to the interface specification, docs/design/06-editor.md (decision 009): **E3a** the new interface, templates, team colours and the palette; **E3b** handles on the model, logos, free text and the Done panel. |
 | E4 | Roster preview: switch the 3D view between players, showing each name and number. Font metrics give a real maximum length per field, which the roster checks then use. |
 | E5 | Proof renders: front, back and side PNGs from the JSON, uploaded to storage and attached to the proof. Measure performance on a mid-range Android phone. |
 
