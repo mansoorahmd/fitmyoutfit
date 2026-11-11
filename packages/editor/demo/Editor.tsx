@@ -42,6 +42,7 @@ import {
   type UploadIssue,
 } from "../src";
 import { SAMPLE_FILES } from "./sample-files";
+import { startPlacement } from "./placements";
 
 /** A demo swatch: a palette colour reference plus a display name. */
 export interface Swatch {
@@ -88,6 +89,17 @@ function FlatPattern({ product, design, images, version }: { product: ProductDef
     if (ctx) drawPatternTexture(ctx, product, design, { size: 720, mode: "flat", images: images.lookup });
   }, [product, design, images, version]);
   return <canvas ref={ref} width={720} height={720} className="flat-pattern" aria-label="Flat pattern pieces" />;
+}
+
+/** The texture exactly as the model gets it: every piece in its packed place, with its bleed. */
+function ModelTexture({ product, design, images, version }: { product: ProductDefinition; design: DesignDocument; images: AssetImageCache; version: number }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  const size = 1024;
+  useEffect(() => {
+    const ctx = ref.current?.getContext("2d");
+    if (ctx) drawPatternTexture(ctx, product, design, { size, images: images.lookup });
+  }, [product, design, images, version]);
+  return <canvas ref={ref} width={size} height={size} className="flat-pattern" aria-label="The model's texture" data-testid="texture" />;
 }
 
 /** One piece, flat and large, to judge text shaping closely. Same drawing function, cropped to the piece. */
@@ -192,7 +204,8 @@ export function Editor({ product, swatches, fonts }: EditorProps) {
     const id = nextLayerId(designRef.current, "text");
     const ok = commitEdit((d) => {
       const withFont = addCatalogFont(d, fonts, textFont);
-      return addLayer(withFont, newTextLayer(product, { id, pieceId, value, fontId: textFont, fill }), { product });
+      const start = startPlacement(product.id, pieceId, "text");
+      return addLayer(withFont, newTextLayer(product, { id, pieceId, value, fontId: textFont, fill, ...start }), { product });
     });
     if (ok) setSelectedId(id);
   };
@@ -206,7 +219,8 @@ export function Editor({ product, swatches, fonts }: EditorProps) {
     const id = nextLayerId(designRef.current, "number");
     const ok = commitEdit((d) => {
       const withFont = addCatalogFont(d, fonts, numberFont);
-      return addLayer(withFont, newNumberLayer(product, { id, pieceId, value, fontId: numberFont, fill }), { product });
+      const start = startPlacement(product.id, pieceId, "number");
+      return addLayer(withFont, newNumberLayer(product, { id, pieceId, value, fontId: numberFont, fill, ...start }), { product });
     });
     if (ok) setSelectedId(id);
   };
@@ -218,7 +232,8 @@ export function Editor({ product, swatches, fonts }: EditorProps) {
       const messages: Message[] = result.issues.map((i: UploadIssue) => ({ severity: i.severity, text: `${file.name}: ${i.message}` }));
       if (result.ok) {
         const id = nextLayerId(designRef.current, "logo");
-        const ok = commitEdit((d) => addLayer(d, newLogoLayer(product, { id, pieceId, asset: result.asset }), { product }));
+        const { position } = startPlacement(product.id, pieceId, "logo");
+        const ok = commitEdit((d) => addLayer(d, newLogoLayer(product, { id, pieceId, asset: result.asset, position }), { product }));
         if (ok) setSelectedId(id);
         messages.unshift({ severity: "info", text: `${file.name}: uploaded as ${result.asset.assetId} (${result.asset.width} x ${result.asset.height} px, ${result.asset.mediaType}). Only this reference is in the design.` });
       } else {
@@ -530,6 +545,11 @@ export function Editor({ product, swatches, fonts }: EditorProps) {
             <summary>Flat pattern pieces</summary>
             <FlatPattern product={product} design={design} images={flatImages} version={fontVersion} />
             <p className="note">The same vector pieces, zones and layers that are drawn onto the model.</p>
+          </details>
+          <details>
+            <summary>The model's texture</summary>
+            <ModelTexture product={product} design={design} images={flatImages} version={fontVersion} />
+            <p className="note">Every piece in its place in the model's one texture, at one scale, with a margin of its own colour round it. Grey is unused.</p>
           </details>
           <details>
             <summary>Design JSON</summary>

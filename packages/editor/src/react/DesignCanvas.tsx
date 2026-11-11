@@ -10,15 +10,18 @@ import {
   type ReactNode,
   type Ref,
 } from "react";
-import { Canvas, useThree } from "@react-three/fiber";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { OrbitControls, useGLTF } from "@react-three/drei";
 import {
   Box3,
   CanvasTexture,
+  DoubleSide,
+  NeutralToneMapping,
   Raycaster,
   SRGBColorSpace,
   Vector2,
   Vector3,
+  type DirectionalLight,
   type Material,
   type Mesh,
   type MeshStandardMaterial,
@@ -30,6 +33,8 @@ import { DEFAULT_TEXTURE_SIZE, drawPatternTexture, type DrawPatternResult } from
 import { FontWatcher, type FontSetLike, type FontStatus } from "../texture/fonts.js";
 import { AssetImageCache, type AssetUrlResolver } from "./asset-images.js";
 import { orbitLimits } from "./camera.js";
+import { makeFabric, type Fabric } from "./fabric.js";
+import { STUDIO_BACKGROUND, STUDIO_LIGHTS, studioLightPosition } from "./studio.js";
 
 /** What it cost to redraw the pattern texture, for a caller that reports performance. */
 export interface TextureDrawInfo extends DrawPatternResult {
@@ -97,6 +102,13 @@ export interface DesignCanvasProps {
 
 const FOV = 35;
 
+/**
+ * Edge of the inside texture (the colour zones without prints, for the inside
+ * of the garment) in pixels. Small on purpose: 256 KB, and the inside is only
+ * seen in shade through the openings.
+ */
+const INSIDE_TEXTURE_SIZE = 256;
+
 interface PreparedModel {
   scene: Object3D;
   /** Every cloned material, to dispose of. */
@@ -105,6 +117,8 @@ interface PreparedModel {
   pieceMaterials: MeshStandardMaterial[];
   /** The meshes that carry pattern pieces, with the name the product uses for them. */
   pieceMeshes: Map<Mesh, string>;
+  /** The pieces' materials, made into cloth (fabric.ts). */
+  fabrics: Fabric[];
   center: [number, number, number];
   size: [number, number, number];
 }
@@ -126,6 +140,7 @@ function prepareModel(source: Object3D, product: ProductDefinition): PreparedMod
   const materials: Material[] = [];
   const pieceMaterials: MeshStandardMaterial[] = [];
   const pieceMeshes = new Map<Mesh, string>();
+  const fabrics: Fabric[] = [];
   scene.traverse((object) => {
     const mesh = object as Mesh;
     if (!mesh.isMesh) return;
@@ -140,6 +155,9 @@ function prepareModel(source: Object3D, product: ProductDefinition): PreparedMod
         pieceMeshes.set(mesh, name);
         for (const material of cloned) {
           if ("map" in material && "color" in material) pieceMaterials.push(material as MeshStandardMaterial);
+          // A garment is one layer of cloth: both sides are drawn, the inside shaded as the inside.
+          material.side = DoubleSide;
+          fabrics.push(makeFabric(material, mesh.geometry));
         }
         break;
       }
@@ -154,7 +172,7 @@ function prepareModel(source: Object3D, product: ProductDefinition): PreparedMod
   const box = new Box3().setFromObject(scene);
   const center = box.getCenter(new Vector3());
   const size = box.getSize(new Vector3());
-  return { scene, materials, pieceMaterials, pieceMeshes, center: center.toArray(), size: size.toArray() };
+  return { scene, materials, pieceMaterials, pieceMeshes, fabrics, center: center.toArray(), size: size.toArray() };
 }
 
 interface PatternSurface {
@@ -296,11 +314,24 @@ function ModelView({
     return () => setHandle(handle, null);
   }, [handle, camera, center, fit, controls, invalidate]);
 
-  // The pieces' materials show the pattern texture.
+  // The pieces' materials show the pattern texture; their inside shows the colour zones only.
+  const inside = usePatternSurface(INSIDE_TEXTURE_SIZE);
   useEffect(() => {
     applyPatternTexture(prepared.pieceMaterials, surface.texture);
+    for (const fabric of prepared.fabrics) fabric.setInsideMap(inside.texture);
     invalidate();
-  }, [prepared, surface, invalidate]);
+  }, [prepared, surface, inside, invalidate]);
+
+  // The inside texture: the zones without layers, redrawn only when a zone colour changes.
+  const { zones } = design;
+  const zonesOnly = useMemo<DesignDocument>(
+    () => ({ schemaVersion: 2, product: { id: product.id }, palette: product.palette, zones, fonts: [], layers: [] }),
+    [zones, product],
+  );
+  useEffect(() => {
+    redrawPattern(inside, product, zonesOnly, null, null);
+    invalidate();
+  }, [zonesOnly, product, inside, invalidate]);
 
   // Fonts: load what the text needs, and redraw when it arrives (never stay in a fallback silently).
   const [fontsVersion, setFontsVersion] = useState(0);
@@ -443,6 +474,7 @@ function ModelView({
 
   return (
     <>
+      <StudioLights target={center} distance={fit} />
       <primitive object={prepared.scene} />
       <OrbitControls
         makeDefault
@@ -454,6 +486,36 @@ function ModelView({
         maxPolarAngle={limits.maxPolarAngle}
         enableDamping={false}
       />
+    </>
+  );
+}
+
+/** The studio's lights (see studio.ts): a sky light, and directional lights that follow the camera. */
+function StudioLights({ target, distance }: { target: [number, number, number]; distance: number }) {
+  const lights = useRef<Array<DirectionalLight | null>>([]);
+  useFrame(({ camera }) => {
+    const cameraAt = camera.position.toArray() as [number, number, number];
+    STUDIO_LIGHTS.lights.forEach((spec, k) => {
+      const light = lights.current[k];
+      if (!light) return;
+      light.position.set(...studioLightPosition(spec, cameraAt, target, distance));
+      light.target.position.set(...target);
+      light.target.updateMatrixWorld();
+    });
+  });
+  return (
+    <>
+      <hemisphereLight args={[STUDIO_LIGHTS.sky.color, STUDIO_LIGHTS.sky.ground, STUDIO_LIGHTS.sky.intensity]} />
+      {STUDIO_LIGHTS.lights.map((spec, k) => (
+        <directionalLight
+          key={spec.name}
+          ref={(light) => {
+            lights.current[k] = light;
+          }}
+          color={spec.color}
+          intensity={spec.intensity}
+        />
+      ))}
     </>
   );
 }
@@ -496,18 +558,16 @@ export function DesignCanvas({ className, style, onError, ref, ...view }: Design
   const handle = useRef<DesignCanvasHandle | null>(null);
   useImperativeHandle(ref, () => ({ showSide: (side) => handle.current?.showSide(side) }), []);
   return (
-    <div className={className} style={{ width: "100%", height: "100%", minHeight: 240, ...style }}>
+    <div className={className} style={{ width: "100%", height: "100%", minHeight: 240, background: STUDIO_BACKGROUND, ...style }}>
       <ModelErrorBoundary onError={onError}>
         <Canvas
-          flat
           frameloop="demand"
           dpr={[1, 2]}
           camera={{ fov: FOV, near: 0.05, far: 50, position: [0, 0.4, 2] }}
-          gl={{ antialias: true, preserveDrawingBuffer: false }}
+          // Neutral tone mapping (Khronos PBR Neutral) keeps the palette's colours true where the light is
+          // even, and rolls highlights off softly instead of clipping them to flat white.
+          gl={{ antialias: true, preserveDrawingBuffer: false, toneMapping: NeutralToneMapping }}
         >
-          <hemisphereLight args={["#ffffff", "#8a8a8a", 1.6]} />
-          <directionalLight position={[2, 3, 4]} intensity={1.8} />
-          <directionalLight position={[-3, 2, -4]} intensity={1.4} />
           <Suspense fallback={null}>
             <ModelView {...view} handle={handle} />
           </Suspense>

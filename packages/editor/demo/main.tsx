@@ -14,7 +14,12 @@ interface DemoData {
   fonts: FontCatalog;
 }
 
-const PRODUCT_URL = "/products/placeholder-jersey.json";
+// The stand-in T-shirt (a real garment model, see samples/models/stand-in-tshirt.LICENSE.txt) by default.
+// The old script-generated placeholder stays reachable for comparison: ?product=placeholder-jersey
+const PRODUCTS = ["stand-in-tshirt", "placeholder-jersey"] as const;
+const requested = new URLSearchParams(window.location.search).get("product");
+const PRODUCT_ID = PRODUCTS.find((id) => id === requested) ?? PRODUCTS[0];
+const PRODUCT_URL = `/products/${PRODUCT_ID}.json`;
 // Placeholder colours, as data. The real print-tested palette (with HEX snapping) is step E3.
 const PALETTE_URL = "/palettes/placeholder-palette.json";
 const FONTS_URL = "/fonts/placeholder-fonts.json";
