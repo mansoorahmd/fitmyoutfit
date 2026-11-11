@@ -10,15 +10,18 @@ import {
   type ReactNode,
   type Ref,
 } from "react";
-import { Canvas, useThree } from "@react-three/fiber";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { OrbitControls, useGLTF } from "@react-three/drei";
 import {
   Box3,
   CanvasTexture,
+  DoubleSide,
+  NeutralToneMapping,
   Raycaster,
   SRGBColorSpace,
   Vector2,
   Vector3,
+  type DirectionalLight,
   type Material,
   type Mesh,
   type MeshStandardMaterial,
@@ -30,6 +33,8 @@ import { DEFAULT_TEXTURE_SIZE, drawPatternTexture, type DrawPatternResult } from
 import { FontWatcher, type FontSetLike, type FontStatus } from "../texture/fonts.js";
 import { AssetImageCache, type AssetUrlResolver } from "./asset-images.js";
 import { orbitLimits } from "./camera.js";
+import { makeFabric } from "./fabric.js";
+import { STUDIO_BACKGROUND, STUDIO_LIGHTS, studioLightPosition } from "./studio.js";
 
 /** What it cost to redraw the pattern texture, for a caller that reports performance. */
 export interface TextureDrawInfo extends DrawPatternResult {
@@ -140,6 +145,9 @@ function prepareModel(source: Object3D, product: ProductDefinition): PreparedMod
         pieceMeshes.set(mesh, name);
         for (const material of cloned) {
           if ("map" in material && "color" in material) pieceMaterials.push(material as MeshStandardMaterial);
+          // A garment is one layer of cloth: both sides are drawn, the inside shaded as the inside.
+          material.side = DoubleSide;
+          makeFabric(material, mesh.geometry);
         }
         break;
       }
@@ -443,6 +451,7 @@ function ModelView({
 
   return (
     <>
+      <StudioLights target={center} distance={fit} />
       <primitive object={prepared.scene} />
       <OrbitControls
         makeDefault
@@ -454,6 +463,36 @@ function ModelView({
         maxPolarAngle={limits.maxPolarAngle}
         enableDamping={false}
       />
+    </>
+  );
+}
+
+/** The studio's lights (see studio.ts): a sky light, and directional lights that follow the camera. */
+function StudioLights({ target, distance }: { target: [number, number, number]; distance: number }) {
+  const lights = useRef<Array<DirectionalLight | null>>([]);
+  useFrame(({ camera }) => {
+    const cameraAt = camera.position.toArray() as [number, number, number];
+    STUDIO_LIGHTS.lights.forEach((spec, k) => {
+      const light = lights.current[k];
+      if (!light) return;
+      light.position.set(...studioLightPosition(spec, cameraAt, target, distance));
+      light.target.position.set(...target);
+      light.target.updateMatrixWorld();
+    });
+  });
+  return (
+    <>
+      <hemisphereLight args={[STUDIO_LIGHTS.sky.color, STUDIO_LIGHTS.sky.ground, STUDIO_LIGHTS.sky.intensity]} />
+      {STUDIO_LIGHTS.lights.map((spec, k) => (
+        <directionalLight
+          key={spec.name}
+          ref={(light) => {
+            lights.current[k] = light;
+          }}
+          color={spec.color}
+          intensity={spec.intensity}
+        />
+      ))}
     </>
   );
 }
@@ -496,18 +535,16 @@ export function DesignCanvas({ className, style, onError, ref, ...view }: Design
   const handle = useRef<DesignCanvasHandle | null>(null);
   useImperativeHandle(ref, () => ({ showSide: (side) => handle.current?.showSide(side) }), []);
   return (
-    <div className={className} style={{ width: "100%", height: "100%", minHeight: 240, ...style }}>
+    <div className={className} style={{ width: "100%", height: "100%", minHeight: 240, background: STUDIO_BACKGROUND, ...style }}>
       <ModelErrorBoundary onError={onError}>
         <Canvas
-          flat
           frameloop="demand"
           dpr={[1, 2]}
           camera={{ fov: FOV, near: 0.05, far: 50, position: [0, 0.4, 2] }}
-          gl={{ antialias: true, preserveDrawingBuffer: false }}
+          // Neutral tone mapping (Khronos PBR Neutral) keeps the palette's colours true where the light is
+          // even, and rolls highlights off softly instead of clipping them to flat white.
+          gl={{ antialias: true, preserveDrawingBuffer: false, toneMapping: NeutralToneMapping }}
         >
-          <hemisphereLight args={["#ffffff", "#8a8a8a", 1.6]} />
-          <directionalLight position={[2, 3, 4]} intensity={1.8} />
-          <directionalLight position={[-3, 2, -4]} intensity={1.4} />
           <Suspense fallback={null}>
             <ModelView {...view} handle={handle} />
           </Suspense>
