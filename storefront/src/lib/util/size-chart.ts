@@ -155,6 +155,38 @@ export const sizeChartTableRows = (chart: SizeChart): SizeChartTableRow[] => {
 export const isChosenSize = (size: string, chosen: string | undefined): boolean =>
   !!chosen && size.trim().toUpperCase() === chosen.trim().toUpperCase()
 
+/**
+ * Where the sheet's body scrolls to when it opens (05, 3.4). Positions are
+ * in pixels from the top of the body's content.
+ *
+ * - It scrolls only as far as needed to show the chosen size's row with
+ *   `room` to spare below it, so the row is not left on the bottom edge.
+ * - It never scrolls past `keepTop`, the top of the draft note when there is
+ *   one: the note is seen before the numbers. The chosen row can then still
+ *   be reached by scrolling.
+ * - Without a note it never scrolls past the row's own top.
+ */
+export const openingScrollTop = ({
+  viewHeight,
+  rowTop,
+  rowBottom,
+  keepTop,
+  room = 0,
+}: {
+  viewHeight: number
+  rowTop: number
+  rowBottom: number
+  keepTop?: number | null
+  room?: number
+}): number => {
+  const needed = rowBottom + room - viewHeight
+  if (needed <= 0) {
+    return 0
+  }
+  const limit = typeof keepTop === "number" ? keepTop : rowTop
+  return Math.max(0, Math.min(needed, limit))
+}
+
 /** The unit the visitor last chose this visit, kept in sessionStorage. */
 export const UNIT_STORAGE_KEY = "fitmyoutfit:size-chart-unit"
 

@@ -5,6 +5,7 @@ import {
   displayMeasurement,
   hasSizeChart,
   isChosenSize,
+  openingScrollTop,
   parseSizeChart,
   readStoredUnit,
   sizeChartTableRows,
@@ -93,6 +94,27 @@ describe("sizeChartTableRows", () => {
       }),
     })!
     expect(sizeChartTableRows(chart).every((r) => r.kind === "size")).toBe(true)
+  })
+})
+
+describe("openingScrollTop: where the sheet opens", () => {
+  // A 390 × 844 phone: the body shows about 600 px; the draft note's top is
+  // at 16 px; the 3XL row is far below.
+  const phone = { viewHeight: 600, room: 44 }
+
+  it("does not move when the chosen row is already in view with room below", () => {
+    expect(openingScrollTop({ ...phone, rowTop: 400, rowBottom: 444, keepTop: 16 })).toBe(0)
+  })
+
+  it("never scrolls the draft note out of view, even for a row far below", () => {
+    // block: "nearest" went to 1044 − 600 = 444, scrolling the note away
+    expect(openingScrollTop({ ...phone, rowTop: 1000, rowBottom: 1044, keepTop: 16 })).toBe(16)
+  })
+
+  it("without a note, shows the row with a row's room below, not on the bottom edge", () => {
+    expect(openingScrollTop({ ...phone, rowTop: 700, rowBottom: 744 })).toBe(188)
+    // and never further than the row's own top
+    expect(openingScrollTop({ viewHeight: 30, rowTop: 700, rowBottom: 744, room: 44 })).toBe(700)
   })
 })
 

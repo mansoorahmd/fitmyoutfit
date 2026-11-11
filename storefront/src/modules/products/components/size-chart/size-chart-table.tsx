@@ -1,7 +1,7 @@
 "use client"
 
 import { clx } from "@medusajs/ui"
-import { Fragment, useEffect, useRef, useState } from "react"
+import React, { Fragment, useEffect, useRef, useState } from "react"
 
 import { productContent } from "@content/product"
 import {
@@ -26,17 +26,17 @@ const SizeChartTable = ({
   unit,
   productTitle,
   chosenSize,
-  scrollToChosen = false,
+  chosenRowRef,
 }: {
   chart: SizeChart
   unit: SizeChartUnit
   productTitle: string
   chosenSize?: string
-  scrollToChosen?: boolean
+  /** Gets the chosen size's row, so the sheet can bring it into view. */
+  chosenRowRef?: React.Ref<HTMLTableRowElement>
 }) => {
   const words = productContent.sizeChart
   const boxRef = useRef<HTMLDivElement>(null)
-  const chosenRef = useRef<HTMLTableRowElement>(null)
   const [scrolls, setScrolls] = useState(false)
   const [atEnd, setAtEnd] = useState(false)
   const many = chart.columns.length > 3
@@ -58,14 +58,6 @@ const SizeChartTable = ({
       observer?.disconnect()
     }
   }, [chart.columns.length])
-
-  // In the sheet, bring the chosen size into view when it opens. Never on
-  // the page itself, which must not move.
-  useEffect(() => {
-    if (scrollToChosen) {
-      chosenRef.current?.scrollIntoView?.({ block: "nearest" })
-    }
-  }, [scrollToChosen])
 
   const rows = sizeChartTableRows(chart)
   const colSpan = chart.columns.length + 1
@@ -130,7 +122,7 @@ const SizeChartTable = ({
               return (
                 <tr
                   key={row.size}
-                  ref={chosen ? chosenRef : undefined}
+                  ref={chosen ? chosenRowRef : undefined}
                   className="h-11 border-t border-brand-border"
                   data-chosen={chosen ? "true" : undefined}
                   data-testid="size-chart-row"

@@ -1,12 +1,13 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 
 import { productContent } from "@content/product"
 import {
   SizeChart,
   SizeChartUnit,
   UNIT_STORAGE_KEY,
+  openingScrollTop,
   readStoredUnit,
 } from "@lib/util/size-chart"
 import Alert from "@modules/common/components/alert"
@@ -22,6 +23,38 @@ const sessionStore = (): Storage | null => {
   } catch {
     return null
   }
+}
+
+/** One table row's height (05, 3.4): the room left below the chosen row. */
+const ROW_ROOM_PX = 44
+
+/** The nearest ancestor that scrolls up and down (the sheet's body). */
+const scrollParent = (element: HTMLElement): HTMLElement | null => {
+  for (let node = element.parentElement; node; node = node.parentElement) {
+    const { overflowY } = window.getComputedStyle(node)
+    if (overflowY === "auto" || overflowY === "scroll") {
+      return node
+    }
+  }
+  return null
+}
+
+/** Scrolls the sheet's body as `openingScrollTop` says. */
+const scrollToChosenRow = (row: HTMLElement | null, note: HTMLElement | null) => {
+  const view = row ? scrollParent(row) : null
+  if (!row || !view) {
+    return
+  }
+  const viewTop = view.getBoundingClientRect().top - view.scrollTop
+  const offset = (element: HTMLElement) => element.getBoundingClientRect().top - viewTop
+  const rowTop = offset(row)
+  view.scrollTop = openingScrollTop({
+    viewHeight: view.clientHeight,
+    rowTop,
+    rowBottom: rowTop + row.getBoundingClientRect().height,
+    keepTop: note ? offset(note) : null,
+    room: ROW_ROOM_PX,
+  })
 }
 
 /**
@@ -73,11 +106,26 @@ export const SizeChartBody = ({
 }: SizeChartBodyProps) => {
   const words = productContent.sizeChart
   const [unit, setUnit] = useChartUnit(chart.unit)
+  const noteRef = useRef<HTMLDivElement>(null)
+  const chosenRowRef = useRef<HTMLTableRowElement>(null)
+
+  // In the sheet, bring the chosen size towards view when it opens, without
+  // scrolling the draft note away. Never on the page itself, which must not move.
+  useEffect(() => {
+    if (scrollToChosen) {
+      scrollToChosenRow(chosenRowRef.current, noteRef.current)
+    }
+  }, [scrollToChosen])
 
   return (
     <div className="flex flex-col gap-4" data-testid="size-chart">
       {chart.draft && (
-        <Alert variant="info" title={words.draftTitle} data-testid="size-chart-draft">
+        <Alert
+          ref={noteRef}
+          variant="info"
+          title={words.draftTitle}
+          data-testid="size-chart-draft"
+        >
           {words.draftText}
         </Alert>
       )}
@@ -88,7 +136,7 @@ export const SizeChartBody = ({
         unit={unit}
         productTitle={productTitle}
         chosenSize={chosenSize}
-        scrollToChosen={scrollToChosen}
+        chosenRowRef={chosenRowRef}
       />
       {showFitKitLink && (
         <ButtonLink
