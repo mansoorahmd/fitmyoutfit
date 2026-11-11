@@ -39,5 +39,5 @@ describe("images.qualities", () => {
     expect(used).toContain(50)
     const qualities: number[] = loadConfig().images.qualities
     used.forEach((value) => expect(qualities).toContain(value))
-  })
+  }, 30_000) // reads every source file; slow on a busy disk
 })

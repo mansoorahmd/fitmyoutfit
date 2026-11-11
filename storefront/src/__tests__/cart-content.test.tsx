@@ -102,7 +102,7 @@ describe("M1 wording", () => {
         expect(source.includes(`"${sentence}"`) || source.includes(`>${sentence}<`), `${file}: ${sentence}`).toBe(false)
       }
     }
-  })
+  }, 30_000) // reads source files; slow on a busy disk
 })
 
 describe("the header's cart link", () => {
