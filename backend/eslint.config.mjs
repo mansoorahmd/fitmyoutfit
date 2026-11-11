@@ -10,8 +10,6 @@ export default tseslint.config(
       "dist/**",
       "coverage/**",
       "static/**",
-      // The admin extension (src/admin) has its own tsconfig; add React lint rules when it gets real code.
-      "src/admin/**",
     ],
   },
   js.configs.recommended,
@@ -27,6 +25,14 @@ export default tseslint.config(
       ],
       // Medusa's container and query results are loosely typed; allow `any` in tests only.
       "@typescript-eslint/no-explicit-any": "error",
+    },
+  },
+  {
+    // The admin extension runs in the browser (it has its own tsconfig). Linted with the
+    // TypeScript rules only; React-specific rules would need a new lint plugin.
+    files: ["src/admin/**"],
+    languageOptions: {
+      globals: { ...globals.browser },
     },
   },
   {
