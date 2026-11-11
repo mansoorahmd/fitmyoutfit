@@ -1,11 +1,11 @@
 "use client"
 
 import { clx } from "@medusajs/ui"
-import { useId, useState } from "react"
+import { Fragment, useId, useState } from "react"
 
 import { checkoutContent } from "@content/checkout"
 import { CheckoutView } from "@lib/util/checkout-view"
-import { countWords, fill } from "@lib/util/wording"
+import { countWords, fillParts } from "@lib/util/wording"
 import CartSummary from "@modules/cart/components/cart-summary"
 import Amount from "@modules/common/components/amount"
 import ChevronDown from "@modules/common/icons/chevron-down"
@@ -69,7 +69,12 @@ export const OrderSummaryDisclosure = ({ view }: { view: CheckoutView }) => {
         <span className="min-w-0 flex-1">
           {open
             ? summaryBar.hide
-            : fill(summaryBar.show, { pieces: countWords(view.pieces, summaryBar.pieces) })}
+            : // the count never breaks inside itself ("(1" / "piece)")
+              fillParts(summaryBar.show, {
+                pieces: (
+                  <span className="whitespace-nowrap">{countWords(view.pieces, summaryBar.pieces)}</span>
+                ),
+              }).map((part, i) => <Fragment key={i}>{part}</Fragment>)}
         </span>
         <ChevronDown
           size={20}
