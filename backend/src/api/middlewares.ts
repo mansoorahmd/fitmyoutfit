@@ -6,6 +6,9 @@
  * (POST /store/payment-collections/:id/payment-sessions). For any other provider it does nothing.
  * Completion is checked again by workflows/hooks/complete-cart-checkout-rules.ts, because the cart
  * can change after the payment method was chosen.
+ *
+ * The promised delivery date is written into the cart just before it is completed, so the order
+ * keeps it (keepDeliveryPromiseBeforeCompletion, below).
  */
 import {
   defineMiddlewares,
@@ -15,6 +18,7 @@ import {
 } from "@medusajs/framework/http"
 import { ContainerRegistrationKeys, MedusaError } from "@medusajs/framework/utils"
 import { COD_PAYMENT_PROVIDER_ID } from "../modules/cod/constants"
+import { keepDeliveryPromiseOnCart } from "../workflows/checkout-rules/keep-delivery-promise"
 import { assertCheckoutAllowed } from "../workflows/checkout-rules/load-checkout-rules"
 
 export async function refuseUnavailableCashOnDelivery(
@@ -48,12 +52,36 @@ export async function refuseUnavailableCashOnDelivery(
   }
 }
 
+/**
+ * Before POST /store/carts/:id/complete: writes the promised delivery date into the cart's
+ * metadata, which Medusa copies into the order when it creates it (see
+ * workflows/checkout-rules/keep-delivery-promise.ts). Runs after Medusa's publishable-key check.
+ * An unknown or completed cart is left to Medusa's route.
+ */
+export async function keepDeliveryPromiseBeforeCompletion(
+  req: MedusaRequest,
+  _res: MedusaResponse,
+  next: MedusaNextFunction
+): Promise<void> {
+  try {
+    await keepDeliveryPromiseOnCart(req.scope, req.params.id)
+    return next()
+  } catch (error) {
+    return next(error)
+  }
+}
+
 export default defineMiddlewares({
   routes: [
     {
       matcher: "/store/payment-collections/:id/payment-sessions",
       method: ["POST"],
       middlewares: [refuseUnavailableCashOnDelivery],
+    },
+    {
+      matcher: "/store/carts/:id/complete",
+      method: ["POST"],
+      middlewares: [keepDeliveryPromiseBeforeCompletion],
     },
   ],
 })
