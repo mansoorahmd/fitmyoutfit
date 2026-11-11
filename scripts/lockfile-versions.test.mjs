@@ -47,3 +47,18 @@ test("backend/package-lock.json: one Vite, 7.x, none at or below 6.4.3", () => {
   assert.equal(version.split(".")[0], "7", `Vite ${version} is not a 7.x`);
   assert.ok(compareVersions(version, "6.4.3") > 0, `Vite ${version} has the high audit finding`);
 });
+
+// GHSA-qx2v-qp2m-jg93 (high) and others: postcss <=8.5.22. Next.js 15 pins postcss 8.4.31; the
+// root package.json overrides it (overrides.next.postcss), so no copy at or below 8.5.22 is left.
+test("package-lock.json: every postcss, Next.js's included, is above 8.5.22", () => {
+  const copies = copiesOf("package-lock.json", "postcss");
+  assert.ok(copies.length > 0, "no postcss in the root lockfile");
+  for (const { location, version } of copies) {
+    assert.ok(
+      compareVersions(version, "8.5.22") > 0,
+      `${location} is postcss ${version}, which has the high audit finding`
+    );
+  }
+  const pkg = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8"));
+  assert.ok(pkg.overrides?.next?.postcss, "the root package.json no longer overrides Next.js's postcss");
+});

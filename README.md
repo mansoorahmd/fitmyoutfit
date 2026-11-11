@@ -175,7 +175,12 @@ npm install <package> -w storefront         # storefront (updates the root packa
 npm install <package> -w packages/editor    # editor (updates the root package-lock.json)
 ```
 
-The root `package.json` has one `overrides` entry: it lets `@medusajs/ui` (which declares React 18 as its peer) use the storefront's React 19, as Medusa's own storefront starter does. It does not reach the backend, whose install is separate. Keep its version equal to the storefront's `react`.
+The root `package.json` has two `overrides` entries. Neither reaches the backend, whose install is separate.
+
+- `@medusajs/ui`: lets it (it declares React 18 as its peer) use the storefront's React 19, as Medusa's own storefront starter does. Keep its version equal to the storefront's `react`.
+- `next` > `postcss`: Next.js 15 pins `postcss` 8.4.31, which `npm audit` reports as high (GHSA-qx2v-qp2m-jg93 and others, fixed after 8.5.22). The override gives Next.js the same `postcss` as the rest of the storefront (8.5.32). Remove it once a Next.js release depends on a fixed `postcss` itself.
+
+npm 10 does not apply a new or changed override to a package that is already in the lockfile (it keeps the old nested copy). To make it take effect, have npm resolve that package again, for example `npm uninstall next -w storefront --package-lock-only` and then `npm install next@<the same version> --save-exact -w storefront --package-lock-only`, and check with `npm ls postcss` that nothing is marked `invalid`.
 
 Backend integration tests create and drop temporary databases on the PostgreSQL server (host `localhost`, port 5433 by default, user `medusa`). They never touch the `medusa` development database. Start `docker compose up -d` first. To point them elsewhere set `DB_HOST`, `DB_PORT`, `DB_USERNAME`, `DB_PASSWORD`, as the CI workflow does. Medusa also reads `backend/.env` in tests, so with `REDIS_URL` set there the tests use Redis, which makes them several times slower; CI has no `backend/.env` and sets no `REDIS_URL`, so there they use Medusa's in-memory modules. The tests use no network: image tests check the stored URLs only.
 
