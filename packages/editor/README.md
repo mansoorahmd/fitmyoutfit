@@ -4,7 +4,7 @@ The 3D design editor for the store. It is a standalone React + Three.js package:
 
 **A design is data, not an image.** A design is a versioned JSON document. Previews, proof renders and production files are all generated from it, so it never holds flattened pixels.
 
-Status: foundation only (Sprint 0). The document format below is a **first draft** (`schemaVersion` 1) that the week 3 to 12 work will extend.
+Status: step E1 done. The placeholder jersey is shown in 3D with its vector pattern pieces drawn onto it as a texture, the camera orbits (mouse and touch), and each colour zone can be recoloured. The document format below is a **first draft** (`schemaVersion` 1) that steps E2 to E5 will extend.
 
 ## Scripts
 
@@ -16,7 +16,9 @@ Status: foundation only (Sprint 0). The document format below is a **first draft
 | `npm run build:demo` | Builds the demo page to `dist-demo/` (not part of the library) |
 | `npm run lint` / `typecheck` / `test` | ESLint, `tsc --noEmit`, Vitest (runs once) |
 | `npm run generate:schema` | Rewrites `schema/*.json` from the zod schemas |
-| `npm run generate:model` | Rewrites the placeholder GLB from `scripts/generate-placeholder-jersey.mjs` |
+| `npm run generate:model` | Rewrites the placeholder GLB from `scripts/generate-placeholder-jersey.ts` (run with `tsx`), built from the pattern pieces in the product definition |
+
+To run the demo on another port: `npm run dev -w packages/editor -- --port 5183 --strictPort` from the repository root. The demo shows the jersey, a list of the colour zones with placeholder swatches (`samples/palettes/placeholder-palette.json`), the flat pattern pieces and the design JSON. It fits a phone screen.
 
 ## Using it
 
@@ -34,7 +36,10 @@ import designSchema from "@fitmyoutfit/editor/design.schema.json";
 
 ```tsx
 <DesignCanvas design={design} product={product} style={{ height: 480 }} />
+// Optional: textureSize (default 2048), onTextureDrawn({ size, pieces, fills, drawMs }), onError
 ```
+
+Drag (one finger) turns the garment, wheel or pinch zooms. There is no panning: the camera always looks at the garment's centre, the zoom stops between 0.45 and 1.6 times the distance at which the whole garment fits the view (whatever the screen's shape), and the view stays between 50 degrees above and 22 degrees below the garment's middle. So the garment cannot be lost off screen.
 
 Two kinds of consumer, both supported:
 
@@ -159,19 +164,51 @@ Limit of "rules as data": rules can change the maximum or allow fewer digit syst
 
 ## Product definitions are data
 
-A product definition (`samples/products/placeholder-jersey.json`, schema in `schema/product.schema.json`) lists the model file, the pattern pieces (id, name, mesh name, size in mm, UV rectangle), the colour zones (id, name, the model's material names it colours, default colour) and the palette. A real model replaces the placeholder by changing this JSON and the GLB file; no code changes. The component colours a zone by setting the colour of the materials the zone lists.
+A product definition (`samples/products/placeholder-jersey.json`, schema in `schema/product.schema.json`) lists the model file, the palette, the colour zones (id, name, default colour) and the **pattern pieces**. Each piece is vector data in its own millimetres:
+
+```jsonc
+{
+  "id": "front", "name": "Front", "mesh": "front", "width": 560, "height": 700,
+  "uv": { "x": 0.02, "y": 0.02, "width": 0.448, "height": 0.56 },
+  "outline": "M 160 0 L 400 0 L 505 45 Q 535 80 540 160 L 560 700 L 0 700 L 20 160 Q 25 80 55 45 Z",
+  "zone": "body",
+  "regions": [
+    { "zone": "yoke", "path": "M -10 -10 H 570 V 115 Q 280 175 -10 115 Z" },
+    { "zone": "side_panels", "path": "M -10 230 L 92 230 L 70 710 L -10 710 Z M 570 230 L 468 230 L 490 710 L 570 710 Z" }
+  ]
+}
+```
+
+- `outline` is the cut shape: one closed SVG path inside the piece's box (0, 0) to (`width`, `height`). It is what production files will be cut from.
+- `zone` fills the whole piece. `regions` are areas of other zones, drawn bottom to top. A region may reach past the outline (a band that runs to the edge); only the part inside the outline is garment.
+- Paths use SVG path syntax with the commands **M, L, H, V, C, Q, Z** (absolute or relative). Arcs (`A`) and the smooth shorthands (`S`, `T`) are refused with a message: write arcs as cubic curves. One small parser (`src/design/svg-path.ts`) reads every path, so what is validated, drawn, hit-tested and used to build the placeholder model is the same shape.
+- `mesh` is the name of the node in the model that carries the piece (the name Blender shows). Several pieces may share one mesh, each with its own UV island.
+- `uv` is the piece's box in the model's UV space. It must have the piece's proportions (within 1%, or artwork would be stretched), and pieces may not overlap (the model has one texture).
+
+`validateProductDefinition` checks all of that, plus that every zone a piece names exists and that every zone is drawn on some piece. The JSON Schema checks the structure and the characters of the paths only; its descriptions say so. A test lists where the two differ.
+
+A real model replaces the placeholder by changing this JSON and the GLB file; no code changes.
+
+### From the design to the model
+
+`drawPatternTexture(ctx, product, design, { size })` (root entry, no Three.js; any 2D context) draws one square texture that covers the model's whole UV space: each piece's box at `uv * size` pixels, drawn with a transform from the piece's millimetres to those pixels, filled with its zone colour and then its regions. In the texture each piece fills its whole box plus a margin of `size / 128` pixels, so filtering at the seams never shows the background. Margins are drawn first for every piece, then every piece exactly, so a margin never covers a neighbour. With `mode: "flat"` it draws the pieces as cut instead (clipped to the outline, outline stroked), as in the demo's "Flat pattern pieces".
+
+`DesignCanvas` keeps one 2D canvas and one `CanvasTexture` per model, puts the texture on the materials of the pieces' meshes (white, so the texture carries the colour), and redraws and re-uploads it whenever the design changes. The model is not reloaded. At 2048 x 2048 the texture costs 16 MiB of GPU memory, about 21 MiB with mipmaps. A redraw of the five pieces takes well under a millisecond of drawing; the upload follows on the next frame. The front gets about 1.6 texture pixels per millimetre at that size.
+
+Pure helpers for the same mapping, on the `/design` entry: `pieceToUv`, `uvToPiece`, `pieceAtUv`, `zoneAtPiecePoint`, `zoneAtUv` (the zone under a tap on the model, from the hit's UV), `isInsidePiece`, `piecesByZone`, `pieceGeometry`; and on the root entry: `pieceTextureRect`, `pieceTextureScale`, `pieceToTexture`, `textureToPiece`.
 
 ## Placeholder model
 
-`samples/models/placeholder-jersey.glb` (about 90 KB) is generated by `scripts/generate-placeholder-jersey.mjs` with `@gltf-transform/core`: procedural geometry, no third-party model or texture, so there is nothing to attribute. The script reads mesh names, material names and UV rectangles from the product definition, and tests check the GLB and the definition agree.
+`samples/models/placeholder-jersey.glb` (about 190 KB) is generated by `scripts/generate-placeholder-jersey.ts` with `@gltf-transform/core`: procedural geometry, no third-party model or texture, so there is nothing to attribute. It is built **from the pattern pieces** in the product definition: each piece becomes one mesh named as its `mesh`, whose rows wrap the piece's outline round a simple body (each row of the flat piece becomes a ring or half ring as long as the row is wide, with points spread by arc length, so 1 mm on the piece is about 1 mm on the model). Every vertex's UV is its own point on the flat piece mapped into the piece's UV rectangle, so a point in piece coordinates lands at a known place on the garment. The model has one white material and no textures. Tests check that every mesh's UVs lie inside its own piece's outline and that every zone shows on the model.
 
 ## Deliberately left for later
 
-- Mapping SVG pattern panels onto the model as textures, and showing text, number and logo layers on the model (weeks 3 to 8).
-- Palette data, snapping a custom HEX to the nearest palette colour and its warning, templates, undo and redo.
+- Showing text, number and logo layers on the model (E2). They will be drawn by `drawPatternTexture` in the same per-piece millimetre transform, after the zones, clipped to the piece.
+- Choosing a zone by tapping the model (the lookup, `zoneAtUv`, exists; the raycast and the UI do not).
+- Palette data (the demo's swatches are placeholder data in `samples/palettes/`), snapping a custom HEX to the nearest palette colour and its warning, templates, undo and redo.
 - Upload checks (file type, resolution, DPI), real font files and font metrics, text fitting.
 - Roster data and number or name binding for team orders; proof renders. (The number rule and the duplicate check exist as plain functions; the roster itself does not.)
 - Migrations between `schemaVersion`s (only version 1 exists; other versions are rejected with a clear message).
 - Checks that layers lie inside their piece (today a layer may sit partly or wholly outside it), mirrored or rotated pieces in UV space, per-layer visibility or locking.
 - Saving, design versions ("every save creates a new version") and share links: backend concerns. `schemaVersion` is the format version only.
-- Compression of the model (Draco or Meshopt) and performance tuning for mid-range phones. The component renders on demand (`frameloop="demand"`) and caps the pixel ratio at 2, but no phone measurements have been made.
+- Compression of the model (Draco or Meshopt) and performance tuning for mid-range phones. The component renders on demand (`frameloop="demand"`) and caps the pixel ratio at 2, but no phone measurements have been made. If phones struggle, pass `textureSize={1024}` (a quarter of the memory).

@@ -112,6 +112,42 @@
               "height"
             ],
             "additionalProperties": false
+          },
+          "outline": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20000,
+            "pattern": "^[MmLlHhVvCcQqZz0-9eE.,+\\-\\s]+$",
+            "description": "The cut shape of the piece: one closed SVG path (M, L, H, V, C, Q, Z) in the piece's millimetres, inside its width and height. This pattern checks the characters only; validateProductDefinition() from @fitmyoutfit/editor/design parses the path and checks the outline is closed, inside the piece and that zones exist. Do not rely on this schema alone."
+          },
+          "zone": {
+            "type": "string",
+            "pattern": "^(?!(?:__proto__|constructor|prototype)$)[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+          },
+          "regions": {
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "zone": {
+                  "type": "string",
+                  "pattern": "^(?!(?:__proto__|constructor|prototype)$)[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+                },
+                "path": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 20000,
+                  "pattern": "^[MmLlHhVvCcQqZz0-9eE.,+\\-\\s]+$",
+                  "description": "SVG path data (M, L, H, V, C, Q, Z) in the piece's millimetres. May reach past the outline; only the part inside it counts. This pattern checks the characters only; validateProductDefinition() from @fitmyoutfit/editor/design parses the path and checks the outline is closed, inside the piece and that zones exist. Do not rely on this schema alone."
+                }
+              },
+              "required": [
+                "zone",
+                "path"
+              ],
+              "additionalProperties": false
+            }
           }
         },
         "required": [
@@ -120,7 +156,10 @@
           "mesh",
           "width",
           "height",
-          "uv"
+          "uv",
+          "outline",
+          "zone",
+          "regions"
         ],
         "additionalProperties": false
       }
@@ -139,14 +178,6 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 100
-          },
-          "materials": {
-            "minItems": 1,
-            "type": "array",
-            "items": {
-              "type": "string",
-              "minLength": 1
-            }
           },
           "defaultColor": {
             "type": "object",
@@ -170,7 +201,6 @@
         "required": [
           "id",
           "name",
-          "materials",
           "defaultColor"
         ],
         "additionalProperties": false
