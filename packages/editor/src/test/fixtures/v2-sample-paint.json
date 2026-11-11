@@ -1,0 +1,20 @@
+{
+  "stand-in-jersey": {
+    "texture": "a970c832a4dea1e67cbac975385f3393f3e3c96ec8a9ea3c4c94133bfc75b4f3",
+    "flat": "3576fae376d12a32255e2602ad909e97035deb8417440b90436888f35863d7f2",
+    "text": "c7dbc0f9565454df90acb6d2324884f0c78b621f717e977743a5d042f5ea1d81",
+    "painted": 132958
+  },
+  "stand-in-tshirt": {
+    "texture": "d3d1cd2e8c02329bcc149c3c6920ba476f112c6429d35c35bc0e5657cadd9a13",
+    "flat": "3e66051195a92439e21915df3c8b0019bd853b60a49a52c3607c65293f5b1a61",
+    "text": "9a605c464bb06711a5e9a6030c0caa78559a5bbdabdd571d345ec9ccae8d6097",
+    "painted": 126845
+  },
+  "placeholder-jersey": {
+    "texture": "d4092b885fa241754fc6e8fdf4e0f2b8f3e58b37c7dbcf4635a166d1549fd87a",
+    "flat": "c841866ca856cd62d14b4faf7f94e00cb0af1e6ac5ca610dd47e058f266ec41f",
+    "text": "78a3b7f87b80c6d09a739402877cde16474913cb94d4339d0920efda0069ccb5",
+    "painted": 123738
+  }
+}
