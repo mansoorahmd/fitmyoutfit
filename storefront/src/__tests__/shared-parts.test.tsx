@@ -131,6 +131,15 @@ describe("QuantityStepper, typing", () => {
     expect(field).toHaveAccessibleDescription("Enter a number from 1 to 999")
     expect(onTyped).not.toHaveBeenCalled()
   })
+
+  it("wraps the range message under the stepper, never widening it (the product page's button stays on screen)", () => {
+    const { field } = setup()
+    fireEvent.change(field, { target: { value: "0" } })
+    fireEvent.blur(field)
+    const box = screen.getByTestId("quantity-range-error-box")
+    expect(box).toHaveClass("w-0", "min-w-full")
+    expect(box).toContainElement(screen.getByTestId("quantity-range-error"))
+  })
 })
 
 describe("FieldError", () => {

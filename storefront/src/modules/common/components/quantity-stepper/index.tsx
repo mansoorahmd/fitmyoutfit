@@ -175,9 +175,14 @@ const QuantityStepper = ({
         </button>
       </div>
       {rangeError && (
-        <FieldError id={messageId} data-testid="quantity-range-error">
-          {rangeMessage}
-        </FieldError>
+        // As wide as the stepper and no wider: the message wraps under it
+        // instead of widening the stepper and pushing the product page's
+        // "Add to cart" past the edge of a 390 px phone.
+        <div className="w-0 min-w-full" data-testid="quantity-range-error-box">
+          <FieldError id={messageId} data-testid="quantity-range-error">
+            {rangeMessage}
+          </FieldError>
+        </div>
       )}
     </div>
   )
