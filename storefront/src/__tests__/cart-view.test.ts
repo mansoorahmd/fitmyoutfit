@@ -16,6 +16,7 @@ import { parseCheckoutRules } from "@lib/util/checkout-rules"
 import { productMinimumLine } from "@lib/util/product-minimum"
 import {
   clampQuantity,
+  commitTypedQuantity,
   maxQuantityFor,
   readTypedQuantity,
   stepperButtons,
@@ -244,6 +245,17 @@ describe("quantity rules", () => {
     expect(stepperButtons(1)).toEqual({ canDecrease: false, canIncrease: true })
     expect(stepperButtons(999)).toEqual({ canDecrease: true, canIncrease: false })
     expect(stepperButtons(5, 1, 5).canIncrease).toBe(false)
+  })
+
+  it("takes a typed number only when it is valid, else puts back the number from before typing", () => {
+    expect(commitTypedQuantity("12", 11)).toEqual({ value: 12, changed: true, rangeError: false })
+    expect(commitTypedQuantity("11", 11)).toEqual({ value: 11, changed: false, rangeError: false })
+    // "1000" passes through "100" while typing; on leaving, it is refused whole
+    expect(commitTypedQuantity("1000", 11)).toEqual({ value: 11, changed: false, rangeError: true })
+    for (const text of ["", "0", "-1", "2.5", "abc"]) {
+      expect(commitTypedQuantity(text, 11)).toEqual({ value: 11, changed: false, rangeError: true })
+    }
+    expect(commitTypedQuantity("13", 11, 1, 12).rangeError).toBe(true)
   })
 
   it("clamps into range", () => {

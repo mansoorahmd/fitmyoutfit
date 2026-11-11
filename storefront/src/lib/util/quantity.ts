@@ -51,6 +51,27 @@ export const readTypedQuantity = (
   return value >= min && value <= max ? { kind: "valid", value } : { kind: "invalid" }
 }
 
+/**
+ * What a typed number becomes when the visitor leaves the field or presses
+ * Enter. Nothing typed is used before then: "1000" passes through "100" on
+ * the way, and that must never be taken (QA, task S1-3b, D3).
+ * - A whole number in range is taken (`changed` when it differs).
+ * - Anything else (empty, out of range, not a whole number) puts back the
+ *   number from before typing and shows the range message; nothing changes.
+ */
+export const commitTypedQuantity = (
+  text: string,
+  previous: number,
+  min: number = MIN_QUANTITY,
+  max: number = MAX_QUANTITY
+): { value: number; changed: boolean; rangeError: boolean } => {
+  const read = readTypedQuantity(text, min, max)
+  if (read.kind === "valid") {
+    return { value: read.value, changed: read.value !== previous, rangeError: false }
+  }
+  return { value: previous, changed: false, rangeError: true }
+}
+
 /** Whether − and + can be pressed. */
 export const stepperButtons = (
   value: number,

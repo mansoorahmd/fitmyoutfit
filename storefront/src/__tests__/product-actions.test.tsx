@@ -230,8 +230,49 @@ describe("product actions", () => {
       screen.getByTestId("mobile-summary").textContent?.replace(/\s/g, " ")
 
     fireEvent.click(screen.getByRole("radio", { name: "M" }))
-    fireEvent.change(screen.getByTestId("quantity-input"), { target: { value: "4" } })
+    const field = screen.getByTestId("quantity-input")
+    fireEvent.change(field, { target: { value: "4" } })
+    // a typed number counts once it is taken, on blur or Enter
+    expect(summary()).toBe("M · PKR 3,500")
+    fireEvent.blur(field)
     expect(summary()).toBe("M × 4 · PKR 14,000")
+  })
+
+  it("never adds a number on the way to one out of range: typed 1000 keeps the earlier 1", async () => {
+    render(<ProductActions product={jersey()} region={region} />)
+    fireEvent.click(screen.getByRole("radio", { name: "M" }))
+    const field = screen.getByTestId("quantity-input")
+    for (const text of ["1", "10", "100", "1000"]) {
+      fireEvent.change(field, { target: { value: text } })
+    }
+    fireEvent.blur(field)
+    expect(field).toHaveValue("1")
+    expect(screen.getByTestId("quantity-range-error")).toHaveTextContent("Enter a number from 1 to 999")
+
+    await act(async () => {
+      fireEvent.click(mainButton())
+    })
+    expect(addToCartAndConfirm).toHaveBeenCalledWith({
+      variantId: "var_M",
+      quantity: 1,
+      countryCode: "pk",
+    })
+  })
+
+  it("adds a typed number when the button is pressed straight after typing (the field blurs first)", async () => {
+    render(<ProductActions product={jersey()} region={region} />)
+    fireEvent.click(screen.getByRole("radio", { name: "M" }))
+    const field = screen.getByTestId("quantity-input")
+    fireEvent.change(field, { target: { value: "12" } })
+    fireEvent.blur(field)
+    await act(async () => {
+      fireEvent.click(mainButton())
+    })
+    expect(addToCartAndConfirm).toHaveBeenCalledWith({
+      variantId: "var_M",
+      quantity: 12,
+      countryCode: "pk",
+    })
   })
 
   it("single-variant product shows Add to cart, no sizes, and adds at once", async () => {

@@ -6,6 +6,7 @@ import React, { useEffect, useId, useState } from "react"
 import {
   MAX_QUANTITY,
   MIN_QUANTITY,
+  commitTypedQuantity,
   readTypedQuantity,
   stepperButtons,
 } from "@lib/util/quantity"
@@ -15,8 +16,14 @@ import LineIcon from "@modules/home/components/line-icon"
 type QuantityStepperProps = {
   /** The current number. */
   value: number
-  /** Called with every new number: a press, or a valid typed number. */
+  /** Called with a new number from − or +, and with a typed one unless `onTyped` is given. */
   onChange: (value: number) => void
+  /**
+   * Called with a typed number once it is taken: when the field loses focus
+   * or Enter is pressed, and only when it is valid and new. Never while
+   * typing, so "1000" is never taken as "100" on the way.
+   */
+  onTyped?: (value: number) => void
   /** Called when the field or a button loses focus (the cart saves then). */
   onBlur?: () => void
   min?: number
@@ -42,12 +49,14 @@ const BUTTON =
 /**
  * [−] [number] [+] (docs/design/05-m1-pages.md, 2.7): 44 px buttons and a
  * 56 px field, 144 × 44 in a 1 px outline. − is inactive at the minimum and
- * + at the maximum (aria-disabled, still focusable). A typed number out of
- * range snaps back on blur, with the reason under the stepper.
+ * + at the maximum (aria-disabled, still focusable). A typed number is
+ * taken on blur or Enter; one out of range puts back the number from before
+ * typing, with the reason under the stepper.
  */
 const QuantityStepper = ({
   value,
   onChange,
+  onTyped,
   onBlur,
   min = MIN_QUANTITY,
   max = MAX_QUANTITY,
@@ -84,23 +93,29 @@ const QuantityStepper = ({
     onChange(next)
   }
 
+  // Typing only changes the text; the number is taken on blur or Enter.
   const onType = (event: React.ChangeEvent<HTMLInputElement>) => {
     const typed = event.target.value
     setText(typed)
-    const read = readTypedQuantity(typed, min, max)
-    if (read.kind === "valid") {
+    if (readTypedQuantity(typed, min, max).kind === "valid") {
       setRangeError(false)
-      if (read.value !== value) {
-        onChange(read.value)
-      }
     }
   }
 
-  const onFieldBlur = () => {
-    const read = readTypedQuantity(text, min, max)
-    if (read.kind !== "valid") {
-      setText(String(value))
-      setRangeError(true)
+  const commit = () => {
+    const result = commitTypedQuantity(text, value, min, max)
+    setText(String(result.value))
+    setRangeError(result.rangeError)
+    if (result.changed) {
+      const take = onTyped ?? onChange
+      take(result.value)
+    }
+  }
+
+  const onFieldKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Enter") {
+      event.preventDefault()
+      commit()
     }
   }
 
@@ -142,7 +157,8 @@ const QuantityStepper = ({
           aria-describedby={described || undefined}
           value={text}
           onChange={onType}
-          onBlur={onFieldBlur}
+          onBlur={commit}
+          onKeyDown={onFieldKeyDown}
           onFocus={(event) => event.target.select()}
           className="w-14 border-x border-brand-border bg-transparent text-center type-body font-semibold tabular-nums text-brand-ink"
           data-testid="quantity-input"

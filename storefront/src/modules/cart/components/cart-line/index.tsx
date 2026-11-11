@@ -33,9 +33,10 @@ type CartLineProps = {
 /**
  * One cart line (docs/design/05-m1-pages.md, 4.3): the thumbnail, the title
  * and line total, "Size: M · PKR 3,500 each", the fit kit's notes, then the
- * quantity stepper and Remove. A quantity change is saved 600 ms after the
- * last press, or when focus leaves the stepper. Errors show under the line
- * with "Try again".
+ * quantity stepper and Remove. A change by − or + is saved 600 ms after the
+ * last press, or when focus leaves the stepper; a typed number is saved when
+ * it is taken (blur or Enter), and never when it is out of range. Errors
+ * show under the line with "Try again".
  */
 const CartLine = ({ line, exportRegion, onSaving }: CartLineProps) => {
   const { line: words } = cartContent
@@ -82,6 +83,16 @@ const CartLine = ({ line, exportRegion, onSaving }: CartLineProps) => {
     setError(null)
     if (timer.current) clearTimeout(timer.current)
     timer.current = setTimeout(() => save(value), SAVE_DELAY_MS)
+  }
+
+  // A typed number arrives only once it is taken (blur or Enter) and valid:
+  // saved at once, with no wait.
+  const saveTyped = (value: number) => {
+    if (timer.current) clearTimeout(timer.current)
+    timer.current = null
+    setQuantity(value)
+    setError(null)
+    save(value)
   }
 
   const saveNow = () => {
@@ -212,6 +223,7 @@ const CartLine = ({ line, exportRegion, onSaving }: CartLineProps) => {
             <QuantityStepper
               value={quantity}
               onChange={change}
+              onTyped={saveTyped}
               onBlur={saveNow}
               max={line.maxQuantity}
               label={fill(line.size ? words.quantityLabel : words.quantityLabelNoSize, named)}
