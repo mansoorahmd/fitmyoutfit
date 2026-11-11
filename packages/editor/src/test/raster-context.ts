@@ -1,9 +1,15 @@
 /**
  * A tiny software 2D context for tests: it implements the calls
- * `drawPatternTexture` makes (scale-and-translate transforms, rectangles,
- * paths, non-zero fills, clipping) and paints a pixel when the pixel's centre
- * is inside the shape. No anti-aliasing, no GPU, no DOM. Good enough to ask
+ * `drawPatternTexture` makes (affine transforms, rectangles, paths, non-zero
+ * fills, clipping, text, images) and paints a pixel when the pixel's centre is
+ * inside the shape. No anti-aliasing, no GPU, no DOM. Good enough to ask
  * "which colour is this texel?" in a unit test.
+ *
+ * Text is not rendered as glyphs: `fillText` paints the line's box, so tests
+ * can check where a line lands, how it is aligned and clipped. The box is
+ * `measureText` wide (0.6 em per character, a fixed stand-in for font
+ * metrics) and 0.7 em tall, centred on the "middle" baseline. Images paint
+ * their rectangle in the colour `image:<id>` (`id` of the image object).
  */
 import type { PatternCanvasContext } from "../texture/pattern-texture";
 import { flattenPath, pointInPolylines, type PathCommand, type Polyline } from "../design/svg-path";
@@ -13,17 +19,55 @@ type Matrix = [number, number, number, number, number, number];
 interface State {
   matrix: Matrix;
   clips: Polyline[][];
+  fillStyle: string;
+  strokeStyle: string;
+  lineWidth: number;
+  font: string;
+  textAlign: CanvasTextAlign;
+  textBaseline: CanvasTextBaseline;
+  direction: CanvasDirection;
+}
+
+/** Width of one character in em, for the fake text metrics. */
+export const FAKE_CHAR_EM = 0.6;
+/** Height of a painted text box in em. */
+export const FAKE_LINE_EM = 0.7;
+
+export interface TextCall {
+  op: "fillText";
+  text: string;
+  font: string;
+  textAlign: CanvasTextAlign;
+  textBaseline: CanvasTextBaseline;
+  direction: CanvasDirection;
+  style: string;
+  /** The transform the text was drawn with. */
+  matrix: Matrix;
+  x: number;
+  y: number;
+}
+
+/** A fake image for drawImage: only its id matters. */
+export function fakeImage(id: string): CanvasImageSource {
+  return { id, width: 10, height: 10 } as unknown as CanvasImageSource;
 }
 
 export class RasterContext implements PatternCanvasContext {
-  fillStyle: string | CanvasGradient | CanvasPattern = "#000000";
-  strokeStyle: string | CanvasGradient | CanvasPattern = "#000000";
-  lineWidth = 1;
   /** One colour string per pixel, row by row; "" is transparent. */
   readonly pixels: string[];
-  /** Every call, for tests that look at the drawing order. */
-  readonly calls: Array<{ op: string; style?: string }> = [];
-  private state: State = { matrix: [1, 0, 0, 1, 0, 0], clips: [] };
+  /** Every painting call, for tests that look at the drawing order. */
+  readonly calls: Array<{ op: string; style?: string } | TextCall> = [];
+  private state: State = {
+    matrix: [1, 0, 0, 1, 0, 0],
+    clips: [],
+    fillStyle: "#000000",
+    strokeStyle: "#000000",
+    lineWidth: 1,
+    font: "10px sans-serif",
+    textAlign: "start",
+    textBaseline: "alphabetic",
+    direction: "inherit",
+  };
   private stack: State[] = [];
   private path: PathCommand[] = [];
 
@@ -34,26 +78,105 @@ export class RasterContext implements PatternCanvasContext {
     this.pixels = new Array<string>(width * height).fill("");
   }
 
+  get fillStyle(): string | CanvasGradient | CanvasPattern {
+    return this.state.fillStyle;
+  }
+  set fillStyle(value: string | CanvasGradient | CanvasPattern) {
+    this.state.fillStyle = String(value);
+  }
+  get strokeStyle(): string | CanvasGradient | CanvasPattern {
+    return this.state.strokeStyle;
+  }
+  set strokeStyle(value: string | CanvasGradient | CanvasPattern) {
+    this.state.strokeStyle = String(value);
+  }
+  get lineWidth(): number {
+    return this.state.lineWidth;
+  }
+  set lineWidth(value: number) {
+    this.state.lineWidth = value;
+  }
+  get font(): string {
+    return this.state.font;
+  }
+  set font(value: string) {
+    this.state.font = value;
+  }
+  get textAlign(): CanvasTextAlign {
+    return this.state.textAlign;
+  }
+  set textAlign(value: CanvasTextAlign) {
+    this.state.textAlign = value;
+  }
+  get textBaseline(): CanvasTextBaseline {
+    return this.state.textBaseline;
+  }
+  set textBaseline(value: CanvasTextBaseline) {
+    this.state.textBaseline = value;
+  }
+  get direction(): CanvasDirection {
+    return this.state.direction;
+  }
+  set direction(value: CanvasDirection) {
+    this.state.direction = value;
+  }
+
   pixel(x: number, y: number): string {
     return this.pixels[Math.floor(y) * this.width + Math.floor(x)] ?? "";
   }
 
+  /** How many pixels have this colour. */
+  count(colour: string): number {
+    return this.pixels.filter((p) => p === colour).length;
+  }
+
+  /** The bounding box, in pixels, of every pixel with this colour, or null. */
+  bounds(colour: string): { minX: number; minY: number; maxX: number; maxY: number } | null {
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    this.pixels.forEach((p, k) => {
+      if (p !== colour) return;
+      const x = k % this.width;
+      const y = Math.floor(k / this.width);
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x + 1);
+      maxY = Math.max(maxY, y + 1);
+    });
+    return minX === Infinity ? null : { minX, minY, maxX, maxY };
+  }
+
   save(): void {
-    this.stack.push({ matrix: [...this.state.matrix], clips: [...this.state.clips] });
+    this.stack.push({ ...this.state, matrix: [...this.state.matrix], clips: [...this.state.clips] });
   }
   restore(): void {
     this.state = this.stack.pop() ?? this.state;
   }
   setTransform(a: number, b: number, c: number, d: number, e: number, f: number): void {
-    if (b !== 0 || c !== 0) throw new Error("RasterContext supports scale and translate only");
     this.state.matrix = [a, b, c, d, e, f];
+  }
+  translate(x: number, y: number): void {
+    const [a, b, c, d, e, f] = this.state.matrix;
+    this.state.matrix = [a, b, c, d, e + a * x + c * y, f + b * x + d * y];
+  }
+  scale(x: number, y: number): void {
+    const [a, b, c, d, e, f] = this.state.matrix;
+    this.state.matrix = [a * x, b * x, c * y, d * y, e, f];
+  }
+  rotate(angle: number): void {
+    const [a, b, c, d, e, f] = this.state.matrix;
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
+    this.state.matrix = [a * cos + c * sin, b * cos + d * sin, c * cos - a * sin, d * cos - b * sin, e, f];
   }
   beginPath(): void {
     this.path = [];
   }
   private map(x: number, y: number): [number, number] {
-    const [a, , , d, e, f] = this.state.matrix;
-    return [a * x + e, d * y + f];
+    const [a, b, c, d, e, f] = this.state.matrix;
+    return [a * x + c * y + e, b * x + d * y + f];
   }
   moveTo(x: number, y: number): void {
     const [px, py] = this.map(x, y);
@@ -88,26 +211,61 @@ export class RasterContext implements PatternCanvasContext {
     this.state.clips = [...this.state.clips, flattenPath(this.path)];
   }
   fill(): void {
-    this.calls.push({ op: "fill", style: String(this.fillStyle) });
-    this.paint(flattenPath(this.path), String(this.fillStyle));
+    this.calls.push({ op: "fill", style: this.state.fillStyle });
+    this.paint(flattenPath(this.path), this.state.fillStyle);
   }
   stroke(): void {
-    this.calls.push({ op: "stroke", style: String(this.strokeStyle) });
+    this.calls.push({ op: "stroke", style: this.state.strokeStyle });
+  }
+  private paintRect(x: number, y: number, width: number, height: number, colour: string): void {
+    const saved = this.path;
+    this.path = [];
+    this.rect(x, y, width, height);
+    this.paint(flattenPath(this.path), colour);
+    this.path = saved;
   }
   fillRect(x: number, y: number, width: number, height: number): void {
-    const saved = this.path;
-    this.path = [];
-    this.rect(x, y, width, height);
-    this.calls.push({ op: "fillRect", style: String(this.fillStyle) });
-    this.paint(flattenPath(this.path), String(this.fillStyle));
-    this.path = saved;
+    this.calls.push({ op: "fillRect", style: this.state.fillStyle });
+    this.paintRect(x, y, width, height, this.state.fillStyle);
   }
   clearRect(x: number, y: number, width: number, height: number): void {
-    const saved = this.path;
-    this.path = [];
-    this.rect(x, y, width, height);
-    this.paint(flattenPath(this.path), "");
-    this.path = saved;
+    this.paintRect(x, y, width, height, "");
+  }
+
+  /** The em size from the current font, in drawing units. */
+  private emSize(): number {
+    const match = /(\d+(?:\.\d+)?)px/.exec(this.state.font);
+    return match ? Number(match[1]) : 10;
+  }
+  measureText(text: string): { width: number } {
+    return { width: [...text].length * FAKE_CHAR_EM * this.emSize() };
+  }
+  fillText(text: string, x: number, y: number): void {
+    const s = this.state;
+    this.calls.push({
+      op: "fillText",
+      text,
+      font: s.font,
+      textAlign: s.textAlign,
+      textBaseline: s.textBaseline,
+      direction: s.direction,
+      style: s.fillStyle,
+      matrix: [...s.matrix],
+      x,
+      y,
+    });
+    const width = this.measureText(text).width;
+    const height = FAKE_LINE_EM * this.emSize();
+    const rtl = s.direction === "rtl";
+    const align = s.textAlign === "start" ? (rtl ? "right" : "left") : s.textAlign === "end" ? (rtl ? "left" : "right") : s.textAlign;
+    const left = align === "left" ? x : align === "right" ? x - width : x - width / 2;
+    const top = s.textBaseline === "middle" ? y - height / 2 : y - height;
+    this.paintRect(left, top, width, height, s.fillStyle);
+  }
+  drawImage(image: CanvasImageSource, dx: number, dy: number, dw: number, dh: number): void {
+    const id = (image as unknown as { id?: string }).id ?? "unknown";
+    this.calls.push({ op: "drawImage", style: `image:${id}` });
+    this.paintRect(dx, dy, dw, dh, `image:${id}`);
   }
 
   private paint(shape: Polyline[], color: string): void {

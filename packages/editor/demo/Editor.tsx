@@ -1,0 +1,741 @@
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import {
+  AssetImageCache,
+  DEFAULT_UPLOAD_LIMITS,
+  DesignCanvas,
+  addCatalogFont,
+  addLayer,
+  checkJerseyNumber,
+  createDesign,
+  createMemoryAssetStore,
+  drawPatternTexture,
+  fontsReady,
+  logoLayerDpi,
+  logoLayerWarnings,
+  moveLayer,
+  newLogoLayer,
+  newNumberLayer,
+  newTextLayer,
+  nextLayerId,
+  normalizeRotation,
+  pieceCentre,
+  pieceTextureRect,
+  removeLayer,
+  scaleLayer,
+  setZoneColor,
+  updateLayer,
+  uploadLogo,
+  useDesignHistory,
+  validateDesign,
+  type ColorRef,
+  type DesignCanvasHandle,
+  type DesignDocument,
+  type FontCatalog,
+  type FontStatus,
+  type Layer,
+  type LayerDragEvent,
+  type LayerPatch,
+  type ProductDefinition,
+  type TextAlign,
+  type TextDirection,
+  type TextureDrawInfo,
+  type UploadIssue,
+} from "../src";
+import { SAMPLE_FILES } from "./sample-files";
+
+/** A demo swatch: a palette colour reference plus a display name. */
+export interface Swatch {
+  color: ColorRef;
+  name: string;
+}
+
+export interface EditorProps {
+  product: ProductDefinition;
+  swatches: Swatch[];
+  fonts: FontCatalog;
+}
+
+interface Message {
+  severity: "error" | "warning" | "info";
+  text: string;
+}
+
+const SAMPLE_TEXTS = [
+  { label: "Latin", value: "TIGERS" },
+  { label: "Urdu", value: "محمد علی" },
+  { label: "Arabic", value: "عبدالله الهاشمي" },
+];
+const SAMPLE_NUMBERS = [
+  { label: "English digits", value: "10" },
+  { label: "Arabic digits", value: "٧" },
+];
+
+function describeLayer(layer: Layer): string {
+  if (layer.kind === "text") return `Text "${layer.value}"`;
+  if (layer.kind === "number") return `Number ${layer.value}`;
+  return `${layer.kind === "logo" ? "Logo" : "Clipart"} ${layer.asset.width} x ${layer.asset.height} px`;
+}
+
+function errorText(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+/** The pattern pieces as cut, drawn by the same function that draws the model's texture. */
+function FlatPattern({ product, design, images, version }: { product: ProductDefinition; design: DesignDocument; images: AssetImageCache; version: number }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const ctx = ref.current?.getContext("2d");
+    if (ctx) drawPatternTexture(ctx, product, design, { size: 720, mode: "flat", images: images.lookup });
+  }, [product, design, images, version]);
+  return <canvas ref={ref} width={720} height={720} className="flat-pattern" aria-label="Flat pattern pieces" />;
+}
+
+/** One piece, flat and large, to judge text shaping closely. Same drawing function, cropped to the piece. */
+function PieceCloseUp({ product, design, pieceId, images, version }: { product: ProductDefinition; design: DesignDocument; pieceId: string; images: AssetImageCache; version: number }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  const piece = product.pieces.find((p) => p.id === pieceId) ?? product.pieces[0]!;
+  const width = 720;
+  const height = Math.round((width * piece.height) / piece.width);
+  useEffect(() => {
+    const target = ref.current?.getContext("2d");
+    if (!target) return;
+    const size = 2048;
+    const scratch = document.createElement("canvas");
+    scratch.width = size;
+    scratch.height = size;
+    const ctx = scratch.getContext("2d");
+    if (!ctx) return;
+    drawPatternTexture(ctx, product, design, { size, mode: "flat", images: images.lookup });
+    const r = pieceTextureRect(piece, size);
+    target.clearRect(0, 0, width, height);
+    target.drawImage(scratch, r.x, r.y, r.width, r.height, 0, 0, width, height);
+  }, [product, design, piece, images, version, width, height]);
+  return <canvas ref={ref} width={width} height={height} className="close-up" aria-label={`Close-up of the ${piece.name} piece`} data-testid="close-up" />;
+}
+
+export function Editor({ product, swatches, fonts }: EditorProps) {
+  const history = useDesignHistory(() => createDesign(product));
+  const { design } = history;
+  const designRef = useRef(design);
+  useEffect(() => {
+    designRef.current = design;
+  });
+  const canvas = useRef<DesignCanvasHandle>(null);
+  const [store] = useState(() => createMemoryAssetStore("demo"));
+  const [fontVersion, setFontVersion] = useState(0);
+  const [flatImages] = useState(() => new AssetImageCache(() => setFontVersion((v) => v + 1)));
+  useEffect(() => flatImages.watch(design, store.url), [flatImages, design, store]);
+
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selected = design.layers.find((l) => l.id === selectedId) ?? null;
+  const [pieceId, setPieceId] = useState(product.pieces[0]!.id);
+  const textFonts = fonts.fonts.filter((f) => f.uses.includes("text"));
+  const numberFonts = fonts.fonts.filter((f) => f.uses.includes("number"));
+  const [textFont, setTextFont] = useState(textFonts[0]!.id);
+  const [numberFont, setNumberFont] = useState((numberFonts.find((f) => f.id.startsWith("graduate")) ?? numberFonts[0]!).id);
+  const [fill, setFill] = useState<ColorRef>(swatches.find((s) => s.color.id === "placeholder-navy")?.color ?? swatches[0]!.color);
+  const [textDraft, setTextDraft] = useState("TIGERS");
+  const [numberDraft, setNumberDraft] = useState("10");
+  const [uploadMessages, setUploadMessages] = useState<Message[]>([]);
+  const [editError, setEditError] = useState<string | null>(null);
+  const [fontStatus, setFontStatus] = useState<FontStatus | null>(null);
+  const [drawInfo, setDrawInfo] = useState<TextureDrawInfo | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const check = validateDesign(design, { product });
+  const pieceName = (id: string) => product.pieces.find((p) => p.id === id)?.name ?? id;
+
+  const commitEdit = useCallback(
+    (edit: (current: DesignDocument) => DesignDocument): boolean => {
+      try {
+        history.commit(edit(designRef.current));
+        setEditError(null);
+        return true;
+      } catch (error) {
+        setEditError(errorText(error));
+        return false;
+      }
+    },
+    [history],
+  );
+
+  // A gesture (slider, typing, drag) is one undo step: begin, preview many times, end.
+  const previewEdit = useCallback(
+    (edit: (current: DesignDocument) => DesignDocument) => {
+      try {
+        history.preview(edit(designRef.current));
+        setEditError(null);
+      } catch (error) {
+        setEditError(errorText(error));
+      }
+    },
+    [history],
+  );
+
+  const onFontStatus = useCallback((status: FontStatus) => {
+    setFontStatus(status);
+    setFontVersion((v) => v + 1);
+  }, []);
+  const onTextureDrawn = useCallback((info: TextureDrawInfo) => setDrawInfo(info), []);
+
+  const onLayerDrag = useCallback(
+    (event: LayerDragEvent) => {
+      if (event.phase === "start") history.begin();
+      else if (event.phase === "move") history.preview((d) => updateLayer(d, event.layerId, { position: event.position }, { product }));
+      else if (event.phase === "end") history.end();
+      else history.cancel();
+    },
+    [history, product],
+  );
+
+  const addText = (value: string) => {
+    const id = nextLayerId(designRef.current, "text");
+    const ok = commitEdit((d) => {
+      const withFont = addCatalogFont(d, fonts, textFont);
+      return addLayer(withFont, newTextLayer(product, { id, pieceId, value, fontId: textFont, fill }), { product });
+    });
+    if (ok) setSelectedId(id);
+  };
+
+  const addNumber = (value: string) => {
+    const rule = checkJerseyNumber(value);
+    if (!rule.ok) {
+      setEditError(`Number not added: ${rule.error}`);
+      return;
+    }
+    const id = nextLayerId(designRef.current, "number");
+    const ok = commitEdit((d) => {
+      const withFont = addCatalogFont(d, fonts, numberFont);
+      return addLayer(withFont, newNumberLayer(product, { id, pieceId, value, fontId: numberFont, fill }), { product });
+    });
+    if (ok) setSelectedId(id);
+  };
+
+  const handleFile = async (file: File) => {
+    setBusy(true);
+    try {
+      const result = await uploadLogo(file, { upload: store.upload });
+      const messages: Message[] = result.issues.map((i: UploadIssue) => ({ severity: i.severity, text: `${file.name}: ${i.message}` }));
+      if (result.ok) {
+        const id = nextLayerId(designRef.current, "logo");
+        const ok = commitEdit((d) => addLayer(d, newLogoLayer(product, { id, pieceId, asset: result.asset }), { product }));
+        if (ok) setSelectedId(id);
+        messages.unshift({ severity: "info", text: `${file.name}: uploaded as ${result.asset.assetId} (${result.asset.width} x ${result.asset.height} px, ${result.asset.mediaType}). Only this reference is in the design.` });
+      } else {
+        messages.unshift({ severity: "error", text: `${file.name}: refused.` });
+      }
+      setUploadMessages(messages);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onFileInput = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (file) void handleFile(file);
+  };
+
+  const deleteLayer = useCallback(
+    (id: string) => {
+      if (commitEdit((d) => removeLayer(d, id))) setSelectedId((s) => (s === id ? null : s));
+    },
+    [commitEdit],
+  );
+
+  // Keyboard shortcuts: undo, redo, delete, nudge, deselect. Text fields keep their own undo.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const typing = target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT") && (target as HTMLInputElement).type !== "range";
+      const mod = event.ctrlKey || event.metaKey;
+      if (mod && !typing && event.key.toLowerCase() === "z") {
+        event.preventDefault();
+        if (event.shiftKey) history.redo();
+        else history.undo();
+      } else if (mod && !typing && event.key.toLowerCase() === "y") {
+        event.preventDefault();
+        history.redo();
+      } else if (!typing && (event.key === "Delete" || event.key === "Backspace") && selectedId) {
+        event.preventDefault();
+        deleteLayer(selectedId);
+      } else if (!typing && event.key === "Escape") {
+        setSelectedId(null);
+      } else if (!typing && selectedId && event.key.startsWith("Arrow")) {
+        const step = event.shiftKey ? 10 : 1;
+        const dx = event.key === "ArrowLeft" ? -step : event.key === "ArrowRight" ? step : 0;
+        const dy = event.key === "ArrowUp" ? -step : event.key === "ArrowDown" ? step : 0;
+        event.preventDefault();
+        commitEdit((d) => {
+          const layer = d.layers.find((l) => l.id === selectedId);
+          if (!layer) return d;
+          return updateLayer(d, selectedId, { position: { x: layer.position.x + dx, y: layer.position.y + dy } }, { product });
+        });
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [history, selectedId, deleteLayer, commitEdit, product]);
+
+  const logoWarnings = useMemo(
+    () => design.layers.flatMap((l) => logoLayerWarnings(l).map((w) => ({ layerId: l.id, ...w }))),
+    [design],
+  );
+
+  const fontMessages: Message[] = [];
+  if (fontStatus) {
+    if (fontStatus.loading.length > 0) fontMessages.push({ severity: "info", text: `Loading fonts: ${fontStatus.loading.join(", ")}. The text is redrawn when they arrive.` });
+    if (fontStatus.missing.length > 0) fontMessages.push({ severity: "error", text: `Fonts not available: ${fontStatus.missing.join(", ")}. Text is shown in a fallback font.` });
+    if (fontStatus.failed.length > 0) fontMessages.push({ severity: "error", text: `Fonts failed to load: ${fontStatus.failed.join(", ")}.` });
+  }
+
+  const allMessages: Message[] = [
+    ...(editError ? [{ severity: "error" as const, text: editError }] : []),
+    ...uploadMessages,
+    ...logoWarnings.map((w) => ({ severity: "warning" as const, text: `${w.layerId}: ${w.message}` })),
+    ...fontMessages,
+  ];
+
+  const layersTopFirst = [...design.layers].reverse();
+  const past = history.history.past.length;
+  const future = history.history.future.length;
+
+  return (
+    <div className="demo">
+      <header className="demo-header">
+        <h1>{product.name}</h1>
+        <div className="history" role="group" aria-label="Undo and redo">
+          <button type="button" onClick={history.undo} disabled={!history.canUndo} data-testid="undo" title="Undo (Ctrl+Z)">
+            Undo ({past})
+          </button>
+          <button type="button" onClick={history.redo} disabled={!history.canRedo} data-testid="redo" title="Redo (Ctrl+Shift+Z or Ctrl+Y)">
+            Redo ({future})
+          </button>
+        </div>
+        <span className={check.ok ? "status-ok" : "status-bad"} data-testid="design-status">
+          {check.ok ? "Design is valid" : `Design is invalid: ${check.errors[0]?.message}`}
+        </span>
+      </header>
+      <main className="demo-main">
+        <div className="viewer">
+          <DesignCanvas
+            ref={canvas}
+            design={design}
+            product={product}
+            selectedLayerId={selected?.id ?? null}
+            onSelectLayer={setSelectedId}
+            onLayerDrag={onLayerDrag}
+            assetUrl={store.url}
+            onFontStatus={onFontStatus}
+            onTextureDrawn={onTextureDrawn}
+          />
+          <div className="sides" role="group" aria-label="View">
+            {(["front", "back", "left", "right"] as const).map((side) => (
+              <button key={side} type="button" onClick={() => canvas.current?.showSide(side)} data-testid={`view-${side}`}>
+                {side[0]!.toUpperCase() + side.slice(1)}
+              </button>
+            ))}
+          </div>
+          <span className="viewer-hint">Drag a layer to move it. Drag elsewhere to turn. Pinch or scroll to zoom.</span>
+        </div>
+        <aside className="panel">
+          <section className="messages" aria-live="polite" data-testid="messages">
+            <h2>Checks</h2>
+            {allMessages.length === 0 ? (
+              <p className="note">No problems.</p>
+            ) : (
+              <ul>
+                {allMessages.map((m, k) => (
+                  <li key={k} className={`msg msg-${m.severity}`}>
+                    <strong>{m.severity === "error" ? "Error" : m.severity === "warning" ? "Warning" : "Note"}:</strong> {m.text}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          <section>
+            <h2>Add to the jersey</h2>
+            <label className="row">
+              <span>Piece</span>
+              <select value={pieceId} onChange={(e) => setPieceId(e.target.value)} data-testid="piece">
+                {product.pieces.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="swatches" role="group" aria-label="Colour for new text and numbers">
+              {swatches.map((s) => (
+                <button key={s.color.id} type="button" className="swatch small" title={s.name} aria-label={`Text colour ${s.name}`} aria-pressed={fill.id === s.color.id} onClick={() => setFill(s.color)} style={{ background: s.color.hex }} />
+              ))}
+            </div>
+
+            <div className="add-row">
+              <input value={textDraft} onChange={(e) => setTextDraft(e.target.value)} dir="auto" aria-label="Text" data-testid="text-input" maxLength={200} />
+              <select value={textFont} onChange={(e) => setTextFont(e.target.value)} aria-label="Font for text">
+                {textFonts.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.name}
+                  </option>
+                ))}
+              </select>
+              <button type="button" onClick={() => addText(textDraft)} data-testid="add-text">
+                Add text
+              </button>
+            </div>
+            <div className="presets">
+              {SAMPLE_TEXTS.map((s) => (
+                <button key={s.label} type="button" className="preset" onClick={() => addText(s.value)} data-testid={`add-text-${s.label.toLowerCase()}`}>
+                  {s.label}: <span dir="auto">{s.value}</span>
+                </button>
+              ))}
+            </div>
+
+            <div className="add-row">
+              <input value={numberDraft} onChange={(e) => setNumberDraft(e.target.value)} aria-label="Number" data-testid="number-input" inputMode="numeric" maxLength={4} />
+              <select value={numberFont} onChange={(e) => setNumberFont(e.target.value)} aria-label="Font for numbers">
+                {numberFonts.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.name}
+                  </option>
+                ))}
+              </select>
+              <button type="button" onClick={() => addNumber(numberDraft)} data-testid="add-number">
+                Add number
+              </button>
+            </div>
+            <div className="presets">
+              {SAMPLE_NUMBERS.map((s) => (
+                <button key={s.label} type="button" className="preset" onClick={() => addNumber(s.value)} data-testid={`add-number-${s.label.split(" ")[0]!.toLowerCase()}`}>
+                  {s.label}: {s.value}
+                </button>
+              ))}
+            </div>
+
+            <div className="add-row">
+              <label className="upload">
+                <span>{busy ? "Checking..." : "Upload logo"}</span>
+                <input type="file" accept="image/png,image/jpeg,image/webp" onChange={onFileInput} data-testid="logo-file" disabled={busy} />
+              </label>
+              <span className="note">
+                PNG, JPEG or WebP, up to {DEFAULT_UPLOAD_LIMITS.maxFileBytes / 1024 / 1024} MB. Checked by content, not by name.
+              </span>
+            </div>
+            <details>
+              <summary>Test files for the checks</summary>
+              <div className="presets">
+                {SAMPLE_FILES.map((s) => (
+                  <button key={s.id} type="button" className="preset" disabled={busy} onClick={() => void s.make().then(handleFile)} data-testid={`sample-${s.id}`}>
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+              <p className="note">Made in the browser by code, then uploaded through the same checks as a picked file.</p>
+            </details>
+          </section>
+
+          <section>
+            <h2>Layers (top first)</h2>
+            {layersTopFirst.length === 0 ? (
+              <p className="note">No layers yet.</p>
+            ) : (
+              <ol className="layers" data-testid="layers">
+                {layersTopFirst.map((layer) => {
+                  const index = design.layers.indexOf(layer);
+                  const warn = logoWarnings.some((w) => w.layerId === layer.id);
+                  return (
+                    <li key={layer.id} className={layer.id === selected?.id ? "layer selected" : "layer"} data-layer={layer.id}>
+                      <button type="button" className="layer-name" onClick={() => setSelectedId(layer.id === selected?.id ? null : layer.id)} aria-pressed={layer.id === selected?.id}>
+                        <span dir="auto">{describeLayer(layer)}</span>
+                        <span className="layer-piece">{pieceName(layer.pieceId)}</span>
+                        {warn && <span className="badge-warn">Low DPI</span>}
+                      </button>
+                      <button type="button" onClick={() => commitEdit((d) => moveLayer(d, layer.id, index + 1))} disabled={index === design.layers.length - 1} aria-label={`Move ${layer.id} up`}>
+                        Up
+                      </button>
+                      <button type="button" onClick={() => commitEdit((d) => moveLayer(d, layer.id, index - 1))} disabled={index === 0} aria-label={`Move ${layer.id} down`}>
+                        Down
+                      </button>
+                      <button type="button" onClick={() => deleteLayer(layer.id)} aria-label={`Delete ${layer.id}`}>
+                        Delete
+                      </button>
+                    </li>
+                  );
+                })}
+              </ol>
+            )}
+          </section>
+
+          {selected && (
+            <LayerControls
+              key={selected.id}
+              layer={selected}
+              product={product}
+              fonts={fonts}
+              swatches={swatches}
+              commitEdit={commitEdit}
+              previewEdit={previewEdit}
+              begin={history.begin}
+              end={history.end}
+            />
+          )}
+
+          <section>
+            <h2>Colour zones</h2>
+            <ul className="zones">
+              {product.zones.map((zone) => {
+                const current = design.zones[zone.id];
+                return (
+                  <li key={zone.id} data-zone={zone.id}>
+                    <div className="zone-head">
+                      <span className="zone-chip" style={{ background: current?.hex }} />
+                      <span className="zone-name">{zone.name}</span>
+                      <span className="zone-hex">
+                        {swatches.find((s) => s.color.id === current?.id)?.name ?? current?.id} {current?.hex}
+                      </span>
+                    </div>
+                    <div className="swatches" role="group" aria-label={`Colour for ${zone.name}`}>
+                      {swatches.map((swatch) => (
+                        <button
+                          key={swatch.color.id}
+                          type="button"
+                          className="swatch"
+                          data-color={swatch.color.id}
+                          title={`${swatch.name} ${swatch.color.hex}`}
+                          aria-label={`${zone.name}: ${swatch.name}`}
+                          aria-pressed={current?.id === swatch.color.id}
+                          onClick={() => commitEdit((d) => setZoneColor(d, zone.id, swatch.color, { product }))}
+                          style={{ background: swatch.color.hex }}
+                        />
+                      ))}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+            <p className="note">
+              Placeholder colours, not print-tested.
+              {drawInfo && ` Texture ${drawInfo.size} x ${drawInfo.size} px, ${drawInfo.layers} layers, redrawn in ${drawInfo.drawMs.toFixed(1)} ms.`}
+              {fontStatus && fontsReady(fontStatus) && " Fonts loaded."}
+            </p>
+          </section>
+
+          <details open>
+            <summary>Close-up of a piece (flat)</summary>
+            <PieceCloseUp product={product} design={design} pieceId={selected?.pieceId ?? pieceId} images={flatImages} version={fontVersion} />
+          </details>
+          <details>
+            <summary>Flat pattern pieces</summary>
+            <FlatPattern product={product} design={design} images={flatImages} version={fontVersion} />
+            <p className="note">The same vector pieces, zones and layers that are drawn onto the model.</p>
+          </details>
+          <details>
+            <summary>Design JSON</summary>
+            <pre className="json" data-testid="design-json">{JSON.stringify(design, null, 2)}</pre>
+          </details>
+          <details>
+            <summary>Fonts and licences</summary>
+            <ul className="licences">
+              {fonts.fonts.map((f) => (
+                <li key={f.id}>
+                  <strong>{f.name}</strong> ({f.family} {f.weight}): {f.licence.spdx}, {f.licence.package}. {f.licence.copyright}
+                </li>
+              ))}
+            </ul>
+          </details>
+        </aside>
+      </main>
+    </div>
+  );
+}
+
+interface LayerControlsProps {
+  layer: Layer;
+  product: ProductDefinition;
+  fonts: FontCatalog;
+  swatches: Swatch[];
+  commitEdit: (edit: (current: DesignDocument) => DesignDocument) => boolean;
+  previewEdit: (edit: (current: DesignDocument) => DesignDocument) => void;
+  begin: () => void;
+  end: () => void;
+}
+
+function LayerControls({ layer, product, fonts, swatches, commitEdit, previewEdit, begin, end }: LayerControlsProps) {
+  const piece = product.pieces.find((p) => p.id === layer.pieceId)!;
+  const update = (patch: LayerPatch) => (d: DesignDocument) => updateLayer(d, layer.id, patch, { product });
+  const [draft, setDraft] = useState(layer.kind === "text" || layer.kind === "number" ? layer.value : "");
+  const [draftError, setDraftError] = useState<string | null>(null);
+
+  // Typing is one undo step: begin on focus, preview valid values, end on blur.
+  const onDraft = (value: string) => {
+    setDraft(value);
+    if (layer.kind === "number") {
+      const rule = checkJerseyNumber(value);
+      if (!rule.ok) {
+        setDraftError(rule.error);
+        return;
+      }
+    } else if (value.trim() === "") {
+      setDraftError("Text cannot be empty.");
+      return;
+    }
+    setDraftError(null);
+    previewEdit(update({ value }));
+  };
+
+  const isText = layer.kind === "text" || layer.kind === "number";
+  const sizeValue = isText ? layer.fontSize : layer.size.width;
+  const sizeMax = isText ? 300 : Math.round(Math.min(piece.width, 400));
+  const resizeTo = (value: number) => {
+    const factor = value / sizeValue;
+    if (!Number.isFinite(factor) || factor <= 0) return null;
+    return scaleLayer(layer, factor);
+  };
+  const gestureProps = {
+    onPointerDown: begin,
+    onFocus: begin,
+    onPointerUp: end,
+    onKeyUp: end,
+    onBlur: end,
+  };
+
+  return (
+    <section className="controls" data-testid="layer-controls">
+      <h2>
+        Selected: <span dir="auto">{describeLayer(layer)}</span>
+      </h2>
+      {isText && (
+        <label className="row">
+          <span>{layer.kind === "number" ? "Number" : "Text"}</span>
+          <input
+            value={draft}
+            dir="auto"
+            onFocus={begin}
+            onBlur={() => {
+              end();
+              setDraft(layer.value);
+              setDraftError(null);
+            }}
+            onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+            onChange={(e) => onDraft(e.target.value)}
+            data-testid="layer-value"
+          />
+        </label>
+      )}
+      {draftError && <p className="msg msg-error">{draftError}</p>}
+      {isText && (
+        <label className="row">
+          <span>Font</span>
+          <select value={layer.fontId} onChange={(e) => commitEdit((d) => updateLayer(addCatalogFont(d, fonts, e.target.value), layer.id, { fontId: e.target.value }, { product }))}>
+            {fonts.fonts
+              .filter((f) => f.uses.includes(layer.kind === "number" ? "number" : "text"))
+              .map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.name}
+                </option>
+              ))}
+          </select>
+        </label>
+      )}
+      {isText && (
+        <div className="row">
+          <span>Align</span>
+          <div className="segmented" role="group" aria-label="Alignment">
+            {(["start", "center", "end"] as TextAlign[]).map((a) => (
+              <button key={a} type="button" aria-pressed={layer.align === a} onClick={() => commitEdit(update({ align: a }))}>
+                {a === "start" ? "Start" : a === "center" ? "Centre" : "End"}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      {layer.kind === "text" && (
+        <label className="row">
+          <span>Direction</span>
+          <select value={layer.direction} onChange={(e) => commitEdit(update({ direction: e.target.value as TextDirection }))}>
+            <option value="auto">Auto (from the text)</option>
+            <option value="ltr">Left to right</option>
+            <option value="rtl">Right to left</option>
+          </select>
+        </label>
+      )}
+      {isText && (
+        <div className="swatches" role="group" aria-label="Colour of this layer">
+          {swatches.map((s) => (
+            <button key={s.color.id} type="button" className="swatch small" title={s.name} aria-pressed={layer.fill.id === s.color.id} onClick={() => commitEdit(update({ fill: s.color }))} style={{ background: s.color.hex }} />
+          ))}
+        </div>
+      )}
+      <label className="row">
+        <span>{isText ? `Size ${Math.round(sizeValue)} mm` : `Width ${Math.round(sizeValue)} mm`}</span>
+        <input
+          type="range"
+          min={10}
+          max={sizeMax}
+          step={1}
+          value={Math.round(sizeValue)}
+          onChange={(e) => {
+            const patch = resizeTo(Number(e.target.value));
+            if (patch) previewEdit(update(patch));
+          }}
+          data-testid="size"
+          {...gestureProps}
+        />
+      </label>
+      <div className="row buttons">
+        <button type="button" onClick={() => commitEdit(update(scaleLayer(layer, 1 / 1.25)))} data-testid="smaller">
+          Smaller
+        </button>
+        <button type="button" onClick={() => commitEdit(update(scaleLayer(layer, 1.25)))} data-testid="bigger">
+          Bigger
+        </button>
+      </div>
+      <label className="row">
+        <span>Rotation {Math.round(normalizeRotation(layer.rotation))} degrees</span>
+        <input
+          type="range"
+          min={-180}
+          max={180}
+          step={1}
+          value={Math.round(normalizeRotation(layer.rotation))}
+          onChange={(e) => previewEdit(update({ rotation: Number(e.target.value) }))}
+          data-testid="rotation"
+          {...gestureProps}
+        />
+      </label>
+      <div className="row buttons">
+        <button type="button" onClick={() => commitEdit(update({ rotation: normalizeRotation(layer.rotation - 15) }))} data-testid="rotate-left">
+          Turn -15
+        </button>
+        <button type="button" onClick={() => commitEdit(update({ rotation: normalizeRotation(layer.rotation + 15) }))} data-testid="rotate-right">
+          Turn +15
+        </button>
+        <button type="button" onClick={() => commitEdit(update({ rotation: 0 }))}>
+          Straight
+        </button>
+      </div>
+      <label className="row">
+        <span>Piece</span>
+        <select value={layer.pieceId} onChange={(e) => {
+          const target = product.pieces.find((p) => p.id === e.target.value)!;
+          commitEdit(update({ pieceId: target.id, position: pieceCentre(target) }));
+        }}>
+          {product.pieces.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <p className="note" data-testid="layer-geometry">
+        Centre {Math.round(layer.position.x)}, {Math.round(layer.position.y)} mm on the {piece.name.toLowerCase()} ({piece.width} x {piece.height} mm). Box {Math.round(layer.size.width)} x {Math.round(layer.size.height)} mm.
+        {layer.kind === "logo" && ` Prints at ${Math.round(logoLayerDpi(layer))} DPI (minimum ${DEFAULT_UPLOAD_LIMITS.minDpi}).`}
+      </p>
+      <button type="button" onClick={() => commitEdit(update({ position: pieceCentre(piece) }))}>
+        Centre on the piece
+      </button>
+    </section>
+  );
+}

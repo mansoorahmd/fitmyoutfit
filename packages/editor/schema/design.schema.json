@@ -6,7 +6,7 @@
   "properties": {
     "schemaVersion": {
       "type": "number",
-      "const": 1
+      "const": 2
     },
     "product": {
       "type": "object",
@@ -76,8 +76,7 @@
           },
           "family": {
             "type": "string",
-            "minLength": 1,
-            "maxLength": 100
+            "pattern": "^[^\"'\\\\;{}<>\\p{Cc}]{1,100}$"
           },
           "weight": {
             "type": "integer",
@@ -94,6 +93,14 @@
           "assetId": {
             "type": "string",
             "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+          },
+          "fallbackFontIds": {
+            "maxItems": 8,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+            }
           }
         },
         "required": [
@@ -162,7 +169,17 @@
               "value": {
                 "type": "string",
                 "minLength": 1,
-                "maxLength": 200
+                "maxLength": 200,
+                "pattern": "^[^\\p{Cc}]*$",
+                "description": "One line of text in any script, 1 to 200 UTF-16 code units. It must also be in Unicode NFC and hold a visible character, which this schema cannot check: validateDesign() from @fitmyoutfit/editor/design does."
+              },
+              "direction": {
+                "type": "string",
+                "enum": [
+                  "auto",
+                  "ltr",
+                  "rtl"
+                ]
               },
               "fontId": {
                 "type": "string",
@@ -193,9 +210,9 @@
               "align": {
                 "type": "string",
                 "enum": [
-                  "left",
+                  "start",
                   "center",
-                  "right"
+                  "end"
                 ]
               }
             },
@@ -207,6 +224,7 @@
               "size",
               "rotation",
               "value",
+              "direction",
               "fontId",
               "fontSize",
               "fill",
@@ -300,9 +318,9 @@
               "align": {
                 "type": "string",
                 "enum": [
-                  "left",
+                  "start",
                   "center",
-                  "right"
+                  "end"
                 ]
               }
             },
@@ -380,17 +398,29 @@
                     "type": "string",
                     "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
                   },
+                  "width": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 100000
+                  },
+                  "height": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 100000
+                  },
                   "mediaType": {
                     "type": "string",
                     "enum": [
-                      "image/svg+xml",
                       "image/png",
-                      "image/jpeg"
+                      "image/jpeg",
+                      "image/webp"
                     ]
                   }
                 },
                 "required": [
                   "assetId",
+                  "width",
+                  "height",
                   "mediaType"
                 ],
                 "additionalProperties": false
@@ -466,17 +496,30 @@
                     "type": "string",
                     "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
                   },
+                  "width": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 100000
+                  },
+                  "height": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 100000
+                  },
                   "mediaType": {
                     "type": "string",
                     "enum": [
-                      "image/svg+xml",
                       "image/png",
-                      "image/jpeg"
+                      "image/jpeg",
+                      "image/webp",
+                      "image/svg+xml"
                     ]
                   }
                 },
                 "required": [
                   "assetId",
+                  "width",
+                  "height",
                   "mediaType"
                 ],
                 "additionalProperties": false

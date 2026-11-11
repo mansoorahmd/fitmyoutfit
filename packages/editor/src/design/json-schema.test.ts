@@ -47,7 +47,7 @@ describe("JSON Schema and validateDesign agree", () => {
     ["design with every layer kind", full, true],
     ["not an object", "design", false],
     ["missing zones", copy((d) => delete d.zones), false],
-    ["wrong schemaVersion", copy((d) => (d.schemaVersion = 2)), false],
+    ["wrong schemaVersion", copy((d) => (d.schemaVersion = 1)), false],
     ["lower-case hex", copy((d) => (d.zones.body.hex = "#ffffff")), false],
     ["short hex", copy((d) => (d.zones.body.hex = "#FFF")), false],
     ["unknown layer kind", copy((d) => (d.layers[0].kind = "sticker")), false],
@@ -77,6 +77,23 @@ describe("JSON Schema and validateDesign agree", () => {
     ["a harmless zone key like toString is just a name", copy((d) => (d.zones.toString = d.zones.body)), true],
     ["text layer without a fill", copy((d) => delete d.layers[0].fill), false],
     ["logo layer with text fields", copy((d) => (d.layers[2].fontId = "font-sans")), false],
+    // Format version 2 (E2).
+    ["text aligned 'left' (the old format)", copy((d) => (d.layers[0].align = "left")), false],
+    ["text aligned 'end'", copy((d) => (d.layers[0].align = "end")), true],
+    ["text without a direction", copy((d) => delete d.layers[0].direction), false],
+    ["text with direction 'rtl' and an Urdu value", copy((d) => Object.assign(d.layers[0], { direction: "rtl", value: "محمد علی" })), true],
+    ["text with a line break", copy((d) => (d.layers[0].value = "A\nB")), false],
+    ["a logo that is an SVG (not accepted for uploads)", copy((d) => (d.layers[2].asset.mediaType = "image/svg+xml")), false],
+    ["a WebP logo", copy((d) => (d.layers[2].asset.mediaType = "image/webp")), true],
+    ["a logo without its pixel size", copy((d) => delete d.layers[2].asset.width), false],
+    ["a logo with a fractional pixel size", copy((d) => (d.layers[2].asset.height = 10.5)), false],
+    ["a logo with the image bytes inline", copy((d) => (d.layers[2].asset.data = "iVBORw0KGgo=")), false],
+    ["a clipart SVG", copy((d) => (d.layers[3].asset.mediaType = "image/svg+xml")), true],
+    ["a font family with a quote", copy((d) => (d.fonts[0].family = 'Inter", serif')), false],
+    ["a font with a fallback list", copy((d) => {
+      d.fonts.push({ id: "font-arabic", family: "Noto Sans Arabic" });
+      d.fonts[0].fallbackFontIds = ["font-arabic"];
+    }), true],
   ];
 
   it.each(cases)("%s", (_name, doc, expected) => {
@@ -129,6 +146,39 @@ describe("JSON Schema is looser than validateDesign for the jersey number maximu
     expect(number.properties.value.description).toContain("enforced by validateDesign()");
     expect(number.properties.value.description).toContain("99");
     expect(number.properties.value.pattern).toBe(JERSEY_NUMBER_VALUE_PATTERN);
+  });
+});
+
+// Other documented differences: rules about text and references that a JSON
+// Schema cannot hold. The schema's descriptions say validateDesign checks them.
+describe("JSON Schema is looser than validateDesign for text and references (documented differences)", () => {
+  const ajv = new Ajv2020({ strict: false, allErrors: true });
+  const validateWithSchema = ajv.compile(committed("design.schema.json") as object);
+  const full = fullDesign(createDesign(product));
+  const copy = (mutate: (d: Record<string, any>) => void) => {
+    const doc = JSON.parse(JSON.stringify(full)) as Record<string, any>;
+    mutate(doc);
+    return doc;
+  };
+
+  it.each<[string, (d: Record<string, any>) => void, string]>([
+    ["text that is not in Unicode NFC", (d) => (d.layers[0].value = "José"), "Unicode normal form NFC"],
+    ["text of spaces only", (d) => (d.layers[0].value = "   "), "visible character"],
+    ["a font fallback that is not in the document", (d) => (d.fonts[0].fallbackFontIds = ["font-arabic"]), "is not listed in 'fonts'"],
+    ["a layer font that is not in the document", (d) => (d.layers[0].fontId = "font-serif"), "is not listed in 'fonts'"],
+  ])("%s: the schema accepts it, validateDesign rejects it", (_name, mutate, message) => {
+    const doc = copy(mutate);
+    expect(validateWithSchema(doc)).toBe(true);
+    const result = validateDesign(doc);
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.errors[0]!.message).toContain(message);
+  });
+
+  it("the schema's description for a text value says where NFC is checked", () => {
+    const schema = committed("design.schema.json") as any;
+    const text = schema.properties.layers.items.oneOf.find((l: any) => l.properties.kind.const === "text");
+    expect(text.properties.value.description).toContain("NFC");
+    expect(text.properties.value.description).toContain("validateDesign()");
   });
 });
 

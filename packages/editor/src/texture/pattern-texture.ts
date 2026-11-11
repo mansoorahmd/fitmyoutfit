@@ -10,13 +10,14 @@
  * Layout: the texture is one square image that covers the model's whole UV
  * space, (0, 0) top-left to (1, 1) bottom-right, V down (glTF). A piece's UV
  * rectangle times the texture size is its pixel rectangle, and each piece is
- * drawn with a transform from its millimetres to those pixels, so later
- * layers (text, numbers, logos, positioned in piece millimetres) draw in the
- * same space with no extra conversion.
+ * drawn with a transform from its millimetres to those pixels, so the layers
+ * (text, numbers, logos, positioned in piece millimetres; see layers.ts) are
+ * drawn in the same space with no extra conversion, after the zones.
  */
 import type { ColorRef, DesignDocument, PatternPiece, ProductDefinition } from "../design/schema.js";
 import { pieceGeometry } from "../design/pattern.js";
 import { traceSvgPath, type PathPoint, type PathSink } from "../design/svg-path.js";
+import { drawLayers, type AssetImageLookup, type LayerCanvasContext } from "./layers.js";
 
 /** Default texture edge in pixels. 2048 x 2048 RGBA is 16 MiB on the GPU (about 21 MiB with mipmaps). */
 export const DEFAULT_TEXTURE_SIZE = 2048;
@@ -28,19 +29,7 @@ export const TEXTURE_BACKGROUND = "#7F7F7F";
  * The 2D-context calls the drawing needs. `CanvasRenderingContext2D` and
  * `OffscreenCanvasRenderingContext2D` satisfy it.
  */
-export interface PatternCanvasContext extends PathSink {
-  fillStyle: string | CanvasGradient | CanvasPattern;
-  strokeStyle: string | CanvasGradient | CanvasPattern;
-  lineWidth: number;
-  save(): void;
-  restore(): void;
-  setTransform(a: number, b: number, c: number, d: number, e: number, f: number): void;
-  beginPath(): void;
-  rect(x: number, y: number, width: number, height: number): void;
-  fill(): void;
-  stroke(): void;
-  clip(): void;
-  fillRect(x: number, y: number, width: number, height: number): void;
+export interface PatternCanvasContext extends PathSink, LayerCanvasContext {
   clearRect(x: number, y: number, width: number, height: number): void;
 }
 
@@ -103,18 +92,28 @@ export interface DrawPatternOptions {
   mode?: "texture" | "flat";
   /** Margin in pixels drawn around each piece in texture mode. Default: size / 128 (16 px at 2048). */
   bleed?: number;
+  /** Images for logo and clipart layers (see layers.ts). Missing ones are drawn as grey placeholders. */
+  images?: AssetImageLookup;
+  /** A layer to outline as selected, in the editor's view. */
+  selectedLayerId?: string | null;
 }
 
-/** What `drawPatternTexture` did, for a caller that reports cost. */
+/** What `drawPatternTexture` did, for a caller that reports cost or must know the drawing is complete. */
 export interface DrawPatternResult {
   size: number;
   pieces: number;
   fills: number;
+  /** Layers drawn. */
+  layers: number;
+  /** Asset ids drawn as placeholders because their image was not available yet. */
+  missingImages: string[];
 }
 
 /**
- * Draws every pattern piece with the design's zone colours. The same inputs
- * always give the same drawing; nothing is cached between calls.
+ * Draws every pattern piece with the design's zone colours, then the
+ * design's layers (text, numbers, logos) over them, each clipped to its
+ * piece. The same inputs always give the same drawing; nothing is cached
+ * between calls.
  */
 export function drawPatternTexture(
   ctx: PatternCanvasContext,
@@ -190,6 +189,18 @@ export function drawPatternTexture(
   } else {
     for (const piece of product.pieces) drawPiece(piece, 0);
   }
+  const pieces = new Map(product.pieces.map((p) => [p.id, p]));
+  const layers = drawLayers(ctx, design, pieces, (piece) => pieceTransform(piece, size), {
+    images: options.images,
+    selectedLayerId: options.selectedLayerId,
+  });
   ctx.setTransform(1, 0, 0, 1, 0, 0);
-  return { size, pieces: product.pieces.length, fills };
+  return { size, pieces: product.pieces.length, fills, layers: layers.layers, missingImages: layers.missingImages };
+}
+
+/** The 2D transform from a piece's millimetres to texture pixels, as setTransform arguments. */
+export function pieceTransform(piece: PatternPiece, size: number): [number, number, number, number, number, number] {
+  const rect = pieceTextureRect(piece, size);
+  const scale = pieceTextureScale(piece, size);
+  return [scale.x, 0, 0, scale.y, rect.x, rect.y];
 }

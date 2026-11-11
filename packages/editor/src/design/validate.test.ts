@@ -43,14 +43,14 @@ describe("validateDesign: invalid documents", () => {
   });
 
   it("explains a newer schemaVersion", () => {
-    const [message] = messages(broken((d) => (d.schemaVersion = 2)));
+    const [message] = messages(broken((d) => (d.schemaVersion = 3)));
     expect(message).toContain("schemaVersion");
     expect(message).toContain("newer");
     expect(message).toContain("update the editor package");
   });
 
   it("explains an older, unsupported schemaVersion", () => {
-    expect(messages(broken((d) => (d.schemaVersion = 0))).join()).toContain("not supported");
+    expect(messages(broken((d) => (d.schemaVersion = 1))).join()).toContain("not supported");
   });
 
   it("names the path of a missing field", () => {

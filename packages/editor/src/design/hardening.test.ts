@@ -222,30 +222,41 @@ describe("D6: nothing is silently dropped from a map", () => {
 });
 
 describe("text layers accept any script", () => {
+  // All already in NFC, so they are stored exactly as written.
   const values = [
     ["Urdu name", "عائشہ"],
     ["Arabic name", "محمد"],
     ["Arabic with diacritics", "مُحَمَّد"],
     ["mixed Latin, Arabic and digits", "Ali علي 10"],
-    ["Latin with a combining accent", "José"],
     ["Latin with a precomposed accent", "José"],
   ] as const;
 
   it.each(values)("accepts %s and keeps it exactly as written", (_name, value) => {
+    expect(value.normalize("NFC")).toBe(value);
     const layer = textLayer({ value });
     const added = addLayer(withFont, layer);
     expect(added.layers[0]).toMatchObject({ value });
     expect(validateDesign(added, { product }).ok).toBe(true);
-    // Survives a JSON round trip unchanged (no normalisation).
+    // Survives a JSON round trip unchanged.
     const reparsed = validateDesign(JSON.parse(JSON.stringify(added)));
     expect(reparsed.ok && reparsed.value.layers[0]).toMatchObject({ value });
     expect(updateLayer(withFont.layers.length ? withFont : addLayer(withFont, textLayer()), "text-1", { value }).layers[0]).toMatchObject({ value });
   });
 
-  it("does not normalise: a combining sequence and its precomposed form stay different", () => {
-    const decomposed = addLayer(withFont, textLayer({ value: "José" })).layers[0];
-    expect(decomposed).toMatchObject({ value: "José" });
-    expect(decomposed).not.toMatchObject({ value: "José" });
+  // Changed in E2 (format version 2): text is stored in NFC so names compare equal.
+  it("normalises to NFC: a combining sequence is stored as its precomposed form", () => {
+    const decomposed = "José";
+    const added = addLayer(withFont, textLayer({ value: decomposed })).layers[0];
+    expect(added).toMatchObject({ value: "José" });
+    const updated = updateLayer(addLayer(withFont, textLayer()), "text-1", { value: decomposed }).layers[0];
+    expect(updated).toMatchObject({ value: "José" });
+  });
+
+  it("validateDesign refuses text that is not NFC instead of changing it silently", () => {
+    const doc = { ...withFont, layers: [textLayer({ value: "José" })] };
+    expect(messages(doc)).toEqual([
+      "layers[0].value: must be in Unicode normal form NFC (the edit functions normalise text; or use normalizeText())",
+    ]);
   });
 });
 
