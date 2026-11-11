@@ -1,0 +1,40 @@
+stand-in-tshirt.glb: licence notice
+====================================
+
+The garment geometry in stand-in-tshirt.glb comes from "Garment 3D" by Prashant Verma:
+
+  Source:    https://github.com/prashant3285/garment (file shirt.glb, "GLB exported from CLO")
+  Copyright: Copyright (c) 2021 Prashant Verma
+  Licence:   MIT License (text below)
+
+What we changed: scripts/process-stand-in-model.ts keeps only the outer cloth surface of each of
+the seven pattern pieces (dropping the inner surface and the edge strips of CLO's thickness export),
+removes all textures and the denim materials and puts one plain white material in their place,
+renames the meshes after the pattern pieces, repacks the UVs into one 0 to 1 layout at one scale,
+welds the seam vertices, recomputes the normals, adds baked ambient occlusion (_OCCLUSION) and
+moves the garment to stand on Y = 0. The source file's SHA-256 is recorded in
+stand-in-tshirt.source.json. It is a stand-in until our own pattern-based models arrive.
+
+-------------------------------------------------------------------------------
+
+MIT License
+
+Copyright (c) 2021 Prashant Verma
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

@@ -45,6 +45,7 @@
     "test": "vitest run",
     "generate:schema": "tsx scripts/generate-schema.ts",
     "generate:model": "tsx scripts/generate-placeholder-jersey.ts",
+    "process:stand-in": "tsx scripts/process-stand-in-model.ts",
     "dev:lan": "vite --config vite.demo.config.ts --host"
   },
   "dependencies": {

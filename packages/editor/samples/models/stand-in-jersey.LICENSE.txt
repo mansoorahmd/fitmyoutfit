@@ -1,0 +1,33 @@
+stand-in-jersey.glb: licence notice
+===================================
+
+The garment geometry in stand-in-jersey.glb comes from "Jersey Patterns 3D Free" by Wearable3D:
+
+  Title:     Jersey Patterns 3D Free
+  Author:    Wearable3D (https://sketchfab.com/Wearable3D)
+  Source:    https://sketchfab.com/3d-models/jersey-patterns-3d-free-a6b7401510484ee1b375c02f97f14e86
+             (the file jersey_patterns_3d_free.glb, as downloaded from Sketchfab; generator Sketchfab-16.52.0)
+  Licence:   Creative Commons Attribution 4.0 International (CC BY 4.0)
+             https://creativecommons.org/licenses/by/4.0/
+             (the file names it "CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)")
+
+This is a modified version of the work. What we changed: scripts/process-stand-in-model.ts keeps
+only the outer cloth surface of the garment and its trims (it drops the inner copy of the cloth
+and the edge strips that joined the two), removes both textures (the tiger-print base colour and
+the normal map) and both materials and puts one plain white material in their place, splits the
+cloth into 27 pattern pieces and renames them, measures the UV layout against the 3D surface and
+re-lays it in millimetres at one scale, packs the pieces into a new UV layout, turns the model from
+Z up in centimetres to Y up in metres and stands it on Y = 0, welds the seam vertices, recomputes
+the normals, adds baked ambient occlusion (_OCCLUSION), joins all pieces into one mesh and stores
+the vertex data as integers (KHR_mesh_quantization). The garment's shape is unchanged.
+
+The source file's SHA-256 is recorded in stand-in-jersey.source.json. It is a stand-in until our
+own pattern-based models arrive.
+
+Credit wherever the model is shown, for example:
+  3D model: "Jersey Patterns 3D Free" by Wearable3D, CC BY 4.0, changed by us
+  (with links to the source and to the licence).
+
+The licence does not let the licensor's name suggest that they endorse us or our use of the work.
+No warranties are given (section 5 of the licence). The full legal code is at
+https://creativecommons.org/licenses/by/4.0/legalcode

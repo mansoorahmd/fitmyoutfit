@@ -7,6 +7,7 @@ import "@fontsource/graduate/400.css";
 import "@fontsource/noto-sans-arabic/700.css";
 import { colorRefSchema, validateFontCatalog, validateProductDefinition, type FontCatalog, type ProductDefinition } from "../src";
 import { Editor, type Swatch } from "./Editor";
+import { chooseProduct } from "./products";
 
 interface DemoData {
   product: ProductDefinition;
@@ -14,7 +15,11 @@ interface DemoData {
   fonts: FontCatalog;
 }
 
-const PRODUCT_URL = "/products/placeholder-jersey.json";
+// The stand-in football jersey (see samples/models/stand-in-jersey.LICENSE.txt) by default. The stand-in
+// T-shirt and the old script-generated placeholder stay reachable: ?product=stand-in-tshirt,
+// ?product=placeholder-jersey (and the switch in the header).
+const DEMO_PRODUCT = chooseProduct(window.location.search);
+const PRODUCT_URL = `/products/${DEMO_PRODUCT.id}.json`;
 // Placeholder colours, as data. The real print-tested palette (with HEX snapping) is step E3.
 const PALETTE_URL = "/palettes/placeholder-palette.json";
 const FONTS_URL = "/fonts/placeholder-fonts.json";
@@ -59,7 +64,7 @@ function App() {
 
   if (error) return <p role="alert">Could not load the demo data: {error}</p>;
   if (!data) return <p>Loading product...</p>;
-  return <Editor product={data.product} swatches={data.swatches} fonts={data.fonts} />;
+  return <Editor product={data.product} swatches={data.swatches} fonts={data.fonts} demoProduct={DEMO_PRODUCT} />;
 }
 
 const container = document.getElementById("root");

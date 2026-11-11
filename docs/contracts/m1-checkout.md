@@ -126,24 +126,28 @@ These came from [05-m1-pages.md](../design/05-m1-pages.md), section 12. They are
 - **Rush days.** `delivery_days_rush` must be lower than `delivery_days_standard`; otherwise the setting is invalid and is reported like any other invalid setting.
 - **Completing twice.** Completing a cart that has already become an order returns that order and never creates a second one. QA saw this hold, including three completions at once; it needs a test of its own.
 
-### 8.1 As built in S1-1b (in QA review on 11 Nov, not merged yet)
+### 8.1 As built (S1-1b, corrected in S1-1c after QA's review; S1-1c is in QA review since 12 Nov, not merged yet)
 
-The storefront checkout (task S1-4) is built against these. If QA changes any of them, this section is corrected first.
+The storefront checkout (S1-4) and account pages (S1-5) are built against these. If QA changes any of them, this section is corrected first.
 
-- **Rules route.** `delivery_promise` gains `"applies": "standard"` (or `"rush"` once the rush charge exists). The storefront shows the date of the option named by `applies`.
-- **The promised date of an order.** `GET /store/orders/:id/delivery-promise` (publishable key) answers:
+- **Rules route.** `delivery_promise` has `"applies": "standard"` (or `"rush"` once the rush charge exists). The storefront shows the date of the option named by `applies`.
+- **The promised date of an order.** The server writes `metadata.delivery_promise` on the order after it is created. It is based on the order's creation date in Asia/Karachi plus the days setting at that moment, never on anything sent by the storefront. This happens for every order, however it was placed (the complete route, a payment provider's webhook, a converted draft order). Once kept, it does not change when the settings change.
+
+  `GET /store/orders/:id/delivery-promise` (publishable key) answers:
 
   ```json
   { "delivery_promise": { "date": "2026-11-26", "days": 15, "based_on": "2026-11-11", "applies": "standard" } }
   ```
 
-  - `delivery_promise` is `null` for an order placed before the date was kept. An unknown order: 404.
-  - As with Medusa's own `GET /store/orders/:id`, knowing the order id is what gives access.
-  - It is a route of its own because Medusa's `GET /store/orders/:id` and the complete route do not return the order's `metadata`.
-- **Completing a cart.** `POST /store/carts/:id/complete` writes the promise into the cart just before the order is created; the storefront sends nothing extra.
-  - HTTP 409 with `type: "conflict"` means "complete again": the cart was changed, or was already being completed, at that moment. The storefront completes once more, and if that fails too it shows the "check my order" state. Medusa replaces the message with a generic one, so the storefront does not show it.
+  - The route makes sure the order has its promise before answering, so it can be called straight after completion and returns the date for a placed order.
+  - An unknown order or a draft order: 404. If no promise is kept yet and the days settings are missing or invalid: HTTP 500 with a message naming the key. The storefront leaves the date line out on any failure; an order page never fails because of it.
+  - As with Medusa's own `GET /store/orders/:id`, knowing the order id is what gives access. A signed-in customer's `GET /store/orders` also returns each order's `metadata`, including `delivery_promise`.
+- **Completing a cart.** `POST /store/carts/:id/complete` needs nothing extra from the storefront. It is refused only by the checkout rules (HTTP 400 `not_allowed`) or a missing or invalid setting (HTTP 500), never because of the delivery date.
+  - Medusa itself can answer HTTP 409 (`type: "conflict"`) when the same cart is already being completed. The storefront completes once more, and if that fails too it shows the "check my order" state.
   - Completing a cart that has already become an order returns that same order (`type: "order"`), also for several completions at once.
-- **Order metadata written by staff.** `cod_slip_reference`, `cod_collected_at` (UTC time) and `cod_collected_by` are written when staff mark the cash as collected (`GET` and `POST /admin/orders/:id/cash-collection`, admin sign-in only). A cart cannot carry these keys into an order. The storefront does not read them in M1.
+- **Cart metadata.** `POST /store/carts` and `POST /store/carts/:id` answer HTTP 400 (`type: "invalid_data"`) when `metadata` contains `delivery_promise` or any key starting with `cod_`, whatever the value (including `null`). The storefront never sends these keys.
+- **Order metadata written by staff.** `cod_slip_reference` and `cod_collected_at` (UTC) are written when staff record the courier's slip (`GET` and `POST /admin/orders/:id/cash-collection`, admin sign-in only). The payment is captured first, and the slip is recorded once. Who captured is kept in Medusa's own capture record, not in the order's metadata. The storefront does not read these keys in M1.
+- **Open, for when a real gateway is connected (M3).** A payment provider's webhook completes the cart without the store route. If the completion hook refuses at that moment (below the minimum, cash on delivery not allowed, an invalid setting), the customer has paid and no order exists. The checks must have passed before the payment is started, and a refused webhook completion needs a refund or an alert. Not decided yet.
 
 ## 9. Not in this contract
 
