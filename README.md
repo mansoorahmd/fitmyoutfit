@@ -51,7 +51,9 @@ To move the backend or the storefront:
 | Variable | Default | Port of | Where to set it |
 | --- | --- | --- | --- |
 | `PORT` | 9000 | Backend, API and admin | In the shell, or in `backend/.env` (a value in the shell wins) |
-| `STOREFRONT_PORT` | 8000 | Storefront | In the shell |
+| `STOREFRONT_PORT` | 8000 | Storefront | In the shell (not read from any `.env` file) |
+
+`PORT` in `backend/.env` counts for every way of starting the backend, not only `npm run dev`: Medusa's CLI loads `backend/.env` before it reads `PORT`, so a plain `medusa develop` or `medusa start` in `backend/` follows it too. `STOREFRONT_PORT` is read by the storefront's own `npm run dev` and `npm run start` (`storefront/scripts/next-with-port.mjs`), from the environment only.
 
 `npm run dev` hands each part its port (the storefront gets `STOREFRONT_PORT` and not `PORT`) and prints both URLs; `npm run setup` prints the admin URL with the backend's port. The two parts find each other through settings that do **not** follow these variables, so when you change either port, change these to match:
 
@@ -139,7 +141,18 @@ The root `package.json` has one `overrides` entry: it lets `@medusajs/ui` (which
 
 Backend integration tests create and drop temporary databases on the PostgreSQL server (host `localhost`, port 5433 by default, user `medusa`). They never touch the `medusa` development database. Start `docker compose up -d` first. To point them elsewhere set `DB_HOST`, `DB_PORT`, `DB_USERNAME`, `DB_PASSWORD`, as the CI workflow does. Medusa also reads `backend/.env` in tests, so with `REDIS_URL` set there the tests use Redis, which makes them several times slower; CI has no `backend/.env` and sets no `REDIS_URL`, so there they use Medusa's in-memory modules. The tests use no network: image tests check the stored URLs only.
 
-**Production start.** With any `NODE_ENV` other than `development` or `test` (or unset), so `production`, `prod` (Medusa's own production mode), `staging` and anything else, in any case, the backend refuses to start when `JWT_SECRET`, `COOKIE_SECRET`, `S3_ACCESS_KEY_ID` or `S3_SECRET_ACCESS_KEY` is missing, when `JWT_SECRET`, `COOKIE_SECRET` or `S3_SECRET_ACCESS_KEY` is shorter than 16 characters, when any of these or `MEDUSA_ADMIN_PASSWORD` is or contains its dev value from `backend/.env.example` (so the dev value with something added before or after is refused too; compared ignoring case and surrounding spaces), or when the backend would log in to PostgreSQL with the dev login `medusa` / `medusa`. That login is looked for wherever the PostgreSQL driver (`pg`) takes it from: the user and password in `DATABASE_URL`, its `user` and `password` query parameters (which win over them), and `PGUSER` / `PGPASSWORD` (`backend/src/lib/config/database-login.ts`). A password in a pgpass file is not checked. It lists every problem and exits (`backend/src/lib/config/build-config.ts`; which `NODE_ENV` counts as what is in `node-env.ts` next to it). Medusa's `supersecret` fallback is used only in development and test. The seed creates the dev admin user only in development and test.
+**Production start.** With any `NODE_ENV` other than `development` or `test` (or unset), so `production`, `prod` (Medusa's own production mode), `staging` and anything else, in any case, the backend refuses to start, lists every problem and exits (`backend/src/lib/config/build-config.ts`; which `NODE_ENV` counts as what is in `node-env.ts` next to it). It refuses:
+
+- `JWT_SECRET`, `COOKIE_SECRET`, `S3_ACCESS_KEY_ID` or `S3_SECRET_ACCESS_KEY` missing.
+- `JWT_SECRET`, `COOKIE_SECRET` or `S3_SECRET_ACCESS_KEY` shorter than 16 characters. A self-hosted MinIO accepts a secret key of 8 characters; in production the backend needs 16 or more.
+- Any of these, or `MEDUSA_ADMIN_PASSWORD`, that is or contains a dev value from `backend/.env.example`, of any variable: the dev JWT secret given as `COOKIE_SECRET` counts too, and so does a dev value with something added before or after. Compared ignoring case and surrounding spaces. (A dev value shorter than 8 characters would count only as the whole value, so a long random secret is never refused because a short word happens to be inside it; today every dev value is 10 characters or longer.)
+- A `DATABASE_URL` with a `#` in it. Write a `#` in the password as `%23`.
+- The dev database login `medusa` / `medusa`, wherever the PostgreSQL driver (`pg`) would take it from: the user and password in `DATABASE_URL`, its `user` and `password` query parameters (which win over them), and `PGUSER` / `PGPASSWORD` (`backend/src/lib/config/database-login.ts`). `DATABASE_URL` is checked as given and also as Medusa rewrites it before `pg` sees it (Medusa removes its own `ssl_mode` parameter; a unit test checks that our copy of that rewrite still matches the installed Medusa).
+- The dev database user `medusa` with no password in `DATABASE_URL` or `PGPASSWORD`. `pg` would then take the password from a pgpass file (`PGPASSFILE`, `~/.pgpass`, or on Windows `%APPDATA%\postgresql\pgpass.conf` even with no variable set), which is not checked. Give the password explicitly, or use a different database user.
+
+Medusa's `supersecret` fallback is used only in development and test. The seed creates the dev admin user only in development and test.
+
+`medusa start` (and so `npm run start --prefix backend`) sets `NODE_ENV=production` itself when it is unset, and loads `backend/.env`, so with the dev `backend/.env` it refuses to start: that is intended. For local work use `npm run dev`.
 
 ## Reset the database
 
