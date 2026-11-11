@@ -31,6 +31,8 @@ E1 is done when the editor demo shows the placeholder jersey with its 2D pattern
 
 **Rules decided by the coordinator, to be confirmed by the founders:** the minimum counts garment pieces across the whole cart; the fit kit and the rush add-on do not count; a fit kit can be bought alone in any region.
 
+**Preview updated to the M1 backend (11 Nov, `1b36dad`).** `npm run setup` on the preview database, which was seeded before M1, exited 0: it added the three settings, the four region minimums, four size charts, the stock location, the fulfilment set, four zones and four shipping options, and linked cash on delivery to Pakistan. Nothing else changed. Checked by the coordinator through the store API on the preview backend (port 9002): a Pakistan cart with 1 T-shirt and cash on delivery became order #1 (PKR 2,250 with delivery); a UK cart of 9 jerseys was refused with the minimum message; cash on delivery in the UK was refused. Order #1 in the preview admin (preview-check@example.com) is that test. The storefront pages for checkout are not built yet (S1-4).
+
 **Fifth QA review, S1-1 (11 Nov): accepted.** Evidence: scratchpad `qa5`. Notes kept for later work:
 - Medusa allows one handler per workflow hook. Later checks at cart completion (team orders, deposits) go into `backend/src/workflows/hooks/complete-cart-checkout-rules.ts`, not into a second hook file.
 - One invalid store setting stops every checkout in every region. That is deliberate (the checkout does not guess); an admin warning is worth adding.
