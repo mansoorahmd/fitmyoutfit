@@ -6,10 +6,13 @@ import { getCheckoutRules } from "@lib/data/checkout-rules"
 import { getGarmentsCollection } from "@lib/data/collections"
 import { retrieveCustomer } from "@lib/data/customer"
 import { getRegion } from "@lib/data/regions"
+import { cartInOtherRegion } from "@lib/util/checkout-view"
 import EmptyCartMessage from "@modules/cart/components/empty-cart-message"
+import MoveCartToRegion from "@modules/cart/components/move-cart-to-region"
 import { UndoToastProvider } from "@modules/cart/components/undo-toast/provider"
 import CartTemplate from "@modules/cart/templates"
 import ServerError from "@modules/common/components/server-error"
+import SkeletonCartPage from "@modules/skeletons/templates/skeleton-cart-page"
 import ProductRail, {
   GarmentsSection,
 } from "@modules/home/components/featured-products/product-rail"
@@ -52,6 +55,12 @@ export default async function Cart(props: {
         )}
       </UndoToastProvider>
     )
+  }
+
+  // A cart from another region (the visitor typed /pk/cart with a UK cart)
+  // is moved to the URL's region before it is shown.
+  if (cartInOtherRegion(cart, (await getRegion(countryCode))?.id)) {
+    return <MoveCartToRegion countryCode={countryCode} fallback={<SkeletonCartPage />} />
   }
 
   const [rules, options] = await Promise.all([

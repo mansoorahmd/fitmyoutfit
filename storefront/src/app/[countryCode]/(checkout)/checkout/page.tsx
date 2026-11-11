@@ -1,30 +1,59 @@
-import { retrieveCart } from "@lib/data/cart"
-import { retrieveCustomer } from "@lib/data/customer"
-import PaymentWrapper from "@modules/checkout/components/payment-wrapper"
-import CheckoutForm from "@modules/checkout/templates/checkout-form"
-import CheckoutSummary from "@modules/checkout/templates/checkout-summary"
 import { Metadata } from "next"
-import { notFound } from "next/navigation"
+import { redirect } from "next/navigation"
+
+import { checkoutContent } from "@content/checkout"
+import { listRegionPaymentProviders, retrieveCheckoutCart } from "@lib/data/checkout"
+import { getCheckoutRules } from "@lib/data/checkout-rules"
+import { retrieveCustomer } from "@lib/data/customer"
+import { listCartShippingMethods } from "@lib/data/fulfillment"
+import { getRegion } from "@lib/data/regions"
+import { cartInOtherRegion, checkoutView } from "@lib/util/checkout-view"
+import MoveCartToRegion from "@modules/cart/components/move-cart-to-region"
+import CheckoutPage from "@modules/checkout/templates/checkout-page"
+import CheckoutSkeleton from "@modules/checkout/templates/checkout-skeleton"
+import ServerError from "@modules/common/components/server-error"
 
 export const metadata: Metadata = {
-  title: "Checkout",
+  title: checkoutContent.pageTitle,
 }
 
-export default async function Checkout() {
-  const cart = await retrieveCart()
+/**
+ * The checkout (docs/design/05-m1-pages.md, section 6). The cart is read
+ * fresh on every render; with no cart, an empty one or one already placed,
+ * the visitor goes to the cart page, which says what there is to say. A
+ * cart from another region is moved to the URL's region first.
+ */
+export default async function Checkout(props: { params: Promise<{ countryCode: string }> }) {
+  const { countryCode } = await props.params
+  const { cart, failed } = await retrieveCheckoutCart()
 
-  if (!cart) {
-    return notFound()
+  if (failed) {
+    return <ServerError />
+  }
+  if (!cart?.items?.length || cart.completed_at) {
+    redirect(`/${countryCode}/cart`)
   }
 
-  const customer = await retrieveCustomer()
+  const region = await getRegion(countryCode)
+  if (cartInOtherRegion(cart, region?.id)) {
+    return <MoveCartToRegion countryCode={countryCode} fallback={<CheckoutSkeleton />} />
+  }
 
-  return (
-    <div className="grid grid-cols-1 small:grid-cols-[1fr_416px] content-container gap-x-40 py-12">
-      <PaymentWrapper cart={cart}>
-        <CheckoutForm cart={cart} customer={customer} />
-      </PaymentWrapper>
-      <CheckoutSummary cart={cart} />
-    </div>
-  )
+  const [customer, rules, shippingOptions, providerIds] = await Promise.all([
+    retrieveCustomer().catch(() => null),
+    getCheckoutRules(cart.id),
+    listCartShippingMethods(cart.id),
+    cart.region_id ? listRegionPaymentProviders(cart.region_id) : Promise.resolve(null),
+  ])
+
+  const view = checkoutView({
+    cart,
+    rules,
+    shippingOptions,
+    providerIds,
+    customer,
+    countryCode,
+  })
+
+  return <CheckoutPage view={view} />
 }
