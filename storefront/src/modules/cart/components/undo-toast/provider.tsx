@@ -1,7 +1,14 @@
 "use client"
 
 import { useParams } from "next/navigation"
-import React, { Fragment, createContext, useContext, useState } from "react"
+import React, {
+  Fragment,
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+} from "react"
 
 import { cartContent } from "@content/cart"
 import { addToCart } from "@lib/data/cart"
@@ -17,9 +24,23 @@ export type RemovedLine = {
 }
 
 const RemovedContext = createContext<(removed: RemovedLine) => void>(() => {})
+const BottomBarContext = createContext<(shown: boolean) => void>(() => {})
 
 /** Lets a cart line report a removal, for the "Removed … Undo" toast. */
 export const useAnnounceRemoved = () => useContext(RemovedContext)
+
+/**
+ * Tells the toast whether the sticky checkout bar is showing at the foot of
+ * the screen, so the toast sits above the bar, or at the foot when there is
+ * none (the empty cart, or from 1024 px).
+ */
+export const useReportBottomBar = (shown: boolean) => {
+  const report = useContext(BottomBarContext)
+  useEffect(() => {
+    report(shown)
+    return () => report(false)
+  }, [report, shown])
+}
 
 /**
  * Holds the "Removed … Undo" toast for the cart page. It sits around both
@@ -30,6 +51,8 @@ export const useAnnounceRemoved = () => useContext(RemovedContext)
 export const UndoToastProvider = ({ children }: { children: React.ReactNode }) => {
   const countryCode = useParams().countryCode as string
   const [removed, setRemoved] = useState<(RemovedLine & { key: string }) | null>(null)
+  const [barShown, setBarShown] = useState(false)
+  const reportBar = useCallback((shown: boolean) => setBarShown(shown), [])
 
   const undo = async () => {
     if (!removed?.variantId) return false
@@ -57,11 +80,12 @@ export const UndoToastProvider = ({ children }: { children: React.ReactNode }) =
     <RemovedContext.Provider
       value={(line) => setRemoved({ ...line, key: `${line.variantId}:${Date.now()}` })}
     >
-      {children}
+      <BottomBarContext.Provider value={reportBar}>{children}</BottomBarContext.Provider>
       {removed && (
         <UndoToast
           key={removed.key}
           messageKey={removed.key}
+          aboveBar={barShown}
           message={message}
           actionLabel={cartContent.removed.undo}
           closeLabel={cartContent.removed.close}

@@ -16,6 +16,7 @@ import MinimumProgress from "../components/minimum-progress"
 import StickyCheckoutBar, {
   useStickyCheckoutBar,
 } from "../components/sticky-checkout-bar"
+import { useReportBottomBar } from "../components/undo-toast/provider"
 import { cartLayout } from "./layout"
 
 /**
@@ -53,6 +54,7 @@ const CartView = ({
   const shownMinimum = rulesFailed ? null : minimum
   const blocked = blocksCheckout(shownMinimum)
   const showBar = useStickyCheckoutBar(buttonBoxRef)
+  useReportBottomBar(showBar)
 
   const goToMinimum = () => {
     const alert = alertRef.current

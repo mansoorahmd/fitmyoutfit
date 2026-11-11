@@ -13,7 +13,9 @@ export const TOAST_MS = 8000
  * Jersey, M × 4" with "Undo", on navy, for 8 seconds. Undoing late loses
  * nothing: the item can be added again from its page. It waits while it
  * has focus or the pointer is over it, and it says so when Undo fails.
- * Above the phone's sticky bar; bottom right from 1024 px.
+ * Above the phone's sticky bar while it shows, else 16 px from the foot of
+ * the screen; bottom right from 1024 px. Its light outline tells it apart
+ * from the navy footer when it sits over it.
  */
 const UndoToast = ({
   message,
@@ -23,7 +25,10 @@ const UndoToast = ({
   errorText,
   onAction,
   onClose,
+  aboveBar = false,
 }: {
+  /** The phone's sticky checkout bar is showing: sit 8 px above it, not at the foot. */
+  aboveBar?: boolean
   /** The words, with the product's name inside <bdi>. */
   message: React.ReactNode
   /** Changes with each removal, so a new one restarts the timer. */
@@ -74,9 +79,14 @@ const UndoToast = ({
         }
       }}
       className={clx(
-        "fixed inset-x-4 bottom-[calc(72px+env(safe-area-inset-bottom))] z-50 flex items-center gap-2 rounded-card bg-brand-inverse py-1 pl-4 pr-1 text-brand-on-inverse shadow-xl",
+        // A light outline keeps the navy toast apart from the navy footer.
+        "fixed inset-x-4 z-50 flex items-center gap-2 rounded-card border border-brand-on-inverse-muted bg-brand-inverse py-1 pl-4 pr-1 text-brand-on-inverse shadow-xl",
+        aboveBar
+          ? "bottom-[calc(72px+env(safe-area-inset-bottom))]"
+          : "bottom-[calc(16px+env(safe-area-inset-bottom))]",
         "lg:inset-x-auto lg:bottom-6 lg:right-8 lg:w-[400px]"
       )}
+      data-placement={aboveBar ? "above-bar" : "bottom"}
       data-testid="undo-toast"
     >
       <div className="flex min-w-0 flex-1 flex-col py-2">
