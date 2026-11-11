@@ -7,12 +7,10 @@
  */
 import type { RegionSeed } from "../seed-data/types"
 
-/** Medusa's built-in payment provider. Real providers are Sprint 1. */
-export const DEFAULT_PAYMENT_PROVIDER = "pp_system_default"
-
 export type ExistingRegion = {
   id: string
   name?: string | null
+  metadata?: Record<string, unknown> | null
   countries?: readonly ({ iso_2?: string | null } | null)[] | null
   payment_providers?: readonly ({ id?: string | null } | null)[] | null
 }
@@ -21,10 +19,28 @@ export type RegionPlan = {
   /** Seed regions none of whose countries is in a region yet: create these. */
   create: RegionSeed[]
   /**
-   * Existing seed regions with no payment provider at all (a region-create that stopped after
-   * the region was written and before its provider was linked): link the default provider.
+   * Existing seed regions that lack one of the seed's payment providers (a region-create that
+   * stopped before its providers were linked, or a database seeded before the provider existed).
+   * `providers` is the full list to set: the region's current providers plus `added`, so a
+   * provider an admin linked is kept.
    */
-  linkPaymentProvider: { regionId: string; seedName: string }[]
+  linkPaymentProviders: {
+    regionId: string
+    seedName: string
+    providers: string[]
+    added: string[]
+  }[]
+  /**
+   * Existing seed regions whose metadata lacks a key of the seed's metadata (for example
+   * `min_garment_quantity` on a database seeded before it existed). `metadata` is the full object
+   * to set: the current metadata plus `added`; a key that is present keeps its value.
+   */
+  addMetadata: {
+    regionId: string
+    seedName: string
+    metadata: Record<string, unknown>
+    added: string[]
+  }[]
 }
 
 function countryCodes(region: ExistingRegion): string[] {
@@ -44,8 +60,8 @@ export function planRegions(
     }
   }
 
-  const plan: RegionPlan = { create: [], linkPaymentProvider: [] }
-  const repaired = new Set<string>()
+  const plan: RegionPlan = { create: [], linkPaymentProviders: [], addMetadata: [] }
+  const seen = new Set<string>()
   for (const seed of seeds) {
     const match = seed.country_codes
       .map((code) => regionByCountry.get(code.toLowerCase()))
@@ -54,10 +70,38 @@ export function planRegions(
       plan.create.push(seed)
       continue
     }
-    const hasProvider = (match.payment_providers ?? []).some((p) => !!p?.id)
-    if (!hasProvider && !repaired.has(match.id)) {
-      plan.linkPaymentProvider.push({ regionId: match.id, seedName: seed.name })
-      repaired.add(match.id)
+    if (seen.has(match.id)) {
+      continue
+    }
+    seen.add(match.id)
+
+    const current = (match.payment_providers ?? [])
+      .map((p) => p?.id)
+      .filter((id): id is string => !!id)
+    const added = seed.payment_providers.filter((id) => !current.includes(id))
+    if (added.length > 0) {
+      plan.linkPaymentProviders.push({
+        regionId: match.id,
+        seedName: seed.name,
+        providers: [...current, ...added],
+        added,
+      })
+    }
+
+    const metadata = match.metadata ?? {}
+    const missingKeys = Object.keys(seed.metadata).filter(
+      (key) => metadata[key] === undefined || metadata[key] === null
+    )
+    if (missingKeys.length > 0) {
+      plan.addMetadata.push({
+        regionId: match.id,
+        seedName: seed.name,
+        metadata: {
+          ...metadata,
+          ...Object.fromEntries(missingKeys.map((key) => [key, seed.metadata[key]])),
+        },
+        added: missingKeys,
+      })
     }
   }
   return plan
