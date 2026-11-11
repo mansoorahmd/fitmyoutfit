@@ -81,10 +81,11 @@ export function requiresProductionSecrets(env: Env): boolean {
 
 /**
  * A dev value shorter than this counts only when a secret is exactly that value, not when a secret
- * merely contains it. A long random secret contains a given 8-character string by chance with a
- * probability of about one in a billion or less, but it could well contain a short word, so a short
- * dev value added to DEV_ONLY_VALUES later must not start refusing real secrets. (Every dev value
- * today is 10 characters or longer, so today every one of them is also looked for inside secrets.)
+ * merely contains it. A 64-character random secret contains a given 8-character string by chance
+ * with a probability well under one in ten million (worst case: hex secret, hex-only string), but it
+ * could well contain a 3- or 4-character word, so a short dev value added to DEV_ONLY_VALUES later
+ * must not start refusing real secrets. (Every dev value today is 10 characters or longer, so
+ * today every one of them is also looked for inside secrets.)
  */
 export const MIN_CONTAINED_DEV_VALUE_LENGTH = 8
 

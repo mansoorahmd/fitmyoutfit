@@ -9,8 +9,10 @@
  * below. That rewrite can change the login: its `[^&]*` also eats a `#`, so in
  * `...?ssl_mode=disable#&password=medusa` the `password` parameter moves out of the fragment (where
  * pg ignores it) into the query (where it wins). The result goes to pg as `connectionString`
- * (@medusajs/utils, create-pg-connection.js; with DATABASE_URL unset, Medusa uses
- * `postgres://localhost/medusa-starter-default`). pg then decides, in this order:
+ * (@medusajs/utils, create-pg-connection.js). With DATABASE_URL unset our config passes
+ * `databaseUrl: undefined`, which replaces Medusa's default `postgres://localhost/medusa-starter-default`
+ * in defineConfig, so pg gets no connection string at all; neither gives a login, so the result
+ * below is the same. pg then decides, in this order:
  *
  * 1. pg-connection-string `parse()`: a string starting with `/` is a Unix socket path and has no
  *    login. Anything else is read as a URL relative to `postgres://base`, so a string that is not
