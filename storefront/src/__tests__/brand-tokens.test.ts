@@ -31,6 +31,9 @@ const MATCHDAY: Record<string, string> = {
   success: "#0F7A3D",
   error: "#B42318",
   focus: "#2563EB",
+  // M1 alert backgrounds (docs/design/05-m1-pages.md, 2.1)
+  "error-surface": "#FDF3F2",
+  "success-surface": "#EEF7F1",
 }
 
 const cssVar = (name: string) => {
