@@ -12,7 +12,8 @@ describe("createDesign", () => {
     expect(design.schemaVersion).toBe(DESIGN_SCHEMA_VERSION);
     expect(design.product).toEqual({ id: "placeholder-jersey" });
     expect(design.palette).toEqual(product.palette);
-    expect(Object.keys(design.zones).sort()).toEqual(["body", "collar", "sleeves"]);
+    expect(Object.keys(design.zones).sort()).toEqual(["body", "collar", "cuffs", "side_panels", "sleeves", "yoke"]);
+    for (const zone of product.zones) expect(design.zones[zone.id]).toEqual(zone.defaultColor);
     expect(design.zones.body).toEqual({ id: "placeholder-white", hex: "#FFFFFF" });
     expect(design.layers).toEqual([]);
     expect(design.fonts).toEqual([]);

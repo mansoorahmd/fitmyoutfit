@@ -9,3 +9,5 @@ export * from "./create.js";
 export * from "./edit.js";
 export * from "./validate.js";
 export * from "./json-schema.js";
+export * from "./svg-path.js";
+export * from "./pattern.js";

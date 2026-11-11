@@ -16,6 +16,7 @@
 import { z } from "zod";
 import { DEFAULT_JERSEY_NUMBER_RULES } from "./jersey-number-rules.js";
 import { checkJerseyNumber } from "./jersey-number.js";
+import { MAX_PATH_LENGTH, SVG_PATH_PATTERN, parseSvgPath } from "./svg-path.js";
 
 /** Version of this document format. Not the version of a saved design. */
 export const DESIGN_SCHEMA_VERSION = 1 as const;
@@ -197,18 +198,60 @@ export const designSchema = z.strictObject({
 
 // Product definition: the garment model and its pattern pieces, as data.
 
+/**
+ * SVG path data in a piece's own coordinates (mm, origin top-left, Y down).
+ * The JSON Schema checks the characters; `validateProductDefinition` parses
+ * the path, which is the rule (see svg-path.ts for the supported commands).
+ */
+const svgPathData = z
+  .string()
+  .min(1)
+  .max(MAX_PATH_LENGTH)
+  .regex(new RegExp(SVG_PATH_PATTERN), {
+    error: (issue) => {
+      const base = "may only hold the path commands M, L, H, V, C, Q and Z (either case), numbers, spaces and commas";
+      const parsed = parseSvgPath(issue.input);
+      // Name the unsupported command when there is one (an arc, say), which is the likely mistake.
+      return !parsed.ok && parsed.error.includes("is not supported") ? `${base}: ${parsed.error}` : base;
+    },
+    abort: true,
+  })
+  .superRefine((value, ctx) => {
+    const parsed = parseSvgPath(value);
+    if (!parsed.ok) ctx.addIssue({ code: "custom", message: `is not usable path data: ${parsed.error}` });
+  });
+
+const SVG_PATH_RULE_NOTE =
+  "This pattern checks the characters only; validateProductDefinition() from @fitmyoutfit/editor/design parses the path " +
+  "and checks the outline is closed, inside the piece and that zones exist. Do not rely on this schema alone.";
+
+export const pieceRegionSchema = z.strictObject({
+  /** The colour zone this area belongs to. */
+  zone: zoneId,
+  /**
+   * The area, as SVG path data in the piece's millimetres. It may reach past
+   * the piece's outline (a band that runs to the edge, for example): only the
+   * part inside the outline is part of the garment.
+   */
+  path: svgPathData.describe(
+    "SVG path data (M, L, H, V, C, Q, Z) in the piece's millimetres. May reach past the outline; only the part inside it counts. " +
+      SVG_PATH_RULE_NOTE,
+  ),
+});
+
 export const pieceSchema = z.strictObject({
   id,
   name: z.string().min(1).max(100),
-  /** Name of the mesh in the model file that carries this piece. */
+  /** Name of the mesh (node) in the model file that carries this piece. Several pieces may share one mesh. */
   mesh: z.string().min(1),
-  /** Flat piece size in mm. */
+  /** Flat piece size in mm: the box the outline sits in. */
   width: finite.positive(),
   height: finite.positive(),
   /**
-   * Where the piece sits in the model's UV space (glTF convention: origin
-   * top-left, V down). The piece's top-left corner maps to (x, y) and its
-   * bottom-right to (x + width, y + height).
+   * Where the piece's box sits in the model's UV space (glTF convention:
+   * origin top-left, V down). The piece's top-left corner maps to (x, y) and
+   * its bottom-right to (x + width, y + height). It must have the same
+   * proportions as the piece, so artwork is not stretched.
    */
   uv: z.strictObject({
     x: z.number().min(0).max(1),
@@ -216,13 +259,25 @@ export const pieceSchema = z.strictObject({
     width: z.number().gt(0).max(1),
     height: z.number().gt(0).max(1),
   }),
+  /**
+   * The cut shape of the flat piece: one closed SVG path in the piece's
+   * millimetres, inside the box (0, 0) to (width, height). It is the vector
+   * that production files are cut from; the model's UVs for this piece lie inside it.
+   */
+  outline: svgPathData.describe(
+    "The cut shape of the piece: one closed SVG path (M, L, H, V, C, Q, Z) in the piece's millimetres, inside its width and height. " +
+      SVG_PATH_RULE_NOTE,
+  ),
+  /** The colour zone that fills the whole piece. `regions` are drawn over it. */
+  zone: zoneId,
+  /** Areas of other colour zones on this piece, bottom to top. */
+  regions: z.array(pieceRegionSchema).max(100),
 });
 
 export const zoneSchema = z.strictObject({
   id: zoneId,
   name: z.string().min(1).max(100),
-  /** Names of the materials in the model file that this zone colours. */
-  materials: z.array(z.string().min(1)).min(1),
+  /** Colour of the zone in a new design. Where the zone is drawn is set by the pieces (`zone` and `regions`). */
   defaultColor: colorRefSchema,
 });
 
@@ -255,5 +310,6 @@ export type Layer = z.infer<typeof layerSchema>;
 export type LayerKind = Layer["kind"];
 export type DesignDocument = z.infer<typeof designSchema>;
 export type PatternPiece = z.infer<typeof pieceSchema>;
+export type PieceRegion = z.infer<typeof pieceRegionSchema>;
 export type ColorZone = z.infer<typeof zoneSchema>;
 export type ProductDefinition = z.infer<typeof productDefinitionSchema>;

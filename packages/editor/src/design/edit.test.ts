@@ -34,7 +34,7 @@ describe("setZoneColor", () => {
   });
 
   it("refuses an unknown zone and names the zones that exist", () => {
-    expect(() => setZoneColor(design, "pockets", RED)).toThrow(/no colour zone "pockets".*body, sleeves, collar/);
+    expect(() => setZoneColor(design, "pockets", RED)).toThrow(/no colour zone "pockets".*body, yoke, side_panels, sleeves, cuffs, collar/);
   });
 
   it("refuses a bad colour with a readable message", () => {
