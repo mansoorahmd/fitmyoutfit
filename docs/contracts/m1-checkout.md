@@ -112,6 +112,8 @@ These came from [05-m1-pages.md](../design/05-m1-pages.md), section 12. They are
 - **Which date applies.** `delivery_promise.applies` is `"standard"` or `"rush"`. It is always `"standard"` until the rush charge exists.
 - **The date is kept on the order.** When a cart is completed, the order gets `metadata.delivery_promise` with `date`, `days`, `based_on` and `applies`, so the confirmation and account pages can show the date that was promised.
 - **Duty-paid marker.** The storefront must be able to tell that a shipping option is the duty-paid one. If the store API does not return the option's `data.ddp`, the rules response gains `shipping: { "ddp": true }`.
+- **Cash on delivery collected.** The courier gives a slip against the order number. Staff mark the payment as collected in the admin, and the slip reference is kept on the order (`metadata.cod_slip_reference`).
+- **Rush days.** `delivery_days_rush` must be lower than `delivery_days_standard`; otherwise the setting is invalid and is reported like any other invalid setting.
 - **Completing twice.** Completing a cart that has already become an order returns that order and never creates a second one. This needs a test.
 
 ## 9. Not in this contract

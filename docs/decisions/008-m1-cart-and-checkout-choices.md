@@ -13,12 +13,14 @@ M1 makes ordering real: cart, checkout, cash on delivery in Pakistan, a minimum 
 3. **Checkout is two short steps on one page:** contact and address, then delivery and payment with the order check and "Place order". Checkout never requires an account.
 4. **The minimum quantity is always shown in the cart and at checkout,** because the backend refuses an order below it. On the product page it is shown behind a content switch that is on in development only, until the founders confirm the number.
 5. **What counts toward the minimum:** garment pieces across the whole cart. The fit kit and the rush add-on do not count, and a fit kit can be bought alone in any region.
-6. **"Tax not final" follows the plan's rule for now:** it is shown on every price, including order pages. The designer recommends dropping it after the order is placed; that is a question for the founders.
+6. **"Tax not final" is shown in the cart and at checkout, not after the order is placed.** On the order confirmation and account pages the total is what the customer pays. The plan says to mark every price; the founder's instruction of 11 Nov to follow what ordinary retail stores on Shopify do, where the plan has no answer, decided it. The founder was told and can reverse it.
 7. **Contract additions for the backend,** to be built after its first M1 task:
    - the promised delivery date is stored on the order when it is placed, so the confirmation and the account can show it;
    - the rules say which delivery date applies (standard or rush);
    - the storefront can tell the duty-paid shipping option from the store API;
    - completing the same cart twice returns the same order.
+   - a cash-on-delivery payment is marked as collected in the admin against the order number, with the courier's slip reference kept on the order (founder, 11 Nov);
+   - the cash-on-delivery limit is compared with the full order total, including delivery and tax (founder, 11 Nov: as ordinary Shopify stores do).
 8. **Password reset is added to M1** as its own task. Without it a customer who forgets a password is locked out. It needs email sending, so in development the reset link goes to a local log; the real provider (decision 002) is wired when its account exists.
 9. **Not in M1:** an order confirmation email, and linking a guest's earlier orders to a new account. Both come with the email work in M2.
 
