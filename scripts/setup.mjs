@@ -11,20 +11,23 @@
 // own messages never contain it, and the output of the migrations and the seed, which setup
 // echoes, goes through a filter that hides it. `runSetup` takes its outputs and the commands it
 // runs as arguments, so setup-output.test.mjs can run it with a known password and read
-// everything it prints.
+// everything it prints; that test also runs this file as a child process and reads the whole of
+// its stdout and stderr. Print only through `out` / `err` (ESLint refuses console.* and
+// process.stdout / process.stderr here; scripts/lib/output.mjs holds the default writers).
 import { spawn } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync, copyFileSync } from "node:fs";
 import net from "node:net";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { extractPublishableKey, parseEnv, upsertEnvVar } from "./lib/env-file.mjs";
+import { writeStderr, writeStdout } from "./lib/output.mjs";
 import { createRedactor } from "./lib/redact.mjs";
 import { adminLoginMessage, servicesToCheck, unreachableMessage } from "./lib/setup-checks.mjs";
 
 const defaultRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 /** Variables setup reads from backend/.env, where a value already set in the shell wins. */
-const SHELL_OVERRIDES = ["DATABASE_URL", "REDIS_URL", "MEDUSA_ADMIN_EMAIL", "MEDUSA_ADMIN_PASSWORD"];
+const SHELL_OVERRIDES = ["DATABASE_URL", "REDIS_URL", "MEDUSA_ADMIN_EMAIL", "MEDUSA_ADMIN_PASSWORD", "PORT"];
 
 class SetupFailed extends Error {}
 
@@ -67,8 +70,8 @@ export function tcpCanConnect(host, port, timeoutMs = 3000) {
 export async function runSetup({
   root = defaultRoot,
   env = process.env,
-  out = (text) => process.stdout.write(text),
-  err = (text) => process.stderr.write(text),
+  out = writeStdout,
+  err = writeStderr,
   runCommand = spawnCommand,
   canConnect = tcpCanConnect,
 } = {}) {
