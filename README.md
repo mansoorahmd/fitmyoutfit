@@ -158,7 +158,7 @@ If two staff press at once, even on two servers, the payment is captured once an
 | Command | What it does |
 | --- | --- |
 | `npm run setup` | Env files, migrations, seed, publishable key (idempotent) |
-| `npm run dev` | Backend and storefront together (a missing part is skipped) |
+| `npm run dev` | Backend and storefront together (a missing part is skipped). If either one exits by itself, with any exit code, dev stops the other and exits non-zero, naming the one that ended; Ctrl+C stops both and exits 0 |
 | `npm run lint` | ESLint in the backend, storefront and editor, and in `scripts/` |
 | `npm run typecheck` | `tsc --noEmit` in the backend, storefront and editor |
 | `npm run test` | Tests in the backend, storefront and editor, plus `scripts/` tests |
@@ -187,7 +187,12 @@ npm install <package> -w storefront         # storefront (updates the root packa
 npm install <package> -w packages/editor    # editor (updates the root package-lock.json)
 ```
 
-The root `package.json` has one `overrides` entry: it lets `@medusajs/ui` (which declares React 18 as its peer) use the storefront's React 19, as Medusa's own storefront starter does. It does not reach the backend, whose install is separate. Keep its version equal to the storefront's `react`.
+The root `package.json` has two `overrides` entries. Neither reaches the backend, whose install is separate.
+
+- `@medusajs/ui`: lets it (it declares React 18 as its peer) use the storefront's React 19, as Medusa's own storefront starter does. Keep its version equal to the storefront's `react`.
+- `next` > `postcss`: Next.js 15 pins `postcss` 8.4.31, which `npm audit` reports as high (GHSA-qx2v-qp2m-jg93 and others, fixed after 8.5.22). The override gives Next.js the same `postcss` as the rest of the storefront (8.5.32). Remove it once a Next.js release depends on a fixed `postcss` itself.
+
+npm 10 does not apply a new or changed override to a package that is already in the lockfile (it keeps the old nested copy). To make it take effect, have npm resolve that package again, for example `npm uninstall next -w storefront --package-lock-only` and then `npm install next@<the same version> --save-exact -w storefront --package-lock-only`, and check with `npm ls postcss` that nothing is marked `invalid`.
 
 Backend integration tests create and drop temporary databases on the PostgreSQL server (host `localhost`, port 5433 by default, user `medusa`). They never touch the `medusa` development database. Start `docker compose up -d` first. To point them elsewhere set `DB_HOST`, `DB_PORT`, `DB_USERNAME`, `DB_PASSWORD`, as the CI workflow does. Medusa also reads `backend/.env` in tests, so with `REDIS_URL` set there the tests use Redis, which makes them several times slower; CI has no `backend/.env` and sets no `REDIS_URL`, so there they use Medusa's in-memory modules. The tests use no network: image tests check the stored URLs only.
 
@@ -196,6 +201,7 @@ Backend integration tests create and drop temporary databases on the PostgreSQL 
 - `JWT_SECRET`, `COOKIE_SECRET`, `S3_ACCESS_KEY_ID` or `S3_SECRET_ACCESS_KEY` missing.
 - `JWT_SECRET`, `COOKIE_SECRET` or `S3_SECRET_ACCESS_KEY` shorter than 16 characters. A self-hosted MinIO accepts a secret key of 8 characters; in production the backend needs 16 or more.
 - Any of these, or `MEDUSA_ADMIN_PASSWORD`, that is or contains a dev value from `backend/.env.example`, of any variable: the dev JWT secret given as `COOKIE_SECRET` counts too, and so does a dev value with something added before or after. Compared ignoring case and surrounding spaces. (A dev value shorter than 8 characters would count only as the whole value, so a long random secret is never refused because a short word happens to be inside it; today every dev value is 10 characters or longer.)
+- `DATABASE_URL` unset, empty or only spaces. Without it Medusa would take the database from `MEDUSA_DATABASE_URL`, a per-module `<MODULE>_DATABASE_URL` (such as `PRODUCT_DATABASE_URL`) or the `PG*` variables, none of which these checks read, so in production `DATABASE_URL` itself must be set. Development and test still start without it.
 - A `DATABASE_URL` with a `#` in it. Write a `#` in the password as `%23`.
 - The dev database login `medusa` / `medusa`, wherever the PostgreSQL driver (`pg`) would take it from: the user and password in `DATABASE_URL`, its `user` and `password` query parameters (which win over them), and `PGUSER` / `PGPASSWORD` (`backend/src/lib/config/database-login.ts`). `DATABASE_URL` is checked as given and also as Medusa rewrites it before `pg` sees it (Medusa removes its own `ssl_mode` parameter; a unit test checks that our copy of that rewrite still matches the installed Medusa).
 - The dev database user `medusa` with no password in `DATABASE_URL` or `PGPASSWORD`. `pg` would then take the password from a pgpass file (`PGPASSFILE`, `~/.pgpass`, or on Windows `%APPDATA%\postgresql\pgpass.conf` even with no variable set), which is not checked. Give the password explicitly, or use a different database user.

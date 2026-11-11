@@ -12,7 +12,8 @@
  * (@medusajs/utils, create-pg-connection.js). With DATABASE_URL unset our config passes
  * `databaseUrl: undefined`, which replaces Medusa's default `postgres://localhost/medusa-starter-default`
  * in defineConfig, so pg gets no connection string at all; neither gives a login, so the result
- * below is the same. pg then decides, in this order:
+ * below is the same. (Outside development and test an unset DATABASE_URL is refused anyway:
+ * DATABASE_URL_NOT_SET in build-config.ts.) pg then decides, in this order:
  *
  * 1. pg-connection-string `parse()`: a string starting with `/` is a Unix socket path and has no
  *    login. Anything else is read as a URL relative to `postgres://base`, so a string that is not
