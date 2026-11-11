@@ -152,7 +152,7 @@ describe("drawPatternTexture", () => {
     }
     // Between the front and the back, away from both margins.
     expect(ctx.pixel(SIZE * 0.5, SIZE * 0.3)).toBe(TEXTURE_BACKGROUND);
-    expect(result).toEqual({ size: SIZE, pieces: 5, fills: 2 * (3 + 3 + 2 + 2 + 1) });
+    expect(result).toEqual({ size: SIZE, pieces: 5, fills: 2 * (3 + 3 + 2 + 2 + 1), layers: 0, missingImages: [] });
   });
 
   it("changing one zone's colour changes that zone's pixels and nothing else", () => {

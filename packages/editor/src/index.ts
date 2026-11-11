@@ -7,5 +7,7 @@
 export { DesignCanvas, type DesignCanvasProps, type TextureDrawInfo } from "./react/DesignCanvas.js";
 export { orbitLimits, type OrbitLimits } from "./react/camera.js";
 export * from "./texture/pattern-texture.js";
+export * from "./texture/layers.js";
+export * from "./texture/fonts.js";
 export * from "./state/history.js";
 export * from "./design/index.js";
