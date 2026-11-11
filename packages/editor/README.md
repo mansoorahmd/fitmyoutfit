@@ -17,8 +17,9 @@ Status: step E2 done. On top of E1 (vector pattern pieces drawn onto the 3D mode
 | `npm run lint` / `typecheck` / `test` | ESLint, `tsc --noEmit`, Vitest (runs once) |
 | `npm run generate:schema` | Rewrites `schema/*.json` from the zod schemas |
 | `npm run generate:model` | Rewrites the placeholder GLB from `scripts/generate-placeholder-jersey.ts` (run with `tsx`), built from the pattern pieces in the product definition |
+| `npm run process:stand-in -- <shirt.glb>` | Rewrites the stand-in T-shirt (model and product definition) from its source file; see "Stand-in T-shirt model" |
 
-To run the demo on another port: `npm run dev -w packages/editor -- --port 5184 --strictPort` from the repository root. The demo shows the jersey with camera buttons for each side; controls to add a team name (Latin, Urdu and Arabic presets or typed), a number (English or Arabic digits) and a logo on a chosen piece; test files for the upload checks (made in the browser by code); the layer list (select, up, down, delete, low-DPI badge); controls for the selected layer (text, font, alignment, direction, colour, size, rotation, piece); the checks' messages; undo and redo (buttons, Ctrl+Z, Ctrl+Shift+Z or Ctrl+Y; Delete, arrow keys to nudge, Escape to deselect); the colour zones; a flat close-up of the selected piece, the flat pattern, the design JSON and the fonts' licences. Drag a layer on the model to move it. It fits a phone screen: the model stays at the top while the panel scrolls.
+To run the demo on another port: `npm run dev -w packages/editor -- --port 5184 --strictPort` from the repository root. The demo shows the stand-in T-shirt (the old placeholder jersey with `?product=placeholder-jersey`) with camera buttons for each side; controls to add a team name (Latin, Urdu and Arabic presets or typed), a number (English or Arabic digits) and a logo on a chosen piece; test files for the upload checks (made in the browser by code); the layer list (select, up, down, delete, low-DPI badge); controls for the selected layer (text, font, alignment, direction, colour, size, rotation, piece); the checks' messages; undo and redo (buttons, Ctrl+Z, Ctrl+Shift+Z or Ctrl+Y; Delete, arrow keys to nudge, Escape to deselect); the colour zones; a flat close-up of the selected piece, the flat pattern, the design JSON and the fonts' licences. Drag a layer on the model to move it. It fits a phone screen: the model stays at the top while the panel scrolls.
 
 ## Using it
 
@@ -218,17 +219,40 @@ A product definition (`samples/products/placeholder-jersey.json`, schema in `sch
 
 `validateProductDefinition` checks all of that, plus that every zone a piece names exists and that every zone is drawn on some piece. The JSON Schema checks the structure and the characters of the paths only; its descriptions say so. A test lists where the two differ.
 
-A real model replaces the placeholder by changing this JSON and the GLB file; no code changes.
+A real model replaces the placeholder by changing this JSON and the GLB file; no code changes. The demo now shows such a model by default: `samples/products/stand-in-tshirt.json` (see "Stand-in T-shirt model").
 
 ### From the design to the model
 
 `drawPatternTexture(ctx, product, design, { size })` (root entry, no Three.js; any 2D context) draws one square texture that covers the model's whole UV space: each piece's box at `uv * size` pixels, drawn with a transform from the piece's millimetres to those pixels, filled with its zone colour and then its regions. In the texture each piece fills its whole box plus a margin of `size / 128` pixels, so filtering at the seams never shows the background. Margins are drawn first for every piece, then every piece exactly, so a margin never covers a neighbour. With `mode: "flat"` it draws the pieces as cut instead (clipped to the outline, outline stroked), as in the demo's "Flat pattern pieces".
 
-`DesignCanvas` keeps one 2D canvas and one `CanvasTexture` per model, puts the texture on the materials of the pieces' meshes (white, so the texture carries the colour), and redraws and re-uploads it whenever the design changes. The model is not reloaded. At 2048 x 2048 the texture costs 16 MiB of GPU memory, about 21 MiB with mipmaps. A redraw of the five pieces takes well under a millisecond of drawing; the upload follows on the next frame. The front gets about 1.6 texture pixels per millimetre at that size.
+`DesignCanvas` keeps one 2D canvas and one `CanvasTexture` per model, puts the texture on the materials of the pieces' meshes (white, so the texture carries the colour), and redraws and re-uploads it whenever the design changes. The model is not reloaded. At 2048 x 2048 the texture costs 16 MiB of GPU memory, about 21 MiB with mipmaps. A redraw of the five pieces takes well under a millisecond of drawing; the upload follows on the next frame. The placeholder's front gets about 1.6 texture pixels per millimetre at that size, every piece of the stand-in T-shirt 1.9.
+
+How the 3D view looks (cheap enough for a phone: no shadows, no environment map, one draw per piece):
+
+- **Cloth shading** (`react/fabric.ts`): the garment's material stays a plain standard material (rough, not metallic, both sides drawn) with a small shader patch. A model may carry baked ambient occlusion per vertex for both sides of the cloth (custom glTF attribute `_OCCLUSION`); folds, armpits and the inside are darkened by it. Back faces are the **inside** of the garment: darker, and coloured from a second, small texture (256 px, about 256 KB) drawn from the colour zones only, redrawn only when a zone colour changes. So no print shows mirrored through the neck opening.
+- **Studio** (`react/studio.ts`): a sky light and three directional lights (key, fill, rim) that follow the camera, so every side is lit alike; a soft CSS gradient behind the canvas (override it with `style.background`). Tone mapping is Khronos PBR Neutral, which keeps palette colours true under even light and rolls highlights off instead of clipping.
 
 Pure helpers for the same mapping, on the `/design` entry: `pieceToUv`, `uvToPiece`, `pieceAtUv`, `zoneAtPiecePoint`, `zoneAtUv` (the zone under a tap on the model, from the hit's UV), `isInsidePiece`, `piecesByZone`, `pieceGeometry`; and on the root entry: `pieceTextureRect`, `pieceTextureScale`, `pieceToTexture`, `textureToPiece`.
 
+## Stand-in T-shirt model
+
+The demo shows `samples/models/stand-in-tshirt.glb` with `samples/products/stand-in-tshirt.json`. It is a **stand-in**: a real garment so the editor can be judged on something that looks like clothing, until our own pattern-based models (from our pattern maker and 3D artist) arrive and replace it, again by changing only those two files.
+
+- **Where it comes from:** "Garment 3D" by Prashant Verma, https://github.com/prashant3285/garment, file `shirt.glb` ("GLB exported from CLO"), MIT License, Copyright (c) 2021 Prashant Verma. The licence notice, with what we changed, is `samples/models/stand-in-tshirt.LICENSE.txt`; the copyright is also in the GLB's `asset.copyright`. The source URL, the source file's SHA-256 and the mapping from source meshes to our pattern pieces and zones are data in `samples/models/stand-in-tshirt.source.json`.
+- **What it is:** a short-sleeved V-neck T-shirt in A-pose, seven pattern pieces (front, back, two sleeves, three neck-band strips), 43,138 triangles, 1.06 MB. Front 520.4 x 712.6 mm, back 522.2 x 738.7 mm, sleeves 417.8 x 182.7 mm (about 103 cm round the chest: a size L).
+- **Zones:** body front, body back, side panels (front and back, from the underarm down), sleeves, sleeve ends (a band along the hem) and the neck band.
+- **How it is made:** download the source file (17.5 MB; it is not in the repository), then from `packages/editor` run `npm run process:stand-in -- <path to shirt.glb>`. The script refuses a file whose SHA-256 differs from the recorded one. It reads the file as data only (its own strict GLB reader, `scripts/model-prep/glb.ts`), and rewrites both the GLB and the product definition:
+  - keeps the **outer** surface of each piece. CLO exports cloth with thickness: two layers a fabric's thickness apart plus an edge strip. Rays cast from each layer show which side faces open space (from the outer layer, 0 to 16% of rays along its normal hit cloth, against it 100%; from the inner layer 97 to 100% either way);
+  - reads each flat piece from the UVs, which CLO writes in millimetres of the flat pattern, and traces its outline from the UV mesh's boundary (lines only, within 0.1 mm);
+  - packs all pieces into one texture at **one scale** (1.903 pixels per mm at 2048), 2/128 of the texture apart so each piece's bleed has room;
+  - sets every vertex's UV from its piece millimetres through the product definition, welds the seams (sewn vertices up to 0.5 mm apart), smooths normals across them and bakes occlusion for both sides (about 35 s);
+  - writes one plain material, no textures, 16-bit indices.
+- The plain functions behind it are in `scripts/model-prep/` with unit tests; `src/test/stand-in-model.test.ts` checks the committed files (true millimetres, one scale, UVs inside outlines, no bleeding, closed seams, size).
+- The outlines are the CLO pieces' **sewing lines** (no seam allowance). They are fine for placing artwork; production cut files will come from our own patterns.
+
 ## Placeholder model
+
+The script-generated placeholder below stays as a second sample: the unit tests use its simple, known shapes, and the demo still shows it with `?product=placeholder-jersey`. Nothing shows it by default.
 
 `samples/models/placeholder-jersey.glb` (about 190 KB) is generated by `scripts/generate-placeholder-jersey.ts` with `@gltf-transform/core`: procedural geometry, no third-party model or texture, so there is nothing to attribute. It is built **from the pattern pieces** in the product definition: each piece becomes one mesh named as its `mesh`, whose rows wrap the piece's outline round a simple body (each row of the flat piece becomes a ring or half ring as long as the row is wide, with points spread by arc length, so 1 mm on the piece is about 1 mm on the model). Every vertex's UV is its own point on the flat piece mapped into the piece's UV rectangle, so a point in piece coordinates lands at a known place on the garment. The model has one white material and no textures. Tests check that every mesh's UVs lie inside its own piece's outline and that every zone shows on the model.
 
@@ -312,4 +336,4 @@ With `onLayerDrag`, a press on a layer drags it instead of turning the garment. 
 - Migrations between `schemaVersion`s (version 1 is refused with a clear message; no migration).
 - Mirrored or rotated pieces in UV space, per-layer visibility or locking.
 - Saving, design versions ("every save creates a new version") and share links: backend concerns. `schemaVersion` is the format version only.
-- Compression of the model (Draco or Meshopt) and performance tuning for mid-range phones. The component renders on demand (`frameloop="demand"`) and caps the pixel ratio at 2, but no phone measurements have been made. If phones struggle, pass `textureSize={1024}` (a quarter of the memory).
+- Compression of the model (Draco or Meshopt; the stand-in is 1.06 MB uncompressed, about a third of that could go with quantised attributes) and performance tuning for mid-range phones. The component renders on demand (`frameloop="demand"`) and caps the pixel ratio at 2, but no phone measurements have been made. If phones struggle, pass `textureSize={1024}` (a quarter of the memory).
