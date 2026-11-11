@@ -4,6 +4,7 @@ import { NodeIO, type Document } from "@gltf-transform/core";
 import { beforeAll, describe, expect, it } from "vitest";
 import { loadPlaceholderProduct } from "./fixtures";
 import { isInsidePiece, pieceGeometry, uvToPiece, zoneAtUv } from "../design/pattern";
+import { pieceAtMeshUv } from "../design/placement";
 import { distanceToPolylines } from "../design/svg-path";
 import { DEFAULT_TEXTURE_SIZE, pieceTextureRect } from "../texture/pattern-texture";
 
@@ -110,6 +111,17 @@ describe("placeholder jersey model", () => {
       }
     }
     expect([...seen].sort()).toEqual(product.zones.map((z) => z.id).sort());
+  });
+
+  it("a hit anywhere on a piece's mesh maps back to that piece (pointer to piece millimetres)", () => {
+    for (const piece of product.pieces) {
+      for (const [u, v] of uvsOf(piece.mesh)) {
+        const hit = pieceAtMeshUv(product, piece.mesh, { u, v });
+        expect(hit?.piece.id, `${piece.mesh} at (${u}, ${v})`).toBe(piece.id);
+        expect(hit!.point.x).toBeGreaterThanOrEqual(-0.5);
+        expect(hit!.point.x).toBeLessThanOrEqual(piece.width + 0.5);
+      }
+    }
   });
 
   it("has no overlapping UV rectangles between pattern pieces", () => {
