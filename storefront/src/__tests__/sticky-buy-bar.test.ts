@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest"
 
 import {
   chosenLabel,
+  chosenWithQuantity,
   hasScrolledPast,
+  showStickyCheckoutBar,
   isFooterVisible,
   isFullyInView,
   showStickyBuyBar,
@@ -160,5 +162,42 @@ describe("the bar's summary", () => {
 
   it("is empty with neither a size nor a price", () => {
     expect(stickyBarSummary(undefined, undefined)).toBe("")
+  })
+})
+
+describe("the cart's sticky checkout bar", () => {
+  const show = (top: number | null, footerTop: number | null = 3000) =>
+    showStickyCheckoutBar({
+      checkoutButton: top === null ? null : at(top),
+      footerTop,
+      headerBottom: HEADER,
+      viewportHeight: VIEWPORT,
+    })
+
+  it("shows while the summary's button is below the screen (a phone with several lines)", () => {
+    expect(show(1400)).toBe(true)
+  })
+
+  it("hides while the button is wholly on screen", () => {
+    expect(show(500)).toBe(false)
+  })
+
+  it("shows once the button has gone up under the header", () => {
+    expect(show(-200)).toBe(true)
+  })
+
+  it("hides while the footer is on screen, and before the button exists", () => {
+    expect(show(-200, 600)).toBe(false)
+    expect(show(null)).toBe(false)
+  })
+})
+
+describe("chosenWithQuantity", () => {
+  const format = (chosen: string, quantity: number) => `${chosen} × ${quantity}`
+
+  it("adds the quantity above 1 only", () => {
+    expect(chosenWithQuantity("M", 4, format)).toBe("M × 4")
+    expect(chosenWithQuantity("M", 1, format)).toBe("M")
+    expect(chosenWithQuantity(undefined, 4, format)).toBeUndefined()
   })
 })

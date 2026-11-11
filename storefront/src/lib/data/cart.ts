@@ -15,6 +15,8 @@ import {
 } from "./cookies"
 import { getRegion } from "./regions"
 import { getLocale } from "@lib/data/locale-actions"
+import { AddedToCartView, addedToCartView } from "@lib/util/added-to-cart"
+import { getCheckoutRules } from "./checkout-rules"
 
 /**
  * Retrieves a cart by its ID. If no ID is provided, it will use the cart ID from the cookies.
@@ -50,6 +52,45 @@ export async function retrieveCart(cartId?: string, fields?: string) {
     })
     .then(({ cart }: { cart: HttpTypes.StoreCart }) => cart)
     .catch(() => null)
+}
+
+/** The cart page's fields (`*items.product` brings the product's kind). */
+const CART_PAGE_FIELDS =
+  "*items, *region, *items.product, *items.variant, *items.thumbnail, *items.metadata, +items.total, *promotions, +shipping_methods.name"
+
+/**
+ * The cart for the cart page, telling "no cart" from "couldn't load". No
+ * cookie, or a cart the backend doesn't know (4xx, for example a completed
+ * one), is no cart: the page shows the empty cart. No answer or a 5xx is a
+ * failure: the page shows the server-error block (05, 4.6).
+ */
+export async function retrieveCartForPage(): Promise<{
+  cart: HttpTypes.StoreCart | null
+  failed: boolean
+}> {
+  const id = await getCartId()
+
+  if (!id) {
+    return { cart: null, failed: false }
+  }
+
+  try {
+    const { cart } = await sdk.client.fetch<HttpTypes.StoreCartResponse>(
+      `/store/carts/${id}`,
+      {
+        method: "GET",
+        query: { fields: CART_PAGE_FIELDS },
+        headers: { ...(await getAuthHeaders()) },
+        next: { ...(await getCacheOptions("carts")) },
+        cache: "force-cache",
+      }
+    )
+    return { cart, failed: false }
+  } catch (error) {
+    const status = (error as { status?: number })?.status
+    const failed = typeof status !== "number" || status >= 500
+    return { cart: null, failed }
+  }
 }
 
 export async function getOrSetCart(countryCode: string) {
@@ -155,6 +196,70 @@ export async function addToCart({
       revalidateTag(fulfillmentCacheTag)
     })
     .catch(medusaError)
+}
+
+export type AddToCartResult =
+  | { ok: true; added: AddedToCartView | null }
+  | { ok: false }
+
+/**
+ * Adds to the cart and returns what the "Added to your cart" confirmation
+ * shows (docs/design/05-m1-pages.md, 4.7): the added line, the cart's piece
+ * count and total, and the minimum from the backend's rules. A failure is
+ * returned, not thrown, so the page can say "We couldn't add this to your
+ * cart" (W-A5) without the error boundary.
+ */
+export async function addToCartAndConfirm({
+  variantId,
+  quantity,
+  countryCode,
+}: {
+  variantId: string
+  quantity: number
+  countryCode: string
+}): Promise<AddToCartResult> {
+  if (!variantId) {
+    return { ok: false }
+  }
+
+  try {
+    const cart = await getOrSetCart(countryCode)
+
+    if (!cart) {
+      return { ok: false }
+    }
+
+    const headers = {
+      ...(await getAuthHeaders()),
+    }
+
+    const { cart: updated } = await sdk.store.cart.createLineItem(
+      cart.id,
+      { variant_id: variantId, quantity },
+      {},
+      headers
+    )
+
+    const cartCacheTag = await getCacheTag("carts")
+    revalidateTag(cartCacheTag)
+    const fulfillmentCacheTag = await getCacheTag("fulfillment")
+    revalidateTag(fulfillmentCacheTag)
+
+    const rules = await getCheckoutRules(updated.id)
+
+    return {
+      ok: true,
+      added: addedToCartView({
+        cart: updated,
+        variantId,
+        quantity,
+        rules,
+        key: `${updated.id}:${Date.now()}`,
+      }),
+    }
+  } catch {
+    return { ok: false }
+  }
 }
 
 export async function updateLineItem({

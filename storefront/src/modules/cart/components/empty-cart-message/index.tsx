@@ -1,25 +1,40 @@
-import { Heading, Text } from "@medusajs/ui"
+import { cartContent } from "@content/cart"
+import { homeContent } from "@content/home"
+import { ButtonLink } from "@modules/common/components/button"
 
-import InteractiveLink from "@modules/common/components/interactive-link"
-
-const EmptyCartMessage = () => {
-  return (
-    <div className="py-48 px-2 flex flex-col justify-center items-start" data-testid="empty-cart-message">
-      <Heading
-        level="h1"
-        className="flex flex-row text-3xl-regular gap-x-2 items-baseline"
+/**
+ * The empty cart (docs/design/05-m1-pages.md, 4.5): a left-aligned block
+ * 48 px under the header with the home page's "Start your team kit" (full
+ * width on a phone) and "See the fit kit". The garment cards follow it on
+ * the page. "Browse garments" waits until the main button goes to the
+ * editor: today both would go to /store.
+ */
+const EmptyCartMessage = () => (
+  <div
+    className="content-container flex flex-col items-start gap-4 pt-12"
+    data-testid="empty-cart-message"
+  >
+    <h1 className="type-h1 text-brand-ink">{cartContent.empty.title}</h1>
+    <p className="type-body text-brand-ink-muted">{cartContent.empty.text}</p>
+    <div className="flex w-full flex-col items-start gap-2 md:w-auto md:flex-row md:items-center md:gap-6">
+      <ButtonLink
+        href={homeContent.button.href}
+        fullWidth
+        className="md:w-auto"
+        data-testid="empty-cart-start"
       >
-        Cart
-      </Heading>
-      <Text className="text-base-regular mt-4 mb-6 max-w-[32rem]">
-        You don&apos;t have anything in your cart. Let&apos;s change that, use
-        the link below to start browsing our products.
-      </Text>
-      <div>
-        <InteractiveLink href="/store">Explore products</InteractiveLink>
-      </div>
+        {homeContent.button.label}
+      </ButtonLink>
+      <ButtonLink
+        href={homeContent.sizing.button.href}
+        variant="text"
+        className="-ml-1 md:ml-0"
+        data-testid="empty-cart-fit-kit"
+      >
+        {homeContent.sizing.button.label}
+      </ButtonLink>
     </div>
-  )
-}
+  </div>
+)
 
 export default EmptyCartMessage
