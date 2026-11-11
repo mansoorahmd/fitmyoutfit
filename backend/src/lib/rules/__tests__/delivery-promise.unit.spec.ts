@@ -1,5 +1,6 @@
 import {
   addCalendarDays,
+  appliedDeliverySpeed,
   calendarDateIn,
   deliveryPromise,
   DELIVERY_TIME_ZONE,
@@ -78,5 +79,11 @@ describe("calendarDateIn", () => {
     // 18:59 UTC on 10 Nov is 23:59 on 10 Nov in Karachi.
     expect(calendarDateIn(new Date("2026-11-10T18:59:00Z"), DELIVERY_TIME_ZONE)).toBe("2026-11-10")
     expect(calendarDateIn(new Date("2026-11-10T20:00:00Z"), "UTC")).toBe("2026-11-10")
+  })
+})
+
+describe("appliedDeliverySpeed", () => {
+  it("is standard until the rush charge exists, for the cart and the order alike", () => {
+    expect(appliedDeliverySpeed()).toBe("standard")
   })
 })

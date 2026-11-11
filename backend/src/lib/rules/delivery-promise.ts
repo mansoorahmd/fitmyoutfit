@@ -43,6 +43,16 @@ export type PromisedDelivery = {
   applies: DeliverySpeed
 }
 
+/**
+ * Which delivery date applies to a cart, and to the order it becomes. The one place that answers
+ * it: the checkout-rules route, the completion check and the promise kept on the order all call
+ * this. Always "standard" for now; the rush charge (a later M1 task, S1-6) answers it here, from
+ * the cart's or the order's lines, and changes nothing else.
+ */
+export function appliedDeliverySpeed(): DeliverySpeed {
+  return "standard"
+}
+
 /** The calendar date (YYYY-MM-DD) that `instant` falls on in `timeZone`. */
 export function calendarDateIn(instant: Date, timeZone: string): string {
   const parts = new Intl.DateTimeFormat("en-CA", {
