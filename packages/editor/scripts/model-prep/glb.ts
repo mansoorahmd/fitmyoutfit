@@ -136,6 +136,29 @@ export function localMatrix(node: NonNullable<GltfJson["nodes"]>[number]): numbe
   ];
 }
 
+/** Applies a column-major 4x4 matrix to a point. */
+export function transformPoint(m: ArrayLike<number>, x: number, y: number, z: number): [number, number, number] {
+  return [m[0]! * x + m[4]! * y + m[8]! * z + m[12]!, m[1]! * x + m[5]! * y + m[9]! * z + m[13]!, m[2]! * x + m[6]! * y + m[10]! * z + m[14]!];
+}
+
+/**
+ * A mesh's positions in the garment's world, in metres: each point through its
+ * node's world matrix (which carries the file's own orientation, for example
+ * a Z-up model turned to glTF's Y up by a root node), then times
+ * `metresPerUnit` (0.01 for a model in centimetres). Returns a new array.
+ */
+export function worldPositions(values: ArrayLike<number>, matrix: ArrayLike<number>, metresPerUnit = 1): Float64Array {
+  if (!(metresPerUnit > 0)) throw new RangeError(`metres per unit must be positive, got ${metresPerUnit}`);
+  const count = Math.floor(values.length / 3);
+  const out = new Float64Array(count * 3);
+  for (let v = 0; v < count; v++) {
+    const p = transformPoint(matrix, values[v * 3]!, values[v * 3 + 1]!, values[v * 3 + 2]!);
+    if (metresPerUnit === 1) out.set(p, v * 3);
+    else out.set([p[0] * metresPerUnit, p[1] * metresPerUnit, p[2] * metresPerUnit], v * 3);
+  }
+  return out;
+}
+
 /** Every node's world matrix (column-major), by node index, walking down from the default scene. */
 export function worldMatrices(json: GltfJson): Map<number, number[]> {
   const out = new Map<number, number[]>();
