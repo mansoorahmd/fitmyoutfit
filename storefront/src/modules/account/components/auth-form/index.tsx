@@ -25,6 +25,7 @@ import { Button } from "@modules/common/components/button"
 import LocalizedClientLink from "@modules/common/components/localized-client-link"
 import { TextField } from "@modules/common/components/text-field"
 
+import { loadPage } from "../../load-page"
 import ErrorList, { focusField } from "../error-list"
 import PasswordField from "../password-field"
 
@@ -126,7 +127,7 @@ const AuthForm = ({
     busy.current = true
     setSubmitting(true)
 
-    let result: AuthResult | undefined
+    let result: AuthResult
     try {
       result = creating
         ? await signUp(values, countryCode, next)
@@ -134,8 +135,11 @@ const AuthForm = ({
     } catch {
       result = { kind: "problem", problem: "unreachable" }
     }
-    // Signed in: the server action has sent the page on; stay busy meanwhile.
-    if (!result) return
+    if (result.kind === "signed_in") {
+      // the page loads the next one; the button stays busy meanwhile
+      loadPage(result.href)
+      return
+    }
 
     busy.current = false
     setSubmitting(false)

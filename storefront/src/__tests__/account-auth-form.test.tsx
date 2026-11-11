@@ -6,6 +6,13 @@ const { calls } = vi.hoisted(() => ({
     signIn: [] as unknown[][],
     signUp: [] as unknown[][],
     answer: undefined as unknown,
+    loaded: [] as string[],
+  },
+}))
+
+vi.mock("@modules/account/load-page", () => ({
+  loadPage: (href: string) => {
+    calls.loaded.push(href)
   },
 }))
 
@@ -41,6 +48,7 @@ beforeEach(async () => {
   calls.signIn = []
   calls.signUp = []
   calls.answer = undefined
+  calls.loaded = []
 })
 
 describe("sign-in view (05, 8.3)", () => {
@@ -138,7 +146,8 @@ describe("create view (05, 8.3)", () => {
     expect(document.activeElement).toBe(screen.getByLabelText("First name"))
   })
 
-  it("sends an Urdu first name as typed", async () => {
+  it("sends an Urdu first name as typed, then loads where the store says", async () => {
+    calls.answer = { kind: "signed_in", href: "/pk/cart" }
     render(<AuthTemplate view="create" next="/cart" email="" />)
     type("First name", "محمد علی")
     type("Email", "ali@example.com")
@@ -147,7 +156,8 @@ describe("create view (05, 8.3)", () => {
     expect(calls.signUp).toEqual([
       [{ firstName: "محمد علی", lastName: "", email: "ali@example.com", phone: "", password: "team-kit-2026" }, "pk", "/cart"],
     ])
-    // signed in: the page is on its way, the button stays busy
+    // signed in: the next page loads afresh, the button stays busy meanwhile
+    expect(calls.loaded).toEqual(["/pk/cart"])
     expect(screen.getByTestId("auth-submit")).toHaveAttribute("aria-busy", "true")
   })
 

@@ -2,7 +2,7 @@
 
 import { clx } from "@medusajs/ui"
 import { useParams } from "next/navigation"
-import { useTransition } from "react"
+import { useState } from "react"
 
 import { accountContent } from "@content/account"
 import { signout } from "@lib/data/customer"
@@ -10,6 +10,7 @@ import { ACCOUNT_MENU, AccountPage } from "@lib/util/account-rows"
 import Spinner from "@modules/common/icons/spinner"
 import LocalizedClientLink from "@modules/common/components/localized-client-link"
 
+import { loadPage } from "../../load-page"
 import AccountIcon from "../account-icon"
 
 const words = accountContent.frame.menu
@@ -29,7 +30,17 @@ const FOCUS =
  */
 const AccountMenu = ({ current, variant }: { current: AccountPage; variant: "rows" | "side" }) => {
   const { countryCode } = useParams() as { countryCode: string }
-  const [signingOut, startSignOut] = useTransition()
+  // stays true until the sign-in page replaces this one
+  const [signingOut, setSigningOut] = useState(false)
+
+  const signOut = () => {
+    if (signingOut) return
+    setSigningOut(true)
+    signout(countryCode)
+      .then(({ href }) => loadPage(href))
+      // no answer: reload the account, which shows what the cookie now says
+      .catch(() => loadPage(`/${countryCode}/account`))
+  }
   const rows = variant === "rows"
 
   const rowClass = (active: boolean) =>
@@ -67,12 +78,7 @@ const AccountMenu = ({ current, variant }: { current: AccountPage; variant: "row
         <li>
           <button
             type="button"
-            onClick={() => {
-              if (signingOut) return
-              startSignOut(async () => {
-                await signout(countryCode)
-              })
-            }}
+            onClick={signOut}
             aria-disabled={signingOut || undefined}
             aria-busy={signingOut || undefined}
             className={clx(rowClass(false), "text-start")}

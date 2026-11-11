@@ -2,7 +2,18 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const { calls } = vi.hoisted(() => ({
-  calls: { signout: [] as string[], removed: [] as string[], removeAnswer: { kind: "saved" } as unknown },
+  calls: {
+    signout: [] as string[],
+    loaded: [] as string[],
+    removed: [] as string[],
+    removeAnswer: { kind: "saved" } as unknown,
+  },
+}))
+
+vi.mock("@modules/account/load-page", () => ({
+  loadPage: (href: string) => {
+    calls.loaded.push(href)
+  },
 }))
 
 vi.mock("next/navigation", () => ({
@@ -16,6 +27,7 @@ vi.mock("next/image", () => ({
 vi.mock("@lib/data/customer", () => ({
   signout: async (countryCode: string) => {
     calls.signout.push(countryCode)
+    return { href: `/${countryCode}/account` }
   },
   deleteCustomerAddress: async (id: string) => {
     calls.removed.push(id)
@@ -46,6 +58,7 @@ const countries = storeCountries(regions)
 
 beforeEach(() => {
   calls.signout = []
+  calls.loaded = []
   calls.removed = []
   calls.removeAnswer = { kind: "saved" }
 })
@@ -95,6 +108,9 @@ describe("the account frame (05, 9.1)", () => {
       fireEvent.click(within(screen.getByTestId("account-menu-side")).getByRole("button", { name: "Sign out" }))
     })
     expect(calls.signout).toEqual(["pk"])
+    expect(calls.loaded).toEqual(["/pk/account"])
+    const side = screen.getByTestId("account-menu-side")
+    expect(within(side).getByTestId("account-sign-out")).toHaveTextContent("Signing out…")
   })
 })
 

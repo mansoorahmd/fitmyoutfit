@@ -2,7 +2,6 @@
 
 import { HttpTypes } from "@medusajs/types"
 import { revalidateTag } from "next/cache"
-import { redirect } from "next/navigation"
 
 import { sdk } from "@lib/config"
 import {
@@ -45,8 +44,8 @@ import { listRegions } from "./regions"
 // The customer's calls to the backend: sign-in, create account, sign out,
 // the profile and the addresses (docs/design/05-m1-pages.md, sections 8
 // and 9), on Medusa's own store and auth routes (contract section 9).
-// Each answers with plain data the page can show, never a thrown error,
-// except the redirects after signing in or out. The decisions are in
+// Each answers with plain data the page can show, never a thrown error
+// and never a redirect (see AuthResult). The decisions are in
 // lib/util/account-*.ts and lib/util/safe-next.ts.
 
 /** A backend call's answer, or its HTTP status (none when nothing came back). */
@@ -165,13 +164,21 @@ const afterSignIn = async (token: string) => {
 }
 
 export type AuthResult =
+  /**
+   * Signed in: the page loads `href` afresh (a full page load, so the
+   * header, the cart and every cached read show the signed-in customer).
+   * Not a redirect from here: a redirect from a server action reaches the
+   * caller as a thrown error, and in a production build the page then
+   * sometimes stayed on the form (task S1-5).
+   */
+  | { kind: "signed_in"; href: string }
   | { kind: "invalid"; errors: SignInErrors | CreateErrors }
   | { kind: "problem"; problem: AuthProblem }
 
 /**
- * Sign in (05, 8.3). Checks the fields again, signs in, then goes to
- * `next` when it is a path inside the store (lib/util/safe-next.ts), else
- * to the account. Otherwise answers with what went wrong.
+ * Sign in (05, 8.3). Checks the fields again, signs in, and answers where
+ * to go: `next` when it is a path inside the store (lib/util/safe-next.ts),
+ * else the account. Otherwise answers with what went wrong.
  */
 export async function signIn(
   values: SignInValues,
@@ -186,7 +193,7 @@ export async function signIn(
   if (!outcome.ok) return { kind: "problem", problem: outcome.problem }
 
   await afterSignIn(outcome.token)
-  redirect(afterSignInPath(countryCode, next))
+  return { kind: "signed_in", href: afterSignInPath(countryCode, next) }
 }
 
 /**
@@ -221,21 +228,22 @@ export async function signUp(
   if (!outcome.ok) return { kind: "problem", problem: outcome.problem }
 
   await afterSignIn(outcome.token)
-  redirect(afterSignInPath(countryCode, next))
+  return { kind: "signed_in", href: afterSignInPath(countryCode, next) }
 }
 
 /**
  * Sign out (05, 9.1): the sign-in cookie goes, and so does the cart, which
  * now belongs to the customer (the next person on this device starts a
- * cart of their own). Then to the sign-in page.
+ * cart of their own). Answers the sign-in page's path, which the page
+ * loads afresh (see AuthResult).
  */
-export async function signout(countryCode: string) {
+export async function signout(countryCode: string): Promise<{ href: string }> {
   await removeAuthToken()
   await revalidate("customers")
   await revalidate("orders")
   await removeCartId()
   await revalidateCartCaches()
-  redirect(`/${/^[a-z]{2}$/.test(countryCode) ? countryCode : "pk"}/account`)
+  return { href: `/${/^[a-z]{2}$/.test(countryCode) ? countryCode : "pk"}/account` }
 }
 
 /**

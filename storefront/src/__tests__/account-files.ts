@@ -12,6 +12,7 @@ export const ACCOUNT_FILES = [
   "app/[countryCode]/(main)/account/addresses/page.tsx",
   "app/[countryCode]/(main)/account/profile/page.tsx",
   "modules/account/require-customer.ts",
+  "modules/account/load-page.ts",
   "modules/account/components/account-icon/index.tsx",
   "modules/account/components/account-menu/index.tsx",
   "modules/account/components/address-book/index.tsx",
