@@ -1,0 +1,77 @@
+{
+  "about": "Where samples/models/stand-in-jersey.glb and samples/products/stand-in-jersey.json come from, and how they are made. Read by scripts/process-stand-in-model.ts (it picks this record by the source file's SHA-256). A stand-in until our own pattern-based models arrive. The source is a Sketchfab download: positions in centimetres with Z up (a root node turns them to Y up), UVs a 0 to 1 layout of the sewing pattern. Object_0 is the cloth's outer layer, Object_1 its inner copy, Object_2 the edge strips between them (no UV area); Object_3 holds both layers of the trims (collar band and stripe, cuffs, cuff and side stripes), Object_4 their edge strips. Each piece is found by a UV point inside its island; rays decide which copy is the outside.",
+  "source": {
+    "title": "Jersey Patterns 3D Free",
+    "author": "Wearable3D (https://sketchfab.com/Wearable3D)",
+    "url": "https://sketchfab.com/3d-models/jersey-patterns-3d-free-a6b7401510484ee1b375c02f97f14e86",
+    "file": "jersey_patterns_3d_free.glb",
+    "generator": "Sketchfab-16.52.0",
+    "licence": "CC-BY-4.0",
+    "licenceUrl": "http://creativecommons.org/licenses/by/4.0/",
+    "bytes": 18526644,
+    "sha256": "68d6d823a4202a305fa05db6b441389b790fd3429acdb8830abcd5fec0551536"
+  },
+  "input": {
+    "metresPerUnit": 0.01,
+    "uv": "normalised",
+    "sourceMeshes": ["Object_0", "Object_1", "Object_2", "Object_3", "Object_4"],
+    "scaleTolerance": 0.04
+  },
+  "output": {
+    "model": "samples/models/stand-in-jersey.glb",
+    "modelUrl": "/models/stand-in-jersey.glb",
+    "product": "samples/products/stand-in-jersey.json",
+    "mesh": "jersey",
+    "quantize": true,
+    "copyright": "\"Jersey Patterns 3D Free\" by Wearable3D (https://sketchfab.com/Wearable3D), https://sketchfab.com/3d-models/jersey-patterns-3d-free-a6b7401510484ee1b375c02f97f14e86 , licensed under CC BY 4.0 (http://creativecommons.org/licenses/by/4.0/). Changed for FitMyOutfit by packages/editor/scripts/process-stand-in-model.ts: outer cloth surface and trims only, textures and materials removed, UVs re-laid in millimetres at one scale, seams welded, normals and ambient occlusion recomputed.",
+    "generator": "FitMyOutfit packages/editor/scripts/process-stand-in-model.ts (glTF-Transform)"
+  },
+  "product": {
+    "id": "stand-in-jersey",
+    "name": "Football jersey (stand-in model, replaced when our own models arrive)",
+    "palette": { "id": "placeholder-palette", "version": 1 }
+  },
+  "outlineToleranceMm": 0.1,
+  "packing": "best",
+  "weldToleranceMm": 0.8,
+  "pieces": [
+    { "id": "front", "name": "Front", "island": [0.54975, 0.50059], "zone": "body_front", "bands": [] },
+    { "id": "back", "name": "Back", "island": [0.50413, 0.04311], "zone": "body_back", "bands": [] },
+    { "id": "sleeve_left", "name": "Left sleeve", "island": [0.84235, 0.77811], "zone": "sleeves", "bands": [] },
+    { "id": "sleeve_right", "name": "Right sleeve", "island": [0.07976, 0.8347], "zone": "sleeves", "bands": [] },
+    { "id": "side_panel_left", "name": "Left side panel", "island": [0.26308, 0.22987], "zone": "side_panels", "bands": [] },
+    { "id": "side_panel_right", "name": "Right side panel", "island": [0.68438, 0.19404], "zone": "side_panels", "bands": [] },
+    { "id": "collar", "name": "Collar", "island": [0.48671, 0.98702], "zone": "collar", "bands": [] },
+    { "id": "collar_strip", "name": "Collar, middle strip", "island": [0.3599, 0.97346], "zone": "collar", "bands": [] },
+    { "id": "collar_stripe", "name": "Collar stripe", "island": [0.59134, 0.9656], "zone": "collar_stripe", "bands": [] },
+    { "id": "cuff_left", "name": "Left cuff", "island": [0.77765, 0.76145], "zone": "cuffs", "bands": [] },
+    { "id": "cuff_right", "name": "Right cuff", "island": [0.12304, 0.76916], "zone": "cuffs", "bands": [] },
+    { "id": "sleeve_strip_left", "name": "Left sleeve, strip between cuff and stripe", "island": [0.85826, 0.76282], "zone": "sleeves", "bands": [] },
+    { "id": "sleeve_strip_right", "name": "Right sleeve, strip between cuff and stripe", "island": [0.04619, 0.77182], "zone": "sleeves", "bands": [] },
+    { "id": "cuff_stripe_left", "name": "Left cuff stripe", "island": [0.85281, 0.75748], "zone": "cuff_stripes", "bands": [] },
+    { "id": "cuff_stripe_right", "name": "Right cuff stripe", "island": [0.19821, 0.76444], "zone": "cuff_stripes", "bands": [] },
+    { "id": "side_strip_left_1", "name": "Left side panel, strip 1", "island": [0.21227, 0.25977], "zone": "side_panels", "bands": [] },
+    { "id": "side_strip_left_2", "name": "Left side panel, strip 2", "island": [0.17606, 0.24516], "zone": "side_panels", "bands": [] },
+    { "id": "side_strip_right_1", "name": "Right side panel, strip 1", "island": [0.67205, 0.28078], "zone": "side_panels", "bands": [] },
+    { "id": "side_strip_right_2", "name": "Right side panel, strip 2", "island": [0.72383, 0.24516], "zone": "side_panels", "bands": [] },
+    { "id": "side_stripe_left_1", "name": "Left side stripe 1", "island": [0.20612, 0.27097], "zone": "side_stripes", "bands": [] },
+    { "id": "side_stripe_left_2", "name": "Left side stripe 2", "island": [0.17694, 0.23419], "zone": "side_stripes", "bands": [] },
+    { "id": "side_stripe_left_3", "name": "Left side stripe 3", "island": [0.18996, 0.28101], "zone": "side_stripes", "bands": [] },
+    { "id": "side_stripe_left_4", "name": "Left side stripe 4", "island": [0.17891, 0.29448], "zone": "side_stripes", "bands": [] },
+    { "id": "side_stripe_right_1", "name": "Right side stripe 1", "island": [0.7128, 0.24582], "zone": "side_stripes", "bands": [] },
+    { "id": "side_stripe_right_2", "name": "Right side stripe 2", "island": [0.68808, 0.29787], "zone": "side_stripes", "bands": [] },
+    { "id": "side_stripe_right_3", "name": "Right side stripe 3", "island": [0.7007, 0.29411], "zone": "side_stripes", "bands": [] },
+    { "id": "side_stripe_right_4", "name": "Right side stripe 4", "island": [0.71508, 0.29683], "zone": "side_stripes", "bands": [] }
+  ],
+  "zones": [
+    { "id": "body_front", "name": "Body front", "defaultColor": { "id": "placeholder-white", "hex": "#FFFFFF" } },
+    { "id": "body_back", "name": "Body back", "defaultColor": { "id": "placeholder-white", "hex": "#FFFFFF" } },
+    { "id": "sleeves", "name": "Sleeves", "defaultColor": { "id": "placeholder-white", "hex": "#FFFFFF" } },
+    { "id": "side_panels", "name": "Side panels", "defaultColor": { "id": "placeholder-white", "hex": "#FFFFFF" } },
+    { "id": "collar", "name": "Collar", "defaultColor": { "id": "placeholder-navy", "hex": "#1B2A5C" } },
+    { "id": "collar_stripe", "name": "Collar stripe", "defaultColor": { "id": "placeholder-navy", "hex": "#1B2A5C" } },
+    { "id": "cuffs", "name": "Cuffs", "defaultColor": { "id": "placeholder-navy", "hex": "#1B2A5C" } },
+    { "id": "cuff_stripes", "name": "Cuff stripes", "defaultColor": { "id": "placeholder-navy", "hex": "#1B2A5C" } },
+    { "id": "side_stripes", "name": "Side stripes", "defaultColor": { "id": "placeholder-navy", "hex": "#1B2A5C" } }
+  ]
+}

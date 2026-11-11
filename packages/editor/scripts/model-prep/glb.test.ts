@@ -1,6 +1,6 @@
 import { Document, NodeIO } from "@gltf-transform/core";
 import { beforeAll, describe, expect, it } from "vitest";
-import { readAccessor, readGlb, worldMatrices, type Glb } from "./glb";
+import { readAccessor, readGlb, transformPoint, worldMatrices, worldPositions, type Glb } from "./glb";
 
 /** A small GLB written by glTF-Transform: a parent node moved and turned, a child with one triangle. */
 async function sample(): Promise<Uint8Array> {
@@ -91,6 +91,32 @@ describe("worldMatrices", () => {
     json.nodes!.push({ name: "second parent", children: [childIndex] });
     json.scenes![0]!.nodes!.push(json.nodes!.length - 1);
     expect(() => worldMatrices(json)).toThrow(/cycle/);
+  });
+
+  it("turns a Z-up model in centimetres (a Sketchfab download) into Y-up metres", () => {
+    // Sketchfab's root node "Sketchfab_model" carries this matrix (column-major): Z up becomes Y up.
+    const json = {
+      scene: 0,
+      scenes: [{ nodes: [0] }],
+      nodes: [
+        { name: "Sketchfab_model", matrix: [1, 0, 0, 0, 0, 2.220446049250313e-16, -1, 0, 0, 1, 2.220446049250313e-16, 0, 0, 0, 0, 1], children: [1] },
+        { name: "Jersey Design.obj.cleaner.materialmerger.gles", children: [2] },
+        { name: "Object_2", mesh: 0 },
+      ],
+    };
+    const m = worldMatrices(json).get(2)!;
+    // The collar at the top of the source (Z = 163.7 cm), in front (source Y = -13.7 cm: Sketchfab's front is -Y).
+    const p = worldPositions([10, -13.7, 163.7], m, 0.01);
+    expect(p[0]).toBeCloseTo(0.1, 12);
+    expect(p[1]).toBeCloseTo(1.637, 12); // up
+    expect(p[2]).toBeCloseTo(0.137, 12); // towards the viewer (+Z)
+    expect(transformPoint(m, 0, 0, 1)).toEqual([0, 1, expect.closeTo(0, 12)]);
+  });
+
+  it("leaves positions in metres alone (scale 1), through the same matrix arithmetic", () => {
+    const identity = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+    expect([...worldPositions([0.1, 0.2, 0.3, 1, 2, 3], identity)]).toEqual([0.1, 0.2, 0.3, 1, 2, 3]);
+    expect(() => worldPositions([0, 0, 0], identity, 0)).toThrow(/positive/);
   });
 
   it("refuses a cycle in the node hierarchy", () => {
