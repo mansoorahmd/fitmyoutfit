@@ -11,7 +11,7 @@ Store settings live in the Store's `metadata`, like `rush_percentage` today. The
 | Key | Placeholder | Meaning |
 | --- | --- | --- |
 | `rush_percentage` | 20 | Already there. Not used by this contract |
-| `cod_max_total` | 20000 | Largest cart total, in PKR, that can be paid by cash on delivery |
+| `cod_max_total` | 20000 | Largest cart total that can be paid by cash on delivery, in whole rupees (20000 means PKR 20,000). The total includes the delivery fee |
 | `delivery_days_standard` | 15 | Days from proof approval to delivery |
 | `delivery_days_rush` | 10 | The same, with paid rush |
 
@@ -88,6 +88,7 @@ The rules are plain TypeScript modules in `backend/src/lib/rules/`, with no Medu
 ```
 
 - `cash_on_delivery.reason` is `null` when available, else `"region"` or `"over_limit"`.
+- `cash_on_delivery.limit` is in whole currency units, like `cod_max_total`. The check uses the cart total including delivery, so a cart can pass in the cart view and go over the limit once delivery is added; the storefront re-reads the rules at checkout.
 - Dates are `YYYY-MM-DD`.
 
 Enforcement, on the backend and not only in the storefront:
@@ -104,7 +105,16 @@ Enforcement, on the backend and not only in the storefront:
 4. Pakistan: cash on delivery is refused for a cart above `cod_max_total`.
 5. Any region: a cart with only a fit kit completes.
 
-## 8. Not in this contract
+## 8. Additions after the page specification (11 Nov, backend follow-up task S1-1b)
+
+These came from [05-m1-pages.md](../design/05-m1-pages.md), section 12. They are not part of the first backend task.
+
+- **Which date applies.** `delivery_promise.applies` is `"standard"` or `"rush"`. It is always `"standard"` until the rush charge exists.
+- **The date is kept on the order.** When a cart is completed, the order gets `metadata.delivery_promise` with `date`, `days`, `based_on` and `applies`, so the confirmation and account pages can show the date that was promised.
+- **Duty-paid marker.** The storefront must be able to tell that a shipping option is the duty-paid one. If the store API does not return the option's `data.ddp`, the rules response gains `shipping: { "ddp": true }`.
+- **Completing twice.** Completing a cart that has already become an order returns that order and never creates a second one. This needs a test.
+
+## 9. Not in this contract
 
 - The rush charge in the cart (a later M1 task).
 - Customer accounts: Medusa's own store routes for sign-up, login and orders are used as they are.
