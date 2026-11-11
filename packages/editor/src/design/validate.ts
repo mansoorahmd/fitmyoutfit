@@ -9,6 +9,7 @@ import {
 } from "./schema.js";
 import { DEFAULT_JERSEY_NUMBER_RULES, type JerseyNumberRules } from "./jersey-number-rules.js";
 import { checkJerseyNumber, checkJerseyNumberRules } from "./jersey-number.js";
+import { flattenPath, parseSvgPath, polylineBounds } from "./svg-path.js";
 
 export interface ValidationError {
   /** Where the problem is, for example `layers[2].position.x`. Empty for the document root. */
@@ -261,7 +262,100 @@ function checkProductDefinition(input: unknown): ValidationResult<ProductDefinit
       errors.push(makeError(`pieces[${i}].uv`, "the UV rectangle extends outside the 0 to 1 range"));
     }
   });
+  errors.push(...checkPieceGeometry(parsed.value));
   return errors.length > 0 ? { ok: false, errors } : parsed;
+}
+
+/** How far (relative) a UV rectangle's proportions may differ from its piece's before artwork counts as stretched. */
+export const UV_ASPECT_TOLERANCE = 0.01;
+/** How far (mm) an outline point may lie outside the piece's box, for rounding in exported patterns. */
+const OUTLINE_BOX_TOLERANCE_MM = 0.01;
+
+/**
+ * Rules for the vector pattern pieces that a JSON Schema cannot express:
+ * outlines are one closed shape inside the piece's box, zones referred to
+ * exist and are each drawn somewhere, UV rectangles keep the piece's
+ * proportions and do not overlap (the whole model shares one texture).
+ */
+function checkPieceGeometry(product: ProductDefinition): ValidationError[] {
+  const errors: ValidationError[] = [];
+  const zoneIds = new Set(product.zones.map((z) => z.id));
+  const drawn = new Set<string>();
+  const zoneList = [...zoneIds].join(", ");
+
+  product.pieces.forEach((piece, i) => {
+    const at = `pieces[${i}]`;
+    // Proportions: the texture is square, so a UV rectangle with other proportions than the piece stretches it.
+    const pieceAspect = piece.width / piece.height;
+    const uvAspect = piece.uv.width / piece.uv.height;
+    if (Math.abs(uvAspect / pieceAspect - 1) > UV_ASPECT_TOLERANCE) {
+      errors.push(
+        makeError(
+          `${at}.uv`,
+          `the UV rectangle's proportions (${uvAspect.toFixed(3)}) differ from the piece's (${pieceAspect.toFixed(3)}) by more than ${UV_ASPECT_TOLERANCE * 100}%, which would stretch artwork on the model`,
+        ),
+      );
+    }
+
+    const outline = parseSvgPath(piece.outline);
+    if (outline.ok) {
+      const lines = flattenPath(outline.commands);
+      const last = outline.commands[outline.commands.length - 1];
+      if (lines.length !== 1 || last?.type !== "Z") {
+        errors.push(makeError(`${at}.outline`, `must be one closed shape (a single M ... Z), found ${lines.length} shape(s)${last?.type === "Z" ? "" : " and no closing Z"}`));
+      } else if (Math.abs(polygonArea(lines[0]!.points)) < 1) {
+        errors.push(makeError(`${at}.outline`, "encloses no area"));
+      }
+      const box = polylineBounds(lines);
+      const t = OUTLINE_BOX_TOLERANCE_MM;
+      if (box && (box.minX < -t || box.minY < -t || box.maxX > piece.width + t || box.maxY > piece.height + t)) {
+        errors.push(
+          makeError(`${at}.outline`, `must lie inside the piece's box, 0 to ${piece.width} by 0 to ${piece.height} mm`),
+        );
+      }
+    }
+
+    const refer = (zone: string, path: string) => {
+      if (zoneIds.has(zone)) drawn.add(zone);
+      else errors.push(makeError(path, `"${zone}" is not one of the product's colour zones (${zoneList})`));
+    };
+    refer(piece.zone, `${at}.zone`);
+    piece.regions.forEach((region, k) => refer(region.zone, `${at}.regions[${k}].zone`));
+  });
+
+  product.zones.forEach((zone, i) => {
+    if (!drawn.has(zone.id)) {
+      errors.push(makeError(`zones[${i}]`, `colour zone "${zone.id}" is not drawn on any piece (use it as a piece's zone or in a region)`));
+    }
+  });
+
+  const pieces = product.pieces;
+  for (let a = 0; a < pieces.length; a++) {
+    for (let b = a + 1; b < pieces.length; b++) {
+      const p = pieces[a]!.uv;
+      const q = pieces[b]!.uv;
+      if (p.x < q.x + q.width && q.x < p.x + p.width && p.y < q.y + q.height && q.y < p.y + p.height) {
+        errors.push(
+          makeError(
+            `pieces[${b}].uv`,
+            `overlaps the UV rectangle of piece "${pieces[a]!.id}"; each piece needs its own area of the texture`,
+          ),
+        );
+      }
+    }
+  }
+  return errors;
+}
+
+/** Signed area of a polygon (shoelace formula). */
+function polygonArea(points: ReadonlyArray<{ x: number; y: number }>): number {
+  let sum = 0;
+  for (let k = 0; k < points.length; k++) {
+    const a = points[k]!;
+    const b = points[(k + 1) % points.length]!;
+    sum += a.x * b.y - b.x * a.y;
+  }
+  return sum / 2;
 }
 
 /** Thrown by `assertValidDesign` and the edit functions. Carries every error. */

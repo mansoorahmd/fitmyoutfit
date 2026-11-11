@@ -14,7 +14,13 @@
       "mesh": "front",
       "width": 560,
       "height": 700,
-      "uv": { "x": 0.02, "y": 0.02, "width": 0.448, "height": 0.56 }
+      "uv": { "x": 0.02, "y": 0.02, "width": 0.448, "height": 0.56 },
+      "outline": "M 160 0 L 400 0 L 505 45 Q 535 80 540 160 L 560 700 L 0 700 L 20 160 Q 25 80 55 45 Z",
+      "zone": "body",
+      "regions": [
+        { "zone": "yoke", "path": "M -10 -10 H 570 V 115 Q 280 175 -10 115 Z" },
+        { "zone": "side_panels", "path": "M -10 230 L 92 230 L 70 710 L -10 710 Z M 570 230 L 468 230 L 490 710 L 570 710 Z" }
+      ]
     },
     {
       "id": "back",
@@ -22,7 +28,13 @@
       "mesh": "back",
       "width": 560,
       "height": 700,
-      "uv": { "x": 0.532, "y": 0.02, "width": 0.448, "height": 0.56 }
+      "uv": { "x": 0.532, "y": 0.02, "width": 0.448, "height": 0.56 },
+      "outline": "M 160 0 L 400 0 L 505 45 Q 535 80 540 160 L 560 700 L 0 700 L 20 160 Q 25 80 55 45 Z",
+      "zone": "body",
+      "regions": [
+        { "zone": "yoke", "path": "M -10 -10 H 570 V 90 H -10 Z" },
+        { "zone": "side_panels", "path": "M -10 230 L 92 230 L 70 710 L -10 710 Z M 570 230 L 468 230 L 490 710 L 570 710 Z" }
+      ]
     },
     {
       "id": "sleeve_left",
@@ -30,7 +42,10 @@
       "mesh": "sleeve_left",
       "width": 440,
       "height": 220,
-      "uv": { "x": 0.02, "y": 0.62, "width": 0.46, "height": 0.23 }
+      "uv": { "x": 0.02, "y": 0.62, "width": 0.46, "height": 0.23 },
+      "outline": "M 0 0 H 440 L 420 220 H 20 Z",
+      "zone": "sleeves",
+      "regions": [{ "zone": "cuffs", "path": "M -10 185 H 450 V 230 H -10 Z" }]
     },
     {
       "id": "sleeve_right",
@@ -38,7 +53,10 @@
       "mesh": "sleeve_right",
       "width": 440,
       "height": 220,
-      "uv": { "x": 0.52, "y": 0.62, "width": 0.46, "height": 0.23 }
+      "uv": { "x": 0.52, "y": 0.62, "width": 0.46, "height": 0.23 },
+      "outline": "M 0 0 H 440 L 420 220 H 20 Z",
+      "zone": "sleeves",
+      "regions": [{ "zone": "cuffs", "path": "M -10 185 H 450 V 230 H -10 Z" }]
     },
     {
       "id": "collar",
@@ -46,27 +64,18 @@
       "mesh": "collar",
       "width": 480,
       "height": 30,
-      "uv": { "x": 0.02, "y": 0.89, "width": 0.96, "height": 0.06 }
+      "uv": { "x": 0.02, "y": 0.89, "width": 0.96, "height": 0.06 },
+      "outline": "M 0 0 H 480 V 30 H 0 Z",
+      "zone": "collar",
+      "regions": []
     }
   ],
   "zones": [
-    {
-      "id": "body",
-      "name": "Body",
-      "materials": ["body"],
-      "defaultColor": { "id": "placeholder-white", "hex": "#FFFFFF" }
-    },
-    {
-      "id": "sleeves",
-      "name": "Sleeves",
-      "materials": ["sleeves"],
-      "defaultColor": { "id": "placeholder-navy", "hex": "#1B2A5C" }
-    },
-    {
-      "id": "collar",
-      "name": "Collar",
-      "materials": ["collar"],
-      "defaultColor": { "id": "placeholder-red", "hex": "#C8102E" }
-    }
+    { "id": "body", "name": "Body", "defaultColor": { "id": "placeholder-white", "hex": "#FFFFFF" } },
+    { "id": "yoke", "name": "Shoulder yoke", "defaultColor": { "id": "placeholder-navy", "hex": "#1B2A5C" } },
+    { "id": "side_panels", "name": "Side panels", "defaultColor": { "id": "placeholder-red", "hex": "#C8102E" } },
+    { "id": "sleeves", "name": "Sleeves", "defaultColor": { "id": "placeholder-navy", "hex": "#1B2A5C" } },
+    { "id": "cuffs", "name": "Sleeve cuffs", "defaultColor": { "id": "placeholder-white", "hex": "#FFFFFF" } },
+    { "id": "collar", "name": "Collar", "defaultColor": { "id": "placeholder-red", "hex": "#C8102E" } }
   ]
 }

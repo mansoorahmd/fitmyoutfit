@@ -22,8 +22,16 @@ export type RegionSeed = {
   currency_code: CurrencyCode
   /** ISO 3166-1 alpha-2, lower case. A country can belong to only one region. */
   country_codes: string[]
-  /** Free-form region metadata. `tax_final: false` drives the "tax not final" label. */
+  /**
+   * Region metadata. `tax_final: false` drives the "tax not final" label; `min_garment_quantity`
+   * is the fewest garment pieces in one order. The seed writes only keys that are missing.
+   */
   metadata: Record<string, unknown>
+  /**
+   * Payment provider ids for the region (`pp_<identifier>_<id>`). The seed links the ones a
+   * region lacks and keeps others an admin linked.
+   */
+  payment_providers: string[]
 }
 
 export type StoreSeed = {
@@ -100,6 +108,51 @@ export type PriceTableSeed = Record<string, Record<CurrencyCode, number>>
 export type StoreSettingsSeed = {
   /** Rush production charge, in percent (0 to 100). How it is applied is Sprint 1 work. */
   rush_percentage: number
+  /** Largest cart total, in PKR (major units), that can be paid by cash on delivery. */
+  cod_max_total: number
+  /** Calendar days from proof approval to delivery. */
+  delivery_days_standard: number
+  /** The same, with paid rush. */
+  delivery_days_rush: number
+}
+
+/**
+ * A garment-measurement chart (the garment laid flat), stored as `metadata.size_chart` on the
+ * product. Shape from docs/contracts/m1-checkout.md, section 2.
+ */
+export type SizeChartSeed = {
+  /** True while the measurements are placeholders; the storefront then shows a note. */
+  draft: boolean
+  unit: "cm"
+  columns: { key: string; label: string }[]
+  /** One row per size, in the size order of sizes.ts; `values` has a number per column key. */
+  rows: { size: string; values: Record<string, number> }[]
+}
+
+export type ShippingOptionSeed = {
+  /** Country code of the region the option is for (regions are matched by country code). */
+  region_country_code: string
+  /** Name of the service zone created for the region (its geo zones are the region's countries). */
+  service_zone_name: string
+  /** Shown to the customer at checkout. */
+  name: string
+  /** Flat amount in MAJOR units of the region's currency. */
+  amount: number
+  /** True for the single duty-paid line of an export market; stored as `data.ddp`. */
+  ddp: boolean
+  /** Medusa's shipping option type (code, label, description). */
+  type: { code: string; label: string; description: string }
+}
+
+export type ShippingSeed = {
+  /** The one place orders ship from. Matched by name. */
+  stock_location: {
+    name: string
+    address: { address_1: string; city: string; country_code: string }
+  }
+  /** Name of the fulfillment set (type shipping) that holds one service zone per region. */
+  fulfillment_set_name: string
+  options: ShippingOptionSeed[]
 }
 
 export type SeedData = {
@@ -110,4 +163,7 @@ export type SeedData = {
   products: PlaceholderData<ProductSeed[]>
   prices: PlaceholderData<PriceTableSeed>
   settings: PlaceholderData<StoreSettingsSeed>
+  /** Per product handle: the product's `metadata.size_chart`. */
+  sizeCharts: PlaceholderData<Record<string, SizeChartSeed>>
+  shipping: PlaceholderData<ShippingSeed>
 }

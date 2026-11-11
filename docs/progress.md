@@ -14,21 +14,39 @@ E1 is done when the editor demo shows the placeholder jersey with its 2D pattern
 
 | # | Task | Owner | Status | Accepted when |
 | --- | --- | --- | --- | --- |
-| S1-1 | Backend checkout foundations: stock location and one shipping option per region; placeholder payment and cash on delivery; settings for the minimum quantity, the cash-on-delivery limit and the delivery days; size charts as product data; the three rules as plain modules; the `checkout-rules` route; refusal at cart completion | backend-dev (Opus) | In progress since 11 Nov | The five API tests in section 7 of the contract pass; root lint, type-check and tests pass; QA review |
+| S1-1 | Backend checkout foundations: stock location and one shipping option per region; placeholder payment and cash on delivery; settings for the minimum quantity, the cash-on-delivery limit and the delivery days; size charts as product data; the three rules as plain modules; the `checkout-rules` route; refusal at cart completion | backend-dev (Opus) | **Done, merged 11 Nov (`8128fa6`).** QA accepted it from a clean install: the five proofs hold through the API on a real backend and each fails when its code is disabled; a refusal leaves no order and no payment; a database seeded before M1 is brought up to date with nothing lost; backend 371 unit and 45 integration tests. One defect to fix soon, in S1-1b: a product with no kind is not counted toward the minimum | The five API tests in section 7 of the contract pass; root lint, type-check and tests pass; QA review |
 | S1-2 | Design specifications in direction A: cart, checkout, order confirmation, sign-in and account pages, the size chart on the product page | storefront-designer | **Done 11 Nov** (`6258653`, on `master`): [05-m1-pages.md](design/05-m1-pages.md). Read by the coordinator; choices recorded in [decision 008](decisions/008-m1-cart-and-checkout-choices.md) | Specs in `docs/design/` at 360, 768 and 1280 px with every state; promises only in the wording the contract and content files give |
-| E1 | Editor: 2D SVG pattern panels as textures on the 3D model; colour per zone; orbit camera | editor-3d-dev (Opus) | In progress since 11 Nov | Demo shows it; the design stays data (no flattened image in the design JSON); tests; screenshots opened by the coordinator |
+| E1 | Editor: 2D SVG pattern panels as textures on the 3D model; colour per zone; orbit camera | editor-3d-dev (Opus) | **Done, merged 11 Nov (`f0d9473`).** Coordinator ran lint, type-check, tests (322, was 243) and the build on the branch (all exit 0) and opened the screenshots at 1366 px and 390 px: front, back, a zone colour change, the flat pattern. Not checked: touch and speed on a real phone | Demo shows it; the design stays data (no flattened image in the design JSON); tests; screenshots opened by the coordinator |
+| E2 | Editor: text, number and logo layers placed on a pattern piece; Latin, Arabic and Urdu text; upload checks (file type, size, transparency, DPI warning); move, resize, rotate; undo and redo | editor-3d-dev (Opus) | In progress since 11 Nov, on the founder's go-ahead | Demo shows it; the design stays data (logo bytes never in the design JSON); tests; screenshots opened by the coordinator |
 | S1-3 | Storefront, first part: shared parts from the specification (fields, alert, quantity stepper, money with currency codes); cart page; "Added to your cart" confirmation in place of the hover dropdown; size chart on the product page; region from the visitor's country; carry-overs (`/sitemap.xml` answers 404, `images.qualities`) | storefront-dev (Opus) | In progress since 11 Nov | Tests; root lint, type-check and tests pass; screenshots at 390 and 1366 px opened by the coordinator |
 | S1-4 | Storefront: cart and checkout to the specification, with the minimum-quantity message, cash on delivery, the shipping line and the delivery date | storefront-dev | Waits for S1-1 and S1-2 | Both "done when" lines seen in a real browser on a phone size |
 | S1-5 | Storefront: sign-up, login and order history to the specification | storefront-dev | Waits for S1-2 | A new customer signs up, orders and sees the order in the history |
 | S1-6 | Rush: the backend works out the rush charge from `rush_percentage` and adds it to the cart; the storefront offers it and the delivery date follows | backend-dev, then storefront-dev | After S1-1 and S1-4 | API test and browser check |
 | S1-7 | Backend carry-overs from M0: refuse an unset `DATABASE_URL` in production; Vite 7 for the admin tooling; postcss override; `dev.mjs` exit code; drop the stray test database | backend-dev | After S1-1 | Tests; admin dev and build checked; `npm audit` re-run |
-| S1-1b | Backend additions from the page specification (contract section 8): which delivery date applies; the date kept on the order; duty-paid marker; completing a cart twice returns the same order | backend-dev | After S1-1 | API tests |
+| S1-1b | Backend additions from the page specification (contract section 8): which delivery date applies; the date kept on the order; the minimum counts products with no kind (QA defect D1); completing a cart twice returns the same order; cash on delivery marked as collected in the admin against the order number, with the courier's slip reference kept on the order; rush days must be lower than standard days | backend-dev (Opus) | In progress since 11 Nov | API tests |
 | S1-10 | Password reset: backend sends the reset link (to a local log in development); storefront pages to ask for and set a new password | backend-dev, then storefront-dev | After S1-5 | A customer resets a password and signs in with the new one |
 | S1-9 | QA review of each branch; the "done when" lines checked in a real browser on `master` | qa-reviewer, coordinator | Not started | Both lines seen working |
 
 **Placeholders chosen by the coordinator for M1, to be replaced by the founders:** cash-on-delivery limit PKR 20,000; delivery fee in Pakistan PKR 250; export minimum 10 pieces (from dev-plan.md); draft size-chart measurements. Export prices are treated as including shipping and duties, so the export shipping line is 0.
 
 **Rules decided by the coordinator, to be confirmed by the founders:** the minimum counts garment pieces across the whole cart; the fit kit and the rush add-on do not count; a fit kit can be bought alone in any region.
+
+**Preview updated to the M1 backend (11 Nov, `1b36dad`).** `npm run setup` on the preview database, which was seeded before M1, exited 0: it added the three settings, the four region minimums, four size charts, the stock location, the fulfilment set, four zones and four shipping options, and linked cash on delivery to Pakistan. Nothing else changed. Checked by the coordinator through the store API on the preview backend (port 9002): a Pakistan cart with 1 T-shirt and cash on delivery became order #1 (PKR 2,250 with delivery); a UK cart of 9 jerseys was refused with the minimum message; cash on delivery in the UK was refused. Order #1 in the preview admin (preview-check@example.com) is that test. The storefront pages for checkout are not built yet (S1-4).
+
+**Fifth QA review, S1-1 (11 Nov): accepted.** Evidence: scratchpad `qa5`. Notes kept for later work:
+- Medusa allows one handler per workflow hook. Later checks at cart completion (team orders, deposits) go into `backend/src/workflows/hooks/complete-cart-checkout-rules.ts`, not into a second hook file.
+- One invalid store setting stops every checkout in every region. That is deliberate (the checkout does not guess); an admin warning is worth adding.
+- A seed re-run links cash on delivery to Pakistan again if an admin removed it. To switch it off, set `cod_max_total` to 0.
+- The root `npm run build` needs `npm run setup` and a running backend, for the storefront build. This is older than M1 and is not in the README yet.
+- The storefront must create the payment session again after any cart change (in the contract, section 6).
+
+**After E1, for the 3D artist and pattern maker, before the real jersey is modelled:**
+- Each pattern piece needs its own area in the model's UV layout. Pieces may not overlap (for example both sleeves mirrored onto one area), because a name or logo on one sleeve needs its own place.
+- Each piece's UV area must keep the proportions of the flat pattern piece (within 1%).
+- The editor reads each piece's outline and colour regions as SVG paths in millimetres. Lines and Bezier curves are supported; arcs are not.
+- The placeholder jersey is a simple generated shape (a tube body, a visible seam at the shoulder). It is a stand-in and is replaced by the real model.
+
+**Editor demo:** `npm run dev -w packages/editor`, then the address it prints. On the dev machine it runs at http://localhost:5183 next to the preview.
 
 ## Previous milestone: M0 Setup (finished 11 Nov 2026)
 M0 Setup (called Sprint 0 until 11 Nov; the plan now uses milestones). Started 10 Nov 2026. **Finished on 11 Nov 2026: the "done when" below was seen working on `master` (`f420b08`) from a clean install.** One thing is not verified: the CI result on GitHub, which cannot be read from this machine. M1 (basic store) and the 3D editor steps start only on the founder's yes.
@@ -99,6 +117,18 @@ The entries below are the review history of M0, kept for reference.
   - text is not Unicode-normalised, which matters when comparing names;
   - number layers accept Western digits only, 1 to 3 of them. That limit should become data, and the roster checks in Sprint 2 need the same rule.
 
+## Founder answers, 11 Nov 2026
+
+| Question | Answer | What it changes |
+| --- | --- | --- |
+| Weeks or milestones in the plan? | Milestones | dev-plan.md relabelled: M0 to M4 and editor steps E1 to E5 |
+| Start M1 and editor step E1? | Yes | Started 11 Nov |
+| How is a cash-on-delivery payment recorded once the courier has the cash? | The courier provides a slip against the order number | Staff mark the payment as collected in the admin against the order number, and the slip reference is kept on the order (task S1-1b) |
+| Is the cash-on-delivery limit compared with the total including delivery and tax? | Keep it the same as ordinary retail stores on Shopify do today | The limit is compared with the full order total, as the backend does now. The coordinator also uses this as the default for similar retail checkout questions |
+| Start editor step E2? | "ok" (read by the coordinator as yes; the founder was told so) | E2 started 11 Nov |
+
+Following the Shopify default above, the coordinator chose: "Tax not final" is shown in the cart and at checkout, and not on the order confirmation or account pages, where the total is what the customer pays. The founder was told and can reverse it.
+
 ## Founder answers, 10 Nov 2026
 
 Given in the coordinator session. critiques/DECISIONS.md and plan.md have not been changed.
@@ -139,6 +169,8 @@ Assumptions the founders have not confirmed:
 - The Urdu and Persian digit forms (۰ to ۹), which look different from the Arabic ones for 4, 5 and 6, are accepted too, because Urdu names are allowed.
 
 ## Standing instructions from the founder
+
+- **Retail conventions (11 Nov):** where a checkout or order question has no answer in the plan, do what ordinary retail stores on Shopify do today.
 
 - **Worker models (10 Nov 2026):** use the Opus model for difficult worker tasks. The coordinator passes the model override on those tasks; routine and mechanical tasks stay on each agent's default model. Counted as difficult so far: Medusa backend work (modules, workflows, seed, payments) and the reviews of it.
 - **The coordinator takes the decisions (10 Nov, late).** The founder said: "you are co founder ... and you also own the code so take decisions." From now on the coordinator chooses the storefront's look, the design direction and other product and code decisions without asking first, records each one here or in `docs/decisions/`, and tells the founder afterwards. Still asked first: prices and money terms, the customer promises in `critiques/DECISIONS.md`, and any edit to `plan.md` or `critiques/DECISIONS.md`.

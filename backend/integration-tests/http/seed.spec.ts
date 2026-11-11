@@ -3,6 +3,10 @@ import type { MedusaContainer } from "@medusajs/framework/types"
 import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils"
 import {
   createRegionsWorkflow,
+  deleteFulfillmentSetsWorkflow,
+  deleteServiceZonesWorkflow,
+  deleteShippingOptionsWorkflow,
+  deleteStockLocationsWorkflow,
   updateProductsWorkflow,
   updateRegionsWorkflow,
   updateStoresWorkflow,
@@ -132,7 +136,62 @@ async function snapshot(container: MedusaContainer) {
 
   const users = (await container.resolve(Modules.USER).listUsers({})).map((u) => u.email).sort()
 
-  return { store, regions: regionList, products: productList, preferences, keys: keyList, users }
+  const { data: locations } = await query.graph({
+    entity: "stock_location",
+    fields: [
+      "name",
+      "address.city",
+      "address.country_code",
+      "sales_channels.name",
+      "fulfillment_providers.id",
+      "fulfillment_sets.name",
+      "fulfillment_sets.type",
+      "fulfillment_sets.service_zones.name",
+      "fulfillment_sets.service_zones.geo_zones.country_code",
+      "fulfillment_sets.service_zones.shipping_options.name",
+      "fulfillment_sets.service_zones.shipping_options.data",
+      "fulfillment_sets.service_zones.shipping_options.provider_id",
+      "fulfillment_sets.service_zones.shipping_options.shipping_profile.type",
+      "fulfillment_sets.service_zones.shipping_options.rules.attribute",
+      "fulfillment_sets.service_zones.shipping_options.rules.value",
+      "fulfillment_sets.service_zones.shipping_options.prices.currency_code",
+      "fulfillment_sets.service_zones.shipping_options.prices.amount",
+    ],
+  })
+  const shipping = (locations as any[]).map((l) => ({
+    name: l.name,
+    address: `${l.address?.city}, ${l.address?.country_code}`,
+    sales_channels: (l.sales_channels ?? []).map((s: any) => s.name).sort(),
+    providers: (l.fulfillment_providers ?? []).map((p: any) => p.id).sort(),
+    sets: (l.fulfillment_sets ?? []).map((s: any) => ({
+      name: s.name,
+      type: s.type,
+      zones: (s.service_zones ?? [])
+        .map((z: any) => ({
+          name: z.name,
+          countries: (z.geo_zones ?? []).map((g: any) => g.country_code).sort(),
+          options: (z.shipping_options ?? []).map((o: any) => ({
+            name: o.name,
+            data: o.data,
+            provider: o.provider_id,
+            profile: o.shipping_profile?.type,
+            rules: (o.rules ?? []).map((r: any) => `${r.attribute}=${r.value}`).sort(),
+            prices: (o.prices ?? []).map((p: any) => `${p.currency_code}:${p.amount}`).sort(),
+          })),
+        }))
+        .sort(byKey((z: any) => z.name)),
+    })),
+  }))
+
+  return {
+    store,
+    regions: regionList,
+    products: productList,
+    preferences,
+    keys: keyList,
+    users,
+    shipping,
+  }
 }
 
 medusaIntegrationTestRunner({
@@ -250,7 +309,12 @@ medusaIntegrationTestRunner({
       })
 
       it("stores rush_percentage 20 in the Store's metadata, readable by the settings module", async () => {
-        expect(firstRun.created.settings).toEqual(["rush_percentage"])
+        expect(firstRun.created.settings).toEqual([
+          "rush_percentage",
+          "cod_max_total",
+          "delivery_days_standard",
+          "delivery_days_rush",
+        ])
         const storeModule = getContainer().resolve(Modules.STORE)
         const [store] = await storeModule.listStores({})
         expect(store.metadata).toMatchObject({ rush_percentage: 20 })
@@ -264,7 +328,9 @@ medusaIntegrationTestRunner({
         await updateStoresWorkflow(container).run({
           input: {
             selector: { id: store.id },
-            update: { metadata: { rush_percentage: 35, admin_note: "keep me" } },
+            // The store's metadata is replaced as a whole (the region's is merged), as the
+            // admin's metadata editor does it.
+            update: { metadata: { ...store.metadata, rush_percentage: 35, admin_note: "keep me" } },
           },
         })
         const rerun = await seedStore(container, adminOptions)
@@ -734,7 +800,7 @@ medusaIntegrationTestRunner({
         expect(await snapshot(container)).toEqual(clean)
         expect(rerun.repaired).toEqual(
           expect.arrayContaining([
-            "region Pakistan: payment provider",
+            "region Pakistan: payment providers pp_system_default, pp_cod_cod",
             "region Pakistan: price preference",
             "store: currencies pkr, gbp, aed, usd",
           ])
@@ -785,6 +851,237 @@ medusaIntegrationTestRunner({
         expect(third.repaired).toEqual([])
       })
 
+      // --- M1 checkout data (docs/contracts/m1-checkout.md, sections 1 to 4) ---
+
+      it("creates the M1 settings, region minimums, payment providers, size charts and shipping", async () => {
+        expect(firstRun.created).toMatchObject({
+          regionSettings: [],
+          sizeCharts: ["jersey", "t-shirt", "jacket", "fit-kit"],
+          stockLocation: true,
+          fulfillmentSet: true,
+          serviceZones: ["Pakistan", "United Kingdom", "United Arab Emirates", "United States"],
+          shippingOptions: ["Pakistan", "United Kingdom", "United Arab Emirates", "United States"],
+        })
+
+        const { data: regions } = await api.get("/store/regions", { headers })
+        const byCountry = Object.fromEntries(
+          regions.regions.map((r: any) => [r.countries[0].iso_2, r])
+        )
+        expect(byCountry.pk.metadata).toEqual({ tax_final: false, min_garment_quantity: 1 })
+        for (const country of ["gb", "ae", "us"]) {
+          expect(byCountry[country].metadata).toEqual({ tax_final: false, min_garment_quantity: 10 })
+        }
+        for (const [country, expected] of [
+          ["pk", ["pp_cod_cod", "pp_system_default"]],
+          ["gb", ["pp_system_default"]],
+          ["ae", ["pp_system_default"]],
+          ["us", ["pp_system_default"]],
+        ] as const) {
+          const { data } = await api.get(
+            `/store/payment-providers?region_id=${byCountry[country].id}`,
+            { headers }
+          )
+          expect(data.payment_providers.map((p: any) => p.id).sort()).toEqual(expected)
+        }
+
+        const { data: products } = await api.get("/store/products?limit=50&fields=handle,metadata", {
+          headers,
+        })
+        for (const product of products.products) {
+          const chart = product.metadata.size_chart
+          if (product.handle === "rush-add-on") {
+            expect(chart).toBeUndefined()
+            continue
+          }
+          expect(chart).toMatchObject({ draft: true, unit: "cm" })
+          expect(chart.rows.map((r: any) => r.size)).toEqual(seedData.sizes.data)
+          expect(chart.columns[0]).toEqual({ key: "chest", label: "Chest width" })
+        }
+
+        expect(clean.shipping).toEqual([
+          expect.objectContaining({
+            name: "Lahore hub",
+            address: "Lahore, pk",
+            sales_channels: ["Default Sales Channel"],
+            providers: ["manual_manual"],
+          }),
+        ])
+        const zones = clean.shipping[0].sets[0].zones
+        expect(zones.map((z: any) => [z.name, z.countries, z.options.map((o: any) => o.name)])).toEqual([
+          ["Pakistan", ["pk"], ["Delivery in Pakistan"]],
+          ["United Arab Emirates", ["ae"], ["Shipping & duties included"]],
+          ["United Kingdom", ["gb"], ["Shipping & duties included"]],
+          ["United States", ["us"], ["Shipping & duties included"]],
+        ])
+        expect(zones[0].options[0]).toMatchObject({ prices: ["pkr:250"], data: {} })
+        expect(zones[2].options[0]).toMatchObject({ prices: ["gbp:0"], data: { ddp: true } })
+      })
+
+      it("brings a store seeded before M1 up to date, and then changes nothing", async () => {
+        const container = getContainer()
+        const query = container.resolve(ContainerRegistrationKeys.QUERY)
+        const storeModule = container.resolve(Modules.STORE)
+        const regionModule = container.resolve(Modules.REGION)
+
+        // A store as the M0 seed left it: no M1 settings, no COD, no size charts, no shipping.
+        const [store] = await storeModule.listStores({})
+        await updateStoresWorkflow(container).run({
+          input: {
+            selector: { id: store.id },
+            update: {
+              // The Store module replaces metadata as a whole: this is what the M0 seed left.
+              metadata: { rush_percentage: 20 },
+            },
+          },
+        })
+        for (const region of await regionModule.listRegions({})) {
+          await updateRegionsWorkflow(container).run({
+            input: {
+              selector: { id: region.id },
+              update: {
+                metadata: { min_garment_quantity: "" },
+                payment_providers: ["pp_system_default"],
+              },
+            },
+          })
+        }
+        const { data: products } = await query.graph({ entity: "product", fields: ["id"] })
+        await updateProductsWorkflow(container).run({
+          input: {
+            products: (products as any[]).map((p) => ({ id: p.id, metadata: { size_chart: "" } })),
+          },
+        })
+        const { data: sets } = await query.graph({ entity: "fulfillment_set", fields: ["id"] })
+        await deleteFulfillmentSetsWorkflow(container).run({
+          input: { ids: (sets as any[]).map((s) => s.id) },
+        })
+        const { data: locations } = await query.graph({ entity: "stock_location", fields: ["id"] })
+        await deleteStockLocationsWorkflow(container).run({
+          input: { ids: (locations as any[]).map((l) => l.id) },
+        })
+
+        const rerun = await seedStore(container, adminOptions)
+        expect(rerun.created).toMatchObject({
+          settings: ["cod_max_total", "delivery_days_standard", "delivery_days_rush"],
+          regionSettings: [
+            "Pakistan: min_garment_quantity",
+            "United Kingdom: min_garment_quantity",
+            "United Arab Emirates: min_garment_quantity",
+            "United States: min_garment_quantity",
+          ],
+          sizeCharts: ["jersey", "t-shirt", "jacket", "fit-kit"],
+          stockLocation: true,
+          fulfillmentSet: true,
+        })
+        expect(rerun.created.shippingOptions).toHaveLength(4)
+        expect(rerun.repaired).toEqual(["region Pakistan: payment providers pp_cod_cod"])
+        expect(await snapshot(container)).toEqual(clean)
+
+        const third = await seedStore(container, adminOptions)
+        expect(third.repaired).toEqual([])
+        expect(third.created.shippingOptions).toEqual([])
+        expect(third.created.regionSettings).toEqual([])
+      })
+
+      it("keeps an admin's minimum, limit, size chart, extra provider and shipping option on a re-run", async () => {
+        const container = getContainer()
+        const query = container.resolve(ContainerRegistrationKeys.QUERY)
+        const storeModule = container.resolve(Modules.STORE)
+        const regionModule = container.resolve(Modules.REGION)
+        const fulfillment = container.resolve(Modules.FULFILLMENT)
+
+        const [store] = await storeModule.listStores({})
+        await updateStoresWorkflow(container).run({
+          input: {
+            selector: { id: store.id },
+            update: { metadata: { ...store.metadata, cod_max_total: 5000 } },
+          },
+        })
+        const [uk] = await regionModule.listRegions({ name: "United Kingdom" })
+        await updateRegionsWorkflow(container).run({
+          input: {
+            selector: { id: uk.id },
+            update: { metadata: { min_garment_quantity: 12 }, payment_providers: ["pp_system_default", "pp_cod_cod"] },
+          },
+        })
+        const { data: jersey } = await query.graph({
+          entity: "product",
+          fields: ["id"],
+          filters: { handle: "jersey" },
+        })
+        const edited = { draft: false, unit: "cm", columns: [], rows: [] }
+        await updateProductsWorkflow(container).run({
+          input: { products: [{ id: (jersey as any[])[0].id, metadata: { size_chart: edited } }] },
+        })
+        const [option] = await fulfillment.listShippingOptions({ name: "Delivery in Pakistan" })
+        await fulfillment.updateShippingOptions(option.id, { name: "Courier (admin's name)" })
+
+        const rerun = await seedStore(container, adminOptions)
+        expect(rerun.created.settings).toEqual([])
+        expect(rerun.created.regionSettings).toEqual([])
+        expect(rerun.created.sizeCharts).toEqual([])
+        expect(rerun.created.shippingOptions).toEqual([])
+        expect(rerun.repaired).toEqual([])
+
+        const [storeAfter] = await storeModule.listStores({})
+        expect(storeAfter.metadata).toMatchObject({ cod_max_total: 5000 })
+        const { data: ukAfter } = await query.graph({
+          entity: "region",
+          fields: ["metadata", "payment_providers.id"],
+          filters: { id: uk.id },
+        })
+        expect((ukAfter[0] as any).metadata.min_garment_quantity).toBe(12)
+        expect((ukAfter[0] as any).payment_providers.map((p: any) => p.id).sort()).toEqual([
+          "pp_cod_cod",
+          "pp_system_default",
+        ])
+        const { data: jerseyAfter } = await query.graph({
+          entity: "product",
+          fields: ["metadata"],
+          filters: { handle: "jersey" },
+        })
+        expect((jerseyAfter[0] as any).metadata.size_chart).toEqual(edited)
+        expect(await fulfillment.listShippingOptions({})).toHaveLength(4)
+      })
+
+      it("repairs shipping an interrupted run left without links, a zone or options", async () => {
+        const container = getContainer()
+        const query = container.resolve(ContainerRegistrationKeys.QUERY)
+        const link = container.resolve(ContainerRegistrationKeys.LINK)
+        const fulfillment = container.resolve(Modules.FULFILLMENT)
+
+        const { data: locations } = await query.graph({
+          entity: "stock_location",
+          fields: ["id", "sales_channels.id"],
+        })
+        const location = (locations as any[])[0]
+        await link.dismiss({
+          [Modules.STOCK_LOCATION]: { stock_location_id: location.id },
+          [Modules.FULFILLMENT]: { fulfillment_provider_id: "manual_manual" },
+        })
+        await link.dismiss({
+          [Modules.SALES_CHANNEL]: { sales_channel_id: location.sales_channels[0].id },
+          [Modules.STOCK_LOCATION]: { stock_location_id: location.id },
+        })
+        const { data: options } = await query.graph({
+          entity: "shipping_option",
+          fields: ["id", "service_zone.name"],
+        })
+        const ukOption = (options as any[]).find((o) => o.service_zone.name === "United Kingdom")
+        await deleteShippingOptionsWorkflow(container).run({ input: { ids: [ukOption.id] } })
+        const [usZone] = await fulfillment.listServiceZones({ name: "United States" })
+        await deleteServiceZonesWorkflow(container).run({ input: { ids: [usZone.id] } })
+
+        const rerun = await seedStore(container, adminOptions)
+        expect(rerun.repaired).toEqual([
+          "stock location: fulfillment provider",
+          "stock location: sales channel",
+        ])
+        expect(rerun.created.serviceZones).toEqual(["United States"])
+        expect(rerun.created.shippingOptions).toEqual(["United Kingdom", "United States"])
+        expect(await snapshot(container)).toEqual(clean)
+      })
+
       // --- Idempotency ---
 
       it("is idempotent: a second run creates and repairs nothing and changes no counts", async () => {
@@ -802,20 +1099,34 @@ medusaIntegrationTestRunner({
           user: await count("user"),
           price: await count("price"),
           image: await count("product_image"),
+          stockLocation: await count("stock_location"),
+          fulfillmentSet: await count("fulfillment_set"),
+          serviceZone: await count("service_zone"),
+          shippingOption: await count("shipping_option"),
         })
         const before = await counts()
         expect(before.region).toBe(4)
         expect(before.product).toBe(5)
         expect(before.image).toBe(9)
+        expect(before.stockLocation).toBe(1)
+        expect(before.fulfillmentSet).toBe(1)
+        expect(before.serviceZone).toBe(4)
+        expect(before.shippingOption).toBe(4)
 
         const second = await seedStore(container, adminOptions)
         expect(second.created).toEqual({
           regions: [],
           settings: [],
+          regionSettings: [],
           collections: [],
           products: [],
           images: [],
+          sizeCharts: [],
           shippingProfile: false,
+          stockLocation: false,
+          fulfillmentSet: false,
+          serviceZones: [],
+          shippingOptions: [],
           salesChannel: false,
           publishableKey: false,
           adminUser: false,

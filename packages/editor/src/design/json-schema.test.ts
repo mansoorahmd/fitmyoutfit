@@ -146,4 +146,57 @@ describe("product JSON Schema and validateProductDefinition agree", () => {
     expect(validateWithSchema(broken)).toBe(false);
     expect(validateProductDefinition(broken).ok).toBe(false);
   });
+
+  const productCopy = (mutate: (p: Record<string, any>) => void) => {
+    const doc = JSON.parse(JSON.stringify(product)) as Record<string, any>;
+    mutate(doc);
+    return doc;
+  };
+
+  it.each<[string, (p: Record<string, any>) => void]>([
+    ["a piece without an outline", (p) => delete p.pieces[0].outline],
+    ["a piece without a zone", (p) => delete p.pieces[0].zone],
+    ["a piece without regions", (p) => delete p.pieces[0].regions],
+    ["an outline with markup in it", (p) => (p.pieces[0].outline = "<path d='M0 0'/>")],
+    ["an empty outline", (p) => (p.pieces[0].outline = "")],
+    ["a region without a path", (p) => delete p.pieces[0].regions[0].path],
+    ["a region with an extra field", (p) => (p.pieces[0].regions[0].fill = "#FFFFFF")],
+    ["a zone with a reserved id", (p) => (p.pieces[0].zone = "constructor")],
+    ["an image on a piece", (p) => (p.pieces[0].image = "data:image/png;base64,AAAA")],
+  ])("reject %s", (_name, mutate) => {
+    const broken = productCopy(mutate);
+    expect(validateWithSchema(broken)).toBe(false);
+    expect(validateProductDefinition(broken).ok).toBe(false);
+  });
+
+  // Documented difference: the schema checks the structure of the panels, the
+  // validator also parses the paths and checks references and geometry.
+  it.each<[string, (p: Record<string, any>) => void]>([
+    ["an arc command (A: letter not allowed by the pattern either)", (p) => (p.pieces[0].outline = "M0 0 A1 1 0 0 0 1 1 Z")],
+  ])("reject %s, both", (_name, mutate) => {
+    const broken = productCopy(mutate);
+    expect(validateWithSchema(broken)).toBe(false);
+    expect(validateProductDefinition(broken).ok).toBe(false);
+  });
+
+  it.each<[string, (p: Record<string, any>) => void]>([
+    ["path data that does not start with M", (p) => (p.pieces[0].outline = "L 0 0 Z")],
+    ["an open outline", (p) => (p.pieces[4].outline = "M 0 0 H 480 V 30 H 0")],
+    ["an outline outside the piece's box", (p) => (p.pieces[4].outline = "M 0 0 H 900 V 30 H 0 Z")],
+    ["a region of a zone the product does not have", (p) => (p.pieces[0].regions[0].zone = "pockets")],
+    ["a zone no piece draws", (p) => (p.pieces[4].zone = "body")],
+    ["a stretched UV rectangle", (p) => (p.pieces[0].uv.width = 0.3)],
+    ["overlapping UV rectangles", (p) => (p.pieces[1].uv.x = 0.3)],
+  ])("the schema accepts %s, validateProductDefinition rejects it", (_name, mutate) => {
+    const broken = productCopy(mutate);
+    expect(validateWithSchema(broken)).toBe(true);
+    expect(validateProductDefinition(broken).ok).toBe(false);
+  });
+
+  it("the schema's descriptions for path data say where the full check is", () => {
+    const schema = committed("product.schema.json") as any;
+    const piece = schema.properties.pieces.items.properties;
+    expect(piece.outline.description).toContain("validateProductDefinition()");
+    expect(piece.regions.items.properties.path.description).toContain("validateProductDefinition()");
+  });
 });

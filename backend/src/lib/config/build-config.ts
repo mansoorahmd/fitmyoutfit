@@ -351,8 +351,26 @@ export function buildFileModules(env: Env): ModuleEntry[] {
   ]
 }
 
+/**
+ * The payment module with our own providers. Medusa always registers its placeholder provider
+ * `pp_system_default` as well; a provider listed here is registered as `pp_<identifier>_<id>`,
+ * so cash on delivery (identifier "cod", id "cod") is `pp_cod_cod`. Which region may use which
+ * provider is seed data (scripts/seed-data/regions.ts).
+ * The path is relative to the directory Medusa runs in (backend/, or .medusa/server after a build).
+ */
+export function buildPaymentModules(): ModuleEntry[] {
+  return [
+    {
+      resolve: "@medusajs/medusa/payment",
+      options: {
+        providers: [{ resolve: "./src/modules/cod", id: "cod" }],
+      },
+    },
+  ]
+}
+
 export function buildModules(env: Env): ModuleEntry[] {
-  return [...buildRedisModules(env), ...buildFileModules(env)]
+  return [...buildRedisModules(env), ...buildFileModules(env), ...buildPaymentModules()]
 }
 
 /**

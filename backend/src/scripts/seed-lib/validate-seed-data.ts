@@ -4,9 +4,13 @@
  * with a readable list of problems instead of half-seeding the database.
  */
 import type { PlaceholderData, ProductKind, SeedData } from "../seed-data/types"
+import { readCodMaxTotal } from "../../lib/settings/cod-max-total"
+import { readDeliveryDays } from "../../lib/settings/delivery-days"
+import { readMinGarmentQuantity } from "../../lib/settings/min-garment-quantity"
 import { readRushPercentage } from "../../lib/settings/rush-percentage"
 import { isHttpsUrl } from "./product-images"
 
+const PAYMENT_PROVIDER_RE = /^pp_[a-z0-9-]+(_[a-z0-9-]+)+$/
 const CURRENCY_RE = /^[a-z]{3}$/
 const COUNTRY_RE = /^[a-z]{2}$/
 const HANDLE_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
@@ -271,7 +275,171 @@ export function validateSeedData(seed: SeedData): string[] {
   if (!rush.ok) {
     problems.push(`settings: ${rush.error}`)
   }
+  const codLimit = readCodMaxTotal(seed.settings.data)
+  if (!codLimit.ok) {
+    problems.push(`settings: ${codLimit.error}`)
+  }
+  const deliveryDays = readDeliveryDays(seed.settings.data)
+  if (!deliveryDays.ok) {
+    problems.push(`settings: ${deliveryDays.error}`)
+  }
 
+  // Region settings and payment providers
+  for (const region of regions) {
+    const minimum = readMinGarmentQuantity(region.metadata, region.name)
+    if (!minimum.ok) {
+      problems.push(`regions: ${minimum.error}`)
+    }
+    const providers = region.payment_providers
+    if (!Array.isArray(providers) || providers.length === 0) {
+      problems.push(`regions: "${region.name}" needs at least one payment provider`)
+      continue
+    }
+    for (const id of providers) {
+      if (typeof id !== "string" || !PAYMENT_PROVIDER_RE.test(id)) {
+        problems.push(
+          `regions: "${region.name}" payment provider ${JSON.stringify(id)} must look like pp_<identifier>_<id>`
+        )
+      }
+    }
+    for (const id of duplicates(providers)) {
+      problems.push(`regions: "${region.name}" payment provider "${id}" is listed twice`)
+    }
+  }
+
+  problems.push(...validateSizeCharts(seed))
+  problems.push(...validateShipping(seed))
+
+  return problems
+}
+
+/** Products of these kinds carry a size chart (docs/contracts/m1-checkout.md, section 2). */
+const KINDS_WITH_SIZE_CHART: ProductKind[] = ["garment", "fit_kit"]
+
+function validateSizeCharts(seed: SeedData): string[] {
+  const problems: string[] = []
+  const charts = seed.sizeCharts.data
+  const sizes = seed.sizes.data
+  const products = seed.products.data
+  const productHandles = new Set(products.map((p) => p.handle))
+  for (const handle of Object.keys(charts)) {
+    if (!productHandles.has(handle)) {
+      problems.push(`sizeCharts: "${handle}" is not a product`)
+    }
+  }
+  for (const product of products) {
+    const chart = charts[product.handle]
+    const label = `sizeCharts: "${product.handle}"`
+    if (!KINDS_WITH_SIZE_CHART.includes(product.kind)) {
+      if (chart) {
+        problems.push(`${label} is a ${product.kind}, which has no size chart`)
+      }
+      continue
+    }
+    if (!chart) {
+      problems.push(`${label} needs a size chart`)
+      continue
+    }
+    if (typeof chart.draft !== "boolean") {
+      problems.push(`${label} draft must be true or false`)
+    }
+    if (chart.unit !== "cm") {
+      problems.push(`${label} unit must be "cm"`)
+    }
+    const columns = Array.isArray(chart.columns) ? chart.columns : []
+    if (columns.length === 0) {
+      problems.push(`${label} needs at least one column`)
+    }
+    for (const column of columns) {
+      if (typeof column.key !== "string" || !/^[a-z][a-z0-9_]*$/.test(column.key)) {
+        problems.push(`${label} column key ${JSON.stringify(column.key)} must be lower-case letters, digits and _`)
+      }
+      if (typeof column.label !== "string" || column.label.trim() === "") {
+        problems.push(`${label} column "${column.key}" needs a label`)
+      }
+    }
+    const keys = columns.map((c) => c.key)
+    for (const key of duplicates(keys)) {
+      problems.push(`${label} column "${key}" is listed twice`)
+    }
+    const rows = Array.isArray(chart.rows) ? chart.rows : []
+    const rowSizes = rows.map((r) => r.size)
+    // Every product with a chart lists every size in order: the garments sell them all, and the
+    // fit kit holds a sample of each.
+    if (rowSizes.join("|") !== sizes.join("|")) {
+      problems.push(`${label} rows must be the sizes ${sizes.join(", ")} in that order`)
+    }
+    for (const row of rows) {
+      const values = row.values ?? {}
+      for (const key of keys) {
+        const value = values[key]
+        if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+          problems.push(`${label} size ${row.size} ${key} must be a number above zero`)
+        }
+      }
+      for (const key of Object.keys(values)) {
+        if (!keys.includes(key)) {
+          problems.push(`${label} size ${row.size} has a value for unknown column "${key}"`)
+        }
+      }
+    }
+  }
+  return problems
+}
+
+function validateShipping(seed: SeedData): string[] {
+  const problems: string[] = []
+  const shipping = seed.shipping.data
+  const location = shipping.stock_location
+  if (!location || typeof location.name !== "string" || location.name.trim() === "") {
+    problems.push("shipping: stock_location needs a name")
+  } else if (!COUNTRY_RE.test(location.address?.country_code ?? "")) {
+    problems.push("shipping: stock_location country_code must be 2 lower-case letters")
+  }
+  if (typeof shipping.fulfillment_set_name !== "string" || shipping.fulfillment_set_name.trim() === "") {
+    problems.push("shipping: fulfillment_set_name must not be blank")
+  }
+  const options = shipping.options ?? []
+  const regionByCountry = new Map(
+    seed.regions.data.flatMap((r) => r.country_codes.map((code) => [code, r] as const))
+  )
+  for (const option of options) {
+    const label = `shipping: option for "${option.region_country_code}"`
+    if (!regionByCountry.has(option.region_country_code)) {
+      problems.push(`${label} does not match a seed region's country`)
+    }
+    if (typeof option.name !== "string" || option.name.trim() === "") {
+      problems.push(`${label} needs a name`)
+    }
+    if (typeof option.service_zone_name !== "string" || option.service_zone_name.trim() === "") {
+      problems.push(`${label} needs a service_zone_name`)
+    }
+    if (typeof option.amount !== "number" || !Number.isFinite(option.amount) || option.amount < 0) {
+      problems.push(`${label} amount must be a number, 0 or more`)
+    } else if (!hasAtMostTwoDecimals(option.amount)) {
+      problems.push(`${label} amount has more than 2 decimals`)
+    }
+    if (typeof option.ddp !== "boolean") {
+      problems.push(`${label} ddp must be true or false`)
+    }
+    if (!option.type || !option.type.code?.trim() || !option.type.label?.trim()) {
+      problems.push(`${label} needs a type with a code and a label`)
+    }
+  }
+  for (const country of duplicates(options.map((o) => o.region_country_code))) {
+    problems.push(`shipping: more than one option for "${country}"`)
+  }
+  for (const name of duplicates(options.map((o) => o.service_zone_name))) {
+    problems.push(`shipping: service zone name "${name}" is used twice`)
+  }
+  for (const code of duplicates(options.map((o) => o.type?.code ?? ""))) {
+    problems.push(`shipping: type code "${code}" is used twice`)
+  }
+  for (const region of seed.regions.data) {
+    if (!options.some((o) => region.country_codes.includes(o.region_country_code))) {
+      problems.push(`shipping: region "${region.name}" has no shipping option`)
+    }
+  }
   return problems
 }
 
