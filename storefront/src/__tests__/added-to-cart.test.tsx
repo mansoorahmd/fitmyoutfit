@@ -103,6 +103,15 @@ const renderPage = (product = jersey(), initialCounted: number | null = null) =>
     </AddedToCartProvider>
   )
 
+/**
+ * "View cart" is the secondary button (navy outline, no fill): red is for
+ * the one main action, "Add to cart", right above it (coordinator, S1-3b).
+ */
+const expectSecondary = (link: HTMLElement) => {
+  expect(link).toHaveClass("border-brand-ink", "bg-transparent", "text-brand-ink")
+  expect(link.className).not.toMatch(/brand-primary/)
+}
+
 const addM = async () => {
   fireEvent.click(screen.getByRole("radio", { name: "M" }))
   await act(async () => {
@@ -129,6 +138,7 @@ describe("Added to your cart, below 1024 px", () => {
     )
     expect(within(box).getByTestId("minimum-progress")).toHaveTextContent("5 of 10 garment pieces")
     expect(within(box).getByTestId("added-view-cart")).toHaveAttribute("href", "/gb/cart")
+    expectSecondary(within(box).getByTestId("added-view-cart"))
     // no checkout button in the confirmation
     expect(within(box).queryByText(/checkout/i)).toBeNull()
     expect(screen.queryByTestId("added-popover")).toBeNull()
@@ -176,6 +186,8 @@ describe("Added to your cart, from 1024 px", () => {
     const popover = screen.getByTestId("added-popover")
     expect(popover.closest("header")).not.toBeNull()
     expect(screen.queryByTestId("added-inline")).toBeNull()
+    expectSecondary(within(popover).getByTestId("added-view-cart"))
+    expect(within(popover).getByTestId("added-keep-shopping")).toHaveClass("underline")
     // not modal: focus stays where it was
     expect(popover).not.toContainElement(document.activeElement as HTMLElement)
     fireEvent.click(within(popover).getByRole("button", { name: "Close" }))
@@ -258,6 +270,17 @@ describe("size chart on the product page", () => {
     expect(chosen).toHaveTextContent("MYour choice")
     expect(within(sheet).getByTestId("size-chart-fit-kit")).toHaveAttribute("href", "/gb/products/fit-kit")
     pushState.mockRestore()
+  })
+
+  it("opening it never pulls the chosen row to the edge with scrollIntoView, which hid the draft note", () => {
+    const scrollIntoView = vi.fn()
+    Element.prototype.scrollIntoView = scrollIntoView
+    renderPage(jersey({ size_chart: chartFixture() }))
+    fireEvent.click(screen.getByRole("radio", { name: "L" }))
+    fireEvent.click(screen.getByTestId("size-chart-link"))
+    const sheet = screen.getByTestId("size-chart-sheet")
+    expect(sheet.querySelector('[data-chosen="true"]')).toHaveTextContent("LYour choice")
+    expect(scrollIntoView).not.toHaveBeenCalled()
   })
 
   it("switches to inches", () => {

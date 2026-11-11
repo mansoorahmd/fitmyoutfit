@@ -101,7 +101,8 @@ const AddedToCart = ({ view, variant, onClose, className }: AddedToCartProps) =>
       {view.minimum && <MinimumProgress minimum={view.minimum} compact />}
 
       <div className="flex flex-col items-stretch gap-1">
-        <ButtonLink href="/cart" fullWidth data-testid="added-view-cart">
+        {/* Secondary, not red: "Add to cart" right above is the view's one main action. */}
+        <ButtonLink href="/cart" variant="secondary" fullWidth data-testid="added-view-cart">
           {words.viewCart}
         </ButtonLink>
         <Button variant="text" onClick={onClose} className="self-center" data-testid="added-keep-shopping">
