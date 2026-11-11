@@ -16,7 +16,7 @@ E1 is done when the editor demo shows the placeholder jersey with its 2D pattern
 | --- | --- | --- | --- | --- |
 | S1-1 | Backend checkout foundations: stock location and one shipping option per region; placeholder payment and cash on delivery; settings for the minimum quantity, the cash-on-delivery limit and the delivery days; size charts as product data; the three rules as plain modules; the `checkout-rules` route; refusal at cart completion | backend-dev (Opus) | In progress since 11 Nov | The five API tests in section 7 of the contract pass; root lint, type-check and tests pass; QA review |
 | S1-2 | Design specifications in direction A: cart, checkout, order confirmation, sign-in and account pages, the size chart on the product page | storefront-designer | **Done 11 Nov** (`6258653`, on `master`): [05-m1-pages.md](design/05-m1-pages.md). Read by the coordinator; choices recorded in [decision 008](decisions/008-m1-cart-and-checkout-choices.md) | Specs in `docs/design/` at 360, 768 and 1280 px with every state; promises only in the wording the contract and content files give |
-| E1 | Editor: 2D SVG pattern panels as textures on the 3D model; colour per zone; orbit camera | editor-3d-dev (Opus) | In progress since 11 Nov | Demo shows it; the design stays data (no flattened image in the design JSON); tests; screenshots opened by the coordinator |
+| E1 | Editor: 2D SVG pattern panels as textures on the 3D model; colour per zone; orbit camera | editor-3d-dev (Opus) | **Done, merged 11 Nov (`f0d9473`).** Coordinator ran lint, type-check, tests (322, was 243) and the build on the branch (all exit 0) and opened the screenshots at 1366 px and 390 px: front, back, a zone colour change, the flat pattern. Not checked: touch and speed on a real phone | Demo shows it; the design stays data (no flattened image in the design JSON); tests; screenshots opened by the coordinator |
 | S1-3 | Storefront, first part: shared parts from the specification (fields, alert, quantity stepper, money with currency codes); cart page; "Added to your cart" confirmation in place of the hover dropdown; size chart on the product page; region from the visitor's country; carry-overs (`/sitemap.xml` answers 404, `images.qualities`) | storefront-dev (Opus) | In progress since 11 Nov | Tests; root lint, type-check and tests pass; screenshots at 390 and 1366 px opened by the coordinator |
 | S1-4 | Storefront: cart and checkout to the specification, with the minimum-quantity message, cash on delivery, the shipping line and the delivery date | storefront-dev | Waits for S1-1 and S1-2 | Both "done when" lines seen in a real browser on a phone size |
 | S1-5 | Storefront: sign-up, login and order history to the specification | storefront-dev | Waits for S1-2 | A new customer signs up, orders and sees the order in the history |
@@ -29,6 +29,14 @@ E1 is done when the editor demo shows the placeholder jersey with its 2D pattern
 **Placeholders chosen by the coordinator for M1, to be replaced by the founders:** cash-on-delivery limit PKR 20,000; delivery fee in Pakistan PKR 250; export minimum 10 pieces (from dev-plan.md); draft size-chart measurements. Export prices are treated as including shipping and duties, so the export shipping line is 0.
 
 **Rules decided by the coordinator, to be confirmed by the founders:** the minimum counts garment pieces across the whole cart; the fit kit and the rush add-on do not count; a fit kit can be bought alone in any region.
+
+**After E1, for the 3D artist and pattern maker, before the real jersey is modelled:**
+- Each pattern piece needs its own area in the model's UV layout. Pieces may not overlap (for example both sleeves mirrored onto one area), because a name or logo on one sleeve needs its own place.
+- Each piece's UV area must keep the proportions of the flat pattern piece (within 1%).
+- The editor reads each piece's outline and colour regions as SVG paths in millimetres. Lines and Bezier curves are supported; arcs are not.
+- The placeholder jersey is a simple generated shape (a tube body, a visible seam at the shoulder). It is a stand-in and is replaced by the real model.
+
+**Editor demo:** `npm run dev -w packages/editor`, then the address it prints. On the dev machine it runs at http://localhost:5183 next to the preview.
 
 ## Previous milestone: M0 Setup (finished 11 Nov 2026)
 M0 Setup (called Sprint 0 until 11 Nov; the plan now uses milestones). Started 10 Nov 2026. **Finished on 11 Nov 2026: the "done when" below was seen working on `master` (`f420b08`) from a clean install.** One thing is not verified: the CI result on GitHub, which cannot be read from this machine. M1 (basic store) and the 3D editor steps start only on the founder's yes.
