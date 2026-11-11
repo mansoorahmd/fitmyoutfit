@@ -249,6 +249,7 @@ Assumptions the founders have not confirmed:
 ## Standing instructions from the founder
 
 - **Retail conventions (11 Nov):** where a checkout or order question has no answer in the plan, do what ordinary retail stores on Shopify do today.
+- **Placeholders stay until the whole project works (12 Nov):** the founder is in no hurry to give the real numbers (cash-on-delivery limit, delivery fee, export minimum, rush percentage) or the size chart. Functionality and the user journey come first; the numbers and the size chart are settled once the complete project is working. Do not ask for them again before then.
 
 - **Worker models (10 Nov 2026):** use the Opus model for difficult worker tasks. The coordinator passes the model override on those tasks; routine and mechanical tasks stay on each agent's default model. Counted as difficult so far: Medusa backend work (modules, workflows, seed, payments) and the reviews of it.
 - **The coordinator takes the decisions (10 Nov, late).** The founder said: "you are co founder ... and you also own the code so take decisions." From now on the coordinator chooses the storefront's look, the design direction and other product and code decisions without asking first, records each one here or in `docs/decisions/`, and tells the founder afterwards. Still asked first: prices and money terms, the customer promises in `critiques/DECISIONS.md`, and any edit to `plan.md` or `critiques/DECISIONS.md`.
