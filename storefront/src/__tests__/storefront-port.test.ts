@@ -46,6 +46,11 @@ describe("STOREFRONT_PORT", () => {
     expect(JSON.stringify(pkg.scripts)).not.toMatch(/-p\s*\d|--port/)
   })
 
+  it("the storefront asks for Node 22 or later, as we develop and run CI on", () => {
+    const pkg = JSON.parse(readFileSync(path.join(storefront, "package.json"), "utf8"))
+    expect(pkg.engines.node).toBe(">=22")
+  })
+
   it(
     "the wrapper stops with the message, before Next.js starts, on an invalid value",
     () => {
