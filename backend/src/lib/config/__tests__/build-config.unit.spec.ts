@@ -8,6 +8,7 @@ import {
   buildRedisModules,
   ConfigError,
   DEV_ONLY_VALUES,
+  devValueMatch,
   MIN_SECRET_LENGTH,
   productionSecretProblems,
   usesDevDatabaseCredentials,
@@ -195,7 +196,7 @@ describe("production secrets", () => {
     )
   })
 
-  it.each(["JWT_SECRET", "COOKIE_SECRET"])(
+  it.each(["JWT_SECRET", "COOKIE_SECRET", "S3_SECRET_ACCESS_KEY"])(
     "refuses a %s shorter than 16 characters in production, and accepts 16",
     (name) => {
       expect(MIN_SECRET_LENGTH).toBe(16)
@@ -210,6 +211,51 @@ describe("production secrets", () => {
       ).not.toThrow()
     }
   )
+
+  it("refuses a 1-character S3_SECRET_ACCESS_KEY in production (QA, third review)", () => {
+    expect(() => buildMedusaConfig({ ...goodProductionEnv, S3_SECRET_ACCESS_KEY: "x" })).toThrow(
+      "S3_SECRET_ACCESS_KEY is shorter than 16 characters"
+    )
+  })
+
+  it("has no minimum length for S3_ACCESS_KEY_ID, which is an identifier, not a secret", () => {
+    expect(productionSecretProblems({ ...goodProductionEnv, S3_ACCESS_KEY_ID: "AKIA" })).toEqual([])
+  })
+
+  // Every dev value, with something added before, after or both, in another letter case and
+  // with surrounding spaces. QA started the backend with the dev JWT secret plus "1".
+  const devValueVariants = Object.entries(DEV_ONLY_VALUES).flatMap(([name, values]) =>
+    values.flatMap((dev) => [
+      [name, `${dev}1`],
+      [name, `1${dev}`],
+      [name, ` prefix-${dev.toUpperCase()}-and-a-long-suffix `],
+    ])
+  )
+  it.each(devValueVariants)(
+    "refuses %s=%j in production: it contains a dev value",
+    (name, value) => {
+      expect(devValueMatch(name, value)).toBe("contains")
+      expect(() => buildMedusaConfig({ ...goodProductionEnv, [name]: value })).toThrow(
+        `${name} contains a dev-only value`
+      )
+    }
+  )
+
+  it("refuses the dev JWT secret with 1 appended (QA's case), and says which rule it breaks", () => {
+    const value = `${devValues.JWT_SECRET}1`
+    expect(productionSecretProblems({ ...goodProductionEnv, JWT_SECRET: value })).toEqual([
+      "JWT_SECRET contains a dev-only value (from .env.example)",
+    ])
+  })
+
+  it("tells an exact dev value from one that contains it, and accepts unrelated values", () => {
+    expect(devValueMatch("S3_SECRET_ACCESS_KEY", " MinioAdmin ")).toBe("is")
+    expect(devValueMatch("S3_SECRET_ACCESS_KEY", "minioadmin-2026-rotated")).toBe("contains")
+    // A dev value of another variable does not count, nor does a part of a dev value.
+    expect(devValueMatch("S3_SECRET_ACCESS_KEY", "dev-admin-password-and-more")).toBeUndefined()
+    expect(devValueMatch("JWT_SECRET", "dev-only-jwt-secret-real-1234")).toBeUndefined()
+    expect(devValueMatch("UNKNOWN", "minioadmin")).toBeUndefined()
+  })
 
   it.each([
     "postgres://medusa:medusa@localhost:5433/medusa",
@@ -230,6 +276,41 @@ describe("production secrets", () => {
     expect(
       productionSecretProblems({ ...goodProductionEnv, DATABASE_URL: undefined })
     ).toEqual([])
+  })
+
+  // QA, third review: the dev login reached pg other ways than user:password@ in the URL.
+  it.each([
+    ["the password as a query parameter", "postgres://medusa@localhost:5433/db?password=medusa", {}],
+    ["both as query parameters", "postgres://other:real@db/x?user=MEDUSA&password=%20Medusa%20", {}],
+    ["the last of repeated parameters", "postgres://db/x?password=real&password=medusa&user=medusa", {}],
+    ["a URL with an empty host", "postgres://medusa:medusa@/db", {}],
+    ["PGPASSWORD with no password in the URL", "postgres://medusa@localhost:5433/db", { PGPASSWORD: "medusa" }],
+    ["PGUSER and PGPASSWORD", "postgres://localhost:5433/db", { PGUSER: " Medusa ", PGPASSWORD: "MEDUSA" }],
+    ["PGUSER and PGPASSWORD with DATABASE_URL unset", undefined, { PGUSER: "medusa", PGPASSWORD: "medusa" }],
+    ["PGUSER and PGPASSWORD with a socket path", "/var/run/postgresql db", { PGUSER: "medusa", PGPASSWORD: "medusa" }],
+    ["PGPASSWORD and the OS user", "postgres://db/x", { PGPASSWORD: "medusa", USERNAME: "medusa", USER: "medusa" }],
+  ] as [string, string | undefined, Record<string, string>][])(
+    "refuses the dev database login given through %s",
+    (_label, url, extra) => {
+      const env = { ...goodProductionEnv, DATABASE_URL: url, ...extra }
+      expect(usesDevDatabaseCredentials(url, env)).toBe(true)
+      expect(() => buildMedusaConfig(env)).toThrow(
+        "DATABASE_URL uses the dev-only database user and password"
+      )
+    }
+  )
+
+  it("accepts a real login even when PGUSER / PGPASSWORD hold the dev values (the URL wins)", () => {
+    const env = {
+      ...goodProductionEnv,
+      DATABASE_URL: "postgres://store:real-password@db/medusa",
+      PGUSER: "medusa",
+      PGPASSWORD: "medusa",
+    }
+    expect(productionSecretProblems(env)).toEqual([])
+    expect(
+      usesDevDatabaseCredentials("postgres://medusa@db/x?password=real-password", env)
+    ).toBe(false)
   })
 
   it("knows the database credentials in .env.example (the list cannot drift from the file)", () => {
