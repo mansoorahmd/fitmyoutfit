@@ -26,6 +26,9 @@
     --c-border-strong: 107 118 137; /* #6B7689 control and card outlines, 4.6:1 */
     --c-success: 15 122 61; /* #0F7A3D */
     --c-error: 180 35 24; /* #B42318 */
+    /* Alert backgrounds only (docs/design/05-m1-pages.md, 2.1). */
+    --c-error-surface: 253 243 242; /* #FDF3F2 error text on it 6.0:1 */
+    --c-success-surface: 238 247 241; /* #EEF7F1 success text on it 5.0:1 */
     --c-focus: 37 99 235; /* #2563EB focus ring */
 
     --radius-control: 4px;

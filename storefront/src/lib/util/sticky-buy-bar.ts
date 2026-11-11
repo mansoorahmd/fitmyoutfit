@@ -46,6 +46,30 @@ export const isFullyInView = (
   viewportHeight: number
 ): boolean => box.top >= headerBottom && box.bottom <= viewportHeight
 
+export type StickyCheckoutInput = {
+  /** The summary's checkout button, or null before it exists. */
+  checkoutButton: VerticalBox | null
+  footerTop: number | null
+  headerBottom: number
+  viewportHeight: number
+}
+
+/**
+ * The cart's sticky checkout bar (docs/design/05-m1-pages.md, 4.2): shown
+ * while the summary's checkout button is not wholly on screen, above it or
+ * below it (on a phone it starts below the lines), and hidden while the
+ * footer is on screen, like the buy bar.
+ */
+export const showStickyCheckoutBar = ({
+  checkoutButton,
+  footerTop,
+  headerBottom,
+  viewportHeight,
+}: StickyCheckoutInput): boolean =>
+  checkoutButton !== null &&
+  !isFullyInView(checkoutButton, headerBottom, viewportHeight) &&
+  !isFooterVisible(footerTop, viewportHeight)
+
 /**
  * What the customer has chosen, for the bar: "M", or "M / Navy" with
  * several options. Undefined until every option has a value, and for a
@@ -73,3 +97,15 @@ export const stickyBarSummary = (
   chosen: string | undefined,
   price: string | undefined
 ): string => [chosen, price].filter(Boolean).join(" · ")
+
+/**
+ * The chosen size with the quantity when it is above 1, for the buy bar
+ * (docs/design/05-m1-pages.md, 4.8): "M × 4". `format` is the wording
+ * ("{chosen} × {quantity}") filled in by the caller.
+ */
+export const chosenWithQuantity = (
+  chosen: string | undefined,
+  quantity: number,
+  format: (chosen: string, quantity: number) => string
+): string | undefined =>
+  chosen && quantity > 1 ? format(chosen, quantity) : chosen

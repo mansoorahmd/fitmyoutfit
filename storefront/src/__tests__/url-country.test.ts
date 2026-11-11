@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { urlHasCountryCode } from "@lib/util/url-country"
+import { countryCodeStatus, urlHasCountryCode } from "@lib/util/url-country"
 
 describe("urlHasCountryCode", () => {
   it("matches the first segment exactly", () => {
@@ -18,5 +18,28 @@ describe("urlHasCountryCode", () => {
 
   it("is false without a country code", () => {
     expect(urlHasCountryCode("/pk", undefined)).toBe(false)
+  })
+})
+
+describe("countryCodeStatus", () => {
+  const regions = [
+    { countries: [{ iso_2: "pk" }] },
+    { countries: [{ iso_2: "gb" }] },
+    { countries: null },
+  ]
+
+  it("knows a country one of the regions sells to", () => {
+    expect(countryCodeStatus("pk", regions)).toBe("region")
+    expect(countryCodeStatus("GB", regions)).toBe("region")
+  })
+
+  it("does not know file names and other segments, so they are not found", () => {
+    for (const segment of ["sitemap.xml", "robots.txt", "fr", "pkx", "", undefined]) {
+      expect(countryCodeStatus(segment, regions)).toBe("unknown")
+    }
+  })
+
+  it("is unverified when the regions could not be read", () => {
+    expect(countryCodeStatus("sitemap.xml", null)).toBe("unverified")
   })
 })

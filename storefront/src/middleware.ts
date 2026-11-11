@@ -1,6 +1,7 @@
 import { HttpTypes } from "@medusajs/types"
 import { NextRequest, NextResponse } from "next/server"
 import { urlHasCountryCode as hasCountryCode } from "@lib/util/url-country"
+import { chooseVisitorCountry } from "@lib/util/visitor-country"
 
 const BACKEND_URL = process.env.MEDUSA_BACKEND_URL
 const PUBLISHABLE_API_KEY = process.env.NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY
@@ -64,34 +65,21 @@ async function getRegionMap(cacheId: string) {
 }
 
 /**
- * Fetches regions from Medusa and sets the region cookie.
- * @param request
- * @param response
+ * The visitor's country: the one in the URL (the region switch), else the
+ * first host country header with a region, else the default region. The
+ * rule and the header names are in lib/util/visitor-country.ts.
  */
 async function getCountryCode(
   request: NextRequest,
   regionMap: Map<string, HttpTypes.StoreRegion | number>
 ) {
   try {
-    let countryCode
-
-    const vercelCountryCode = request.headers
-      .get("x-vercel-ip-country")
-      ?.toLowerCase()
-
-    const urlCountryCode = request.nextUrl.pathname.split("/")[1]?.toLowerCase()
-
-    if (urlCountryCode && regionMap.has(urlCountryCode)) {
-      countryCode = urlCountryCode
-    } else if (vercelCountryCode && regionMap.has(vercelCountryCode)) {
-      countryCode = vercelCountryCode
-    } else if (regionMap.has(DEFAULT_REGION)) {
-      countryCode = DEFAULT_REGION
-    } else if (regionMap.keys().next().value) {
-      countryCode = regionMap.keys().next().value
-    }
-
-    return countryCode
+    return chooseVisitorCountry({
+      pathname: request.nextUrl.pathname,
+      header: (name) => request.headers.get(name),
+      regionCountries: regionMap,
+      defaultCountry: DEFAULT_REGION,
+    })
   } catch (error) {
     if (process.env.NODE_ENV === "development") {
       console.error(

@@ -28,6 +28,9 @@ const BRAND_COLOR_TOKENS = [
   "success",
   "error",
   "focus",
+  // M1 (docs/design/05-m1-pages.md, 2.1): alert backgrounds only
+  "error-surface",
+  "success-surface",
 ]
 
 const brandColors = Object.fromEntries(

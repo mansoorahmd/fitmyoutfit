@@ -2,7 +2,10 @@ import { HttpTypes } from "@medusajs/types"
 
 import { productContent } from "@content/product"
 import { descriptionOf, fabricRows } from "@lib/util/product-page"
+import { productKind } from "@lib/util/product-kind"
+import { parseSizeChart } from "@lib/util/size-chart"
 import ChevronDown from "@modules/common/icons/chevron-down"
+import { SizeChartBody } from "@modules/products/components/size-chart"
 
 const Item = ({
   title,
@@ -40,8 +43,11 @@ const ProductDetails = ({ product }: { product: HttpTypes.StoreProduct }) => {
   const { details } = productContent
   const description = descriptionOf(product)
   const rows = fabricRows(product, details.rows)
+  // The fit kit shows its chart under the price instead ("Sizes in the kit").
+  const chart =
+    productKind(product) === "fit_kit" ? null : parseSizeChart(product.metadata)
 
-  if (!description && rows.length === 0) {
+  if (!description && rows.length === 0 && !chart) {
     return null
   }
 
@@ -64,6 +70,15 @@ const ProductDetails = ({ product }: { product: HttpTypes.StoreProduct }) => {
               </div>
             ))}
           </dl>
+        </Item>
+      )}
+      {chart && (
+        <Item title={productContent.sizeChart.title} testId="product-size-chart">
+          <SizeChartBody
+            chart={chart}
+            productTitle={product.title}
+            showFitKitLink
+          />
         </Item>
       )}
     </div>

@@ -20,6 +20,13 @@ const CURRENCY_FRACTION_DIGITS: Record<string, { min: number; max: number }> = {
   pkr: { min: 0, max: 2 },
 }
 
+/**
+ * Every amount in the store, on every page: the currency code, then the
+ * number ("PKR 3,500", "GBP 22.00", "AED 95.00", "USD 28.00"). One format
+ * for all four regions, and no "$" that could be read as another dollar
+ * (decision 008, 1). Intl puts a no-break space after the code, so the code
+ * never ends a line on its own.
+ */
 export const convertToLocale = ({
   amount,
   currency_code,
@@ -36,6 +43,7 @@ export const convertToLocale = ({
   return new Intl.NumberFormat(locale, {
     style: "currency",
     currency: currency_code,
+    currencyDisplay: "code",
     minimumFractionDigits: minimumFractionDigits ?? pinned?.min,
     maximumFractionDigits: maximumFractionDigits ?? pinned?.max,
   }).format(amount)

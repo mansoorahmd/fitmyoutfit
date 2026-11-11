@@ -13,19 +13,23 @@ import {
  * The price block (docs/design/03-direction.md, "Product page" 4): the price
  * in the region's currency ("PKR 3,500") and "per piece", styled like the
  * product card's price; "Tax not final" while the region's tax is not final;
- * and in export regions "Shipping and duties included". No minimum is shown
- * until the founders set it (decision 007).
+ * and in export regions "Shipping and duties included", then the minimum
+ * order line when the caller passes one (docs/design/05-m1-pages.md, 5.2;
+ * shown in development only until the founders confirm it, decision 008).
  */
 export default function ProductPrice({
   product,
   variant,
   region,
   countryCode,
+  minimum,
 }: {
   product: HttpTypes.StoreProduct
   variant?: HttpTypes.StoreProductVariant
   region?: Pick<HttpTypes.StoreRegion, "metadata"> | null
   countryCode?: string
+  /** The minimum order line, under "Shipping and duties included". */
+  minimum?: React.ReactNode
 }) {
   const { cheapestPrice, variantPrice } = getProductPrice({
     product,
@@ -68,6 +72,7 @@ export default function ProductPrice({
             <span className="type-body font-normal">{fromPrefix} </span>
           )}
           <span
+            dir="ltr"
             data-testid="product-price"
             data-value={selectedPrice.calculated_price_number}
           >
@@ -93,6 +98,7 @@ export default function ProductPrice({
           {exportNote}
         </p>
       )}
+      {minimum}
     </div>
   )
 }

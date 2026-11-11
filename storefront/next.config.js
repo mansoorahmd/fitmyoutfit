@@ -25,6 +25,11 @@ const nextConfig = {
     ignoreBuildErrors: true,
   },
   images: {
+    // Every `quality` the code asks next/image for: 75 is the default, 50 is
+    // the thumbnail's. Next 16 refuses any value not listed here (its
+    // default list is [75]), so add a value here when a component uses it.
+    // src/__tests__/image-qualities.test.ts checks the code against it.
+    qualities: [50, 75],
     remotePatterns: [
       {
         protocol: "http",
