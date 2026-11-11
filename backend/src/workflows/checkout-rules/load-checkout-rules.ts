@@ -13,7 +13,11 @@ import {
   evaluateCheckoutRules,
   type CheckoutRules,
 } from "../../lib/rules/checkout-rules"
-import { calendarDateIn, DELIVERY_TIME_ZONE } from "../../lib/rules/delivery-promise"
+import {
+  calendarDateIn,
+  DELIVERY_TIME_ZONE,
+  type DeliverySpeed,
+} from "../../lib/rules/delivery-promise"
 
 type Metadata = Record<string, unknown> | null | undefined
 
@@ -33,6 +37,15 @@ type CartRow = {
 export type LoadedCheckoutRules = {
   rules: CheckoutRules
   cart: { id: string; currencyCode: string; total: number }
+}
+
+/**
+ * Which delivery date applies to the cart. Always "standard" for now: the rush charge is a later
+ * M1 task (S1-6), which answers this from the cart (for example from a rush line) and changes
+ * nothing else. The route, the completion check and the date kept on the order all follow it.
+ */
+function cartDeliverySpeed(): DeliverySpeed {
+  return "standard"
 }
 
 function toNumber(value: unknown): number {
@@ -86,7 +99,8 @@ export async function loadCheckoutRules(
         ? [
             {
               quantity: toNumber(item.quantity),
-              kind: (item.product?.metadata?.kind as string | undefined) ?? null,
+              // Passed on as it is: the rule counts a missing or unknown kind as a garment.
+              kind: item.product?.metadata?.kind,
             },
           ]
         : []
@@ -100,6 +114,7 @@ export async function loadCheckoutRules(
     total,
     storeSettings,
     baseDate: calendarDateIn(now, DELIVERY_TIME_ZONE),
+    deliverySpeed: cartDeliverySpeed(),
   })
   if (!result.ok) {
     throw new MedusaError(
@@ -113,19 +128,21 @@ export async function loadCheckoutRules(
 /**
  * Throws NOT_ALLOWED (HTTP 400, Medusa's usual `type` and `message` body) when the cart breaks a
  * rule: below the minimum (only when `checkMinimum`), or cash on delivery when it is not available.
+ * Returns the rules it checked.
  */
 export async function assertCheckoutAllowed(
   container: MedusaContainer,
   cartId: string,
   options: { usesCashOnDelivery: boolean; checkMinimum: boolean }
-): Promise<void> {
-  const { rules, cart } = await loadCheckoutRules(container, cartId)
-  const refusals = checkoutRefusals(rules, {
+): Promise<LoadedCheckoutRules> {
+  const loaded = await loadCheckoutRules(container, cartId)
+  const refusals = checkoutRefusals(loaded.rules, {
     ...options,
-    currencyCode: cart.currencyCode,
-    total: cart.total,
+    currencyCode: loaded.cart.currencyCode,
+    total: loaded.cart.total,
   })
   if (refusals.length > 0) {
     throw new MedusaError(MedusaError.Types.NOT_ALLOWED, refusals.join(" "))
   }
+  return loaded
 }
