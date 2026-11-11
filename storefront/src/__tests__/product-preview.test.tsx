@@ -86,9 +86,9 @@ describe("ProductPreview (product card)", () => {
   })
 
   it.each([
-    ["gbp", 22, "£22.00"],
+    ["gbp", 22, "GBP 22.00"],
     ["aed", 95, "AED 95.00"],
-    ["usd", 28, "$28.00"],
+    ["usd", 28, "USD 28.00"],
   ])("shows %s prices in that currency", async (currency, amount, expected) => {
     render(
       await ProductPreview({
@@ -116,7 +116,7 @@ describe("ProductPreview (product card)", () => {
 
     render(await ProductPreview({ product, region }))
 
-    expect(screen.getByTestId("price")).toHaveTextContent("$20.00")
+    expect(screen.getByTestId("price")).toHaveTextContent("USD 20.00")
   })
 })
 

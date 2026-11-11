@@ -226,7 +226,9 @@ describe("price block", () => {
       />
     )
 
-    expect(screen.getByTestId("product-price").textContent).toBe("£30.00")
+    expect(
+      screen.getByTestId("product-price").textContent?.replace(/\s/g, " ")
+    ).toBe("GBP 30.00")
     expect(screen.getByTestId("export-note")).toHaveTextContent(
       /^Shipping and duties included$/
     )
