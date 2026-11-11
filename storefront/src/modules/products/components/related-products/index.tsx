@@ -1,6 +1,7 @@
 import { listingContent } from "@content/listing"
 import { listProducts } from "@lib/data/products"
 import { getRegion } from "@lib/data/regions"
+import { listedOnly } from "@lib/util/product-kind"
 import { hasRelatedProducts } from "@lib/util/product-page"
 import { HttpTypes } from "@medusajs/types"
 import {
@@ -53,7 +54,9 @@ export default async function RelatedProducts({
     queryParams,
     countryCode,
   }).then(({ response }) => {
-    return response.products.filter(
+    // never the product itself, nor a kind that is never listed (the rush
+    // add-on, lib/util/product-kind)
+    return listedOnly(response.products).filter(
       (responseProduct) => responseProduct.id !== product.id
     )
   })

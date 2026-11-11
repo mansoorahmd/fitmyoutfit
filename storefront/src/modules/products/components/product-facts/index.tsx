@@ -8,8 +8,10 @@ import LineIcon from "@modules/home/components/line-icon"
 /**
  * The facts boxes under the main button (docs/design/04-reference-spized.md,
  * point 3): a line icon, a short title and one line each. The wording is
- * data in src/content/product.ts; this only lays it out. Export regions add
- * the shipping box; the fit kit's own page leaves out the fit-kit box.
+ * data in src/content/product.ts; this only lays it out. Garments only:
+ * on the fit kit and any product without a kind it renders nothing, and the
+ * buy block runs straight into the details. Export regions add the shipping
+ * box.
  */
 const ProductFacts = ({
   product,

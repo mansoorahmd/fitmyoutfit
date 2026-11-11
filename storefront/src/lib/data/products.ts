@@ -1,6 +1,7 @@
 "use server"
 
 import { sdk } from "@lib/config"
+import { listedOnly } from "@lib/util/product-kind"
 import { sortProducts } from "@lib/util/sort-products"
 import { HttpTypes } from "@medusajs/types"
 import { SortOptions } from "@modules/store/components/refinement-list/sort-products"
@@ -111,7 +112,7 @@ export const listProductsWithSort = async ({
   const limit = queryParams?.limit || 12
 
   const {
-    response: { products, count },
+    response: { products: fetched, count: fetchedCount },
   } = await listProducts({
     pageParam: 0,
     queryParams: {
@@ -120,6 +121,11 @@ export const listProductsWithSort = async ({
     },
     countryCode,
   })
+
+  // A kind that is never listed (the rush add-on) stays out of every
+  // listing, wherever it is filed; the count drops by as many.
+  const products = listedOnly(fetched)
+  const count = fetchedCount - (fetched.length - products.length)
 
   const sortedProducts = sortProducts(products, sortBy)
 

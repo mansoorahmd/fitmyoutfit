@@ -7,7 +7,7 @@ import {
   factsFor,
   hasPriceRange,
   hasRelatedProducts,
-  isFitKit,
+  showsFacts,
   showsPerPiece,
   showsTaxNote,
 } from "@lib/util/product-page"
@@ -19,12 +19,13 @@ const rush = { handle: "rush-add-on", metadata: { kind: "rush_add_on" } }
 const titles = (facts: { title: string }[]) => facts.map((f) => f.title)
 
 describe("product page rules", () => {
-  it("finds the fit kit by its kind, or by its handle without one", () => {
-    expect(isFitKit(fitKit)).toBe(true)
-    expect(isFitKit({ handle: "fit-kit", metadata: null })).toBe(true)
-    expect(isFitKit({ handle: "kit", metadata: { kind: "fit_kit" } })).toBe(true)
-    expect(isFitKit(jersey)).toBe(false)
-    expect(isFitKit(rush)).toBe(false)
+  it("shows the facts boxes on garments only", () => {
+    expect(showsFacts(jersey)).toBe(true)
+    expect(showsFacts(fitKit)).toBe(false)
+    expect(showsFacts(rush)).toBe(false)
+    expect(showsFacts({ handle: "jersey", metadata: null })).toBe(false)
+    expect(showsFacts({ handle: "jersey", metadata: {} })).toBe(false)
+    expect(showsFacts({ handle: "x", metadata: { kind: "gift_card" } })).toBe(false)
   })
 
   it("says 'per piece' for garments only", () => {
@@ -50,14 +51,14 @@ describe("product page rules", () => {
     }
   })
 
-  it("leaves the fit-kit box out on the fit kit's own page", () => {
-    expect(titles(factsFor(productContent.facts, "pk", fitKit))).toEqual([
-      "Delivered in 15 days",
-      "Free replacement",
-    ])
-    expect(titles(factsFor(productContent.facts, "gb", fitKit))).not.toContain(
-      "Not sure of sizes?"
-    )
+  it("gives the fit kit, the rush add-on and a product with no kind no facts, in every region", () => {
+    for (const country of ["pk", "gb", "ae", "us", undefined]) {
+      expect(factsFor(productContent.facts, country, fitKit)).toEqual([])
+      expect(factsFor(productContent.facts, country, rush)).toEqual([])
+      expect(
+        factsFor(productContent.facts, country, { handle: "jersey", metadata: null })
+      ).toEqual([])
+    }
   })
 
   it("shows the tax note until the region's tax is marked final", () => {
