@@ -33,6 +33,7 @@
     },
     "./design.schema.json": "./schema/design.schema.json",
     "./product.schema.json": "./schema/product.schema.json",
+    "./font-catalog.schema.json": "./schema/font-catalog.schema.json",
     "./package.json": "./package.json"
   },
   "scripts": {

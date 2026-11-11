@@ -4,7 +4,7 @@ The 3D design editor for the store. It is a standalone React + Three.js package:
 
 **A design is data, not an image.** A design is a versioned JSON document. Previews, proof renders and production files are all generated from it, so it never holds flattened pixels.
 
-Status: step E1 done. The placeholder jersey is shown in 3D with its vector pattern pieces drawn onto it as a texture, the camera orbits (mouse and touch), and each colour zone can be recoloured. The document format below is a **first draft** (`schemaVersion` 1) that steps E2 to E5 will extend.
+Status: step E2 done. On top of E1 (vector pattern pieces drawn onto the 3D model, orbit camera, colour per zone): text layers in Latin, Arabic and Urdu, jersey number layers, logo uploads with checks (file type by content, size limits, transparency, print resolution), moving layers by dragging them on the model, resizing, rotating, ordering and deleting them, and undo and redo of every change. The document format is `schemaVersion` **2** (see "Format version 2" below); E3 to E5 will extend it.
 
 ## Scripts
 
@@ -18,7 +18,7 @@ Status: step E1 done. The placeholder jersey is shown in 3D with its vector patt
 | `npm run generate:schema` | Rewrites `schema/*.json` from the zod schemas |
 | `npm run generate:model` | Rewrites the placeholder GLB from `scripts/generate-placeholder-jersey.ts` (run with `tsx`), built from the pattern pieces in the product definition |
 
-To run the demo on another port: `npm run dev -w packages/editor -- --port 5183 --strictPort` from the repository root. The demo shows the jersey, a list of the colour zones with placeholder swatches (`samples/palettes/placeholder-palette.json`), the flat pattern pieces and the design JSON. It fits a phone screen.
+To run the demo on another port: `npm run dev -w packages/editor -- --port 5184 --strictPort` from the repository root. The demo shows the jersey with camera buttons for each side; controls to add a team name (Latin, Urdu and Arabic presets or typed), a number (English or Arabic digits) and a logo on a chosen piece; test files for the upload checks (made in the browser by code); the layer list (select, up, down, delete, low-DPI badge); controls for the selected layer (text, font, alignment, direction, colour, size, rotation, piece); the checks' messages; undo and redo (buttons, Ctrl+Z, Ctrl+Shift+Z or Ctrl+Y; Delete, arrow keys to nudge, Escape to deselect); the colour zones; a flat close-up of the selected piece, the flat pattern, the design JSON and the fonts' licences. Drag a layer on the model to move it. It fits a phone screen: the model stays at the top while the panel scrolls.
 
 ## Using it
 
@@ -36,8 +36,13 @@ import designSchema from "@fitmyoutfit/editor/design.schema.json";
 
 ```tsx
 <DesignCanvas design={design} product={product} style={{ height: 480 }} />
-// Optional: textureSize (default 2048), onTextureDrawn({ size, pieces, fills, drawMs }), onError
+// Optional: textureSize (default 2048), onTextureDrawn({ size, pieces, fills, layers, missingImages, drawMs }), onError,
+// selectedLayerId, onSelectLayer(id), onLayerDrag({ phase, layerId, pieceId, position }),
+// assetUrl(asset) => url, fonts (default document.fonts), onFontStatus({ loading, missing, failed }),
+// touchSlopMm (default 8), ref: { showSide("front" | "back" | "left" | "right") }
 ```
+
+A full editor (the demo is one) keeps the design in `useDesignHistory`, applies every edit through the design functions, and passes `onLayerDrag` events to `begin`, `preview` and `end`. See "Layers on the model" below.
 
 Drag (one finger) turns the garment, wheel or pinch zooms. There is no panning: the camera always looks at the garment's centre, the zoom stops between 0.45 and 1.6 times the distance at which the whole garment fits the view (whatever the screen's shape), and the view stays between 50 degrees above and 22 degrees below the garment's middle. So the garment cannot be lost off screen.
 
@@ -68,28 +73,47 @@ One source of truth: the zod schemas in `src/design/schema.ts`. The TypeScript t
 
 ```jsonc
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "product": { "id": "placeholder-jersey" },
   "palette": { "id": "placeholder-palette", "version": 1 },
   "zones": { "body": { "id": "placeholder-white", "hex": "#FFFFFF" } },
-  "fonts": [{ "id": "font-sans", "family": "Inter", "weight": 700 }],
+  "fonts": [
+    { "id": "noto-sans-arabic-700", "family": "Noto Sans Arabic", "weight": 700, "style": "normal" },
+    { "id": "oswald-700", "family": "Oswald", "weight": 700, "style": "normal", "fallbackFontIds": ["noto-sans-arabic-700"] }
+  ],
   "layers": [
     {
-      "id": "text-1", "kind": "text", "pieceId": "front",
-      "position": { "x": 280, "y": 250 }, "size": { "width": 400, "height": 80 }, "rotation": 0,
-      "value": "TIGERS", "fontId": "font-sans", "fontSize": 60,
-      "fill": { "id": "placeholder-red", "hex": "#C8102E" }, "align": "center"
+      "id": "text-1", "kind": "text", "pieceId": "back",
+      "position": { "x": 280, "y": 150 }, "size": { "width": 448, "height": 98 }, "rotation": 0,
+      "value": "محمد علی", "direction": "auto", "fontId": "oswald-700", "fontSize": 70,
+      "fill": { "id": "placeholder-navy", "hex": "#1B2A5C" }, "align": "center"
+    },
+    {
+      "id": "logo-1", "kind": "logo", "pieceId": "front",
+      "position": { "x": 125, "y": 140 }, "size": { "width": 80, "height": 80 }, "rotation": 15,
+      "asset": { "assetId": "upload-7f3a", "mediaType": "image/png", "width": 600, "height": 600 }
     }
   ]
 }
 ```
 
-Layer kinds: `text` and `number` (value, font, size, fill, alignment), and `logo` and `clipart` (an `asset` reference). Layers are listed bottom to top.
+Layer kinds: `text` and `number` (value, font, size, fill, alignment), and `logo` and `clipart` (an `asset` reference). Layers are listed bottom to top: later layers are drawn over earlier ones, and `moveLayer` changes the order.
 
-- A `text` value is any Unicode text of 1 to 200 characters and is stored exactly as written: Latin, Arabic and Urdu names, mixed text such as `Ali علي 10`, and combining marks are all accepted. There is no normalisation, so `e` plus a combining acute and the single character `é` stay different values. (Text direction, alignment by reading direction and font fallback per script belong to the text-layer work in weeks 5 to 6.)
+- A `text` value is one line of Unicode text, 1 to 200 UTF-16 code units, in any script: Latin, Arabic and Urdu names and mixed text such as `Ali علي 10`. It is stored in **Unicode NFC**, so a name typed with a combining accent and the same name typed with the precomposed letter are the same string and compare equal with `===` (the roster checks will rely on that). `addLayer` and `updateLayer` normalise; `validateDesign` refuses text that is not NFC rather than changing it silently. No line breaks, tabs or other control characters, and not only spaces. Bidi marks (LRM, RLM, ALM) are allowed.
+- A text layer's `direction` is `"auto"`, `"ltr"` or `"rtl"`. `"auto"` follows the text: the first strong letter decides (Unicode bidi rules P2 and P3), so `محمد علی` reads right to left and `Ali علي` left to right. Digits are never strong letters.
+- `align` is `"start"`, `"center"` or `"end"`, **by reading direction**: start is the left edge of the box for left-to-right text and the right edge for right-to-left text.
 - A `number` value is a jersey number: see "Jersey numbers" below. In short, a string of 1 or 2 digits worth 0 to 99, in English, Arabic or Urdu digits, one system per number, stored exactly as typed (`"7"`, `"07"`, `"٧"`).
 - `rotation` is any finite number of degrees. It is stored as given, not wrapped to 0 to 360 (`725.5` stays `725.5`). A value that is not a finite number is rejected.
-- `position` may lie outside the piece (negative, or beyond the piece size) and is accepted. Checking that layers stay inside their piece is not done yet (see "Deliberately left for later").
+- `position` may lie outside the piece (negative, or beyond the piece size) and is accepted by the format. Dragging in the editor keeps the centre inside the piece's box; whatever reaches past the piece's outline is clipped when drawn.
+
+### Format version 2 (step E2): what changed, and why old documents are refused
+
+A version 1 document is refused with `format version 1 is not supported`; no migration exists because no version 1 design was ever saved in production, and a version 1 logo cannot be migrated (it did not record its pixel size). Changes:
+
+- text layers: `align` is `start`, `center` or `end` (was `left`, `center`, `right`); a required `direction`; NFC, one line, not blank;
+- fonts: optional `fallbackFontIds` (other fonts of the document, tried in order for characters the font lacks); `family` may not contain quotes, backslashes, semicolons, braces or angle brackets, because it goes into a CSS font string;
+- asset references: required `width` and `height` in pixels (used for the DPI check); `image/webp` added; a `logo` takes PNG, JPEG or WebP only (customer uploads), `clipart` may also be SVG (our own curated files);
+- product definitions keep their own `schemaVersion` 1 (`PRODUCT_SCHEMA_VERSION`); they did not change.
 
 ### Pattern-piece coordinates
 
@@ -106,20 +130,27 @@ A colour is `{ "id": "<palette colour id>", "hex": "#RRGGBB" }`: a palette refer
 
 ### Assets and vectors
 
-`logo` and `clipart` layers hold `asset: { assetId, mediaType }`, a reference to a file in asset storage. SVG stays SVG; PNG and JPEG are kept as the original file. Nothing is rasterised or re-encoded into the document. A text layer stays text (value, font reference), not outlines.
+`logo` and `clipart` layers hold `asset: { assetId, mediaType, width, height }`, a reference to a file in asset storage and its pixel size. The image's bytes are never in the document (a test adds an uploaded logo and checks the JSON). SVG stays SVG; PNG, JPEG and WebP are kept as the original file. Nothing is rasterised or re-encoded into the document. A text layer stays text (value, font reference), not outlines.
 
 ### Functions (`@fitmyoutfit/editor/design`)
 
 - `createDesign(product)`: empty design, every zone at its default colour.
 - `validateDesign(input, { product? })`: returns `{ ok: true, value }` or `{ ok: false, errors: [{ path, message }] }`. **Never throws**: a value that cannot even be read (a throwing getter, a Proxy that throws) comes back as one error with an empty `path` and the message `a design could not be read (<reason>)`. With `product`, it also checks that zones and pattern pieces exist. Rules that need several parts of the document (unique ids, `fontId` listed in `fonts`) run only after the structure is valid.
 - `validateProductDefinition(input)` (also never throws), `assertValidDesign(input)`.
-- Edits, all immutable (they return a new document, never change the input, and throw `DesignError`, never a raw `TypeError`, with readable messages for invalid input, including a wrong argument such as `undefined` or `null`): `setZoneColor`, `addLayer`, `updateLayer`, `removeLayer`, `addFont`. `updateLayer` replaces nested objects (`position`, `size`) whole and cannot change `id` or `kind`.
+- Edits, all immutable (they return a new document, never change the input, and throw `DesignError`, never a raw `TypeError`, with readable messages for invalid input, including a wrong argument such as `undefined` or `null`): `setZoneColor`, `addLayer`, `updateLayer`, `removeLayer`, `moveLayer(design, id, toIndex)` (0 is the bottom; clamped), `addFont` (its `fallbackFontIds` must already be in the document), `addCatalogFont(design, catalog, fontId)` (adds a catalogue font after its fallbacks). `updateLayer` replaces nested objects (`position`, `size`) whole and cannot change `id` or `kind`.
+- New layers with first placements: `newTextLayer`, `newNumberLayer`, `newLogoLayer` (a logo starts as wide as prints sharp at the minimum DPI, at most 100 mm), `nextLayerId`.
+- Text: `normalizeText`, `isNormalizedText`, `resolveTextDirection`, `firstStrongDirection`, `physicalAlign`.
+- Placement in piece millimetres: `pieceAtMeshUv(product, meshName, uv)` (a hit on the model to a point on the mesh's piece), `layerAtPoint`, `isPointInLayer`, `layerCorners`, `startLayerDrag` and `dragPosition` (keeps the grab offset, ignores other pieces, keeps the centre in the piece), `scaleLayer` (box and font size together), `normalizeRotation`.
+- Upload checks (see "Logo uploads"): `checkLogoFile`, `readImageHeader`, `sniffImageType`, `fileSizeIssue`, `analyseTransparency`, `logoLayerDpi`, `logoLayerWarnings`, `DEFAULT_UPLOAD_LIMITS`.
+- Font catalogue: `validateFontCatalog`, `fontRefFromCatalog`, `fontCatalogSchema`.
   - A text or number layer must use a font listed in `design.fonts`: `addLayer` and `updateLayer` refuse an unknown `fontId`. Add the font first with `addFont`.
   - A number layer's value must follow the jersey number rule (below), in `validateDesign` and in `addLayer` and `updateLayer`, with the same readable message. Pass `{ jerseyNumberRules }` (next to `{ product }`) to use other rules than the default data.
   - Pass `{ product }` as the last argument (`addLayer(design, layer, { product })`, `updateLayer(design, id, patch, { product })`, `setZoneColor(design, zone, colour, { product })`) to also refuse a `pieceId` or zone that the product does not have, or a product that is not the one the design is for. Without it only the document is checked, because the document does not carry the product's pieces.
   - **Fonts that no layer uses any more stay in `fonts`** after `removeLayer` or after a layer switches font. They are harmless, the next layer can reuse them, and nothing removes data behind the caller's back. A later "tidy up" step (for example when saving) can drop them.
 - A zone id may not be `__proto__`, `constructor` or `prototype`, and a `__proto__` key in a JSON document is a validation error rather than being dropped silently.
-- `getDesignJsonSchema()`, `getProductJsonSchema()`.
+- `getDesignJsonSchema()`, `getProductJsonSchema()`, `getFontCatalogJsonSchema()`.
+
+The JSON Schema cannot check NFC, a visible character, font references or the number maximum; `validateDesign` does, and `json-schema.test.ts` lists each such difference.
 
 ## Jersey numbers
 
@@ -201,14 +232,84 @@ Pure helpers for the same mapping, on the `/design` entry: `pieceToUv`, `uvToPie
 
 `samples/models/placeholder-jersey.glb` (about 190 KB) is generated by `scripts/generate-placeholder-jersey.ts` with `@gltf-transform/core`: procedural geometry, no third-party model or texture, so there is nothing to attribute. It is built **from the pattern pieces** in the product definition: each piece becomes one mesh named as its `mesh`, whose rows wrap the piece's outline round a simple body (each row of the flat piece becomes a ring or half ring as long as the row is wide, with points spread by arc length, so 1 mm on the piece is about 1 mm on the model). Every vertex's UV is its own point on the flat piece mapped into the piece's UV rectangle, so a point in piece coordinates lands at a known place on the garment. The model has one white material and no textures. Tests check that every mesh's UVs lie inside its own piece's outline and that every zone shows on the model.
 
+## Layers on the model (step E2)
+
+### How layers are drawn
+
+`drawPatternTexture` draws the zones of every piece, then the design's layers bottom to top (`texture/layers.ts`), each in its piece's millimetre-to-pixel transform, translated to the layer's centre and turned by its rotation, and **clipped to the piece's outline**. The same function draws the flat view, so the demo's close-up and (later) proofs show exactly what the model shows.
+
+The text layout rule, which proofs and production files must repeat:
+
+- the line is drawn as text by the browser's text engine (it shapes Arabic and Urdu and orders mixed text inside the line by the Unicode bidi algorithm), with the paragraph direction this package resolves (`direction`, or the first strong letter for `auto`; number layers are always left to right);
+- at `fontSize` mm per em, vertically centred on the box (CSS "middle" baseline), anchored at the box's start edge, centre or end edge by `align`;
+- a line wider than the box is shrunk evenly to the box's width; it never wraps and is never stretched;
+- the font stack is the layer's font, its `fallbackFontIds` in order, then `sans-serif` (`layerFont`).
+
+Logos and clipart are drawn as large as fits inside the box, keeping the image's proportions, centred. An image not loaded yet is drawn as a grey placeholder and listed in `missingImages`. The selected layer can be outlined (`selectedLayerId`, editor view only; never for proofs).
+
+`drawMs` measures recording the drawing calls; browsers may rasterise text later (at upload), so it understates the full cost. No phone measurement has been made yet (E5).
+
+### Fonts
+
+Fonts are data: `samples/fonts/placeholder-fonts.json` (schema `schema/font-catalog.schema.json`) lists three placeholder fonts, each with the scripts it covers, its fallbacks and its licence (SPDX id, copyright line, npm package):
+
+| Font | Package | Licence | Use |
+| --- | --- | --- | --- |
+| Oswald 700 | `@fontsource/oswald` | OFL-1.1 | names (Latin); falls back to Noto Sans Arabic |
+| Graduate 400 | `@fontsource/graduate` | OFL-1.1 | varsity numbers (Latin digits); falls back to Noto Sans Arabic |
+| Noto Sans Arabic 700 | `@fontsource/noto-sans-arabic` | OFL-1.1 | Arabic, Urdu (and Latin) |
+
+The editor does not ship font files: **the host declares the faces** (the demo imports `@fontsource/<name>/<weight>.css`; the packages are dev dependencies of this package for the demo). `DesignCanvas` then makes sure text never stays in a fallback silently: a `FontWatcher` asks the font set (`document.fonts` by default) to load each family of each layer for that layer's characters, redraws the texture when faces arrive or fail, and reports `{ loading, missing, failed }` through `onFontStatus`, where `missing` names a family no face was declared for. `loadDesignFonts(fontSet, design)` waits until nothing is loading, for proof renders.
+
+### Logo uploads
+
+The host supplies the upload function; the editor never knows where files go:
+
+```ts
+import { uploadLogo, newLogoLayer, addLayer } from "@fitmyoutfit/editor";
+
+const result = await uploadLogo(file, {
+  upload: async ({ bytes, mediaType, width, height, fileName }) => ({ assetId: await storage.put(bytes, mediaType) }),
+  // limits: DEFAULT_UPLOAD_LIMITS (data), decode: decodeWithBrowser (default)
+});
+if (result.ok) design = addLayer(design, newLogoLayer(product, { id, pieceId, asset: result.asset }), { product });
+// result.issues: [{ code, severity: "error" | "warning", message }] to show
+```
+
+`<DesignCanvas assetUrl={(asset) => url}>` then says where to load each asset's image from (with CORS: a cross-origin image without it would stop the texture from uploading). `createMemoryAssetStore()` plays the host in the demo and tests.
+
+The checks (plain functions on the `/design` entry, no DOM, so the backend runs the same ones on the same bytes; limits in `DEFAULT_UPLOAD_LIMITS`, placeholders until the factories' print specifications arrive). **Errors block the upload, warnings do not.**
+
+| Check | Rule | Limit (data) | Kind |
+| --- | --- | --- | --- |
+| File type | by the file's signature, never its name or declared type: PNG, JPEG, WebP. A GIF, PDF, HEIC, SVG or text file renamed to `.png` is refused and named | `acceptedTypes` | error |
+| Damaged | header missing or cut short, no image data, or (in the browser) the file does not decode or decodes at another size than its header says | | error |
+| File size | checked before the file is read | `maxFileBytes` 10 MB | error |
+| Dimensions | longest side, total pixels, smallest side | `maxSidePx` 8000, `maxPixels` 40 M, `minSidePx` 16 | error |
+| Animation | animated PNG or WebP (only one frame would print) | | error |
+| Transparency | JPEG, or PNG/WebP without alpha (from the header); else the decoded pixels: fewer than 25% of the edge pixels transparent | `transparentAlphaMax` 16, `minTransparentEdgeShare` 0.25 | warning: "will print as a box" |
+| Resolution | pixels per inch at the size the logo is placed (drawn) at; recalculated from the layer after every resize (`logoLayerWarnings`), from the design data alone | `minDpi` 150 | warning |
+
+**SVG is not accepted for uploads.** A solid check (no scripts, no event attributes, no external or `javascript:` references, no `foreignObject`, no entity tricks, CSS `url()` and `@import`) needs a real XML parser and an allow-list sanitiser that behaves the same on the server; a hand-written pattern check would not be solid, and a strict allow-list would refuse most Illustrator and Inkscape exports anyway. Customers upload PNG, JPEG or WebP; curated clipart may still be SVG.
+
+### Dragging on the model: pointer to piece millimetres
+
+With `onLayerDrag`, a press on a layer drags it instead of turning the garment. A capture-phase listener on the canvas's parent sees the pointer before the orbit controls. The pointer is cast as a ray into the scene; the first hit gives the mesh and the UV at that point; `pieceAtMeshUv` finds the piece of that mesh whose UV rectangle holds the UV and turns it into the piece's millimetres (the inverse of the linear piece-to-UV map). `layerAtPoint` picks the topmost layer whose turned box (plus `touchSlopMm`) holds the point. During the drag the layer keeps its grab offset, moves only while the pointer is on its own piece, and its centre stays inside the piece's box. Moves are sent at most once per animation frame, between a `start` and an `end` (or `cancel`). A press while another pointer is down (orbit, pinch) is left to the orbit controls; a second finger during a drag is ignored.
+
+### Undo and redo
+
+`state/history.ts` is a plain immutable history over any value: `commit` records a step; a gesture (`beginGesture`, `updateGesture` for every pointer move or slider value, `endGesture`) records **one** step from its start to its end, or none if nothing changed; `undo` and `redo` end an open gesture first; equal values (`sameJson` for designs) are never a step; at most `limit` (200) steps are kept. `useDesignHistory` wraps it for React. Selection is not part of the history (it is not part of the design).
+
 ## Deliberately left for later
 
-- Showing text, number and logo layers on the model (E2). They will be drawn by `drawPatternTexture` in the same per-piece millimetre transform, after the zones, clipped to the piece.
 - Choosing a zone by tapping the model (the lookup, `zoneAtUv`, exists; the raycast and the UI do not).
-- Palette data (the demo's swatches are placeholder data in `samples/palettes/`), snapping a custom HEX to the nearest palette colour and its warning, templates, undo and redo.
-- Upload checks (file type, resolution, DPI), real font files and font metrics, text fitting.
-- Roster data and number or name binding for team orders; proof renders. (The number rule and the duplicate check exist as plain functions; the roster itself does not.)
-- Migrations between `schemaVersion`s (only version 1 exists; other versions are rejected with a clear message).
-- Checks that layers lie inside their piece (today a layer may sit partly or wholly outside it), mirrored or rotated pieces in UV space, per-layer visibility or locking.
+- Palette data (the demo's swatches are placeholder data in `samples/palettes/`), snapping a custom HEX to the nearest palette colour and its warning (E3), templates (E3).
+- Font metrics for a maximum length per field (E4); the text layout above (shrink to the box) is where they plug in. Curved or arched text. Text outlines (strokes) and multi-line text.
+- Roster preview (E4): swapping each player's name and number into the text and number layers. The values are plain text in NFC and numbers under the number rule, so the swap is a data change.
+- Proof renders (E5): draw with `drawPatternTexture` after `loadDesignFonts`, refuse when `missingImages` is not empty, and never pass `selectedLayerId`.
+- SVG logo uploads (see "Logo uploads"); a malware scan of uploads (M4).
+- On-model resize and rotate handles (today: sliders and buttons), snapping and guides.
+- Migrations between `schemaVersion`s (version 1 is refused with a clear message; no migration).
+- Mirrored or rotated pieces in UV space, per-layer visibility or locking.
 - Saving, design versions ("every save creates a new version") and share links: backend concerns. `schemaVersion` is the format version only.
 - Compression of the model (Draco or Meshopt) and performance tuning for mid-range phones. The component renders on demand (`frameloop="demand"`) and caps the pixel ratio at 2, but no phone measurements have been made. If phones struggle, pass `textureSize={1024}` (a quarter of the memory).
