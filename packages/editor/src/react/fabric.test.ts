@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BufferAttribute, BufferGeometry, MeshStandardMaterial, ShaderLib } from "three";
+import { BufferAttribute, BufferGeometry, MeshStandardMaterial, ShaderLib, Texture } from "three";
 import { DEFAULT_FABRIC_SHADING, OCCLUSION_ATTRIBUTE, OCCLUSION_ATTRIBUTE_GLTF, makeFabric, patchFabricShader } from "./fabric";
 
 // The real shaders of Three.js's standard material, which the garment uses.
@@ -19,6 +19,13 @@ describe("patchFabricShader", () => {
     const fs = patched.fragmentShader;
     expect(fs.indexOf("fmoOpen")).toBeGreaterThan(fs.indexOf("#include <color_fragment>"));
     expect(fs.indexOf("fmoOpen")).toBeLessThan(fs.indexOf("#include <lights_fragment_begin>"));
+  });
+
+  it("shows the inside texture (the fabric's colours, no prints) on back faces only, before shading", () => {
+    const fs = patchFabricShader(standard, true).fragmentShader;
+    expect(fs).toContain("uniform sampler2D fmoInsideMap;");
+    expect(fs).toContain("if (!gl_FrontFacing) diffuseColor.rgb = mix(diffuseColor.rgb, texture2D(fmoInsideMap, vMapUv).rgb * diffuse, fmoInsideMix);");
+    expect(fs.indexOf("fmoInsideMap, vMapUv")).toBeLessThan(fs.indexOf("vec2 fmoOpen"));
   });
 
   it("still shades the inside darker on a model without occlusion data", () => {
@@ -47,13 +54,36 @@ describe("makeFabric", () => {
     const material = new MeshStandardMaterial();
     makeFabric(material, geometry);
     expect(geometry.getAttribute(OCCLUSION_ATTRIBUTE)).toBe(geometry.getAttribute(OCCLUSION_ATTRIBUTE_GLTF));
-    const parameters = { ...standard } as Parameters<typeof material.onBeforeCompile>[0];
+    const parameters = { ...standard, uniforms: {} } as unknown as Parameters<typeof material.onBeforeCompile>[0];
     material.onBeforeCompile(parameters, undefined as never);
     expect(parameters.vertexShader).toContain("#define FMO_OCCLUSION");
     // Materials with the same shading share one compiled program.
     const other = new MeshStandardMaterial();
     makeFabric(other, geometry);
     expect(other.customProgramCacheKey()).toBe(material.customProgramCacheKey());
+  });
+
+  it("gives each material its own inside texture, switched on when one is set", () => {
+    const geometry = new BufferGeometry();
+    const a = new MeshStandardMaterial();
+    const b = new MeshStandardMaterial();
+    const fabricA = makeFabric(a, geometry);
+    makeFabric(b, geometry);
+    const compile = (m: MeshStandardMaterial) => {
+      const parameters = { ...standard, uniforms: {} } as unknown as Parameters<typeof m.onBeforeCompile>[0];
+      m.onBeforeCompile(parameters, undefined as never);
+      return parameters.uniforms as Record<string, { value: unknown }>;
+    };
+    const uniformsA = compile(a);
+    const uniformsB = compile(b);
+    expect(uniformsA.fmoInsideMix!.value).toBe(0);
+    const inside = new Texture();
+    fabricA.setInsideMap(inside);
+    expect(uniformsA.fmoInsideMap!.value).toBe(inside);
+    expect(uniformsA.fmoInsideMix!.value).toBe(1);
+    expect(uniformsB.fmoInsideMap!.value).toBeNull();
+    fabricA.setInsideMap(null);
+    expect(uniformsA.fmoInsideMix!.value).toBe(0);
   });
 
   it("compiles a separate program for models without occlusion", () => {

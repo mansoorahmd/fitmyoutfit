@@ -33,7 +33,7 @@ import { DEFAULT_TEXTURE_SIZE, drawPatternTexture, type DrawPatternResult } from
 import { FontWatcher, type FontSetLike, type FontStatus } from "../texture/fonts.js";
 import { AssetImageCache, type AssetUrlResolver } from "./asset-images.js";
 import { orbitLimits } from "./camera.js";
-import { makeFabric } from "./fabric.js";
+import { makeFabric, type Fabric } from "./fabric.js";
 import { STUDIO_BACKGROUND, STUDIO_LIGHTS, studioLightPosition } from "./studio.js";
 
 /** What it cost to redraw the pattern texture, for a caller that reports performance. */
@@ -102,6 +102,13 @@ export interface DesignCanvasProps {
 
 const FOV = 35;
 
+/**
+ * Edge of the inside texture (the colour zones without prints, for the inside
+ * of the garment) in pixels. Small on purpose: 256 KB, and the inside is only
+ * seen in shade through the openings.
+ */
+const INSIDE_TEXTURE_SIZE = 256;
+
 interface PreparedModel {
   scene: Object3D;
   /** Every cloned material, to dispose of. */
@@ -110,6 +117,8 @@ interface PreparedModel {
   pieceMaterials: MeshStandardMaterial[];
   /** The meshes that carry pattern pieces, with the name the product uses for them. */
   pieceMeshes: Map<Mesh, string>;
+  /** The pieces' materials, made into cloth (fabric.ts). */
+  fabrics: Fabric[];
   center: [number, number, number];
   size: [number, number, number];
 }
@@ -131,6 +140,7 @@ function prepareModel(source: Object3D, product: ProductDefinition): PreparedMod
   const materials: Material[] = [];
   const pieceMaterials: MeshStandardMaterial[] = [];
   const pieceMeshes = new Map<Mesh, string>();
+  const fabrics: Fabric[] = [];
   scene.traverse((object) => {
     const mesh = object as Mesh;
     if (!mesh.isMesh) return;
@@ -147,7 +157,7 @@ function prepareModel(source: Object3D, product: ProductDefinition): PreparedMod
           if ("map" in material && "color" in material) pieceMaterials.push(material as MeshStandardMaterial);
           // A garment is one layer of cloth: both sides are drawn, the inside shaded as the inside.
           material.side = DoubleSide;
-          makeFabric(material, mesh.geometry);
+          fabrics.push(makeFabric(material, mesh.geometry));
         }
         break;
       }
@@ -162,7 +172,7 @@ function prepareModel(source: Object3D, product: ProductDefinition): PreparedMod
   const box = new Box3().setFromObject(scene);
   const center = box.getCenter(new Vector3());
   const size = box.getSize(new Vector3());
-  return { scene, materials, pieceMaterials, pieceMeshes, center: center.toArray(), size: size.toArray() };
+  return { scene, materials, pieceMaterials, pieceMeshes, fabrics, center: center.toArray(), size: size.toArray() };
 }
 
 interface PatternSurface {
@@ -304,11 +314,25 @@ function ModelView({
     return () => setHandle(handle, null);
   }, [handle, camera, center, fit, controls, invalidate]);
 
-  // The pieces' materials show the pattern texture.
+  // The pieces' materials show the pattern texture; their inside shows the colour zones only.
+  const inside = usePatternSurface(INSIDE_TEXTURE_SIZE);
   useEffect(() => {
     applyPatternTexture(prepared.pieceMaterials, surface.texture);
+    for (const fabric of prepared.fabrics) fabric.setInsideMap(inside.texture);
     invalidate();
-  }, [prepared, surface, invalidate]);
+  }, [prepared, surface, inside, invalidate]);
+
+  // The inside texture: the zones without layers, redrawn only when a zone colour changes.
+  const { zones } = design;
+  const zonesOnly = useMemo<DesignDocument>(
+    () => ({ schemaVersion: 2, product: { id: product.id }, palette: product.palette, zones, fonts: [], layers: [] }),
+    [zones, product],
+  );
+  useEffect(() => {
+    drawPatternTexture(inside.ctx, product, zonesOnly, { size: inside.size });
+    inside.texture.needsUpdate = true;
+    invalidate();
+  }, [zonesOnly, product, inside, invalidate]);
 
   // Fonts: load what the text needs, and redraw when it arrives (never stay in a fallback silently).
   const [fontsVersion, setFontsVersion] = useState(0);
