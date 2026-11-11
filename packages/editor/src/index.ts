@@ -4,7 +4,16 @@
  * the design document (for example a server) should import
  * `@fitmyoutfit/editor/design` instead, which does not load React or Three.js.
  */
-export { DesignCanvas, type DesignCanvasProps, type TextureDrawInfo } from "./react/DesignCanvas.js";
+export {
+  DesignCanvas,
+  type CameraSide,
+  type DesignCanvasHandle,
+  type DesignCanvasProps,
+  type LayerDragEvent,
+  type TextureDrawInfo,
+} from "./react/DesignCanvas.js";
+export { useDesignHistory, type DesignHistory } from "./react/useDesignHistory.js";
+export { AssetImageCache, type AssetUrlResolver } from "./react/asset-images.js";
 export { orbitLimits, type OrbitLimits } from "./react/camera.js";
 export * from "./texture/pattern-texture.js";
 export * from "./texture/layers.js";
