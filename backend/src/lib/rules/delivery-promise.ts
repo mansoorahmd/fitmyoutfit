@@ -15,11 +15,32 @@ const ISO_DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/
 
 export type DeliveryOption = { days: number; date: string }
 
+/** Which of the two dates is promised: standard, or rush when the order pays for rush. */
+export type DeliverySpeed = "standard" | "rush"
+
+export const DELIVERY_SPEEDS: readonly DeliverySpeed[] = ["standard", "rush"]
+
 export type DeliveryPromise = {
   /** The base date, YYYY-MM-DD. */
   based_on: string
   standard: DeliveryOption
   rush: DeliveryOption
+  /** Which of `standard` and `rush` applies to this cart. */
+  applies: DeliverySpeed
+}
+
+/**
+ * The one date promised to an order, kept in the order's `metadata.delivery_promise`
+ * (docs/contracts/m1-checkout.md, section 8).
+ */
+export type PromisedDelivery = {
+  /** The promised delivery date, YYYY-MM-DD. */
+  date: string
+  /** Calendar days from `based_on` to `date`. */
+  days: number
+  /** The base date, YYYY-MM-DD. */
+  based_on: string
+  applies: DeliverySpeed
 }
 
 /** The calendar date (YYYY-MM-DD) that `instant` falls on in `timeZone`. */
@@ -56,10 +77,33 @@ export function addCalendarDays(date: string, days: number): string {
   return base.toISOString().slice(0, 10)
 }
 
-export function deliveryPromise(baseDate: string, days: DeliveryDays): DeliveryPromise {
+/**
+ * Both dates, and which one applies. `applies` is the caller's answer to "does this cart pay for
+ * rush?"; until the rush charge exists (a later M1 task) the caller always passes "standard".
+ */
+export function deliveryPromise(
+  baseDate: string,
+  days: DeliveryDays,
+  applies: DeliverySpeed
+): DeliveryPromise {
+  if (!DELIVERY_SPEEDS.includes(applies)) {
+    throw new Error(`Expected "standard" or "rush", got ${JSON.stringify(applies)}`)
+  }
   return {
     based_on: addCalendarDays(baseDate, 0),
     standard: { days: days.standard, date: addCalendarDays(baseDate, days.standard) },
     rush: { days: days.rush, date: addCalendarDays(baseDate, days.rush) },
+    applies,
+  }
+}
+
+/** The date that applies, in the shape kept on the order. */
+export function promisedDelivery(promise: DeliveryPromise): PromisedDelivery {
+  const option = promise[promise.applies]
+  return {
+    date: option.date,
+    days: option.days,
+    based_on: promise.based_on,
+    applies: promise.applies,
   }
 }

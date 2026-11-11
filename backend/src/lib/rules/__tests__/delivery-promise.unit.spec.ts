@@ -3,27 +3,58 @@ import {
   calendarDateIn,
   deliveryPromise,
   DELIVERY_TIME_ZONE,
+  promisedDelivery,
+  type DeliverySpeed,
 } from "../delivery-promise"
 
 describe("deliveryPromise", () => {
   it("adds the standard and rush days to the base date (the contract's example)", () => {
-    expect(deliveryPromise("2026-11-11", { standard: 15, rush: 10 })).toEqual({
+    expect(deliveryPromise("2026-11-11", { standard: 15, rush: 10 }, "standard")).toEqual({
       based_on: "2026-11-11",
       standard: { days: 15, date: "2026-11-26" },
       rush: { days: 10, date: "2026-11-21" },
+      applies: "standard",
     })
   })
 
+  it("says which date applies, as the caller answers it", () => {
+    expect(deliveryPromise("2026-11-11", { standard: 15, rush: 10 }, "rush").applies).toBe("rush")
+    expect(() =>
+      deliveryPromise("2026-11-11", { standard: 15, rush: 10 }, "express" as DeliverySpeed)
+    ).toThrow(/"standard" or "rush"/)
+  })
+
   it("counts calendar days across month and year ends", () => {
-    expect(deliveryPromise("2026-12-25", { standard: 15, rush: 10 })).toEqual({
+    expect(deliveryPromise("2026-12-25", { standard: 15, rush: 10 }, "standard")).toEqual({
       based_on: "2026-12-25",
       standard: { days: 15, date: "2027-01-09" },
       rush: { days: 10, date: "2027-01-04" },
+      applies: "standard",
     })
   })
 
   it("rejects a malformed base date", () => {
-    expect(() => deliveryPromise("11/11/2026", { standard: 15, rush: 10 })).toThrow(/YYYY-MM-DD/)
+    expect(() => deliveryPromise("11/11/2026", { standard: 15, rush: 10 }, "standard")).toThrow(
+      /YYYY-MM-DD/
+    )
+  })
+})
+
+describe("promisedDelivery", () => {
+  it("keeps the date, days and base date of the option that applies", () => {
+    const days = { standard: 15, rush: 10 }
+    expect(promisedDelivery(deliveryPromise("2026-11-11", days, "standard"))).toEqual({
+      date: "2026-11-26",
+      days: 15,
+      based_on: "2026-11-11",
+      applies: "standard",
+    })
+    expect(promisedDelivery(deliveryPromise("2026-11-11", days, "rush"))).toEqual({
+      date: "2026-11-21",
+      days: 10,
+      based_on: "2026-11-11",
+      applies: "rush",
+    })
   })
 })
 

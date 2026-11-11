@@ -14,7 +14,7 @@ import {
   checkCashOnDelivery,
   type CashOnDeliveryReason,
 } from "./cash-on-delivery"
-import { deliveryPromise, type DeliveryPromise } from "./delivery-promise"
+import { deliveryPromise, type DeliveryPromise, type DeliverySpeed } from "./delivery-promise"
 import { checkMinimumQuantity, type MinimumQuantityResult, type QuantityLine } from "./minimum-quantity"
 
 type Metadata = Readonly<Record<string, unknown>> | null | undefined
@@ -34,6 +34,11 @@ export type CheckoutRulesInput = {
   storeSettings: Metadata
   /** Base date of the delivery promise, YYYY-MM-DD. */
   baseDate: string
+  /**
+   * Which delivery date applies: "rush" when the cart pays for rush. The caller answers it; until
+   * the rush charge exists (a later M1 task) the answer is always "standard".
+   */
+  deliverySpeed: DeliverySpeed
 }
 
 export type CheckoutRules = {
@@ -77,7 +82,7 @@ export function evaluateCheckoutRules(input: CheckoutRulesInput): SettingResult<
         limit: limit.value,
         limit_currency_code: COD_LIMIT_CURRENCY_CODE,
       },
-      delivery_promise: deliveryPromise(input.baseDate, days.value),
+      delivery_promise: deliveryPromise(input.baseDate, days.value, input.deliverySpeed),
     },
   }
 }

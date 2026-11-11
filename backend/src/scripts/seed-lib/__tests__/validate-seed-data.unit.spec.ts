@@ -267,6 +267,16 @@ describe("validateSeedData", () => {
     )
   })
 
+  it("rejects seed rush days that are not lower than the standard days", () => {
+    const seed = clone()
+    seed.settings.data.delivery_days_rush = seed.settings.data.delivery_days_standard
+    expect(
+      validateSeedData(seed).some((p) =>
+        p.startsWith("settings: delivery_days_rush in the store's metadata must be lower than delivery_days_standard")
+      )
+    ).toBe(true)
+  })
+
   it("rejects size charts that miss a product, a size or a measurement", () => {
     const seed = clone()
     delete seed.sizeCharts.data.jacket
