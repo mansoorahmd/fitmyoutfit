@@ -22,6 +22,14 @@ import { useAnnounceRemoved } from "../undo-toast/provider"
 /** A change is saved after this long without another press (05, 2.7). */
 export const SAVE_DELAY_MS = 600
 
+/**
+ * The title link looks like text one line tall, but its hit area is at
+ * least 44 px high: an invisible layer centred on it, as wide as the title.
+ */
+export const TITLE_LINK =
+  "relative inline-block hover:underline " +
+  "before:absolute before:inset-x-0 before:top-1/2 before:h-full before:min-h-[44px] before:-translate-y-1/2 before:content-['']"
+
 type CartLineProps = {
   line: CartLineView
   /** Export regions add "Not counted towards the minimum" to the fit kit. */
@@ -184,7 +192,7 @@ const CartLine = ({ line, exportRegion, onSaving }: CartLineProps) => {
             {productHref ? (
               <LocalizedClientLink
                 href={productHref}
-                className="hover:underline"
+                className={TITLE_LINK}
                 data-testid="cart-line-title"
               >
                 <bdi>{line.title}</bdi>

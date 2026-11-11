@@ -78,6 +78,16 @@ describe("cart page", () => {
     expect(within(line).getByRole("textbox", { name: "Quantity, Jersey, size M" })).toHaveValue("4")
   })
 
+  it("gives the title link a 44 px tall hit area without changing how it looks", () => {
+    renderCart()
+    const title = screen.getByTestId("cart-line-title")
+    expect(title.tagName).toBe("A")
+    expect(title).toHaveClass("relative", "before:absolute", "before:min-h-[44px]", "before:inset-x-0")
+    // still plain text: no padding, no underline until hover
+    expect(title.className).not.toMatch(/(^|\s)(p[xy]?-|min-h-)/)
+    expect(title.className).not.toMatch(/(^|\s)underline(\s|$)/)
+  })
+
   it("keeps amounts left to right and unbroken", () => {
     renderCart()
     const total = screen.getByTestId("cart-line-total")
@@ -255,6 +265,51 @@ describe("cart page", () => {
       expect(within(error).getByRole("button", { name: "Try again" })).toBeInTheDocument()
     })
 
+    it("never saves a number on the way to one out of range: 1000 is not saved as 100", async () => {
+      vi.useFakeTimers()
+      renderCart({ cart: cartFixture({ items: [lineFixture({ quantity: 11, total: 242 })] }) })
+      const field = screen.getByTestId("quantity-input")
+
+      // typed one key at a time, as on a phone
+      for (const text of ["1", "10", "100", "1000"]) {
+        fireEvent.change(field, { target: { value: text } })
+        act(() => {
+          vi.advanceTimersByTime(700)
+        })
+      }
+      expect(callsOf("update")).toHaveLength(0)
+
+      await act(async () => {
+        fireEvent.blur(field)
+        vi.advanceTimersByTime(700)
+      })
+      expect(field).toHaveValue("11")
+      expect(screen.getByTestId("quantity-range-error")).toHaveTextContent("Enter a number from 1 to 999")
+      expect(callsOf("update")).toHaveLength(0)
+    })
+
+    it("saves a typed number at once when the field is left, or on Enter", async () => {
+      renderCart({ cart: cartFixture({ items: [lineFixture({ quantity: 11, total: 242 })] }) })
+      const field = screen.getByTestId("quantity-input")
+
+      fireEvent.change(field, { target: { value: "12" } })
+      expect(callsOf("update")).toHaveLength(0)
+      await act(async () => {
+        fireEvent.blur(field)
+      })
+      expect(callsOf("update")).toEqual([{ name: "update", args: { lineId: "cali_1", quantity: 12 } }])
+      expect(screen.queryByTestId("quantity-range-error")).toBeNull()
+
+      fireEvent.change(field, { target: { value: "15" } })
+      await act(async () => {
+        fireEvent.keyDown(field, { key: "Enter" })
+      })
+      expect(callsOf("update")).toEqual([
+        { name: "update", args: { lineId: "cali_1", quantity: 12 } },
+        { name: "update", args: { lineId: "cali_1", quantity: 15 } },
+      ])
+    })
+
     it("snaps a typed number out of range back, and says why", () => {
       renderCart()
       const field = screen.getByTestId("quantity-input")
@@ -285,6 +340,20 @@ describe("cart page", () => {
         { name: "add", args: { variantId: "var_M", quantity: 4, countryCode: "gb" } },
       ])
       expect(screen.queryByTestId("undo-toast")).toBeNull()
+    })
+
+    it("puts the toast at the foot of the screen when no sticky bar shows, outlined apart from the footer", async () => {
+      renderCart()
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Remove Jersey, size M" }))
+      })
+      const toast = screen.getByTestId("undo-toast")
+      // jsdom has no layout, so the sticky bar is hidden here
+      expect(screen.getByTestId("sticky-checkout-bar")).toHaveAttribute("data-visible", "false")
+      expect(toast).toHaveAttribute("data-placement", "bottom")
+      expect(toast).toHaveClass("bottom-[calc(16px+env(safe-area-inset-bottom))]")
+      expect(toast).not.toHaveClass("bottom-[calc(72px+env(safe-area-inset-bottom))]")
+      expect(toast).toHaveClass("border", "border-brand-on-inverse-muted")
     })
 
     it("closes the toast after 8 seconds", async () => {
