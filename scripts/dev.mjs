@@ -1,13 +1,26 @@
 #!/usr/bin/env node
-// `npm run dev`: start the backend (9000) and the storefront (8000) together.
+// `npm run dev`: start the backend and the storefront together.
 // A part that does not exist yet (or has no `dev` script) is skipped with a note,
 // so this works in a checkout that has only some of the parts.
+//
+// Ports (scripts/lib/ports.mjs): the backend listens on PORT (from the shell, else backend/.env,
+// else 9000), the storefront on STOREFRONT_PORT (from the shell, else 8000). Each child gets its
+// port in its environment, and dev prints both URLs.
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { parseEnv } from "./lib/env-file.mjs";
+import { devChildEnv, devUrlLines } from "./lib/ports.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+
+/** backend/.env, parsed; empty when the file does not exist yet. */
+function readBackendEnvFile() {
+  const file = path.join(root, "backend", ".env");
+  return existsSync(file) ? parseEnv(readFileSync(file, "utf8")) : {};
+}
+const backendEnvFile = readBackendEnvFile();
 
 const targets = [
   { name: "backend", dir: "backend" },
@@ -61,6 +74,7 @@ for (const target of targets) {
   }
   const child = spawn(`npm run dev --prefix ${target.dir}`, {
     cwd: root,
+    env: devChildEnv(target.name, process.env, backendEnvFile),
     shell: true,
     stdio: ["inherit", "pipe", "pipe"],
   });
@@ -78,6 +92,7 @@ if (started.length === 0) {
   console.error("[dev] nothing to start");
   process.exit(1);
 }
+for (const line of devUrlLines(started, process.env, backendEnvFile)) console.log(`[dev] ${line}`);
 console.log(`[dev] started: ${started.join(", ")}. Press Ctrl+C to stop.`);
 
 process.on("SIGINT", () => shutdown(0));
