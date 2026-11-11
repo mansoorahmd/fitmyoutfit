@@ -4,6 +4,7 @@ import { listCartOptions, retrieveCart } from "@lib/data/cart"
 import { retrieveCustomer } from "@lib/data/customer"
 import { getBaseURL } from "@lib/util/env"
 import { StoreCartShippingOption } from "@medusajs/types"
+import { AddedToCartProvider } from "@modules/cart/components/added-to-cart/context"
 import CartMismatchBanner from "@modules/layout/components/cart-mismatch-banner"
 import Footer from "@modules/layout/templates/footer"
 import Nav from "@modules/layout/templates/nav"
@@ -28,8 +29,10 @@ export default async function PageLayout(props: {
     shippingOptions = shipping_options
   }
 
+  // The provider shares the last add between the product page and the
+  // header's "Added to your cart" popover (docs/design/05-m1-pages.md, 4.7).
   return (
-    <>
+    <AddedToCartProvider>
       <Nav countryCode={countryCode} />
       {customer && cart && (
         <CartMismatchBanner customer={customer} cart={cart} />
@@ -44,6 +47,6 @@ export default async function PageLayout(props: {
       )}
       {props.children}
       <Footer countryCode={countryCode} />
-    </>
+    </AddedToCartProvider>
   )
 }

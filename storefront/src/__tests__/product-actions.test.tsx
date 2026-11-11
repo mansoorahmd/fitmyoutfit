@@ -1,12 +1,12 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-const { replace, addToCart } = vi.hoisted(() => ({
+const { replace, addToCartAndConfirm } = vi.hoisted(() => ({
   replace: vi.fn(),
-  addToCart: vi.fn(),
+  addToCartAndConfirm: vi.fn(),
 }))
 
-vi.mock("@lib/data/cart", () => ({ addToCart }))
+vi.mock("@lib/data/cart", () => ({ addToCartAndConfirm }))
 vi.mock("next/navigation", () => ({
   useParams: () => ({ countryCode: "pk" }),
   usePathname: () => "/pk/products/jersey",
@@ -55,8 +55,8 @@ const sizeGroup = () => screen.getByRole("radiogroup", { name: "Size" })
 
 beforeEach(() => {
   replace.mockClear()
-  addToCart.mockReset()
-  addToCart.mockResolvedValue(undefined)
+  addToCartAndConfirm.mockReset()
+  addToCartAndConfirm.mockResolvedValue({ ok: true, added: null })
 })
 
 afterEach(() => {
@@ -82,7 +82,7 @@ describe("product actions", () => {
 
     fireEvent.click(mainButton())
 
-    expect(addToCart).not.toHaveBeenCalled()
+    expect(addToCartAndConfirm).not.toHaveBeenCalled()
     const error = screen.getByTestId("option-error")
     expect(error).toHaveTextContent("Choose a size")
     expect(error).toHaveClass("text-brand-error")
@@ -112,8 +112,8 @@ describe("product actions", () => {
       fireEvent.click(mainButton())
     })
 
-    expect(addToCart).toHaveBeenCalledTimes(1)
-    expect(addToCart).toHaveBeenCalledWith({
+    expect(addToCartAndConfirm).toHaveBeenCalledTimes(1)
+    expect(addToCartAndConfirm).toHaveBeenCalledWith({
       variantId: "var_M",
       quantity: 1,
       countryCode: "pk",
@@ -128,7 +128,7 @@ describe("product actions", () => {
       fireEvent.click(barButton())
     })
 
-    expect(addToCart).toHaveBeenCalledWith({
+    expect(addToCartAndConfirm).toHaveBeenCalledWith({
       variantId: "var_L",
       quantity: 1,
       countryCode: "pk",
@@ -149,7 +149,7 @@ describe("product actions", () => {
 
     fireEvent.click(barButton())
 
-    expect(addToCart).not.toHaveBeenCalled()
+    expect(addToCartAndConfirm).not.toHaveBeenCalled()
     expect(scrollIntoView).toHaveBeenCalledTimes(1)
     expect(scrollIntoView.mock.calls[0][0]).toMatchObject({ block: "center" })
     expect(screen.getByTestId("option-error")).toHaveTextContent("Choose a size")
@@ -199,11 +199,39 @@ describe("product actions", () => {
     }
   })
 
-  it("has no quantity field", () => {
+  it("has a quantity stepper beside the main button, starting at 1, that sets how many to add", async () => {
     render(<ProductActions product={jersey()} region={region} />)
 
-    expect(screen.queryByRole("spinbutton")).toBeNull()
-    expect(screen.queryByLabelText(/quantity/i)).toBeNull()
+    const field = screen.getByTestId("quantity-input")
+    expect(field).toHaveValue("1")
+    expect(field).toHaveAttribute("inputmode", "numeric")
+    expect(screen.getByTestId("quantity-decrease")).toHaveAttribute("aria-disabled", "true")
+
+    fireEvent.click(screen.getByRole("radio", { name: "M" }))
+    expect(field).toHaveAccessibleName("Quantity, Jersey, size M")
+    fireEvent.click(screen.getByTestId("quantity-increase"))
+    fireEvent.click(screen.getByTestId("quantity-increase"))
+    fireEvent.click(screen.getByTestId("quantity-increase"))
+    expect(field).toHaveValue("4")
+
+    await act(async () => {
+      fireEvent.click(mainButton())
+    })
+    expect(addToCartAndConfirm).toHaveBeenCalledWith({
+      variantId: "var_M",
+      quantity: 4,
+      countryCode: "pk",
+    })
+  })
+
+  it("the sticky bar adds the quantity above 1: 'M × 4 · PKR 14,000'", () => {
+    render(<ProductActions product={jersey()} region={region} />)
+    const summary = () =>
+      screen.getByTestId("mobile-summary").textContent?.replace(/\s/g, " ")
+
+    fireEvent.click(screen.getByRole("radio", { name: "M" }))
+    fireEvent.change(screen.getByTestId("quantity-input"), { target: { value: "4" } })
+    expect(summary()).toBe("M × 4 · PKR 14,000")
   })
 
   it("single-variant product shows Add to cart, no sizes, and adds at once", async () => {
@@ -233,7 +261,7 @@ describe("product actions", () => {
     await act(async () => {
       fireEvent.click(mainButton())
     })
-    expect(addToCart).toHaveBeenCalledWith({
+    expect(addToCartAndConfirm).toHaveBeenCalledWith({
       variantId: "var_kit",
       quantity: 1,
       countryCode: "pk",
@@ -260,6 +288,6 @@ describe("product actions", () => {
     expect(barButton()).toHaveTextContent("Out of stock")
     expect(barButton()).toHaveAttribute("aria-disabled", "true")
     fireEvent.click(mainButton())
-    expect(addToCart).not.toHaveBeenCalled()
+    expect(addToCartAndConfirm).not.toHaveBeenCalled()
   })
 })

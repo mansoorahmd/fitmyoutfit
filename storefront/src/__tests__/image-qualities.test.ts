@@ -26,18 +26,18 @@ const loadConfig = () => {
 
 describe("images.qualities", () => {
   it("lists every quality the code uses, and the default 75", () => {
-    const used = new Set<number>([75])
+    const used: number[] = [75]
     for (const file of sourceFiles(src)) {
       const text = fs.readFileSync(file, "utf8")
-      for (const match of text.matchAll(/quality=\{(\d+)\}/g)) {
-        used.add(Number(match[1]))
+      const pattern = /quality=\{(\d+)\}/g
+      let match: RegExpExecArray | null
+      while ((match = pattern.exec(text))) {
+        used.push(Number(match[1]))
       }
     }
 
-    expect(used.has(50)).toBe(true)
+    expect(used).toContain(50)
     const qualities: number[] = loadConfig().images.qualities
-    for (const value of used) {
-      expect(qualities).toContain(value)
-    }
+    used.forEach((value) => expect(qualities).toContain(value))
   })
 })

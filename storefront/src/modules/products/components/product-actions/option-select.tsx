@@ -19,6 +19,8 @@ type OptionSelectProps = {
   error?: string
   /** The radio group, so the main button can move focus to it. */
   groupRef?: React.Ref<HTMLDivElement>
+  /** At the end of the label row: the "Size chart" link (05, 3.3). */
+  labelAction?: React.ReactNode
   "data-testid"?: string
 }
 
@@ -39,6 +41,7 @@ const OptionSelect: React.FC<OptionSelectProps> = ({
   unavailable = [],
   error,
   groupRef,
+  labelAction,
 }) => {
   const id = useId()
   const errorId = `${id}-error`
@@ -49,15 +52,23 @@ const OptionSelect: React.FC<OptionSelectProps> = ({
 
   return (
     <div className="flex flex-col gap-y-3">
-      {/* "Size" before a choice, "Size: M" after */}
-      <p
-        className="type-body font-semibold text-brand-ink"
-        aria-hidden="true"
-        data-testid="option-label"
+      <div
+        className={clx(
+          "flex items-center justify-between gap-4",
+          labelAction && "-my-2.5 min-h-[44px]"
+        )}
       >
-        {title}
-        {current ? `: ${current}` : ""}
-      </p>
+        {/* "Size" before a choice, "Size: M" after */}
+        <p
+          className="type-body font-semibold text-brand-ink"
+          aria-hidden="true"
+          data-testid="option-label"
+        >
+          {title}
+          {current ? `: ${current}` : ""}
+        </p>
+        {labelAction}
+      </div>
       {error && (
         <p
           id={errorId}
