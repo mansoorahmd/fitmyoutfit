@@ -70,6 +70,32 @@ const Sheet = ({
     return () => window.removeEventListener("popstate", onPop)
   }, [open, closeOnBack, entryId])
 
+  // Focus goes to the title on every device (05, 3.4). Headless UI 2 skips
+  // `initialFocus` on touch screens (`pointer: coarse`), to keep the
+  // keyboard down, and focuses the dialog itself; the title opens no
+  // keyboard, so it takes focus there too, once the panel is on screen.
+  useEffect(() => {
+    if (!open) {
+      return
+    }
+    let frame = 0
+    let tries = 0
+    const focusTitle = () => {
+      const title = titleRef.current
+      if (title) {
+        if (!title.contains(document.activeElement)) {
+          title.focus({ preventScroll: true })
+        }
+        return
+      }
+      if (++tries < 10) {
+        frame = window.requestAnimationFrame(focusTitle)
+      }
+    }
+    frame = window.requestAnimationFrame(focusTitle)
+    return () => window.cancelAnimationFrame(frame)
+  }, [open])
+
   // Closing by the button, Esc or the backdrop takes our entry off too; the
   // popstate that follows does the closing.
   const close = () => {

@@ -1,9 +1,10 @@
-import { act, fireEvent, render, screen } from "@testing-library/react"
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { useState } from "react"
 import { describe, expect, it, vi } from "vitest"
 
 import Alert from "@modules/common/components/alert"
 import DeliveryDateLine from "@modules/common/components/delivery-date-line"
+import FieldError from "@modules/common/components/field-error"
 import QuantityStepper from "@modules/common/components/quantity-stepper"
 import Sheet from "@modules/common/components/sheet"
 
@@ -85,6 +86,70 @@ describe("QuantityStepper", () => {
   })
 })
 
+describe("QuantityStepper, typing", () => {
+  const setup = () => {
+    const onChange = vi.fn()
+    const onTyped = vi.fn()
+    render(
+      <QuantityStepper
+        value={11}
+        onChange={onChange}
+        onTyped={onTyped}
+        label="Quantity"
+        decreaseLabel="Decrease quantity"
+        increaseLabel="Increase quantity"
+        rangeMessage="Enter a number from 1 to 999"
+      />
+    )
+    return { onChange, onTyped, field: screen.getByRole("textbox", { name: "Quantity" }) }
+  }
+
+  it("reports nothing while typing, only the number taken on blur", () => {
+    const { onChange, onTyped, field } = setup()
+    for (const text of ["1", "10", "100"]) {
+      fireEvent.change(field, { target: { value: text } })
+    }
+    expect(onChange).not.toHaveBeenCalled()
+    expect(onTyped).not.toHaveBeenCalled()
+    fireEvent.blur(field)
+    expect(onTyped).toHaveBeenCalledWith(100)
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it("takes the number on Enter", () => {
+    const { onTyped, field } = setup()
+    fireEvent.change(field, { target: { value: "12" } })
+    fireEvent.keyDown(field, { key: "Enter" })
+    expect(onTyped).toHaveBeenCalledWith(12)
+  })
+
+  it("puts back the number from before typing when the typed one is out of range", () => {
+    const { onTyped, field } = setup()
+    fireEvent.change(field, { target: { value: "1000" } })
+    fireEvent.blur(field)
+    expect(field).toHaveValue("11")
+    expect(field).toHaveAccessibleDescription("Enter a number from 1 to 999")
+    expect(onTyped).not.toHaveBeenCalled()
+  })
+})
+
+describe("FieldError", () => {
+  it("keeps the icon beside the words: they wrap in their own column, never under the icon", () => {
+    render(
+      <FieldError action={<button type="button">Try again</button>}>
+        We couldn&apos;t change the quantity. Try again.
+      </FieldError>
+    )
+    const error = screen.getByTestId("field-error")
+    expect(error).not.toHaveClass("flex-wrap")
+    const [icon, body] = Array.from(error.children)
+    expect(icon).toHaveAttribute("data-icon", "alert")
+    expect(icon).toHaveClass("shrink-0")
+    expect(body).toHaveClass("min-w-0", "flex-1")
+    expect(body).toHaveTextContent("We couldn't change the quantity. Try again.Try again")
+  })
+})
+
 describe("DeliveryDateLine", () => {
   it("shows the backend's date as a calendar day with its note", () => {
     render(<DeliveryDateLine date="2026-11-26" />)
@@ -132,6 +197,36 @@ describe("Sheet", () => {
       window.dispatchEvent(new PopStateEvent("popstate"))
     })
     expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it("moves focus to the title on a touch screen too, not to the dialog itself", async () => {
+    // Headless UI skips `initialFocus` when `(pointer: coarse)` matches (QA, S1-3b, M1).
+    const original = window.matchMedia
+    window.matchMedia = ((query: string) => ({
+      matches: query === "(pointer: coarse)",
+      media: query,
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    })) as typeof window.matchMedia
+    try {
+      render(<Harness onClose={() => {}} />)
+      const title = screen.getByRole("heading", { name: "Size chart" })
+      await waitFor(() => expect(title).toHaveFocus())
+      expect(screen.getByRole("dialog")).not.toHaveFocus()
+    } finally {
+      window.matchMedia = original
+    }
+  })
+
+  it("moves focus to the title with a mouse and keyboard", async () => {
+    render(<Harness onClose={() => {}} />)
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: "Size chart" })).toHaveFocus()
+    )
   })
 
   it("has a 44 px close button with its own label", () => {
