@@ -50,6 +50,8 @@ const COMPONENTS = [
   // S1-4: the checkout and the order confirmation
   "app/[countryCode]/(checkout)/layout.tsx",
   "app/[countryCode]/(checkout)/checkout/page.tsx",
+  "app/[countryCode]/(main)/order/[id]/confirmed/page.tsx",
+  "app/[countryCode]/(main)/order/[id]/confirmed/not-found.tsx",
   "modules/cart/components/move-cart-to-region/index.tsx",
   "modules/checkout/components/address-step/index.tsx",
   "modules/checkout/components/address-summary/index.tsx",
@@ -64,6 +66,7 @@ const COMPONENTS = [
   "modules/common/components/check-field/index.tsx",
   "modules/common/components/radio-card/index.tsx",
   "modules/common/components/text-field/index.tsx",
+  "modules/order/templates/order-completed-template.tsx",
 ]
 
 describe("M1 wording", () => {

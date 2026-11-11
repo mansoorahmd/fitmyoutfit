@@ -33,7 +33,7 @@ export default async function Nav({ countryCode }: { countryCode: string }) {
   const regionChoices = toRegionChoices(regions)
 
   return (
-    <div className="sticky top-0 inset-x-0 z-50">
+    <div className="sticky top-0 inset-x-0 z-50 print:hidden">
       <header className="bg-brand-inverse text-brand-on-inverse">
         <nav
           aria-label="Main"

@@ -56,7 +56,7 @@ export default async function Footer({ countryCode }: { countryCode: string }) {
 
   return (
     <footer
-      className="bg-brand-inverse text-brand-on-inverse"
+      className="bg-brand-inverse text-brand-on-inverse print:hidden"
       data-testid="footer"
     >
       <div className="content-container flex flex-col gap-10 py-12 xl:py-16">
