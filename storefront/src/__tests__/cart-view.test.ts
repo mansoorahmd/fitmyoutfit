@@ -21,7 +21,13 @@ import {
   stepperButtons,
 } from "@lib/util/quantity"
 
-import { cartFixture, lineFixture, rulesFixture } from "./fixtures/m1"
+import {
+  cartFixture,
+  lineFixture,
+  rulesFixture,
+  shippingMethodsFixture,
+  shippingOptionsFixture,
+} from "./fixtures/m1"
 
 const plain = (s: string | undefined | null) => s?.replace(/\s/g, " ")
 
@@ -70,28 +76,46 @@ describe("deliveryRow", () => {
     expect(totalIsBeforeDelivery(row)).toBe(true)
   })
 
-  it("shows the chosen option's amount", () => {
-    expect(
-      deliveryRow({
-        shippingMethods: [{ name: "Delivery in Pakistan" }],
-        shippingSubtotal: 250,
-      })
-    ).toEqual({ kind: "amount", label: "Delivery in Pakistan", amount: 250 })
+  it("shows the chosen option's amount (Pakistan, with its method set)", () => {
+    const row = deliveryRow({
+      shippingMethods: shippingMethodsFixture("pk"),
+      shippingSubtotal: 250,
+      shippingOptions: shippingOptionsFixture("pk"),
+    })
+    expect(row).toEqual({ kind: "amount", label: "Delivery in Pakistan", amount: 250 })
+    expect(totalIsBeforeDelivery(row)).toBe(false)
   })
 
   it("shows the duty-paid option as included, never as a zero amount", () => {
-    const fromData = deliveryRow({
-      shippingOptions: [{ name: "Shipping & duties included", data: { ddp: true } }],
-    })
+    const fromData = deliveryRow({ shippingOptions: shippingOptionsFixture("us") })
     expect(fromData).toEqual({ kind: "included", label: "Shipping & duties included" })
     expect(totalIsBeforeDelivery(fromData)).toBe(false)
+  })
+
+  it("knows a chosen duty-paid method by its shipping option, as the real backend sends it", () => {
+    // The method has no marker of its own: only its option carries `ddp: true`.
+    const methods = shippingMethodsFixture("us")
+    expect(methods[0]).not.toHaveProperty("data")
+    const row = deliveryRow({
+      shippingMethods: methods,
+      shippingSubtotal: 0,
+      shippingOptions: shippingOptionsFixture("us"),
+    })
+    expect(row).toEqual({ kind: "included", label: "Shipping & duties included" })
+  })
+
+  it("shows a chosen method's amount when its option is not duty-paid or isn't known", () => {
+    const methods = shippingMethodsFixture("us")
+    expect(
+      deliveryRow({ shippingMethods: methods, shippingSubtotal: 0, shippingOptions: null })?.kind
+    ).toBe("amount")
     expect(
       deliveryRow({
-        shippingMethods: [{ name: "Shipping & duties included" }],
+        shippingMethods: methods,
         shippingSubtotal: 0,
-        rulesSayDdp: true,
+        shippingOptions: shippingOptionsFixture("pk"),
       })?.kind
-    ).toBe("included")
+    ).toBe("amount")
   })
 
   it("is left out when no option is known", () => {
@@ -156,6 +180,35 @@ describe("cartPageView", () => {
     // the cart itself still works
     expect(v.lines).toHaveLength(1)
     expect(v.checkoutHref).toBe("/checkout?step=address")
+  })
+
+  it("an export cart with the duty-paid method set says Included, not USD 0.00", () => {
+    const v = view({
+      countryCode: "us",
+      cart: cartFixture({ currency_code: "usd", shipping_methods: shippingMethodsFixture("us") }),
+      shippingOptions: shippingOptionsFixture("us"),
+    })
+    expect(v.delivery).toEqual({ kind: "included", label: "Shipping & duties included" })
+    expect(v.deliveryAmount).toBeUndefined()
+  })
+
+  it("a Pakistan cart with its delivery set shows the amount, in a total that includes it", () => {
+    const v = view({
+      countryCode: "pk",
+      cart: cartFixture({
+        currency_code: "pkr",
+        items: [lineFixture({ unit_price: 3500, total: 14000 })],
+        item_subtotal: 14000,
+        shipping_subtotal: 250,
+        total: 14250,
+        shipping_methods: shippingMethodsFixture("pk"),
+      }),
+      shippingOptions: shippingOptionsFixture("pk"),
+    })
+    expect(v.delivery).toEqual({ kind: "amount", label: "Delivery in Pakistan", amount: 250 })
+    expect(plain(v.deliveryAmount)).toBe("PKR 250")
+    expect(plain(v.total)).toBe("PKR 14,250")
+    expect(totalIsBeforeDelivery(v.delivery)).toBe(false)
   })
 
   it("shows the tax note until the region's tax is final", () => {

@@ -27,7 +27,7 @@ import { revalidateCartCaches } from "./cart-cache"
 export async function retrieveCart(cartId?: string, fields?: string) {
   const id = cartId || (await getCartId())
   fields ??=
-    "*items, *region, *items.product, *items.variant, *items.thumbnail, *items.metadata, +items.total, *promotions, +shipping_methods.name"
+    "*items, *region, *items.product, *items.variant, *items.thumbnail, *items.metadata, +items.total, *promotions, +shipping_methods.name, +shipping_methods.shipping_option_id"
 
   if (!id) {
     return null
@@ -55,9 +55,13 @@ export async function retrieveCart(cartId?: string, fields?: string) {
     .catch(() => null)
 }
 
-/** The cart page's fields (`*items.product` brings the product's kind). */
+/**
+ * The cart page's fields. `*items.product` brings the product's kind;
+ * `shipping_methods.shipping_option_id` tells which option a chosen method
+ * came from, the only way to know it is the duty-paid one (contract section 3).
+ */
 const CART_PAGE_FIELDS =
-  "*items, *region, *items.product, *items.variant, *items.thumbnail, *items.metadata, +items.total, *promotions, +shipping_methods.name"
+  "*items, *region, *items.product, *items.variant, *items.thumbnail, *items.metadata, +items.total, *promotions, +shipping_methods.name, +shipping_methods.shipping_option_id"
 
 /**
  * The cart for the cart page, telling "no cart" from "couldn't load". No

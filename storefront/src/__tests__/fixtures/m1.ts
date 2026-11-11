@@ -36,6 +36,46 @@ export const rulesFixture = (over: Record<string, unknown> = {}) => ({
   ...over,
 })
 
+type Market = "pk" | "us"
+
+/**
+ * GET /store/shipping-options?cart_id= (contract section 3), trimmed to the
+ * fields the storefront reads, as the backend returned them on 11 Nov 2026
+ * (task S1-3b, a cart of 10 pieces in each region).
+ */
+export const shippingOptionsFixture = (market: Market) =>
+  market === "pk"
+    ? [{ id: "so_01M75TYKSNQCNFW2NHG4X8V7J2", name: "Delivery in Pakistan", amount: 250, price_type: "flat", data: {} }]
+    : [{ id: "so_01M75TYKSPCRF6EY96EH7XT3W3", name: "Shipping & duties included", amount: 0, price_type: "flat", data: { ddp: true } }]
+
+/**
+ * `cart.shipping_methods` with the cart page's fields, after POST
+ * /store/carts/:id/shipping-methods, exactly as the backend returned them
+ * on the same day. The method carries no duty-paid marker of its own (with
+ * `*shipping_methods` its `data` is {}): only its option says so.
+ */
+export const shippingMethodsFixture = (market: Market) => [
+  market === "pk"
+    ? {
+        amount: 250,
+        is_tax_inclusive: false,
+        shipping_option_id: "so_01M75TYKSNQCNFW2NHG4X8V7J2",
+        name: "Delivery in Pakistan",
+        id: "casm_01M75VAK4SFT36EX1Y4S759P4V",
+        tax_lines: [],
+        adjustments: [],
+      }
+    : {
+        amount: 0,
+        is_tax_inclusive: false,
+        shipping_option_id: "so_01M75TYKSPCRF6EY96EH7XT3W3",
+        name: "Shipping & duties included",
+        id: "casm_01M75VAH3VDJ5NZ8KGMZQ5NB4D",
+        tax_lines: [],
+        adjustments: [],
+      },
+]
+
 /** A cart line as the store API returns it (the fields the storefront reads). */
 export const lineFixture = (over: Record<string, unknown> = {}) =>
   ({

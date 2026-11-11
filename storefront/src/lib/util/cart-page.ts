@@ -7,6 +7,8 @@ import { HttpTypes } from "@medusajs/types"
 import {
   CartLineView,
   DeliveryRow,
+  ShippingMethodLike,
+  ShippingOptionLike,
   cartLineView,
   cartShowsTaxNote,
   checkoutHref,
@@ -24,8 +26,6 @@ import {
   promisedDate,
 } from "./checkout-rules"
 import { maxQuantityFor } from "./quantity"
-
-type ShippingOptionLike = { name?: string | null; data?: Record<string, unknown> | null }
 
 export type CartPageView = {
   lines: CartLineView[]
@@ -64,10 +64,9 @@ export const cartPageView = ({
 }): CartPageView => {
   const currency = cart.currency_code
   const delivery = deliveryRow({
-    shippingMethods: cart.shipping_methods as ShippingOptionLike[] | null | undefined,
+    shippingMethods: cart.shipping_methods as ShippingMethodLike[] | null | undefined,
     shippingSubtotal: cart.shipping_subtotal,
     shippingOptions,
-    rulesSayDdp: rules?.shipping?.ddp === true,
   })
 
   return {

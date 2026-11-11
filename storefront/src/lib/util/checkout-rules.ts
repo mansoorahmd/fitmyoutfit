@@ -34,8 +34,6 @@ export type CheckoutRules = {
   minimum_quantity: MinimumQuantity | null
   cash_on_delivery: CashOnDelivery | null
   delivery_promise: DeliveryPromise | null
-  /** Contract section 8: present when the store API can't say which option is duty-paid. */
-  shipping?: { ddp?: boolean } | null
 }
 
 const isObject = (value: unknown): value is Record<string, unknown> =>
@@ -116,9 +114,6 @@ export const parseCheckoutRules = (json: unknown): CheckoutRules | null => {
     minimum_quantity: readMinimum(json.minimum_quantity),
     cash_on_delivery: readCod(json.cash_on_delivery),
     delivery_promise: readPromise(json.delivery_promise),
-    shipping: isObject(json.shipping)
-      ? { ddp: json.shipping.ddp === true }
-      : null,
   }
 }
 

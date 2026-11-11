@@ -69,39 +69,58 @@ export type DeliveryRow =
   /** Pakistan before checkout: the option's name and "Added at checkout". */
   | { kind: "at_checkout"; label: string }
 
-type ShippingOptionLike = {
+/** A shipping option as `GET /store/shipping-options?cart_id=` returns it. */
+export type ShippingOptionLike = {
+  id?: string | null
   name?: string | null
   data?: Record<string, unknown> | null
 }
 
+/** A shipping method already on the cart (`cart.shipping_methods[]`). */
+export type ShippingMethodLike = {
+  name?: string | null
+  shipping_option_id?: string | null
+}
+
+/** The option is the export markets' single duty-paid line (contract section 3). */
+const isDutyPaid = (option: ShippingOptionLike | null | undefined): boolean =>
+  option?.data?.ddp === true
+
 /**
  * The summary's delivery row (05, 4.4), or null when there is nothing true
  * to say (no option known yet). The name is always the backend's: "Delivery
- * in Pakistan" or "Shipping & duties included". An option is duty-paid when
- * its `data.ddp` is true, or when the rules say so (contract section 8).
+ * in Pakistan" or "Shipping & duties included".
+ *
+ * Only the shipping option carries the duty-paid marker (`data.ddp: true`,
+ * contract section 3); the method on the cart has its own `data`, which is
+ * empty. So a chosen method is duty-paid when the option it was made from,
+ * matched by `shipping_option_id`, is.
  */
 export const deliveryRow = ({
   shippingMethods,
   shippingSubtotal,
   shippingOptions,
-  rulesSayDdp = false,
 }: {
-  shippingMethods?: { name?: string | null; data?: Record<string, unknown> | null }[] | null
+  shippingMethods?: ShippingMethodLike[] | null
   shippingSubtotal?: number | null
   shippingOptions?: ShippingOptionLike[] | null
-  rulesSayDdp?: boolean
 }): DeliveryRow | null => {
   const chosen = shippingMethods?.find((m) => !!m.name)
-  const option = chosen ?? shippingOptions?.find((o) => !!o.name)
+  if (chosen?.name) {
+    const from = chosen.shipping_option_id
+      ? shippingOptions?.find((o) => !!o.id && o.id === chosen.shipping_option_id)
+      : undefined
+    if (isDutyPaid(from)) {
+      return { kind: "included", label: chosen.name }
+    }
+    return { kind: "amount", label: chosen.name, amount: shippingSubtotal ?? 0 }
+  }
+  const option = shippingOptions?.find((o) => !!o.name)
   if (!option?.name) {
     return null
   }
-  const ddp = option.data?.ddp === true || rulesSayDdp
-  if (ddp) {
+  if (isDutyPaid(option)) {
     return { kind: "included", label: option.name }
-  }
-  if (chosen) {
-    return { kind: "amount", label: option.name, amount: shippingSubtotal ?? 0 }
   }
   return { kind: "at_checkout", label: option.name }
 }

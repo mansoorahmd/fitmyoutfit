@@ -35,17 +35,18 @@ describe("parseCheckoutRules", () => {
         rush: { days: 10, date: "2026-11-21" },
         applies: "standard",
       },
-      shipping: null,
     })
   })
 
-  it("reads the section 8 additions: which date applies, and the duty-paid marker", () => {
+  it("reads the section 8 addition: which date applies", () => {
     const rules = rulesWith({
       delivery_promise: { ...CONTRACT_EXAMPLE.delivery_promise, applies: "rush" },
-      shipping: { ddp: true },
     })
     expect(rules?.delivery_promise?.applies).toBe("rush")
-    expect(rules?.shipping).toEqual({ ddp: true })
+  })
+
+  it("reads nothing about shipping: the duty-paid marker is on the shipping option (contract section 3)", () => {
+    expect(rulesWith({ shipping: { ddp: true } })).not.toHaveProperty("shipping")
   })
 
   it("is null for anything but an object", () => {
