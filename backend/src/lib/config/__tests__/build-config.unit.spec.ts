@@ -8,6 +8,7 @@ import {
   buildModules,
   buildRedisModules,
   ConfigError,
+  DATABASE_HOST_PROBLEMS,
   DATABASE_URL_NOT_SET,
   DEV_ONLY_VALUES,
   devValueMatch,
@@ -479,6 +480,67 @@ describe("production secrets", () => {
       productionSecretProblems({ ...goodProductionEnv, DATABASE_URL: url.replace(/#/g, "%23") })
     ).toEqual([])
     expect(productionSecretProblems({ NODE_ENV: "development", DATABASE_URL: url })).toEqual([])
+  })
+
+  // QA, eighth review: the login was checked, but the server was chosen elsewhere (PGHOST for a
+  // URL with no host, a ?host= parameter over the visible host).
+  it.each([
+    ["an empty host", "postgres://store:real-password@/medusa", "no_host"],
+    ["no authority at all", "postgres:///medusa", "no_host"],
+    ["an empty host after Medusa's rewrite", "postgres://store:real-password@/medusa?ssl_mode=disable", "no_host"],
+    ["a percent-encoded socket path as host", "postgres://store:real-password@%2Fvar%2Frun%2Fpostgresql/medusa", "no_host"],
+    ["a host parameter", "postgres://store:real-password@db:5432/medusa?host=evil.example", "host_parameter"],
+    ["an empty host parameter", "postgres://store:real-password@db/medusa?sslmode=require&host=", "host_parameter"],
+    ["a HOST parameter in capitals", "postgres://store:real-password@db/medusa?HOST=evil", "host_parameter"],
+    ["a hostaddr parameter", "postgresql://store:real-password@db/medusa?hostaddr=10.0.0.9", "host_parameter"],
+    ["a socket path", "/var/run/postgresql medusa", "not_a_url"],
+    ["libpq's keyword form", "host=db user=store password=real-password dbname=medusa", "not_a_url"],
+    ["plain words", "not a url", "not_a_url"],
+    ["another scheme", "mysql://store:real-password@db/medusa", "not_a_url"],
+    ["a URL with no scheme", "store:real-password@db/medusa", "not_a_url"],
+  ] as [string, string, keyof typeof DATABASE_HOST_PROBLEMS][])(
+    "refuses a DATABASE_URL that does not name its server in production: %s",
+    (_label, url, problem) => {
+      const env = { ...goodProductionEnv, DATABASE_URL: url, PGHOST: "elsewhere.example" }
+      expect(productionSecretProblems(env)).toEqual([DATABASE_HOST_PROBLEMS[problem]])
+      expect(() => buildMedusaConfig(env)).toThrow(ConfigError)
+      for (const nodeEnv of ["prod", "staging"]) {
+        expect(productionSecretProblems({ ...env, NODE_ENV: nodeEnv })).toEqual([
+          DATABASE_HOST_PROBLEMS[problem],
+        ])
+      }
+      // Development and test are unchanged.
+      for (const nodeEnv of [undefined, "development", "test"]) {
+        expect(productionSecretProblems({ ...env, NODE_ENV: nodeEnv })).toEqual([])
+      }
+    }
+  )
+
+  it("says what to write instead, and never echoes the value", () => {
+    for (const message of Object.values(DATABASE_HOST_PROBLEMS)) {
+      expect(message).toContain("postgres://<user>:<password>@<host>:<port>/<database>")
+    }
+    let message = ""
+    try {
+      buildMedusaConfig({ ...goodProductionEnv, DATABASE_URL: "postgres://store:s3cret-pw@/medusa" })
+    } catch (error) {
+      message = (error as Error).message
+    }
+    expect(message).toContain("DATABASE_URL names no database host after the @")
+    expect(message).not.toContain("s3cret-pw")
+  })
+
+  it.each([
+    "postgres://store:real-password@db:5432/medusa",
+    "postgresql://store:real-password@db.internal.example.com/medusa?sslmode=require",
+    "postgres://store:real-password@10.0.0.5:5432/medusa?ssl_mode=disable",
+    "postgres://store:real-password@[::1]:5432/medusa",
+    "postgres://store:real-password@my_db-1:5432/medusa?application_name=medusa",
+    " postgres://store:real-password@db:5432/medusa ",
+    // The '#' is reported on its own, once (below), not also as a missing host.
+    "postgres://store:pass%23word@db:5432/medusa",
+  ])("accepts a DATABASE_URL that names its server: %s", (url) => {
+    expect(productionSecretProblems({ ...goodProductionEnv, DATABASE_URL: url, PGHOST: "x" })).toEqual([])
   })
 
   // QA, fourth review: with no password given, pg reads one from a pgpass file (on Windows

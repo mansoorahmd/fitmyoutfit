@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 import {
   connectionStringLogin,
+  databaseHostProblem,
   databaseUrlReadings,
   effectiveDatabaseLogin,
   medusaClientUrl,
@@ -130,6 +131,78 @@ describe("effectiveDatabaseLogin agrees with the installed pg", () => {
       user: pg.user || undefined,
       password: pg.password || undefined,
     })
+  })
+})
+
+describe("databaseHostProblem", () => {
+  it("accepts a URL with a host after the @ and no host parameter", () => {
+    for (const url of [
+      "postgres://u:p@db/x",
+      "postgresql://u:p@db.example.com:6543/x?sslmode=require",
+      "postgres://u:p@127.0.0.1/x",
+      "postgres://u:p@[2001:db8::1]:5432/x",
+      "postgres://db/x",
+    ]) {
+      expect({ url, problem: databaseHostProblem(url) }).toEqual({ url, problem: undefined })
+    }
+  })
+
+  it("finds a missing host, a host parameter and a string that is not a URL", () => {
+    expect(databaseHostProblem("postgres://u:p@/x")).toBe("no_host")
+    expect(databaseHostProblem("postgres://u:p@%2Ftmp/x")).toBe("no_host")
+    expect(databaseHostProblem("postgres://u:p@db/x?host=other")).toBe("host_parameter")
+    expect(databaseHostProblem("postgres://u:p@db/x?Hostaddr=10.0.0.1")).toBe("host_parameter")
+    expect(databaseHostProblem("/var/run/postgresql x")).toBe("not_a_url")
+    expect(databaseHostProblem("host=db user=u")).toBe("not_a_url")
+    expect(databaseHostProblem("http://u:p@db/x")).toBe("not_a_url")
+    expect(databaseHostProblem("postgres://[bad")).toBe("not_a_url")
+  })
+
+  it("looks at every reading: a host parameter that only Medusa's rewrite brings into the query", () => {
+    // As given, `&host=` sits in the fragment; after Medusa removes ssl_mode it is in the query.
+    expect(databaseHostProblem("postgres://u:p@db/x?ssl_mode=1#&host=evil")).toBe("host_parameter")
+    expect(databaseHostProblem("postgres://u:p@db/x?ssl_mode=1&host=evil")).toBe("host_parameter")
+  })
+})
+
+/**
+ * Why those are refused, against the installed pg: for every URL databaseHostProblem accepts, pg
+ * connects to the host after the @ whatever PGHOST says; for each refused one, PGHOST or a
+ * parameter chooses the server.
+ */
+describe("databaseHostProblem agrees with the installed pg", () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const ConnectionParameters = require("pg/lib/connection-parameters")
+  const saved = process.env.PGHOST
+  beforeAll(() => {
+    process.env.PGHOST = "pghost.example"
+  })
+  afterAll(() => {
+    if (saved === undefined) {
+      delete process.env.PGHOST
+    } else {
+      process.env.PGHOST = saved
+    }
+  })
+  const pgHost = (url: string) => new ConnectionParameters({ connectionString: url }).host
+
+  it.each([
+    ["postgres://u:p@db/x", "db"],
+    ["postgresql://u:p@db.example.com:6543/x?sslmode=require", "db.example.com"],
+    ["postgres://u:p@[2001:db8::1]:5432/x", "2001:db8::1"],
+  ])("accepted %s: pg connects to %s", (url, host) => {
+    expect(databaseHostProblem(url)).toBeUndefined()
+    expect(pgHost(url)).toBe(host)
+  })
+
+  it.each([
+    ["postgres://u:p@/x", "pghost.example"],
+    ["postgres://u:p@db/x?host=evil.example", "evil.example"],
+    ["/var/run/postgresql x", "/var/run/postgresql"],
+    ["postgres://u:p@%2Ftmp/x", "/tmp"],
+  ])("refused %s: pg would connect to %s, not a host after the @", (url, host) => {
+    expect(databaseHostProblem(url)).toBeDefined()
+    expect(pgHost(url)).toBe(host)
   })
 })
 
