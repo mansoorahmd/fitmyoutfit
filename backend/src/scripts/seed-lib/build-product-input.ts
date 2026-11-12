@@ -60,13 +60,26 @@ export function buildSizeRanks(sizes: string[]): Record<string, number> {
   return Object.fromEntries(sizes.map((size, index) => [size, index]))
 }
 
-/** The variant prices: one per currency for a product with fixed prices, none otherwise. */
+/**
+ * The placeholder price of a product the server prices (has_fixed_prices: false, the rush
+ * add-on): Medusa needs a price in the cart's currency to put the variant in a cart; the server
+ * replaces it on the cart line in the same step (lib/rules/rush-charge.ts). Never charged.
+ */
+export const SERVER_PRICED_PLACEHOLDER_AMOUNT = 0
+
+/**
+ * The variant prices: one per currency, from prices.ts for a product with fixed prices, the
+ * placeholder 0 for a product the server prices.
+ */
 function buildVariantPrices(
   product: ProductSeed,
   ctx: BuildContext
 ): { amount: number; currency_code: string }[] {
   if (!product.has_fixed_prices) {
-    return []
+    return ctx.currencies.map((currency_code) => ({
+      amount: SERVER_PRICED_PLACEHOLDER_AMOUNT,
+      currency_code,
+    }))
   }
   const row = ctx.prices[product.handle]
   if (!row) {

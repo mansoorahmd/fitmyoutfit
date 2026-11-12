@@ -83,7 +83,14 @@ describe("calendarDateIn", () => {
 })
 
 describe("appliedDeliverySpeed", () => {
-  it("is standard until the rush charge exists, for the cart and the order alike", () => {
-    expect(appliedDeliverySpeed()).toBe("standard")
+  it("is rush when a line is the rush product, for the cart and the order alike", () => {
+    expect(appliedDeliverySpeed(["garment", "rush_add_on"])).toBe("rush")
+    expect(appliedDeliverySpeed(["rush_add_on"])).toBe("rush")
+  })
+
+  it("is standard otherwise, also for a kind written another way", () => {
+    expect(appliedDeliverySpeed([])).toBe("standard")
+    expect(appliedDeliverySpeed(["garment", "fit_kit", undefined, null])).toBe("standard")
+    expect(appliedDeliverySpeed(["Rush_Add_On", "rush add on", { kind: "rush_add_on" }])).toBe("standard")
   })
 })

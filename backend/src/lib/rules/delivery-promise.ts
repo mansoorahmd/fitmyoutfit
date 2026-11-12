@@ -43,14 +43,17 @@ export type PromisedDelivery = {
   applies: DeliverySpeed
 }
 
+/** The `metadata.kind` of the rush product (lib/rules/rush-charge.ts re-exports it). */
+const RUSH_PRODUCT_KIND = "rush_add_on"
+
 /**
- * Which delivery date applies to a cart, and to the order it becomes. The one place that answers
- * it: the checkout-rules route, the completion check and the promise kept on the order all call
- * this. Always "standard" for now; the rush charge (a later M1 task, S1-6) answers it here, from
- * the cart's or the order's lines, and changes nothing else.
+ * Which delivery date applies to a cart, and to the order it becomes: "rush" when one of its lines
+ * is the rush product (`metadata.kind` `rush_add_on`; a cart holds rush or it does not, there is
+ * no other flag), else "standard". The one place that answers it: the checkout-rules route and the
+ * promise kept on the order both call this, with the kinds of the cart's or the order's lines.
  */
-export function appliedDeliverySpeed(): DeliverySpeed {
-  return "standard"
+export function appliedDeliverySpeed(lineKinds: readonly unknown[]): DeliverySpeed {
+  return lineKinds.some((kind) => kind === RUSH_PRODUCT_KIND) ? "rush" : "standard"
 }
 
 /** The calendar date (YYYY-MM-DD) that `instant` falls on in `timeZone`. */

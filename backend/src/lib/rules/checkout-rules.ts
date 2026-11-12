@@ -1,26 +1,32 @@
 /**
- * The checkout rules of one cart, put together: minimum quantity, cash on delivery and the
- * delivery promise. Plain TypeScript, no Medusa imports. The Medusa code (the
+ * The checkout rules of one cart, put together: minimum quantity, cash on delivery, the delivery
+ * promise and rush. Plain TypeScript, no Medusa imports. The Medusa code (the
  * `GET /store/carts/:id/checkout-rules` route, the cart-completion hook and the payment-session
  * check) only loads the cart and settings, calls these functions and passes the result on.
  *
- * The result has exactly the shape of the route's JSON (docs/contracts/m1-checkout.md, section 6).
+ * The result has exactly the shape of the route's JSON (docs/contracts/m1-checkout.md, sections 6
+ * and 9).
  */
 import { COD_LIMIT_CURRENCY_CODE, readCodMaxTotal } from "../settings/cod-max-total"
 import { readDeliveryDays } from "../settings/delivery-days"
 import { readMinGarmentQuantity } from "../settings/min-garment-quantity"
 import type { SettingResult } from "../settings/read-number-setting"
+import { readRushPercentage } from "../settings/rush-percentage"
 import {
   checkCashOnDelivery,
   type CashOnDeliveryReason,
 } from "./cash-on-delivery"
-import { deliveryPromise, type DeliveryPromise, type DeliverySpeed } from "./delivery-promise"
+import { appliedDeliverySpeed, deliveryPromise, type DeliveryPromise } from "./delivery-promise"
 import { checkMinimumQuantity, type MinimumQuantityResult, type QuantityLine } from "./minimum-quantity"
+import { amountForJson, isRushKind, rushOffer, type RushRuleLine } from "./rush-charge"
 
 type Metadata = Readonly<Record<string, unknown>> | null | undefined
 
+/** One cart line: its kind and quantity (minimum quantity), and its price (rush). */
+export type CheckoutRulesLine = QuantityLine & Omit<RushRuleLine, "quantity" | "kind">
+
 export type CheckoutRulesInput = {
-  lines: readonly QuantityLine[]
+  lines: readonly CheckoutRulesLine[]
   region: {
     name?: string | null
     countryCodes: readonly (string | null | undefined)[]
@@ -28,17 +34,29 @@ export type CheckoutRulesInput = {
   }
   /** The cart's currency code. */
   currencyCode: string
+  /** Decimal places of the cart's currency (its smallest unit), from Medusa's currency data. */
+  currencyDigits: number
   /** The cart total, in major units of the cart's currency. */
   total: number
-  /** The Store's metadata (cod_max_total, delivery_days_standard, delivery_days_rush). */
+  /**
+   * The Store's metadata (rush_percentage, cod_max_total, delivery_days_standard,
+   * delivery_days_rush).
+   */
   storeSettings: Metadata
   /** Base date of the delivery promise, YYYY-MM-DD. */
   baseDate: string
-  /**
-   * Which delivery date applies: "rush" when the cart pays for rush. The caller answers it; until
-   * the rush charge exists (a later M1 task) the answer is always "standard".
-   */
-  deliverySpeed: DeliverySpeed
+}
+
+/** Rush for this cart (section 9 of the contract). */
+export type RushRules = {
+  /** False when the cart has no garment line or the percentage is 0. */
+  available: boolean
+  /** True when the cart holds the rush line. */
+  in_cart: boolean
+  percentage: number
+  /** The charge this cart has, or would have, in whole currency units; 0 when not available. */
+  amount: number
+  currency_code: string
 }
 
 export type CheckoutRules = {
@@ -50,6 +68,7 @@ export type CheckoutRules = {
     limit_currency_code: string
   }
   delivery_promise: DeliveryPromise
+  rush: RushRules
 }
 
 /**
@@ -60,8 +79,9 @@ export function evaluateCheckoutRules(input: CheckoutRulesInput): SettingResult<
   const minimum = readMinGarmentQuantity(input.region.metadata, input.region.name)
   const limit = readCodMaxTotal(input.storeSettings)
   const days = readDeliveryDays(input.storeSettings)
-  if (!minimum.ok || !limit.ok || !days.ok) {
-    const errors = [minimum, limit, days].flatMap((r) => (r.ok ? [] : [r.error]))
+  const percentage = readRushPercentage(input.storeSettings)
+  if (!minimum.ok || !limit.ok || !days.ok || !percentage.ok) {
+    const errors = [minimum, limit, days, percentage].flatMap((r) => (r.ok ? [] : [r.error]))
     return { ok: false, error: errors.join(" ") }
   }
 
@@ -72,6 +92,8 @@ export function evaluateCheckoutRules(input: CheckoutRulesInput): SettingResult<
     limit: limit.value,
     limitCurrencyCode: COD_LIMIT_CURRENCY_CODE,
   })
+  const kinds = input.lines.map((line) => line.kind)
+  const offer = rushOffer(input.lines, percentage.value, input.currencyDigits)
   return {
     ok: true,
     value: {
@@ -82,7 +104,14 @@ export function evaluateCheckoutRules(input: CheckoutRulesInput): SettingResult<
         limit: limit.value,
         limit_currency_code: COD_LIMIT_CURRENCY_CODE,
       },
-      delivery_promise: deliveryPromise(input.baseDate, days.value, input.deliverySpeed),
+      delivery_promise: deliveryPromise(input.baseDate, days.value, appliedDeliverySpeed(kinds)),
+      rush: {
+        available: offer.available,
+        in_cart: kinds.some(isRushKind),
+        percentage: percentage.value,
+        amount: amountForJson(offer.amount),
+        currency_code: input.currencyCode,
+      },
     },
   }
 }

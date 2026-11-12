@@ -9,6 +9,10 @@
  * (../order-metadata/write-order-metadata.ts); when another run wrote first, the order is read
  * again and the decision taken again, so both runs end with the same one value.
  *
+ * Which date applies (standard, or rush when the order has a line of the rush product) is
+ * lib/rules/delivery-promise.ts (appliedDeliverySpeed), from the kinds of the order's products,
+ * read with deleted products included so that the answer never changes later.
+ *
  * No business rule lives here: what to keep or write is decided by lib/rules/order-metadata.ts.
  */
 import type { MedusaContainer } from "@medusajs/framework/types"
@@ -21,6 +25,7 @@ import {
 } from "../../lib/rules/order-metadata"
 import { readDeliveryDays } from "../../lib/settings/delivery-days"
 import { replaceOrderMetadataKey } from "../order-metadata/write-order-metadata"
+import { productKinds } from "../rush/rush-cart"
 
 type OrderRow = {
   id: string
@@ -29,6 +34,7 @@ type OrderRow = {
   metadata?: Record<string, unknown> | null
   /** The cart the order was made from (Medusa's order-cart link), if any. */
   cart?: { metadata?: Record<string, unknown> | null } | null
+  items?: ({ product_id?: string | null } | null)[] | null
 }
 
 /** Attempts before giving up when other writers keep changing the promise (never seen). */
@@ -38,7 +44,7 @@ async function readOrder(container: MedusaContainer, orderId: string): Promise<O
   const query = container.resolve(ContainerRegistrationKeys.QUERY)
   const { data } = await query.graph({
     entity: "order",
-    fields: ["id", "created_at", "is_draft_order", "metadata", "cart.metadata"],
+    fields: ["id", "created_at", "is_draft_order", "metadata", "cart.metadata", "items.product_id"],
     filters: { id: orderId },
   })
   return (data as unknown as OrderRow[])[0]
@@ -72,12 +78,14 @@ export async function keepOrderDeliveryPromise(
       throw new MedusaError(MedusaError.Types.NOT_FOUND, `Order id not found: ${orderId}`)
     }
     const kept = order.metadata?.[DELIVERY_PROMISE_KEY]
+    const productIds = (order.items ?? []).map((item) => item?.product_id)
+    const kinds = await productKinds(container, productIds)
     const outcome = decideOrderPromise({
       kept,
       cartKept: order.cart?.metadata?.[DELIVERY_PROMISE_KEY],
       createdAt: new Date(order.created_at),
       days: readDeliveryDays(await readStoreSettings(container)),
-      applies: appliedDeliverySpeed(),
+      applies: appliedDeliverySpeed(productIds.map((id) => (id ? kinds.get(id) : undefined))),
       trust,
     })
     if (outcome.action === "keep") {

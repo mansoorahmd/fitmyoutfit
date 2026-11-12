@@ -41,6 +41,41 @@ export function isStaffOnlyKey(key: string): boolean {
   return key.startsWith(STAFF_ONLY_KEY_PREFIX)
 }
 
+/**
+ * A copy of `metadata` without the staff-only keys (what a customer may be shown). Anything that
+ * is not a plain object is returned as it is.
+ */
+export function withoutStaffOnlyKeys<T>(metadata: T): T {
+  if (typeof metadata !== "object" || metadata === null || Array.isArray(metadata)) {
+    return metadata
+  }
+  const entries = Object.entries(metadata as Record<string, unknown>)
+  if (!entries.some(([key]) => isStaffOnlyKey(key))) {
+    return metadata
+  }
+  return Object.fromEntries(entries.filter(([key]) => !isStaffOnlyKey(key))) as T
+}
+
+/**
+ * A store answer about orders (`{ order }` or `{ orders: [...] }`) with the staff-only keys left
+ * out of each order's metadata. Other answers are returned as they are.
+ */
+export function hideStaffOnlyKeysInOrders<T>(body: T): T {
+  if (typeof body !== "object" || body === null) {
+    return body
+  }
+  const answer = body as { order?: unknown; orders?: unknown }
+  const clean = (order: unknown) =>
+    typeof order === "object" && order !== null && "metadata" in order
+      ? { ...order, metadata: withoutStaffOnlyKeys((order as { metadata?: unknown }).metadata) }
+      : order
+  return {
+    ...answer,
+    ...("order" in answer ? { order: clean(answer.order) } : {}),
+    ...(Array.isArray(answer.orders) ? { orders: answer.orders.map(clean) } : {}),
+  } as T
+}
+
 /** Whether a customer may not write this metadata key on a cart. */
 export function isReservedKey(key: string): boolean {
   return key === DELIVERY_PROMISE_KEY || isStaffOnlyKey(key)
