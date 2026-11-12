@@ -89,12 +89,15 @@ describe("pages that meet an ordered cart", () => {
     const page = await CartPage(params)
     expect(isValidElement(page) && page.type).toBe(CompletedCartRecovery)
     expect((page as { props: { countryCode: string } }).props.countryCode).toBe("pk")
+    // the cart it met goes with the request (QA S1-4c, m1)
+    expect((page as { props: { cartId: string } }).props.cartId).toBe(ordered().id)
   })
 
   it("the checkout opens the order instead of sending the customer to the cart (the loop)", async () => {
     data.checkoutCart = ordered()
     const page = await CheckoutPage(params)
     expect(isValidElement(page) && page.type).toBe(CompletedCartRecovery)
+    expect((page as { props: { cartId: string } }).props.cartId).toBe(ordered().id)
     expect(nav.redirected).toEqual([])
   })
 
@@ -104,9 +107,10 @@ describe("pages that meet an ordered cart", () => {
     const panel = found.find((e) => isValidElement(e) && e.type === CartPanel) as { props: { count: number } }
     expect(panel.props.count).toBe(0)
     const recovery = found.find((e) => isValidElement(e) && e.type === CompletedCartRecovery) as {
-      props: { quiet?: boolean }
+      props: { quiet?: boolean; cartId?: string }
     }
     expect(recovery.props.quiet).toBe(true)
+    expect(recovery.props.cartId).toBe(ordered().id)
   })
 
   it("a live cart is shown as it is", async () => {
@@ -124,6 +128,14 @@ describe("CompletedCartRecovery", () => {
     expect(screen.getByTestId("completed-cart-opening")).toHaveTextContent("Opening your order…")
     await waitFor(() => expect(nav.replaced).toEqual(["/pk/order/order_1/confirmed"]))
     expect(status.requests).toEqual([{ url: "/pk/checkout/order-status", body: { cartId: null } }])
+  })
+
+  it("a second tab, whose cookie the first tab's answer already cleared, still reaches the order: the cart id goes with the request (QA S1-4c, m1)", async () => {
+    status.answers = [{ kind: "order", url: "/pk/order/order_1/confirmed" }]
+    render(<CompletedCartRecovery countryCode="pk" cartId="cart_01TWOTAB" />)
+    await waitFor(() => expect(nav.replaced).toEqual(["/pk/order/order_1/confirmed"]))
+    expect(status.requests).toEqual([{ url: "/pk/checkout/order-status", body: { cartId: "cart_01TWOTAB" } }])
+    expect(screen.queryByText("Your cart is empty")).toBeNull()
   })
 
   it("when the order can't be opened now: says it is placed, with Try again", async () => {

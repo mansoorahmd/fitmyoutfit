@@ -17,8 +17,8 @@ const words = checkoutContent.completedCart
  * one answer is enough.
  */
 let pending: Promise<OrderStatus> | null = null
-const askOnce = (countryCode: string): Promise<OrderStatus> => {
-  pending ??= requestOrderStatus({ countryCode }).finally(() => {
+const askOnce = (countryCode: string, cartId: string | null): Promise<OrderStatus> => {
+  pending ??= requestOrderStatus({ countryCode, cartId }).finally(() => {
     pending = null
   })
   return pending
@@ -36,12 +36,20 @@ const askOnce = (countryCode: string): Promise<OrderStatus> => {
  *
  * `quiet` (the header's cart): nothing is shown; the order opens when it
  * can, and the header shows an empty cart meanwhile.
+ *
+ * `cartId`: the ordered cart the page met. It is sent with the request, so
+ * a second tab whose cookie the first tab's answer has already cleared
+ * still reaches the order (QA S1-4c, m1). The route never completes an
+ * open cart, and the id gives nothing that Medusa doesn't give to whoever
+ * holds it.
  */
 const CompletedCartRecovery = ({
   countryCode,
+  cartId = null,
   quiet = false,
 }: {
   countryCode: string
+  cartId?: string | null
   quiet?: boolean
 }) => {
   const router = useRouter()
@@ -50,7 +58,7 @@ const CompletedCartRecovery = ({
 
   const open = useCallback(async () => {
     setState("opening")
-    const status = await askOnce(countryCode)
+    const status = await askOnce(countryCode, cartId)
     if (status.kind === "order") {
       router.replace(status.url)
       return
@@ -61,7 +69,7 @@ const CompletedCartRecovery = ({
       return
     }
     setState("failed")
-  }, [countryCode, router])
+  }, [countryCode, cartId, router])
 
   useEffect(() => {
     if (started.current) return

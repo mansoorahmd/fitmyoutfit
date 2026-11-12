@@ -45,7 +45,7 @@ export default async function Cart(props: {
   // Already an order (the answer to "Place order" was lost): its
   // confirmation, never the ordered cart as a live one (QA S1-4, D1).
   if (cart?.completed_at) {
-    return <CompletedCartRecovery countryCode={countryCode} />
+    return <CompletedCartRecovery countryCode={countryCode} cartId={cart.id} />
   }
 
   if (!cart?.items?.length) {

@@ -15,7 +15,7 @@ export default async function CartButton({ countryCode }: { countryCode: string 
     return (
       <>
         <CartPanel count={0} />
-        <CompletedCartRecovery countryCode={countryCode} quiet />
+        <CompletedCartRecovery countryCode={countryCode} cartId={cart.id} quiet />
       </>
     )
   }

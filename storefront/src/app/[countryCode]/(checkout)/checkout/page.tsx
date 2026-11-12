@@ -33,7 +33,7 @@ export default async function Checkout(props: { params: Promise<{ countryCode: s
     return <ServerError />
   }
   if (cart?.completed_at) {
-    return <CompletedCartRecovery countryCode={countryCode} />
+    return <CompletedCartRecovery countryCode={countryCode} cartId={cart.id} />
   }
   if (!cart?.items?.length) {
     redirect(`/${countryCode}/cart`)
