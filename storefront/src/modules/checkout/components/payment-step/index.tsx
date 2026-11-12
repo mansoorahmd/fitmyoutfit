@@ -73,18 +73,11 @@ type Phase = "idle" | "placing" | "checking" | "leaving"
 
 /**
  * Step 2, delivery and payment (docs/design/05-m1-pages.md, 6.5 to 6.8):
- * the delivery line and date, the payment choice, "Check your order" and
- * the place-order block. Closed (before step 1 is done): its heading only.
+ * the delivery line and date, the payment choice, "Check your order" (only
+ * where the summary box isn't beside the steps; see OrderCheck) and the
+ * place-order block. Closed (before step 1 is done): its heading only.
  */
-const PaymentStep = ({
-  view,
-  open,
-  onChangeAddress,
-}: {
-  view: CheckoutView
-  open: boolean
-  onChangeAddress: () => void
-}) => {
+const PaymentStep = ({ view, open }: { view: CheckoutView; open: boolean }) => {
   const router = useRouter()
   const online = useOnline()
   const { payment } = view
@@ -309,7 +302,7 @@ const PaymentStep = ({
             groupRef={groupRef}
           />
 
-          <OrderCheck view={view} onChange={onChangeAddress} />
+          <OrderCheck view={view} />
 
           <div className="flex flex-col gap-4" data-testid="place-order-block">
             {chosen === COD_PROVIDER_ID && (

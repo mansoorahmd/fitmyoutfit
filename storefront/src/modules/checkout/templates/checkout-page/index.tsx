@@ -81,7 +81,7 @@ const CheckoutPage = ({ view }: { view: CheckoutView }) => {
 
       <div className={checkoutLayout.columns}>
         <div className={checkoutLayout.main}>
-          <div className="lg:hidden">
+          <div className={checkoutLayout.summaryCollapsed}>
             <OrderSummaryDisclosure view={view} />
           </div>
 
@@ -114,11 +114,7 @@ const CheckoutPage = ({ view }: { view: CheckoutView }) => {
           />
 
           <div className="border-t border-brand-border pt-8">
-            <PaymentStep
-              view={view}
-              open={step === "payment"}
-              onChangeAddress={() => go("address")}
-            />
+            <PaymentStep view={view} open={step === "payment"} />
           </div>
         </div>
 

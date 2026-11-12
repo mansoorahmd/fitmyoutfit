@@ -66,6 +66,7 @@ vi.mock("next/image", () => ({
 import { parseCheckoutRules } from "@lib/util/checkout-rules"
 import { checkoutView } from "@lib/util/checkout-view"
 import CheckoutPage from "@modules/checkout/templates/checkout-page"
+import { checkoutLayout } from "@modules/checkout/templates/checkout-page/layout"
 
 const plain = (s: string | null | undefined) => s?.replace(/\s/g, " ")
 const callsOf = (name: string) => actions.calls.filter((c) => c.name === name)
@@ -357,6 +358,61 @@ describe("step 2, delivery and payment (05, 6.5 and 6.6)", () => {
     })
     expect(callsOf("retryDelivery")).toHaveLength(1)
     expect(nav.refreshed).toBe(1)
+  })
+
+  // QA 9, D8: the coordinator's decision of 12 Nov departs from 05, 6.5 c.
+  // Step 2 says each thing once.
+  it("'Check your order' is the lines, the rows and the total: no contact, address, 'Change' or date (QA 9, D8)", () => {
+    render(<CheckoutPage view={pkView()} />)
+    const check = screen.getByTestId("order-check")
+    // all of it, in order: the heading, the line, the rows, the total, the tax note
+    expect(plain(check.textContent)).toBe(
+      "Check your order" + "T-ShirtSize: M · × 1PKR 2,000" + "Items (1)PKR 2,000" + "Delivery in PakistanPKR 250" + "TotalPKR 2,250" + "Tax not final"
+    )
+    expect(within(check).getByRole("heading", { level: 3 })).toHaveTextContent("Check your order")
+    expect(within(check).getAllByTestId("summary-line")).toHaveLength(1)
+    // no contact, no address, no "Change" (no control at all with 6 lines or fewer), no date
+    expect(within(check).queryByTestId("address-summary")).toBeNull()
+    expect(within(check).queryAllByTestId("address-line")).toHaveLength(0)
+    expect(check).not.toHaveTextContent("ali@example.com")
+    expect(check).not.toHaveTextContent("Delivery address")
+    expect(within(check).queryByRole("button")).toBeNull()
+    expect(within(check).queryByTestId("delivery-date-line")).toBeNull()
+    expect(check).not.toHaveTextContent("Delivered by")
+  })
+
+  it("the contact, the address and 'Change' are on the page once, in step 1's summary; the date once in step 2 (QA 9, D8)", () => {
+    render(<CheckoutPage view={pkView()} />)
+    const step1 = screen.getByTestId("step-address")
+    const summaries = screen.getAllByTestId("address-summary")
+    expect(summaries).toHaveLength(1)
+    expect(step1).toContainElement(summaries[0])
+    const changes = screen.getAllByRole("button", { name: "Change contact and address" })
+    expect(changes).toHaveLength(1)
+    expect(step1).toContainElement(changes[0])
+    const dates = within(screen.getByTestId("step-payment")).getAllByTestId("delivery-date-line")
+    expect(dates).toHaveLength(1)
+    expect(screen.getByTestId("delivery-block")).toContainElement(dates[0])
+  })
+
+  it("'Check your order' is displayed only where the 'Your order' box isn't: one breakpoint for both (QA 9, D8)", () => {
+    render(<CheckoutPage view={pkView()} />)
+    // The classes that set `display`, with their breakpoints. The test
+    // setup loads no stylesheet, so the rule is read from the class names.
+    const display = (el: Element) =>
+      el.className.split(/\s+/).filter((c) => /^([a-z0-9]+:)?(hidden|block|flex|grid|contents|inline(-[a-z]+)?)$/.test(c))
+    const box = screen.getByTestId("checkout-summary-box").parentElement!
+    const bar = screen.getByTestId("order-summary-disclosure").parentElement!
+    const check = screen.getByTestId("order-check")
+    // the box beside the steps: not displayed, then displayed from 1024 px
+    expect(display(box)).toEqual(["hidden", "lg:block"])
+    // the bar and the block: displayed, then not displayed from the same width
+    expect(display(bar)).toEqual(["lg:hidden"])
+    expect(display(check)).toEqual(["flex", "lg:hidden"])
+    expect(checkoutLayout.summaryCollapsed).toBe("lg:hidden")
+    // "Place order" is not inside the block: it stays at every width
+    expect(check).not.toContainElement(screen.getByTestId("place-order-block"))
+    expect(check.nextElementSibling).toBe(screen.getByTestId("place-order-block"))
   })
 
   it("has one red main button in the view: Place order", () => {
