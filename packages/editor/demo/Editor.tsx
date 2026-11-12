@@ -541,7 +541,7 @@ export function Editor({ product, swatches, fonts, demoProduct }: EditorProps) {
               swatches={swatches}
               commitEdit={commitEdit}
               previewEdit={previewEdit}
-              begin={history.begin}
+              begin={() => history.begin()}
               end={history.end}
             />
           )}
