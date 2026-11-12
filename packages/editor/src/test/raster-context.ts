@@ -26,12 +26,27 @@ interface State {
   textAlign: CanvasTextAlign;
   textBaseline: CanvasTextBaseline;
   direction: CanvasDirection;
+  lineJoin: CanvasLineJoin;
+  miterLimit: number;
 }
 
 /** Width of one character in em, for the fake text metrics. */
 export const FAKE_CHAR_EM = 0.6;
 /** Height of a painted text box in em. */
 export const FAKE_LINE_EM = 0.7;
+
+/** A strokeText call: the outline of a line of text. */
+export interface StrokeTextCall {
+  op: "strokeText";
+  text: string;
+  font: string;
+  style: string;
+  lineWidth: number;
+  lineJoin: CanvasLineJoin;
+  matrix: Matrix;
+  x: number;
+  y: number;
+}
 
 export interface TextCall {
   op: "fillText";
@@ -56,7 +71,7 @@ export class RasterContext implements PatternCanvasContext {
   /** One colour string per pixel, row by row; "" is transparent. */
   readonly pixels: string[];
   /** Every painting call, for tests that look at the drawing order. */
-  readonly calls: Array<{ op: string; style?: string } | TextCall> = [];
+  readonly calls: Array<{ op: string; style?: string } | TextCall | StrokeTextCall> = [];
   private state: State = {
     matrix: [1, 0, 0, 1, 0, 0],
     clips: [],
@@ -67,6 +82,8 @@ export class RasterContext implements PatternCanvasContext {
     textAlign: "start",
     textBaseline: "alphabetic",
     direction: "inherit",
+    lineJoin: "miter",
+    miterLimit: 10,
   };
   private stack: State[] = [];
   private path: PathCommand[] = [];
@@ -119,6 +136,19 @@ export class RasterContext implements PatternCanvasContext {
   }
   set direction(value: CanvasDirection) {
     this.state.direction = value;
+  }
+
+  get lineJoin(): CanvasLineJoin {
+    return this.state.lineJoin;
+  }
+  set lineJoin(value: CanvasLineJoin) {
+    this.state.lineJoin = value;
+  }
+  get miterLimit(): number {
+    return this.state.miterLimit;
+  }
+  set miterLimit(value: number) {
+    this.state.miterLimit = value;
   }
 
   pixel(x: number, y: number): string {
@@ -240,6 +270,25 @@ export class RasterContext implements PatternCanvasContext {
   measureText(text: string): { width: number } {
     return { width: [...text].length * FAKE_CHAR_EM * this.emSize() };
   }
+  /** The box a line of text covers (the fake glyphs), grown by `grow` on every side. */
+  private textBox(text: string, x: number, y: number, grow: number) {
+    const s = this.state;
+    const width = this.measureText(text).width;
+    const height = FAKE_LINE_EM * this.emSize();
+    const rtl = s.direction === "rtl";
+    const align = s.textAlign === "start" ? (rtl ? "right" : "left") : s.textAlign === "end" ? (rtl ? "left" : "right") : s.textAlign;
+    const left = align === "left" ? x : align === "right" ? x - width : x - width / 2;
+    const top = s.textBaseline === "middle" ? y - height / 2 : y - height;
+    return { left: left - grow, top: top - grow, width: width + 2 * grow, height: height + 2 * grow };
+  }
+  /** Paints the text box grown by half the line width on every side, as a stroke round the glyphs would reach. */
+  strokeText(text: string, x: number, y: number): void {
+    const s = this.state;
+    this.calls.push({ op: "strokeText", text, font: s.font, style: s.strokeStyle, lineWidth: s.lineWidth, lineJoin: s.lineJoin, matrix: [...s.matrix], x, y });
+    if (text.length === 0) return;
+    const box = this.textBox(text, x, y, s.lineWidth / 2);
+    this.paintRect(box.left, box.top, box.width, box.height, s.strokeStyle);
+  }
   fillText(text: string, x: number, y: number): void {
     const s = this.state;
     this.calls.push({
@@ -254,13 +303,8 @@ export class RasterContext implements PatternCanvasContext {
       x,
       y,
     });
-    const width = this.measureText(text).width;
-    const height = FAKE_LINE_EM * this.emSize();
-    const rtl = s.direction === "rtl";
-    const align = s.textAlign === "start" ? (rtl ? "right" : "left") : s.textAlign === "end" ? (rtl ? "left" : "right") : s.textAlign;
-    const left = align === "left" ? x : align === "right" ? x - width : x - width / 2;
-    const top = s.textBaseline === "middle" ? y - height / 2 : y - height;
-    this.paintRect(left, top, width, height, s.fillStyle);
+    const box = this.textBox(text, x, y, 0);
+    this.paintRect(box.left, box.top, box.width, box.height, s.fillStyle);
   }
   drawImage(image: CanvasImageSource, dx: number, dy: number, dw: number, dh: number): void {
     const id = (image as unknown as { id?: string }).id ?? "unknown";

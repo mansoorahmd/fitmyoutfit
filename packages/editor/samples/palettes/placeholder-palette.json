@@ -1,15 +1,68 @@
 {
   "id": "placeholder-palette",
   "version": 1,
-  "note": "Placeholder colours for the demo only. Not print-tested. The real palette (E3) replaces this file.",
+  "printTested": false,
+  "note": "PLACEHOLDER colours for development only. NOT print-tested: none of these codes has been printed or measured on our fabrics. The founders' print-tested palette replaces this file. Colours are grouped in the families of docs/design/06-editor.md section 4.3; 'common' is a guess at the colours teams pick most, for the start card's first row.",
+  "families": [
+    { "id": "whites-greys", "name": "Whites & greys" },
+    { "id": "blacks-navies", "name": "Blacks & navies" },
+    { "id": "blues", "name": "Blues" },
+    { "id": "greens", "name": "Greens" },
+    { "id": "yellows-oranges", "name": "Yellows & oranges" },
+    { "id": "reds-maroons", "name": "Reds & maroons" },
+    { "id": "purples-pinks", "name": "Purples & pinks" }
+  ],
+  "common": [
+    "placeholder-white",
+    "placeholder-black",
+    "placeholder-navy",
+    "placeholder-red",
+    "placeholder-royal",
+    "placeholder-sky",
+    "placeholder-green",
+    "placeholder-gold",
+    "placeholder-yellow",
+    "placeholder-maroon",
+    "placeholder-orange",
+    "placeholder-purple",
+    "placeholder-grey"
+  ],
   "colors": [
-    { "id": "placeholder-white", "name": "White", "hex": "#FFFFFF" },
-    { "id": "placeholder-black", "name": "Black", "hex": "#111111" },
-    { "id": "placeholder-navy", "name": "Navy", "hex": "#1B2A5C" },
-    { "id": "placeholder-red", "name": "Red", "hex": "#C8102E" },
-    { "id": "placeholder-green", "name": "Green", "hex": "#0B6B3A" },
-    { "id": "placeholder-gold", "name": "Gold", "hex": "#F2B705" },
-    { "id": "placeholder-sky", "name": "Sky blue", "hex": "#5B9BD5" },
-    { "id": "placeholder-grey", "name": "Grey", "hex": "#8C8C8C" }
+    { "id": "placeholder-white", "name": "White", "hex": "#FFFFFF", "family": "whites-greys" },
+    { "id": "placeholder-cream", "name": "Cream", "hex": "#F2EBD9", "family": "whites-greys" },
+    { "id": "placeholder-silver", "name": "Silver", "hex": "#BFC4C9", "family": "whites-greys" },
+    { "id": "placeholder-grey", "name": "Grey", "hex": "#8C8C8C", "family": "whites-greys" },
+    { "id": "placeholder-charcoal", "name": "Charcoal", "hex": "#3B3E43", "family": "whites-greys" },
+
+    { "id": "placeholder-black", "name": "Black", "hex": "#111111", "family": "blacks-navies" },
+    { "id": "placeholder-navy", "name": "Navy", "hex": "#1B2A5C", "family": "blacks-navies" },
+    { "id": "placeholder-dark-navy", "name": "Dark navy", "hex": "#121A35", "family": "blacks-navies" },
+
+    { "id": "placeholder-royal", "name": "Royal blue", "hex": "#1F4E9C", "family": "blues" },
+    { "id": "placeholder-azure", "name": "Azure", "hex": "#0072CE", "family": "blues" },
+    { "id": "placeholder-sky", "name": "Sky blue", "hex": "#5B9BD5", "family": "blues" },
+    { "id": "placeholder-light-blue", "name": "Light blue", "hex": "#A9C9E8", "family": "blues" },
+    { "id": "placeholder-teal", "name": "Teal", "hex": "#00808A", "family": "blues" },
+    { "id": "placeholder-turquoise", "name": "Turquoise", "hex": "#2FB5C6", "family": "blues" },
+
+    { "id": "placeholder-bottle-green", "name": "Bottle green", "hex": "#0F3D2E", "family": "greens" },
+    { "id": "placeholder-green", "name": "Green", "hex": "#0B6B3A", "family": "greens" },
+    { "id": "placeholder-kelly-green", "name": "Kelly green", "hex": "#2E9E4E", "family": "greens" },
+    { "id": "placeholder-lime", "name": "Lime", "hex": "#9BCB3C", "family": "greens" },
+    { "id": "placeholder-mint", "name": "Mint", "hex": "#A3DBB8", "family": "greens" },
+
+    { "id": "placeholder-yellow", "name": "Yellow", "hex": "#FFD100", "family": "yellows-oranges" },
+    { "id": "placeholder-gold", "name": "Gold", "hex": "#F2B705", "family": "yellows-oranges" },
+    { "id": "placeholder-old-gold", "name": "Old gold", "hex": "#B8933A", "family": "yellows-oranges" },
+    { "id": "placeholder-orange", "name": "Orange", "hex": "#F26B1D", "family": "yellows-oranges" },
+
+    { "id": "placeholder-scarlet", "name": "Scarlet", "hex": "#E03A3E", "family": "reds-maroons" },
+    { "id": "placeholder-red", "name": "Red", "hex": "#C8102E", "family": "reds-maroons" },
+    { "id": "placeholder-cardinal", "name": "Cardinal", "hex": "#9D2235", "family": "reds-maroons" },
+    { "id": "placeholder-maroon", "name": "Maroon", "hex": "#6E1E2C", "family": "reds-maroons" },
+
+    { "id": "placeholder-purple", "name": "Purple", "hex": "#5B2C83", "family": "purples-pinks" },
+    { "id": "placeholder-lavender", "name": "Lavender", "hex": "#B6A0D8", "family": "purples-pinks" },
+    { "id": "placeholder-pink", "name": "Pink", "hex": "#E8559A", "family": "purples-pinks" }
   ]
 }

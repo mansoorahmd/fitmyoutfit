@@ -13,11 +13,32 @@
  * drawn with a transform from its millimetres to those pixels, so the layers
  * (text, numbers, logos, positioned in piece millimetres; see layers.ts) are
  * drawn in the same space with no extra conversion, after the zones.
+ *
+ * Shapes (stripes, hoops, a sash: `design.shapes`) are drawn with the zones,
+ * piece by piece, over the zone colours and regions and under every layer,
+ * clipped exactly as the regions are: to the piece's outline in the flat
+ * view, and to the piece's area plus its margin in the texture, so the seams
+ * bleed in the shape's colour and never show a line of the zone colour.
  */
-import type { ColorRef, DesignDocument, PatternPiece, ProductDefinition } from "../design/schema.js";
+import type { ColorRef, DesignDocument, PatternPiece, ProductDefinition, Shape } from "../design/schema.js";
 import { pieceGeometry } from "../design/pattern.js";
-import { traceSvgPath, type PathPoint, type PathSink } from "../design/svg-path.js";
-import { drawLayers, type AssetImageLookup, type LayerCanvasContext } from "./layers.js";
+import { parseSvgPath, traceSvgPath, type PathCommand, type PathPoint, type PathSink } from "../design/svg-path.js";
+import { drawLayers, type AssetImageLookup, type LayerCanvasContext, type TextFit } from "./layers.js";
+
+/** Parsed shape paths, by path text (a design repaints often; its shapes rarely change). */
+const shapePaths = new Map<string, PathCommand[] | null>();
+
+/** A shape's path as drawing commands, or null when it does not parse (validation refuses those). */
+export function shapeCommands(shape: Pick<Shape, "path">): PathCommand[] | null {
+  let commands = shapePaths.get(shape.path);
+  if (commands === undefined) {
+    const parsed = parseSvgPath(shape.path);
+    commands = parsed.ok ? parsed.commands : null;
+    if (shapePaths.size > 2000) shapePaths.clear();
+    shapePaths.set(shape.path, commands);
+  }
+  return commands;
+}
 
 /** Default texture edge in pixels. 2048 x 2048 RGBA is 16 MiB on the GPU (about 21 MiB with mipmaps). */
 export const DEFAULT_TEXTURE_SIZE = 2048;
@@ -107,6 +128,10 @@ export interface DrawPatternResult {
   layers: number;
   /** Asset ids drawn as placeholders because their image was not available yet. */
   missingImages: string[];
+  /** Shapes drawn (each once per piece pass that shows it). */
+  shapes: number;
+  /** For every text and number layer, whether it was shrunk to fit its box (N12). */
+  textFits: TextFit[];
 }
 
 /**
@@ -125,6 +150,13 @@ export function drawPatternTexture(
   const mode = options.mode ?? "texture";
   const bleed = options.bleed ?? Math.max(2, size / 128);
   let fills = 0;
+  let shapesDrawn = 0;
+  const shapesByPiece = new Map<string, Shape[]>();
+  for (const shape of design.shapes ?? []) {
+    const list = shapesByPiece.get(shape.pieceId);
+    if (list) list.push(shape);
+    else shapesByPiece.set(shape.pieceId, [shape]);
+  }
 
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, size, size);
@@ -168,6 +200,15 @@ export function drawPatternTexture(
       ctx.fill();
       fills++;
     }
+    for (const shape of shapesByPiece.get(piece.id) ?? []) {
+      const commands = shapeCommands(shape);
+      if (!commands) continue;
+      ctx.fillStyle = shape.fill.hex;
+      ctx.beginPath();
+      traceSvgPath(ctx, commands);
+      ctx.fill();
+      if (margin === 0) shapesDrawn++;
+    }
     ctx.restore();
     if (mode === "flat") {
       ctx.save();
@@ -195,7 +236,15 @@ export function drawPatternTexture(
     selectedLayerId: options.selectedLayerId,
   });
   ctx.setTransform(1, 0, 0, 1, 0, 0);
-  return { size, pieces: product.pieces.length, fills, layers: layers.layers, missingImages: layers.missingImages };
+  return {
+    size,
+    pieces: product.pieces.length,
+    fills,
+    layers: layers.layers,
+    missingImages: layers.missingImages,
+    shapes: shapesDrawn,
+    textFits: layers.textFits,
+  };
 }
 
 /** The 2D transform from a piece's millimetres to texture pixels, as setTransform arguments. */

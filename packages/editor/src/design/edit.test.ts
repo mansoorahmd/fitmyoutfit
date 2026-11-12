@@ -86,7 +86,7 @@ describe("addLayer", () => {
 
   it("refuses a duplicate id", () => {
     const one = addLayer(design, textLayer());
-    expect(() => addLayer(one, textLayer())).toThrow('a layer with id "text-1" already exists');
+    expect(() => addLayer(one, textLayer())).toThrow('an item with id "text-1" already exists');
   });
 
   it("refuses an invalid layer with a readable path", () => {

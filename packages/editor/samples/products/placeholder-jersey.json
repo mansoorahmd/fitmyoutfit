@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "id": "placeholder-jersey",
   "name": "Placeholder jersey (sample data, replace with the real product)",
   "model": {
@@ -7,6 +7,12 @@
     "format": "glb"
   },
   "palette": { "id": "placeholder-palette", "version": 1 },
+  "teamColors": {
+    "main": { "id": "placeholder-white", "hex": "#FFFFFF" },
+    "second": { "id": "placeholder-navy", "hex": "#1B2A5C" },
+    "accent": { "id": "placeholder-red", "hex": "#C8102E" }
+  },
+  "views": { "front": "front", "back": "back" },
   "pieces": [
     {
       "id": "front",
@@ -77,5 +83,17 @@
     { "id": "sleeves", "name": "Sleeves", "defaultColor": { "id": "placeholder-navy", "hex": "#1B2A5C" } },
     { "id": "cuffs", "name": "Sleeve cuffs", "defaultColor": { "id": "placeholder-white", "hex": "#FFFFFF" } },
     { "id": "collar", "name": "Collar", "defaultColor": { "id": "placeholder-red", "hex": "#C8102E" } }
+  ],
+  "placements": [
+    { "id": "chest-centre", "name": "Centre chest", "pieceId": "front", "centre": { "x": 280, "y": 260 }, "maxSize": { "width": 320, "height": 80 }, "roles": ["team-name", "sponsor", "text", "crest", "graphic"], "side": "front", "fontSize": 52 },
+    { "id": "left-chest", "name": "Left chest (wearer's left)", "pieceId": "front", "centre": { "x": 380, "y": 180 }, "maxSize": { "width": 90, "height": 90 }, "roles": ["crest", "sponsor", "graphic", "text"], "side": "front", "fontSize": 28 },
+    { "id": "right-chest", "name": "Right chest (wearer's right)", "pieceId": "front", "centre": { "x": 180, "y": 180 }, "maxSize": { "width": 90, "height": 90 }, "roles": ["crest", "sponsor", "graphic", "text"], "side": "front", "fontSize": 28 },
+    { "id": "front-number", "name": "Front number", "pieceId": "front", "centre": { "x": 280, "y": 390 }, "maxSize": { "width": 170, "height": 125 }, "roles": ["player-number"], "side": "front", "fontSize": 105 },
+    { "id": "upper-back", "name": "Upper back", "pieceId": "back", "centre": { "x": 280, "y": 60 }, "maxSize": { "width": 260, "height": 50 }, "roles": ["team-name", "sponsor", "text", "crest", "graphic"], "side": "back", "fontSize": 34 },
+    { "id": "back-name", "name": "Name on back", "pieceId": "back", "centre": { "x": 280, "y": 160 }, "maxSize": { "width": 340, "height": 75 }, "roles": ["player-name", "team-name", "text"], "side": "back", "fontSize": 52 },
+    { "id": "back-number", "name": "Number on back", "pieceId": "back", "centre": { "x": 280, "y": 345 }, "maxSize": { "width": 300, "height": 250 }, "roles": ["player-number"], "side": "back", "fontSize": 215 },
+    { "id": "lower-back", "name": "Lower back", "pieceId": "back", "centre": { "x": 280, "y": 590 }, "maxSize": { "width": 300, "height": 70 }, "roles": ["sponsor", "text", "team-name", "crest", "graphic"], "side": "back", "fontSize": 40 },
+    { "id": "sleeve-left", "name": "Left sleeve", "pieceId": "sleeve_left", "centre": { "x": 220, "y": 100 }, "maxSize": { "width": 80, "height": 80 }, "roles": ["crest", "sponsor", "graphic", "player-number", "text"], "side": "left", "fontSize": 60 },
+    { "id": "sleeve-right", "name": "Right sleeve", "pieceId": "sleeve_right", "centre": { "x": 220, "y": 100 }, "maxSize": { "width": 80, "height": 80 }, "roles": ["crest", "sponsor", "graphic", "player-number", "text"], "side": "right", "fontSize": 60 }
   ]
 }

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { defaultFontSize, newLogoLayer, newNumberLayer, newTextLayer, nextLayerId } from "./new-layers";
 import { createDesign } from "./create";
 import { addLayer } from "./edit";
+import { setSamplePlayer } from "./roles";
 import { addCatalogFont } from "./font-catalog";
 import { validateDesign } from "./validate";
 import { DesignError } from "./validate";
@@ -38,8 +39,12 @@ describe("new layers", () => {
   it("a number layer is large on the back, centred, and follows the number rule when added", () => {
     const layer = newNumberLayer(product, { id: "n", pieceId: "back", value: "١٠", fontId: "oswald-700", fill: RED });
     expect(layer).toMatchObject({ fontSize: 245, align: "center", position: { x: 280, y: 350 } });
-    expect(addLayer(design, layer, { product }).layers).toHaveLength(1);
-    expect(() => addLayer(design, { ...layer, value: "100" }, { product })).toThrow(/more than 2 digits/);
+    // A number layer is the player's number by default: it shows the sample player's number.
+    expect(layer.role).toBe("player-number");
+    const withPlayer = setSamplePlayer(design, { number: "١٠" });
+    expect(addLayer(withPlayer, layer, { product }).layers).toHaveLength(1);
+    expect(() => addLayer(design, layer, { product })).toThrow(/shows the sample player's number/);
+    expect(() => addLayer(withPlayer, { ...layer, value: "100" }, { product })).toThrow(/more than 2 digits/);
   });
 
   it("a logo starts as wide as prints sharp, at most 100 mm, keeping its proportions", () => {

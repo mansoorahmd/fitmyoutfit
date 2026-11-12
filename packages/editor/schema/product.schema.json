@@ -6,7 +6,7 @@
   "properties": {
     "schemaVersion": {
       "type": "number",
-      "const": 1
+      "const": 2
     },
     "id": {
       "type": "string",
@@ -51,6 +51,103 @@
       "required": [
         "id",
         "version"
+      ],
+      "additionalProperties": false
+    },
+    "teamColors": {
+      "type": "object",
+      "properties": {
+        "main": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+            },
+            "hex": {
+              "type": "string",
+              "pattern": "^#[0-9A-F]{6}$"
+            },
+            "requested": {
+              "type": "string",
+              "pattern": "^#[0-9A-F]{6}$",
+              "description": "The colour code the customer asked for (a code typed in the colour-code match), kept beside the palette colour it was matched to. Never printed: `id` and `hex` are the printed colour."
+            }
+          },
+          "required": [
+            "id",
+            "hex"
+          ],
+          "additionalProperties": false
+        },
+        "second": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+            },
+            "hex": {
+              "type": "string",
+              "pattern": "^#[0-9A-F]{6}$"
+            },
+            "requested": {
+              "type": "string",
+              "pattern": "^#[0-9A-F]{6}$",
+              "description": "The colour code the customer asked for (a code typed in the colour-code match), kept beside the palette colour it was matched to. Never printed: `id` and `hex` are the printed colour."
+            }
+          },
+          "required": [
+            "id",
+            "hex"
+          ],
+          "additionalProperties": false
+        },
+        "accent": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+            },
+            "hex": {
+              "type": "string",
+              "pattern": "^#[0-9A-F]{6}$"
+            },
+            "requested": {
+              "type": "string",
+              "pattern": "^#[0-9A-F]{6}$",
+              "description": "The colour code the customer asked for (a code typed in the colour-code match), kept beside the palette colour it was matched to. Never printed: `id` and `hex` are the printed colour."
+            }
+          },
+          "required": [
+            "id",
+            "hex"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "main",
+        "second"
+      ],
+      "additionalProperties": false
+    },
+    "views": {
+      "type": "object",
+      "properties": {
+        "front": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+        },
+        "back": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+        }
+      },
+      "required": [
+        "front",
+        "back"
       ],
       "additionalProperties": false
     },
@@ -118,7 +215,7 @@
             "minLength": 1,
             "maxLength": 20000,
             "pattern": "^[MmLlHhVvCcQqZz0-9eE.,+\\-\\s]+$",
-            "description": "The cut shape of the piece: one closed SVG path (M, L, H, V, C, Q, Z) in the piece's millimetres, inside its width and height. This pattern checks the characters only; validateProductDefinition() from @fitmyoutfit/editor/design parses the path and checks the outline is closed, inside the piece and that zones exist. Do not rely on this schema alone."
+            "description": "The cut shape of the piece: one closed SVG path (M, L, H, V, C, Q, Z) in the piece's millimetres, inside its width and height. This pattern checks the characters only; validateProductDefinition() and validateDesign() from @fitmyoutfit/editor/design parse the path and check where it lies. Do not rely on this schema alone."
           },
           "zone": {
             "type": "string",
@@ -139,7 +236,7 @@
                   "minLength": 1,
                   "maxLength": 20000,
                   "pattern": "^[MmLlHhVvCcQqZz0-9eE.,+\\-\\s]+$",
-                  "description": "SVG path data (M, L, H, V, C, Q, Z) in the piece's millimetres. May reach past the outline; only the part inside it counts. This pattern checks the characters only; validateProductDefinition() from @fitmyoutfit/editor/design parses the path and checks the outline is closed, inside the piece and that zones exist. Do not rely on this schema alone."
+                  "description": "SVG path data (M, L, H, V, C, Q, Z) in the piece's millimetres. May reach past the outline; only the part inside it counts. This pattern checks the characters only; validateProductDefinition() and validateDesign() from @fitmyoutfit/editor/design parse the path and check where it lies. Do not rely on this schema alone."
                 }
               },
               "required": [
@@ -205,6 +302,101 @@
         ],
         "additionalProperties": false
       }
+    },
+    "placements": {
+      "maxItems": 100,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "pieceId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+          },
+          "centre": {
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "number"
+              },
+              "y": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "x",
+              "y"
+            ],
+            "additionalProperties": false
+          },
+          "maxSize": {
+            "type": "object",
+            "properties": {
+              "width": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "height": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              }
+            },
+            "required": [
+              "width",
+              "height"
+            ],
+            "additionalProperties": false
+          },
+          "roles": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "team-name",
+                "player-name",
+                "player-number",
+                "crest",
+                "sponsor",
+                "text",
+                "graphic"
+              ]
+            }
+          },
+          "side": {
+            "type": "string",
+            "enum": [
+              "front",
+              "back",
+              "left",
+              "right"
+            ]
+          },
+          "fontSize": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "pieceId",
+          "centre",
+          "maxSize",
+          "roles",
+          "side"
+        ],
+        "additionalProperties": false
+      }
     }
   },
   "required": [
@@ -213,8 +405,11 @@
     "name",
     "model",
     "palette",
+    "teamColors",
+    "views",
     "pieces",
-    "zones"
+    "zones",
+    "placements"
   ],
   "additionalProperties": false
 }

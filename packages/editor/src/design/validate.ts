@@ -2,16 +2,19 @@ import type { z } from "zod";
 import {
   DESIGN_SCHEMA_VERSION,
   PRODUCT_SCHEMA_VERSION,
+  ROLES_BY_KIND,
   designSchema,
   productDefinitionSchema,
+  type ColorValue,
   type DesignDocument,
   type FontRef,
+  type ItemRole,
   type Layer,
   type ProductDefinition,
 } from "./schema.js";
 import { DEFAULT_JERSEY_NUMBER_RULES, type JerseyNumberRules } from "./jersey-number-rules.js";
 import { checkJerseyNumber, checkJerseyNumberRules } from "./jersey-number.js";
-import { flattenPath, parseSvgPath, polylineBounds } from "./svg-path.js";
+import { flattenPath, parseSvgPath, pointInPolylines, polylineBounds, shapesOverlap } from "./svg-path.js";
 
 export interface ValidationError {
   /** Where the problem is, for example `layers[2].position.x`. Empty for the document root. */
@@ -76,25 +79,65 @@ export function jerseyNumberLayerErrors(
   return result.ok ? [] : [makeError(`${path}.value`, result.error)];
 }
 
+/** Roles whose text may be empty: a slot waiting for the team's or the player's name. */
+const MAY_BE_EMPTY: readonly ItemRole[] = ["team-name", "player-name"];
+
+/**
+ * The rules for one layer that the JSON Schema cannot hold: the jersey number
+ * rule (its maximum is data); a text layer holds a visible character, unless
+ * it is the team name or the player's name, which may be empty (never only
+ * spaces); the role fits the kind (also in the schema, repeated for a layer
+ * built in code).
+ */
+export function layerRuleErrors(layer: Layer, path: string, rules: JerseyNumberRules = DEFAULT_JERSEY_NUMBER_RULES): ValidationError[] {
+  const errors = jerseyNumberLayerErrors(layer, path, rules);
+  const allowed: readonly string[] = ROLES_BY_KIND[layer.kind];
+  if (!allowed.includes(layer.role)) {
+    errors.push(makeError(`${path}.role`, `a ${layer.kind} layer cannot have the role "${layer.role}" (one of ${allowed.join(", ")})`));
+  }
+  if (layer.kind === "text" && layer.value.trim().length === 0) {
+    const empty = layer.value.length === 0;
+    if (!(empty && MAY_BE_EMPTY.includes(layer.role))) {
+      errors.push(
+        makeError(
+          `${path}.value`,
+          MAY_BE_EMPTY.includes(layer.role)
+            ? "must be empty or contain a visible character, not only spaces"
+            : "must contain a visible character, not only spaces",
+        ),
+      );
+    }
+  }
+  return errors;
+}
+
 /** An error for rules that cannot be used, or null. Shared by `validateDesign` and the edit functions. */
 export function jerseyNumberRulesError(rules: unknown): ValidationError | null {
   const problem = checkJerseyNumberRules(rules);
   return problem ? makeError("", `cannot check number layers: ${problem}`) : null;
 }
 
-function checkSchemaVersion(input: unknown, expected: number): ValidationError | null {
+function checkSchemaVersion(input: unknown, expected: number, what: string): ValidationError | null {
   if (typeof input !== "object" || input === null || Array.isArray(input)) return null;
   const version = (input as Record<string, unknown>).schemaVersion;
   if (typeof version === "number" && Number.isInteger(version) && version !== expected) {
+    const upgradable = UPGRADABLE_VERSIONS.get(what);
     return makeError(
       "schemaVersion",
       version > expected
         ? `this document uses format version ${version}, which is newer than the version this code understands (${expected}); update the editor package`
-        : `format version ${version} is not supported (this code understands ${expected}); no migration exists for it`,
+        : upgradable?.versions.includes(version)
+          ? `format version ${version} is an older format (this code understands ${expected}); upgrade it first with ${upgradable.how}`
+          : `format version ${version} is not supported (this code understands ${expected}); no migration exists for it`,
     );
   }
   return null;
 }
+
+/** Older format versions that can be upgraded, per kind of document, and how. */
+const UPGRADABLE_VERSIONS = new Map<string, { versions: number[]; how: string }>([
+  ["a design", { versions: [2], how: "upgradeDesign() from @fitmyoutfit/editor/design" }],
+]);
 
 /**
  * zod silently skips a `__proto__` key in a record, so `{"zones": {"__proto__": ...}}`
@@ -120,7 +163,7 @@ export function parseWith<T>(
   if (typeof input !== "object" || input === null || Array.isArray(input)) {
     return { ok: false, errors: [makeError("", `${what} must be a JSON object`)] };
   }
-  const versionError = version === null ? null : checkSchemaVersion(input, version);
+  const versionError = version === null ? null : checkSchemaVersion(input, version, what);
   if (versionError) return { ok: false, errors: [versionError] };
   const reserved = what === "a design" ? checkReservedKeys(input as Record<string, unknown>) : [];
   if (reserved.length > 0) return { ok: false, errors: reserved };
@@ -160,21 +203,100 @@ function checkReferences(design: DesignDocument, rules: JerseyNumberRules): Vali
   });
   design.fonts.forEach((font, i) => errors.push(...fontFallbackErrors(font, fontIds, `fonts[${i}]`)));
 
-  const layerIds = new Set<string>();
+  // Layers and shapes share one id space: the interface selects either by id.
+  const itemIds = new Set<string>();
+  design.shapes.forEach((shape, i) => {
+    if (itemIds.has(shape.id)) errors.push(makeError(`shapes[${i}].id`, `duplicate item id "${shape.id}"`));
+    itemIds.add(shape.id);
+  });
   design.layers.forEach((layer, i) => {
-    if (layerIds.has(layer.id)) errors.push(makeError(`layers[${i}].id`, `duplicate layer id "${layer.id}"`));
-    layerIds.add(layer.id);
-    errors.push(...jerseyNumberLayerErrors(layer, `layers[${i}]`, rules));
+    if (itemIds.has(layer.id)) errors.push(makeError(`layers[${i}].id`, `duplicate layer id "${layer.id}"`));
+    itemIds.add(layer.id);
+    errors.push(...layerRuleErrors(layer, `layers[${i}]`, rules));
     if ((layer.kind === "text" || layer.kind === "number") && !fontIds.has(layer.fontId)) {
       errors.push(
         makeError(`layers[${i}].fontId`, `font "${layer.fontId}" is not listed in 'fonts'; add it to the document`),
       );
     }
   });
+
+  for (const { path, value } of designColourValues(design)) errors.push(...teamColourValueErrors(design, value, path));
+
+  errors.push(...roleValueErrors(design, rules));
   return errors;
 }
 
-/** Checks a design against the product it is for: zones and pattern pieces must exist. */
+/** Every colour value of a design, with its path: zones, text fills and outlines, shapes. */
+export function designColourValues(design: Pick<DesignDocument, "zones" | "shapes" | "layers">): Array<{ path: string; value: ColorValue }> {
+  const out: Array<{ path: string; value: ColorValue }> = [];
+  for (const [zone, value] of Object.entries(design.zones)) out.push({ path: `zones.${zone}`, value });
+  design.shapes.forEach((shape, i) => out.push({ path: `shapes[${i}].fill`, value: shape.fill }));
+  design.layers.forEach((layer, i) => {
+    if (layer.kind !== "text" && layer.kind !== "number") return;
+    out.push({ path: `layers[${i}].fill`, value: layer.fill });
+    if (layer.outline) out.push({ path: `layers[${i}].outline.color`, value: layer.outline.color });
+  });
+  return out;
+}
+
+/**
+ * A colour that follows a team colour must name a team colour the design has,
+ * and hold that colour's id and code (and no code of its own).
+ */
+export function teamColourValueErrors(design: Pick<DesignDocument, "teamColors">, value: ColorValue, path: string): ValidationError[] {
+  if (value.teamColor === undefined) return [];
+  const team = design.teamColors[value.teamColor];
+  if (!team) {
+    return [makeError(`${path}.teamColor`, `follows team colour "${value.teamColor}", but the design has no ${value.teamColor} team colour`)];
+  }
+  const errors: ValidationError[] = [];
+  if (team.id !== value.id || team.hex !== value.hex) {
+    errors.push(
+      makeError(path, `follows team colour "${value.teamColor}" (${team.id} ${team.hex}) but holds ${value.id} ${value.hex}; use setTeamColor to change team colours`),
+    );
+  }
+  if (value.requested !== undefined) {
+    errors.push(makeError(`${path}.requested`, `a colour that follows team colour "${value.teamColor}" has no colour code of its own (the team colour keeps it)`));
+  }
+  return errors;
+}
+
+/**
+ * The team name and the sample player are one value each, shown by every
+ * layer with their role: every `team-name` layer shows `teamName`, every
+ * `player-name` layer the sample player's name, every `player-number` layer
+ * the sample player's number. (The roster preview swaps them together.)
+ */
+function roleValueErrors(design: DesignDocument, rules: JerseyNumberRules): ValidationError[] {
+  const errors: ValidationError[] = [];
+  const number = design.samplePlayer.number;
+  if (number !== "") {
+    const check = checkJerseyNumber(number, rules);
+    if (!check.ok) errors.push(makeError("samplePlayer.number", check.error));
+  }
+  if (design.samplePlayer.name !== "" && design.samplePlayer.name.trim() === "") {
+    errors.push(makeError("samplePlayer.name", "must be empty or contain a visible character, not only spaces"));
+  }
+  if (design.teamName !== "" && design.teamName.trim() === "") {
+    errors.push(makeError("teamName", "must be empty or contain a visible character, not only spaces"));
+  }
+  const expected: Partial<Record<ItemRole, { value: string; source: string }>> = {
+    "team-name": { value: design.teamName, source: "teamName" },
+    "player-name": { value: design.samplePlayer.name, source: "samplePlayer.name" },
+    "player-number": { value: number, source: "samplePlayer.number" },
+  };
+  design.layers.forEach((layer, i) => {
+    const want = expected[layer.role];
+    if ((layer.kind === "text" || layer.kind === "number") && want && layer.value !== want.value) {
+      errors.push(
+        makeError(`layers[${i}].value`, `a ${layer.role} layer shows ${want.source} (${JSON.stringify(want.value)}), not ${JSON.stringify(layer.value)}; change it with setTeamName or setSamplePlayer`),
+      );
+    }
+  });
+  return errors;
+}
+
+/** Checks a design against the product it is for: zones, pieces and placement presets must exist, shapes must lie on their piece. */
 function checkAgainstProduct(design: DesignDocument, product: ProductDefinition): ValidationError[] {
   const errors: ValidationError[] = [];
   if (design.product.id !== product.id) {
@@ -198,18 +320,67 @@ function checkAgainstProduct(design: DesignDocument, product: ProductDefinition)
       makeError("palette.id", `design uses palette "${design.palette.id}" but the product uses "${product.palette.id}"`),
     );
   }
-  const pieceIds = new Set(product.pieces.map((p) => p.id));
+  const pieces = new Map(product.pieces.map((p) => [p.id, p]));
+  const presets = new Map(product.placements.map((p) => [p.id, p]));
   design.layers.forEach((layer, i) => {
-    if (!pieceIds.has(layer.pieceId)) {
+    if (!pieces.has(layer.pieceId)) {
       errors.push(makeError(`layers[${i}].pieceId`, `product "${product.id}" has no pattern piece "${layer.pieceId}"`));
+    }
+    if (layer.preset === undefined) return;
+    const preset = presets.get(layer.preset);
+    if (!preset) {
+      errors.push(makeError(`layers[${i}].preset`, `product "${product.id}" has no placement preset "${layer.preset}" (presets: ${[...presets.keys()].join(", ") || "none"})`));
+    } else if (preset.pieceId !== layer.pieceId) {
+      errors.push(makeError(`layers[${i}].preset`, `placement preset "${preset.id}" is on piece "${preset.pieceId}", but the layer is on "${layer.pieceId}"`));
+    } else if (!preset.roles.includes(layer.role)) {
+      errors.push(makeError(`layers[${i}].preset`, `placement preset "${preset.id}" takes ${preset.roles.join(", ")}, not a ${layer.role} layer`));
+    }
+  });
+  design.shapes.forEach((shape, i) => {
+    const piece = pieces.get(shape.pieceId);
+    if (!piece) {
+      errors.push(makeError(`shapes[${i}].pieceId`, `product "${product.id}" has no pattern piece "${shape.pieceId}"`));
+      return;
+    }
+    const parsed = parseSvgPath(shape.path);
+    const outline = parseSvgPath(piece.outline);
+    if (parsed.ok && outline.ok && !shapesOverlap(flattenPath(parsed.commands), flattenPath(outline.commands))) {
+      errors.push(makeError(`shapes[${i}].path`, `lies outside piece "${piece.id}" (${piece.width} x ${piece.height} mm): none of it would be drawn`));
     }
   });
   return errors;
 }
 
+/** The palette colours a design may use: what `validateDesign` needs from a palette. */
+export interface PaletteColours {
+  id: string;
+  colors: ReadonlyArray<{ id: string; hex: string }>;
+}
+
+/** Every colour of the design (team colours too) must be a colour of the palette, with the palette's code. */
+function checkAgainstPalette(design: DesignDocument, palette: PaletteColours): ValidationError[] {
+  const errors: ValidationError[] = [];
+  if (design.palette.id !== palette.id) {
+    errors.push(makeError("palette.id", `design uses palette "${design.palette.id}" but was checked against "${palette.id}"`));
+  }
+  const byId = new Map(palette.colors.map((c) => [c.id, c.hex]));
+  const team = Object.entries(design.teamColors).flatMap(([role, value]) => (value ? [{ path: `teamColors.${role}`, value }] : []));
+  for (const { path, value } of [...team, ...designColourValues(design)]) {
+    const known = byId.get(value.id);
+    if (known === undefined) {
+      errors.push(makeError(path, `colour "${value.id}" (${value.hex}) is not in palette "${palette.id}"; only palette colours can be printed`));
+    } else if (known !== value.hex) {
+      errors.push(makeError(path, `colour "${value.id}" is ${known} in palette "${palette.id}" but ${value.hex} here; the printed colour must be the palette's`));
+    }
+  }
+  return errors;
+}
+
 export interface ValidateDesignOptions {
-  /** When given, the design is also checked against this product's zones and pieces. */
+  /** When given, the design is also checked against this product's zones, pieces and placement presets. */
   product?: ProductDefinition;
+  /** When given, every colour of the design must be a colour of this palette, with its code (nothing off-palette is printed). */
+  palette?: PaletteColours;
   /**
    * The jersey number rules for number layers (see jersey-number-rules.ts).
    * Defaults to `DEFAULT_JERSEY_NUMBER_RULES`. Rules may change the maximum or
@@ -236,6 +407,7 @@ export function validateDesign(
     if (!parsed.ok) return parsed;
     const errors = checkReferences(parsed.value, rules);
     if (options.product) errors.push(...checkAgainstProduct(parsed.value, options.product));
+    if (options.palette) errors.push(...checkAgainstPalette(parsed.value, options.palette));
     return errors.length > 0 ? { ok: false, errors } : parsed;
   } catch (error) {
     return unreadable("a design", error);
@@ -285,7 +457,36 @@ function checkProductDefinition(input: unknown): ValidationResult<ProductDefinit
     }
   });
   errors.push(...checkPieceGeometry(parsed.value));
+  errors.push(...checkPlacements(parsed.value));
   return errors.length > 0 ? { ok: false, errors } : parsed;
+}
+
+/** The views name pieces of the product; each placement preset sits inside its piece's outline, with a unique id. */
+function checkPlacements(product: ProductDefinition): ValidationError[] {
+  const errors: ValidationError[] = [];
+  const pieces = new Map(product.pieces.map((p) => [p.id, p]));
+  const list = [...pieces.keys()].join(", ");
+  for (const side of ["front", "back"] as const) {
+    if (!pieces.has(product.views[side])) errors.push(makeError(`views.${side}`, `"${product.views[side]}" is not one of the product's pieces (${list})`));
+  }
+  const ids = new Set<string>();
+  product.placements.forEach((preset, i) => {
+    const at = `placements[${i}]`;
+    if (ids.has(preset.id)) errors.push(makeError(`${at}.id`, `duplicate placement preset id "${preset.id}"`));
+    ids.add(preset.id);
+    const piece = pieces.get(preset.pieceId);
+    if (!piece) {
+      errors.push(makeError(`${at}.pieceId`, `"${preset.pieceId}" is not one of the product's pieces (${list})`));
+      return;
+    }
+    const outline = parseSvgPath(piece.outline);
+    if (outline.ok && !pointInPolylines(flattenPath(outline.commands), preset.centre)) {
+      errors.push(makeError(`${at}.centre`, `(${preset.centre.x}, ${preset.centre.y}) is outside the outline of piece "${piece.id}"`));
+    }
+    const duplicateRoles = preset.roles.filter((role, k) => preset.roles.indexOf(role) !== k);
+    if (duplicateRoles.length > 0) errors.push(makeError(`${at}.roles`, `lists ${duplicateRoles.join(", ")} twice`));
+  });
+  return errors;
 }
 
 /** How far (relative) a UV rectangle's proportions may differ from its piece's before artwork counts as stretched. */

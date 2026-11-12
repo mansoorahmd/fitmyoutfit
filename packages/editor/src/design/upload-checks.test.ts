@@ -204,6 +204,7 @@ describe("print resolution (DPI)", () => {
   const logo = (width: number, height: number, box: { width: number; height: number }): Extract<Layer, { kind: "logo" }> => ({
     id: "logo-1",
     kind: "logo",
+    role: "crest",
     pieceId: "front",
     position: { x: 100, y: 100 },
     size: box,

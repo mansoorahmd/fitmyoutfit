@@ -1,0 +1,8 @@
+{
+  "productId": "stand-in-tshirt",
+  "templates": [
+    "plain",
+    "contrast",
+    "band"
+  ]
+}
