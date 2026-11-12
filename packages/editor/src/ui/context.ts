@@ -69,8 +69,8 @@ export interface EditorApi {
   useColour(colourId: string): void;
   /** A text field has focus: on a phone the dock hides and the panel shrinks to the field (06-editor.md 3.3). */
   setTyping(layerId: string | null): void;
-  /** Opens a tool (the start card's "See designs", for example). */
-  openTool(tool: ToolId, detent?: PanelDetent): void;
+  /** Opens a tool (the start card's "See designs", for example); `turn: false` keeps the camera where it is. */
+  openTool(tool: ToolId, detent?: PanelDetent, options?: { turn?: boolean }): void;
   reducedMotion: boolean;
   /** Logs a timing for the performance log (06-editor.md 11.3; E3 logs, E5 measures). */
   markTiming(name: string): void;

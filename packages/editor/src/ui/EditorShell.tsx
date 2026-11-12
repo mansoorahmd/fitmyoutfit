@@ -43,6 +43,7 @@ import { EDITOR_CSS } from "./styles.js";
 import { TOOL_ORDER, ToolPanel, ToolTabs } from "./ToolPanel.js";
 import { TopBar } from "./TopBar.js";
 import { hasWebGL2, readLocal, writeLocal } from "./webgl.js";
+import { toolForLayer } from "./selection.js";
 
 /** Places the host fills with its own components (06-editor.md 13.1, 9.1). */
 export interface EditorSlots {
@@ -204,7 +205,8 @@ export function EditorShell(props: EditorShellProps) {
     }
   });
   const [hover, setHover] = useState<DesignDocument | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedIdState] = useState<string | null>(null);
+  const setSelectedId = useCallback((id: string | null) => setSelectedIdState(id), []);
   const [saveInfo, setSaveInfo] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const timing = useRef<{ name: string; start: number } | null>(null);
@@ -296,11 +298,13 @@ export function EditorShell(props: EditorShellProps) {
   const fontsLoading = (fontStatus?.loading.length ?? 0) > 0;
   const fontsFailed = (fontStatus?.failed.length ?? 0) > 0 || (fontStatus?.missing.length ?? 0) > 0;
   const openTool = useCallback(
-    (next: ToolId, nextDetent: PanelDetent = "normal") => {
+    (next: ToolId, nextDetent: PanelDetent = "normal", options: { turn?: boolean } = {}) => {
       setTool(next);
       setDetent(nextDetent);
       setStartCard(false);
-      // The camera turns to the side the tool works on (6.3).
+      // The camera turns to the side the tool works on (6.3), unless the coach tapped an item on the model
+      // (they are already looking at it).
+      if (options.turn === false) return;
       if (next === "players") showSide("back");
       else if (next === "team") {
         const name = designRef.current.layers.find((l) => l.role === "team-name");
@@ -374,7 +378,7 @@ export function EditorShell(props: EditorShellProps) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [undo, redo, selectedId, panelOpen, layout, closePanel]);
+  }, [undo, redo, selectedId, setSelectedId, panelOpen, layout, closePanel]);
 
   // ---- The zone flash (4.3): white then ink, 600 ms, fading; a still outline for 1.5 s with reduced motion.
   const chooseColourTarget = useCallback(
@@ -584,6 +588,17 @@ export function EditorShell(props: EditorShellProps) {
     },
   };
 
+  const selectOnModel = useCallback(
+    (layerId: string | null) => {
+      setSelectedId(layerId);
+      const layer = layerId ? designRef.current.layers.find((l) => l.id === layerId) : undefined;
+      if (!layer || startCard) return;
+      const next = toolForLayer(layer);
+      if (next !== activeTool && tools.includes(next)) openTool(next, detent === "expanded" ? "normal" : detent, { turn: false });
+    },
+    [setSelectedId, startCard, activeTool, tools, openTool, detent],
+  );
+
   const onLayerDrag = useCallback(
     (event: LayerDragEvent) => {
       if (event.phase === "start") history.begin("move");
@@ -725,7 +740,8 @@ export function EditorShell(props: EditorShellProps) {
               fonts: props.fontSet,
               reducedMotion,
               selectedLayerId: selectedId,
-              onSelectLayer: setSelectedId,
+              onSelectLayer: selectOnModel,
+              dragOnlySelected: "touch",
               onLayerDrag,
               pickZones: activeTool === "colours" && !startCard,
               onZoneTap,

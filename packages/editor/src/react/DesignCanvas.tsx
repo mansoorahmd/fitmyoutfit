@@ -28,6 +28,9 @@ import {
   type PerspectiveCamera,
 } from "three";
 import type { DesignDocument, Point, ProductDefinition } from "../design/schema.js";
+import { buildSurfaceLookup, projectItem, projectPieceLine, type ItemOnScreen, type ScreenPoint, type SurfaceLookup } from "../texture/surface-lookup.js";
+import { extractGarmentMeshes } from "./garment-geometry.js";
+import { TAP_MAX_MS, pressAction, type DragOnlySelected } from "./press-policy.js";
 import { dragPosition, layerAtPoint, pieceAtMeshUv, round3, startLayerDrag, type LayerDrag } from "../design/placement.js";
 import { backgroundAt } from "../design/readability.js";
 import { DEFAULT_TEXTURE_SIZE, drawPatternTexture, type DrawPatternResult } from "../texture/pattern-texture.js";
@@ -52,6 +55,32 @@ export interface LayerDragEvent {
   layerId: string;
   pieceId: string;
   position: Point;
+  /** The Alt key is held (a mouse): place freely, without snapping (06-editor.md 5.2). */
+  free?: boolean;
+  /** Screen px per piece mm where the item is (snapping takes 8 px or 6 mm, whichever is larger). */
+  pxPerMm?: number;
+}
+
+/** A line on a piece to draw over the model while placing (a snapping guide, or the print area's edge), in piece mm. */
+export interface PieceGuide {
+  pieceId: string;
+  from: Point;
+  to: Point;
+  kind: "guide" | "area";
+}
+
+/**
+ * The selected item as the camera sees it (N9), for the handles drawn over the
+ * canvas: its box on the screen (CSS px from the canvas's top left), whether it
+ * faces the camera, and the guides on the screen.
+ */
+export interface SelectionGeometry extends ItemOnScreen {
+  layerId: string;
+  /** Each guide as runs of screen points (a guide may leave the cloth and come back). */
+  guides: Array<{ kind: PieceGuide["kind"]; runs: ScreenPoint[][] }>;
+  /** The canvas's size in CSS px. */
+  width: number;
+  height: number;
 }
 
 /** Which side of the garment the camera looks at. "left" is the wearer's left. */
@@ -117,8 +146,26 @@ export interface DesignCanvasProps {
   onTextureDrawn?: (info: TextureDrawInfo) => void;
   /** The layer outlined as selected on the model. */
   selectedLayerId?: string | null;
-  /** Called with a layer's id when the customer taps (or presses) it on the model. */
+  /** Called with a layer's id when the customer taps (or, with a mouse, presses) it on the model; null for a tap on empty fabric or the stage. */
   onSelectLayer?: (layerId: string | null) => void;
+  /**
+   * Who may drag an item that is not selected (N10): "touch" (default) means on
+   * touch a drag that starts on an unselected item turns the garment, and a tap
+   * selects it first; with a mouse, a press selects and drags at once. true:
+   * select first for every pointer; false: direct drag for every pointer.
+   */
+  dragOnlySelected?: DragOnlySelected;
+  /** Draw the selected layer's outline into the texture (default true). An interface that draws handles over the canvas passes false. */
+  outlineSelected?: boolean;
+  /**
+   * Called with the selected item's box on the screen whenever it changes (the
+   * camera moved, the item changed), and null when nothing is selected or the
+   * item is not on the cloth. Computed only while something is selected; the
+   * model's UV lookup is built once, the first time it is needed.
+   */
+  onSelectionGeometry?: (geometry: SelectionGeometry | null) => void;
+  /** Lines to draw over the model with the selection (snapping guides, the print area), projected along the cloth. */
+  guides?: readonly PieceGuide[];
   /**
    * When given, layers can be dragged on the model. Called at the start, for
    * every move (at most once per frame) and at the end of a drag. A layer
@@ -332,6 +379,10 @@ function ModelView({
   selectedLayerId,
   onSelectLayer,
   onLayerDrag,
+  dragOnlySelected = "touch",
+  outlineSelected = true,
+  onSelectionGeometry,
+  guides,
   assetUrl,
   fonts,
   onFontStatus,
@@ -374,7 +425,64 @@ function ModelView({
   useFrame(() => rig.frame());
 
   // The layer and design the commands need, read when a command runs.
-  const latest = useLatest({ design, product, onSelectLayer, onLayerDrag, touchSlopMm, controls, pickZones, onZoneTap });
+  const latest = useLatest({ design, product, onSelectLayer, onLayerDrag, touchSlopMm, controls, pickZones, onZoneTap, selectedLayerId, dragOnlySelected });
+
+  // The selected item on the screen (N9): the UV lookup is built once per model, the first time something is
+  // selected; then the box is projected in the frame loop, only while something is selected (the canvas renders
+  // on demand, so this runs only when the camera or the design changed), and reported only when it changed.
+  const lookup = useRef<{ model: PreparedModel; lookup: SurfaceLookup } | null>(null);
+  const lastProjected = useRef<SelectionGeometry | null>(null);
+  const geometryOut = useLatest(onSelectionGeometry);
+  const lastGeometry = useRef<string>("");
+  const selectionInputs = useLatest({ design, product, selectedLayerId, guides, viewSize });
+  useEffect(() => {
+    lastGeometry.current = "";
+    invalidate();
+  }, [selectedLayerId, guides, invalidate]);
+  useFrame(({ camera: cam }) => {
+    const report = geometryOut.current;
+    if (!report) return;
+    const { design: d, product: p, selectedLayerId: id, guides: g, viewSize: vs } = selectionInputs.current;
+    const layer = id ? d.layers.find((l) => l.id === id) : undefined;
+    const piece = layer ? p.pieces.find((x) => x.id === layer.pieceId) : undefined;
+    if (!layer || !piece) {
+      if (lastGeometry.current !== "none") {
+        lastGeometry.current = "none";
+        lastProjected.current = null;
+        report(null);
+      }
+      return;
+    }
+    cam.updateMatrixWorld();
+    const key = JSON.stringify([cam.matrixWorld.elements, cam.projectionMatrix.elements, layer.position, layer.size, layer.rotation, layer.pieceId, g, vs.width, vs.height]);
+    if (key === lastGeometry.current) return;
+    lastGeometry.current = key;
+    if (lookup.current?.model !== prepared) {
+      try {
+        lookup.current = { model: prepared, lookup: buildSurfaceLookup(extractGarmentMeshes(prepared.scene, p)) };
+      } catch (error) {
+        console.error("[editor] the model's UV lookup:", error);
+        report(null);
+        return;
+      }
+    }
+    const surface = lookup.current.lookup;
+    const viewProjection = cam.projectionMatrix.clone().multiply(cam.matrixWorldInverse).elements;
+    const screen = { viewProjection, position: cam.position.toArray() as [number, number, number], width: vs.width, height: vs.height };
+    const on = projectItem(surface, piece, layer, screen);
+    if (!on) {
+      lastProjected.current = null;
+      report(null);
+      return;
+    }
+    const lines = (g ?? []).flatMap((line) => {
+      const linePiece = p.pieces.find((x) => x.id === line.pieceId);
+      return linePiece ? [{ kind: line.kind, runs: projectPieceLine(surface, linePiece, line.from, line.to, screen) }] : [];
+    });
+    const geometry: SelectionGeometry = { ...on, layerId: layer.id, guides: lines, width: vs.width, height: vs.height };
+    lastProjected.current = geometry;
+    report(geometry);
+  });
 
   // Camera commands, for the host's buttons and tools.
   useEffect(() => {
@@ -450,11 +558,12 @@ function ModelView({
   // when fonts or images arrive, when the selection or the highlight changes, and after the
   // 3D context comes back. The model is not reloaded.
   const onDrawn = useLatest(onTextureDrawn);
+  const outlinedLayerId = outlineSelected ? (selectedLayerId ?? null) : null;
   useEffect(() => {
-    const info = redrawPattern(surface, product, design, images, selectedLayerId ?? null, highlight);
+    const info = redrawPattern(surface, product, design, images, outlinedLayerId, highlight);
     invalidate();
     onDrawn.current?.(info);
-  }, [design, product, surface, invalidate, images, selectedLayerId, fontsVersion, imagesVersion, onDrawn, highlight, restored]);
+  }, [design, product, surface, invalidate, images, outlinedLayerId, fontsVersion, imagesVersion, onDrawn, highlight, restored]);
 
   // The 3D context can be taken away (a phone under memory pressure) and given back (N16).
   const contextEvents = useLatest({ onContextLost, onContextRestored });
@@ -489,8 +598,14 @@ function ModelView({
     const ndc = new Vector2();
     const meshes = [...prepared.pieceMeshes.keys()];
     const down = new Set<number>();
-    let drag: { pointerId: number; state: LayerDrag; position: Point; pending: Point | null; frame: number | null } | null = null;
-    let tap: { pointerId: number; x: number; y: number; time: number } | null = null;
+    let drag: { pointerId: number; state: LayerDrag; position: Point; pending: Point | null; frame: number | null; free: boolean; pxPerMm: number } | null = null;
+    let tap: { pointerId: number; x: number; y: number; time: number; selects: string | null } | null = null;
+
+    // Screen px per mm at the item, from the last projection (for snapping distances); 2 until known.
+    const pxPerMmAt = (layerId: string) => {
+      const g = lastProjected.current;
+      return g && g.layerId === layerId ? g.pxPerMm : 2;
+    };
 
     const hitAt = (event: { clientX: number; clientY: number }) => {
       const rect = canvas.getBoundingClientRect();
@@ -504,7 +619,7 @@ function ModelView({
 
     const emit = (phase: LayerDragEvent["phase"], position: Point) => {
       if (!drag) return;
-      latest.current.onLayerDrag?.({ phase, layerId: drag.state.layerId, pieceId: drag.state.pieceId, position });
+      latest.current.onLayerDrag?.({ phase, layerId: drag.state.layerId, pieceId: drag.state.pieceId, position, free: drag.free, pxPerMm: drag.pxPerMm });
     };
 
     const flush = () => {
@@ -522,6 +637,7 @@ function ModelView({
       event.preventDefault();
       const next = dragPosition(latest.current.product, drag.state, hitAt(event));
       if (!next) return;
+      drag.free = event.altKey;
       drag.pending = { x: round3(next.x), y: round3(next.y) };
       drag.frame ??= requestAnimationFrame(flush);
     };
@@ -531,11 +647,13 @@ function ModelView({
       if (tap && event.pointerId === tap.pointerId) {
         const t = tap;
         tap = null;
-        const still = Math.hypot(event.clientX - t.x, event.clientY - t.y) <= TAP_SLOP_PX && performance.now() - t.time < 700;
+        const still = Math.hypot(event.clientX - t.x, event.clientY - t.y) <= TAP_SLOP_PX && performance.now() - t.time < TAP_MAX_MS;
         if (phase === "end" && still) {
           const hit = hitAt(event);
-          const { design: current, product: currentProduct, onZoneTap: zoneTap } = latest.current;
-          if (hit && zoneTap) {
+          const { design: current, product: currentProduct, onZoneTap: zoneTap, pickZones: zonesNow, onSelectLayer: select } = latest.current;
+          // A tap selects the item under it (touch: select first), or deselects on empty fabric or the stage.
+          select?.(zonesNow ? null : t.selects);
+          if (hit && zoneTap && zonesNow) {
             const background = backgroundAt(currentProduct, current, hit.piece.id, hit.point);
             zoneTap({
               pieceId: hit.piece.id,
@@ -572,21 +690,30 @@ function ModelView({
         return;
       }
       if (event.button !== 0) return;
-      if (zones) {
-        // Zones: remember the press; the orbit controls still turn the garment if it moves.
-        tap = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, time: performance.now() };
+      // Presses on the handles drawn over the canvas are theirs, not the model's.
+      if (event.target !== canvas) return;
+      const hit = zones ? null : hitAt(event);
+      const under = hit ? layerAtPoint(current, hit.piece.id, hit.point, slop) : null;
+      const action = pressAction({
+        pointerType: event.pointerType,
+        hitLayerId: under?.id ?? null,
+        selectedId: latest.current.selectedLayerId ?? null,
+        dragOnlySelected: latest.current.dragOnlySelected,
+        pickZones: zones,
+        canDrag: Boolean(dragHandler),
+      });
+      if (action.kind === "turn") {
+        // Left to the orbit controls (they turn the garment if it moves); a tap selects or chooses the zone.
+        if (select || zones) tap = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, time: performance.now(), selects: action.tapSelects };
         return;
       }
-      if (!select && !dragHandler) return;
-      const hit = hitAt(event);
-      if (!hit) return;
-      const layer = layerAtPoint(current, hit.piece.id, hit.point, slop);
-      if (!layer) return;
+      const layer = under;
+      if (!hit || !layer) return;
       event.stopPropagation();
       event.preventDefault();
       select?.(layer.id);
       if (!dragHandler) return;
-      drag = { pointerId: event.pointerId, state: startLayerDrag(layer, hit.point), position: layer.position, pending: null, frame: null };
+      drag = { pointerId: event.pointerId, state: startLayerDrag(layer, hit.point), position: layer.position, pending: null, frame: null, free: event.altKey, pxPerMm: pxPerMmAt(layer.id) };
       const controlsNow = latest.current.controls;
       if (controlsNow) controlsNow.enabled = false;
       canvas.style.cursor = "grabbing";
@@ -604,7 +731,7 @@ function ModelView({
       window.removeEventListener("pointermove", onMove);
       if (drag?.frame != null) cancelAnimationFrame(drag.frame);
     };
-  }, [gl, camera, prepared, latest]);
+  }, [gl, camera, prepared, latest, lastProjected]);
 
   // Dispose of the cloned materials when the model goes away.
   useEffect(() => {
