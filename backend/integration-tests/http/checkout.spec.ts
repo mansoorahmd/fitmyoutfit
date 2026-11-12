@@ -1121,15 +1121,22 @@ medusaIntegrationTestRunner({
             collected_at: null,
             amount: 2250,
             captured_amount: 0,
+            refunded_amount: 0,
+            order_canceled: false,
             captured_by: null,
             captured_by_email: null,
             captured_at: null,
+            label: "Not collected",
+            tone: "orange",
+            note: null,
+            capture_mismatch: null,
+            capture_warning: null,
           })
           expect((await payments(container, orderId)).payments[0].captured_at).toBeNull()
 
           const blank = await record(orderId, "  ")
           expect(blank.status).toBe(400)
-          expect(blank.data).toMatchObject({ type: "invalid_data", message: "Enter the slip reference from the courier's slip." })
+          expect(blank.data).toMatchObject({ type: "invalid_data", message: expect.stringContaining("Enter the reference from the courier's slip.") })
 
           const startedAt = Date.now()
           const marked = await record(orderId, " TCS  778812 ")

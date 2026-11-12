@@ -1,11 +1,13 @@
 /**
- * Medusa glue: loads one order's payments (with their captures) with Query, and its
- * cash-collection record from our own module (modules/cash-collection), and hands them to the
- * plain rule in lib/rules/cash-collection.ts. Used by the admin route and by the steps that record
- * the cash as collected, so both see the same state. No business rule lives here.
+ * Medusa glue: loads one order's payments (with their captures and refunds) and capture
+ * transactions with Query, and its cash-collection record from our own module
+ * (modules/cash-collection), and hands them to the plain rule in lib/rules/cash-collection.ts. Used
+ * by the admin route and by the steps that record the cash as collected, so both see the same
+ * state. No business rule lives here: what counts as captured, what is left to capture and whether
+ * the figures agree are the rule's.
  */
 import type { MedusaContainer } from "@medusajs/framework/types"
-import { ContainerRegistrationKeys, MathBN, MedusaError } from "@medusajs/framework/utils"
+import { ContainerRegistrationKeys, MedusaError } from "@medusajs/framework/utils"
 import {
   cashCollectionState,
   ORDER_NOT_FOUND_MESSAGE,
@@ -16,6 +18,8 @@ import {
 import { CASH_COLLECTION_MODULE } from "../../modules/cash-collection/constants"
 import type CashCollectionModuleService from "../../modules/cash-collection/service"
 import { staffError } from "./staff-error"
+
+type Amount = CollectionPayment["amount"]
 
 type RawCapture = {
   amount?: unknown
@@ -32,19 +36,15 @@ type RawPayment = {
   captured_at?: unknown
   canceled_at?: unknown
   captures?: RawCapture[] | null
+  refunds?: ({ amount?: unknown; raw_amount?: unknown } | null)[] | null
 } | null
 
 type OrderRow = {
   id: string
   status?: string | null
+  currency_code?: string | null
   payment_collections?: ({ payments?: RawPayment[] | null } | null)[] | null
-}
-
-function toNumber(value: unknown): number {
-  if (value === undefined || value === null) {
-    return 0
-  }
-  return MathBN.convert(value as number).toNumber()
+  transactions?: ({ amount?: unknown; raw_amount?: unknown; reference?: string | null } | null)[] | null
 }
 
 function toIso(value: unknown): string | null {
@@ -55,18 +55,13 @@ function toIso(value: unknown): string | null {
   return Number.isNaN(date.getTime()) ? null : date.toISOString()
 }
 
-/** A value Medusa stores as a big number (`raw_amount`), or the plain amount if that is missing. */
-function exact(raw: unknown, plain: unknown) {
-  return MathBN.convert((raw ?? plain ?? 0) as number)
+/** Medusa's exact figure (`raw_amount`, a decimal string), or the plain amount if that is missing. */
+function amountOf(raw: unknown, plain: unknown): Amount {
+  return (raw ?? plain ?? null) as Amount
 }
 
 export type LoadedCashCollection = {
   state: CashCollectionState
-  /**
-   * What is still open of a payment (its amount less its captures), exactly, as a string for
-   * Medusa's capture. Undefined for an unknown payment.
-   */
-  remainingOf: (paymentId: string) => string | undefined
 }
 
 /** The cash-collection record of an order, or null. */
@@ -95,6 +90,7 @@ export async function loadCashCollection(
     fields: [
       "id",
       "status",
+      "currency_code",
       "payment_collections.payments.id",
       "payment_collections.payments.provider_id",
       "payment_collections.payments.amount",
@@ -105,6 +101,12 @@ export async function loadCashCollection(
       "payment_collections.payments.captures.raw_amount",
       "payment_collections.payments.captures.created_by",
       "payment_collections.payments.captures.created_at",
+      // Refunds Medusa abandoned (failed) are soft-deleted, so Query leaves them out.
+      "payment_collections.payments.refunds.amount",
+      "payment_collections.payments.refunds.raw_amount",
+      "transactions.amount",
+      "transactions.raw_amount",
+      "transactions.reference",
     ],
     filters: { id: orderId },
   })
@@ -115,38 +117,38 @@ export async function loadCashCollection(
   const raw = (order.payment_collections ?? []).flatMap((collection) =>
     (collection?.payments ?? []).flatMap((payment) => (payment ? [payment] : []))
   )
-  const payments: CollectionPayment[] = raw.map((payment) => {
-    const captures = (payment.captures ?? []).flatMap((capture) => (capture ? [capture] : []))
-    const amount = toNumber(payment.amount)
-    const capturedAmount = captures.reduce((sum, capture) => sum + toNumber(capture.amount), 0)
-    return {
-      id: payment.id,
-      provider_id: payment.provider_id ?? "",
-      amount,
-      captured_amount: capturedAmount,
-      // Medusa sets captured_at once the whole amount is captured, a moment after it saves the
-      // capture that completes it; the captures' sum says so already in between.
-      fully_captured: Boolean(payment.captured_at) || (amount > 0 && capturedAmount >= amount),
-      canceled: Boolean(payment.canceled_at),
-      captures: captures.map((capture) => ({
-        created_by: capture.created_by ?? null,
-        created_at: toIso(capture.created_at),
-      })),
-    }
-  })
+  const payments: CollectionPayment[] = raw.map((payment) => ({
+    id: payment.id,
+    provider_id: payment.provider_id ?? "",
+    amount: amountOf(payment.raw_amount, payment.amount),
+    captured_at: toIso(payment.captured_at),
+    canceled: Boolean(payment.canceled_at),
+    captures: (payment.captures ?? []).flatMap((capture) =>
+      capture
+        ? [
+            {
+              amount: amountOf(capture.raw_amount, capture.amount),
+              created_by: capture.created_by ?? null,
+              created_at: toIso(capture.created_at),
+            },
+          ]
+        : []
+    ),
+    refunds: (payment.refunds ?? []).flatMap((refund) =>
+      refund ? [amountOf(refund.raw_amount, refund.amount)] : []
+    ),
+  }))
+  const orderCaptureTransactions = (order.transactions ?? []).flatMap((transaction) =>
+    transaction?.reference === "capture" ? [amountOf(transaction.raw_amount, transaction.amount)] : []
+  )
   const record = await readCashCollectionRecord(container, orderId)
   return {
-    state: cashCollectionState({ orderStatus: order.status, payments, record }),
-    remainingOf: (paymentId) => {
-      const payment = raw.find((p) => p.id === paymentId)
-      if (!payment) {
-        return undefined
-      }
-      const captured = (payment.captures ?? []).reduce(
-        (sum, capture) => MathBN.add(sum, exact(capture?.raw_amount, capture?.amount)),
-        MathBN.convert(0)
-      )
-      return MathBN.sub(exact(payment.raw_amount, payment.amount), captured).toFixed()
-    },
+    state: cashCollectionState({
+      orderStatus: order.status,
+      currencyCode: order.currency_code,
+      payments,
+      record,
+      orderCaptureTransactions,
+    }),
   }
 }

@@ -8,15 +8,19 @@
  *   (`applies`; the panel shows only then), its `stage` (not_collected, partly_captured,
  *   captured_without_slip, recorded, unavailable), whether a slip reference may be recorded now
  *   and whether that captures (all or the rest of) the payment, the recorded slip reference and
- *   time (the order's cash-collection record, modules/cash-collection), and who captured and when
- *   (from Medusa's own capture record).
+ *   time (the order's cash-collection record, modules/cash-collection), who captured and when
+ *   (from Medusa's own capture record), what is refunded and whether the order is canceled, the
+ *   badge (`label`, `tone`) and a `note` on what happened after the cash was recorded, and
+ *   `capture_warning` (with `capture_mismatch`) when the order's capture transactions do not add
+ *   up to the payment's captures (a Medusa fault; decision 010).
  *
  * POST /admin/orders/:id/cash-collection  { "slip_reference": "..." }
  *   Captures what is still open of the cash-on-delivery payment, then records the slip reference
  *   (workflows/cash-collection/mark-cash-collected.ts). Answers with the new state.
  *   Refused with HTTP 400: `invalid_data` for a missing or invalid reference, `not_allowed` when
- *   the order is not cash on delivery, already recorded or canceled, or when another press
- *   captured or recorded it at the same moment. HTTP 500 when the capture fails (nothing is
+ *   the order is not cash on delivery, already recorded or canceled, its payment canceled or
+ *   refunded, or when another press captured or recorded it, or the order was canceled or the
+ *   payment refunded, at the same moment. HTTP 500 when the capture fails (nothing is
  *   recorded) or the record fails after the capture (the capture stays; record it again).
  *   An unknown or deleted order: 404.
  *
@@ -62,9 +66,16 @@ async function describe(container: MedusaContainer, orderId: string) {
       collected_at: state.collected_at,
       amount: state.amount,
       captured_amount: state.captured_amount,
+      refunded_amount: state.refunded_amount,
+      order_canceled: state.order_canceled,
       captured_by: state.captured_by,
       captured_by_email: capturedByEmail,
       captured_at: state.captured_at,
+      label: state.label,
+      tone: state.tone,
+      note: state.note,
+      capture_mismatch: state.capture_mismatch,
+      capture_warning: state.capture_warning,
     },
   }
 }

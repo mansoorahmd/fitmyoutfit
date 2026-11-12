@@ -11,7 +11,14 @@
  *   could not be saved after the capture): the same field, with "Record slip reference"; the
  *   payment is not captured again.
  * - Collected: the reference, when it was recorded, and who captured the payment and when (from
- *   Medusa's own capture record).
+ *   Medusa's own capture record). When the order was canceled or the payment refunded afterwards,
+ *   the badge and a note say so ("Collected, then canceled and refunded").
+ * - A warning, in any state, when the order's capture transactions do not add up to the payment's
+ *   captures (a Medusa fault seen when two captures run at once): staff are told not to refund
+ *   from the order's paid figure and to tell the developer.
+ *
+ * The slip field does not cut what staff type: the server checks the reference (64 characters,
+ * counted as typed) and its refusal, which says what is allowed, is shown under the field.
  *
  * All decisions (shown or not, which state, may be submitted or not, valid reference) come from
  * the backend (lib/rules/cash-collection.ts through the admin route); this file only renders them.
@@ -35,18 +42,27 @@ type CashCollection = {
   collected_at: string | null
   amount: number | null
   captured_amount: number | null
+  refunded_amount?: number | null
+  order_canceled?: boolean
   captured_by: string | null
   captured_by_email: string | null
   captured_at: string | null
+  label?: string
+  tone?: "green" | "orange" | "red" | "grey"
+  note?: string | null
+  capture_warning?: string | null
 }
 
 const REASONS: Record<string, string> = {
-  order_canceled: "This order is canceled.",
-  payment_canceled: "The cash-on-delivery payment is canceled.",
+  order_canceled: "This order is canceled, so the cash cannot be recorded as collected.",
+  payment_canceled: "The cash-on-delivery payment is canceled, so the cash cannot be recorded as collected.",
+  payment_refunded:
+    "The cash-on-delivery payment is refunded, so the cash cannot be recorded as collected.",
   several_payments:
     "This order has more than one open payment. Capture it in the Payments section below.",
 }
 
+/** Fallback badges, for an answer without the backend's own label. */
 const BADGES: Record<Stage, { label: string; color: "green" | "orange" | "red" | "grey" }> = {
   not_collected: { label: "Not collected", color: "orange" },
   partly_captured: { label: "Partly captured", color: "orange" },
@@ -137,7 +153,8 @@ const CashOnDeliveryCollectedWidget = ({ data: order }: DetailWidgetProps<AdminO
     }
   }
   const capturedBy = state.captured_by_email ?? state.captured_by
-  const badge = BADGES[state.stage] ?? BADGES.unavailable
+  const fallback = BADGES[state.stage] ?? BADGES.unavailable
+  const badge = { label: state.label ?? fallback.label, color: state.tone ?? fallback.color }
 
   return (
     <Container className="divide-y p-0">
@@ -147,6 +164,14 @@ const CashOnDeliveryCollectedWidget = ({ data: order }: DetailWidgetProps<AdminO
           {badge.label}
         </Badge>
       </div>
+
+      {state.capture_warning ? (
+        <div className="px-6 py-4">
+          <Text size="small" className="text-ui-fg-error" role="alert" data-testid="cod-capture-warning">
+            {state.capture_warning}
+          </Text>
+        </div>
+      ) : null}
 
       {mark.error && !state.can_record ? (
         // The press failed and the panel has moved on (another press recorded it, for example).
@@ -165,6 +190,14 @@ const CashOnDeliveryCollectedWidget = ({ data: order }: DetailWidgetProps<AdminO
           <Row label="Recorded">{formatDate(state.collected_at)}</Row>
           {capturedBy ? <Row label="Captured by">{capturedBy}</Row> : null}
           {state.captured_at ? <Row label="Captured">{formatDate(state.captured_at)}</Row> : null}
+          {state.refunded_amount ? (
+            <Row label="Refunded">{formatAmount(state.refunded_amount, order.currency_code)}</Row>
+          ) : null}
+          {state.note ? (
+            <Text size="small" className="text-ui-fg-subtle" data-testid="cod-note">
+              {state.note}
+            </Text>
+          ) : null}
         </div>
       ) : state.can_record ? (
         <form className="flex flex-col gap-y-3 px-6 py-4" onSubmit={submit}>
@@ -197,7 +230,6 @@ const CashOnDeliveryCollectedWidget = ({ data: order }: DetailWidgetProps<AdminO
               id="cod-slip-reference"
               size="small"
               value={reference}
-              maxLength={64}
               onChange={(event) => setReference(event.target.value)}
               disabled={mark.isPending}
             />
