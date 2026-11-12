@@ -799,6 +799,8 @@ export function EditorShell(props: EditorShellProps) {
   );
 
   const onStageKey = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    // With an item selected, the arrows move it (the window's key handler, 5.1); the garment does not turn.
+    if (selectedId && event.key.startsWith("Arrow")) return;
     const turn = { ArrowLeft: -15, ArrowRight: 15 }[event.key as "ArrowLeft" | "ArrowRight"];
     if (turn !== undefined) {
       event.preventDefault();

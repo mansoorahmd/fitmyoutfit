@@ -41,6 +41,10 @@ export function ContextBar({ variant }: { variant: "stage" | "panel" }) {
     window.addEventListener("pointerdown", close, true);
     return () => window.removeEventListener("pointerdown", close, true);
   }, [menu]);
+  // The menu takes focus when it opens (its first item), so it can be used from the keyboard.
+  useEffect(() => {
+    if (menu) menuRef.current?.querySelector<HTMLElement>("[role=menuitem]")?.focus();
+  }, [menu]);
   if (!layer) return null;
   const w = wording.selection;
   const words = itemWords(wording, product, layer, { fileName: assets.fileName });

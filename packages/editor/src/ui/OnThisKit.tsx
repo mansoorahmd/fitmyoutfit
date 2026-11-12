@@ -49,6 +49,11 @@ export function KitButton({ count, compact, open, onClick }: { count: number; co
 /** The list itself. `onDone` closes the list (a row was chosen). */
 export function OnThisKit({ onDone }: { onDone: () => void }) {
   const api = useEditor();
+  // Focus moves into the list when it opens (from the button, by keyboard or touch), to its first row.
+  const list = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    list.current?.querySelector<HTMLElement>(".fmo-kit-pick, button")?.focus({ preventScroll: true });
+  }, []);
   const { design, product, wording, assets } = api;
   const w = wording.selection;
   const [menu, setMenu] = useState<string | null>(null);
@@ -59,7 +64,7 @@ export function OnThisKit({ onDone }: { onDone: () => void }) {
     onDone();
   };
   return (
-    <div className="fmo-kit" data-testid="kit-list">
+    <div className="fmo-kit" ref={list} data-testid="kit-list">
       {items.length === 0 && <p className="fmo-muted">{w.kitEmpty}</p>}
       {items.length > 0 && (
         <ul className="fmo-kit-rows" role="list">
@@ -191,6 +196,9 @@ function RowMenu({ open, onToggle, onClose, label, actions, testId }: { open: bo
       window.removeEventListener("keydown", key);
     };
   }, [open, onClose]);
+  useEffect(() => {
+    if (open) ref.current?.querySelector<HTMLElement>("[role=menuitem]")?.focus();
+  }, [open]);
   return (
     <div className="fmo-context-more" ref={ref}>
       <button type="button" className="fmo-round fmo-kit-menu" aria-label={label} title={label} aria-haspopup="menu" aria-expanded={open} onClick={onToggle} data-testid={`kit-menu-${testId}`}>
