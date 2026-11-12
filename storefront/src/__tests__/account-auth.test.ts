@@ -118,6 +118,16 @@ describe("signInFlow (backend answers as the real backend gave them)", () => {
     })
   })
 
+  it("Medusa's HTTP 400 at sign-in is 'wrong email or password', never a server error (QA S1-4c, S3)", async () => {
+    expect(await signInFlow({ login: async () => fail(400), hasCustomer: async () => ok(true) })).toEqual({
+      ok: false,
+      problem: "wrong",
+    })
+    expect(authProblemText("wrong", "Something went wrong on our side")).toBe(
+      "That email and password don't match an account."
+    )
+  })
+
   it("a sign-in with no customer behind it is 'wrong' too, never 'no account'", async () => {
     expect(await signInFlow({ login: async () => ok("tok"), hasCustomer: async () => ok(false) })).toEqual({
       ok: false,

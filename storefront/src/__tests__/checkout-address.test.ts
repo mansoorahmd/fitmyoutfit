@@ -271,6 +271,16 @@ describe("what the cart receives", () => {
     expect(normalizePkMobile("0423 5761234")).toBeNull()
   })
 
+  it("the UK's one special postcode, GIR 0AA, is accepted and stored with its space (QA S1-4c, S3)", () => {
+    for (const typed of ["GIR 0AA", "gir0aa", " Gir  0aa "]) {
+      expect(normalizePostalCode("gb", typed), typed).toBe("GIR 0AA")
+    }
+    const gb = form("gb", { phone: "07700 900123" })
+    gb.shipping.postal_code = "gir0aa"
+    expect(validateAddressForm(gb, ["gb"])["shipping.postal_code"]).toBeUndefined()
+    expect(toCartUpdate(gb).shipping_address.postal_code).toBe("GIR 0AA")
+  })
+
   it("leaves out the fields the country doesn't have", () => {
     const values = form("ae")
     values.shipping.postal_code = "12345"

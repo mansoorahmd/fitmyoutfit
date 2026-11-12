@@ -8,7 +8,7 @@ import { checkoutCartPk, optionPk, providersPk, rulesPkAvailable } from "./fixtu
 // The rules themselves are tested next to their modules.
 
 const { nav, saves } = vi.hoisted(() => ({
-  nav: { step: "address" as string | null, replaced: [] as string[] },
+  nav: { step: "address" as string | null, replaced: [] as string[], pathname: "/pk/checkout" },
   saves: { calls: [] as { saveToAccount: boolean; address_1: string }[] },
 }))
 
@@ -20,7 +20,7 @@ vi.mock("next/navigation", () => ({
   }),
   useSearchParams: () => new URLSearchParams(nav.step ? `step=${nav.step}` : ""),
   useParams: () => ({ countryCode: "pk" }),
-  usePathname: () => "/pk/checkout",
+  usePathname: () => nav.pathname,
 }))
 vi.mock("next/image", () => ({
   // eslint-disable-next-line @next/next/no-img-element
@@ -42,15 +42,37 @@ import { checkoutView } from "@lib/util/checkout-view"
 import { keepAddressDraft } from "@modules/checkout/step-memory"
 import CheckoutPage from "@modules/checkout/templates/checkout-page"
 
+import StoreError from "../app/[countryCode]/error"
+
 beforeEach(() => {
   nav.step = "address"
   nav.replaced = []
+  nav.pathname = "/pk/checkout"
   saves.calls = []
   sessionStorage.clear()
 })
 
 afterEach(() => {
   vi.useRealTimers()
+})
+
+describe("S3: the store's error page keeps its 'your order may exist' sentence on the checkout and order pages", () => {
+  const MAY_EXIST = "If you pressed Place order, your order may have gone through."
+
+  it("on the checkout and an order's page it says so; elsewhere it doesn't", () => {
+    for (const path of ["/pk/checkout", "/gb/order/order_1/confirmed", "/pk/order"]) {
+      nav.pathname = path
+      const { unmount } = render(<StoreError />)
+      expect(screen.getByTestId("page-error-alert"), path).toHaveTextContent(MAY_EXIST)
+      unmount()
+    }
+    for (const path of ["/pk/store", "/pk/products/t-shirt", "/pk/account/orders"]) {
+      nav.pathname = path
+      const { unmount } = render(<StoreError />)
+      expect(screen.getByTestId("page-error-alert"), path).not.toHaveTextContent(MAY_EXIST)
+      unmount()
+    }
+  })
 })
 
 describe("S1: an address saved to the account from the checkout is saved once", () => {
