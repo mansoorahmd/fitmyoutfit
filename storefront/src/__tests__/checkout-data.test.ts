@@ -442,6 +442,10 @@ describe("the order-status route", () => {
     state.cartId = null
     expect(await post({ cartId: "../orders" })).toEqual({ kind: "cart_lost" })
     expect(state.calls).toEqual([])
+    // nor a cookie that doesn't hold a cart id
+    state.cartId = "cart_1/../../admin"
+    expect(await post({})).toEqual({ kind: "cart_lost" })
+    expect(state.calls).toEqual([])
   })
 })
 
