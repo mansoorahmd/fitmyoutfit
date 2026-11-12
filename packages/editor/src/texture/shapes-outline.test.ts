@@ -129,21 +129,49 @@ describe("text outlines", () => {
     expect((ctx.calls.find((c) => c.op === "fillText") as TextCall).direction).toBe("ltr");
   });
 
-  it("keeps the outline inside the box: the line fits the box less the outline on both ends, and the width stays in mm when shrunk", () => {
+  it("keeps the outline inside the box: the letters and their outline fit the box together", () => {
     // 30 characters at 50 mm: 900 mm wide in the fake metrics, in a 400 mm box with a 4 mm outline.
     const long = textLayer("ABCDEFGHIJKLMNOPQRSTUVWXYZABCD", { outline: { color: EDGE, width: 4 } });
     const layout = textLayout(long, 30 * FAKE_CHAR_EM * 50);
-    expect(layout.scale).toBeCloseTo(392 / 900, 9);
+    expect(layout.scale).toBeCloseTo(400 / 908, 9);
     const { ctx } = render(addLayer(base, long));
-    const stroke = ctx.calls.find((c): c is StrokeTextCall => c.op === "strokeText")!;
-    expect(stroke.lineWidth * layout.scale).toBeCloseTo(8, 9);
     const edge = ctx.bounds(EDGE.hex)!;
     const s = pieceTextureScale(front, SIZE).x;
     expect((edge.maxX - edge.minX) / s).toBeLessThanOrEqual(400 + 1);
+    expect((edge.maxX - edge.minX) / s).toBeGreaterThan(400 - 4);
     // Without an outline nothing changes: no stroke, the whole box for the line.
     const plain = render(addLayer(base, textLayer("TIGERS"))).ctx;
     expect(plain.calls.some((c) => c.op === "strokeText")).toBe(false);
     expect(FAKE_LINE_EM).toBeGreaterThan(0);
+  });
+
+  it("a long name shrunk to fit: the outline follows the size the letters are drawn at (E3a-2 fault 3)", () => {
+    // A thick outline (8% of 52 mm = 4.16 mm) on a 30-character name at the back-name preset's 340 mm box.
+    const long = textLayer("MUHAMMAD ABDUL REHMAN QURESHI X", { size: { width: 340, height: 72.8 }, fontSize: 52, outline: { color: EDGE, width: 4.16 } });
+    const measured = long.value.length * FAKE_CHAR_EM * 52;
+    const layout = textLayout(long, measured);
+    expect(layout.scale).toBeLessThan(0.5);
+    // Drawn outline: the full width times the shrink, so the outline keeps its proportion to the letters.
+    expect(layout.outlineWidth).toBeCloseTo(4.16 * layout.scale, 9);
+    const { ctx } = render(addLayer(base, long));
+    const stroke = ctx.calls.find((c): c is StrokeTextCall => c.op === "strokeText")!;
+    // lineWidth is in the shrunk frame: times the shrink gives the width on the garment (twice the outline).
+    expect(stroke.lineWidth * layout.scale).toBeCloseTo(2 * 4.16 * layout.scale, 6);
+    expect(stroke.lineWidth * layout.scale).toBeLessThan(2 * 4.16 * 0.5);
+    // An unshrunk line keeps its full outline.
+    const short = textLayer("ALI", { size: { width: 340, height: 72.8 }, fontSize: 52, outline: { color: EDGE, width: 4.16 } });
+    expect(textLayout(short, 3 * FAKE_CHAR_EM * 52)).toMatchObject({ scale: 1, outlineWidth: 4.16 });
+  });
+
+  it("a shrunk outline never goes below the thinnest printable width (1 mm)", () => {
+    // A thin 1.5 mm outline on a line shrunk to about a quarter: 1 mm, not 0.4 mm.
+    const long = textLayer("ABCDEFGHIJKLMNOPQRSTUVWXYZABCDEFGHIJKLMNOPQRSTUVWXYZ", { outline: { color: EDGE, width: 1.5 } });
+    const layout = textLayout(long, long.value.length * FAKE_CHAR_EM * 50);
+    expect(layout.outlineWidth).toBe(1);
+    expect(layout.scale).toBeCloseTo(398 / (long.value.length * FAKE_CHAR_EM * 50), 9);
+    // An outline already thinner than the floor keeps its own width.
+    const hair = textLayer(long.value, { outline: { color: EDGE, width: 0.5 } });
+    expect(textLayout(hair, long.value.length * FAKE_CHAR_EM * 50).outlineWidth).toBe(0.5);
   });
 
   it("an empty team name draws nothing, outline included", () => {

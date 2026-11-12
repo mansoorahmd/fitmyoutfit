@@ -207,6 +207,34 @@ function strip(a: [number, number], b: [number, number], width: number): string 
   ]);
 }
 
+/** A rectangle with rounded corners (radius `r` mm), as quadratic curves: a number panel. */
+function panel(x: number, y: number, width: number, height: number, r: number): string {
+  const R = r1;
+  return [
+    `M ${R(x + r)} ${R(y)}`,
+    `L ${R(x + width - r)} ${R(y)} Q ${R(x + width)} ${R(y)} ${R(x + width)} ${R(y + r)}`,
+    `L ${R(x + width)} ${R(y + height - r)} Q ${R(x + width)} ${R(y + height)} ${R(x + width - r)} ${R(y + height)}`,
+    `L ${R(x + r)} ${R(y + height)} Q ${R(x)} ${R(y + height)} ${R(x)} ${R(y + height - r)}`,
+    `L ${R(x)} ${R(y + r)} Q ${R(x)} ${R(y)} ${R(x + r)} ${R(y)} Z`,
+  ].join(" ");
+}
+
+/**
+ * The back's name-and-number panel, in the main colour, behind the player's name and number: on a
+ * patterned back (hoops, stripes) the letters then sit on one colour, so they read whole. Without it a
+ * number across hoops shows its fill on the body and only its outline on the hoops (hollow digits), which
+ * the readability check refuses (E3a-2). Sized from the back's two presets, with 15 mm round the letters.
+ */
+function backPanel(product: ProductDefinition): { group: string; pieceId: string; path: string; fill: TemplateColour } {
+  const name = product.placements.find((p) => p.id === "back-name")!;
+  const number = product.placements.find((p) => p.id === "back-number")!;
+  const left = Math.min(name.centre.x - name.maxSize.width / 2, number.centre.x - number.maxSize.width / 2) - 15;
+  const right = Math.max(name.centre.x + name.maxSize.width / 2, number.centre.x + number.maxSize.width / 2) + 15;
+  const top = name.centre.y - name.maxSize.height / 2 - 15;
+  const bottom = number.centre.y + number.maxSize.height / 2 + 15;
+  return { group: "panel", pieceId: name.pieceId, path: panel(left, top, right - left, bottom - top, 24), fill: MAIN };
+}
+
 /** A chevron (a V) of `width` mm, from `left` down to `apex` and up to `right`. */
 function chevron(left: [number, number], apex: [number, number], right: [number, number], width: number): string {
   const h = width / 2;
@@ -279,15 +307,19 @@ async function jerseyTemplates(): Promise<Template[]> {
     template(product, {
       id: "hoops",
       name: "Hoops",
-      about: `${PLACEHOLDER_NOTE} Hoops at equal heights on the body (measured on the 3D model), on the front, back and side panels; plain shoulders.`,
+      about: `${PLACEHOLDER_NOTE} Hoops at equal heights on the body (measured on the 3D model), on the front, back and side panels; plain shoulders; a plain panel on the back for the name and number.`,
       zones: { body_front: MAIN, body_back: MAIN, sleeves: MAIN, side_panels: MAIN, side_stripes: SECOND, ...trims },
-      shapes: hoopPieces.flatMap((pieceId) =>
-        hoopBands.flatMap(([low, high]) => {
-          const path = band(heights, pieceId, low, high);
-          return path ? [{ group: "hoops", pieceId, path, fill: SECOND }] : [];
-        }),
-      ),
-      slots: slots({ nameFill: SECOND, numberFill: SECOND, numberOutline: { step: "medium", color: MAIN } }),
+      shapes: [
+        ...hoopPieces.flatMap((pieceId) =>
+          hoopBands.flatMap(([low, high]) => {
+            const path = band(heights, pieceId, low, high);
+            return path ? [{ group: "hoops", pieceId, path, fill: SECOND }] : [];
+          }),
+        ),
+        // Over the hoops on the back, so the player's name and number sit on one colour.
+        backPanel(product),
+      ],
+      slots: slots({ nameFill: SECOND, numberFill: SECOND }),
     }),
   );
 
@@ -303,14 +335,28 @@ async function jerseyTemplates(): Promise<Template[]> {
   };
   const front = product.pieces.find((p) => p.id === "front")!;
   const back = product.pieces.find((p) => p.id === "back")!;
+  /** A plain band across the front behind the team name's preset: its box's height plus 10 mm above and below. */
+  const chestBand = (p: ProductDefinition) => {
+    const chest = p.placements.find((x) => x.id === "chest-centre")!;
+    const top = chest.centre.y - chest.maxSize.height / 2 - 10;
+    const bottom = chest.centre.y + chest.maxSize.height / 2 + 10;
+    return { group: "band", pieceId: chest.pieceId, path: pathOf([[-40, top], [front.width + 40, top], [front.width + 40, bottom], [-40, bottom]]), fill: MAIN };
+  };
   out.push(
     template(product, {
       id: "stripes",
       name: "Vertical stripes",
-      about: `${PLACEHOLDER_NOTE} Stripes 45 mm wide, 90 mm apart, centred on the front's and back's centre lines; plain side panels and sleeves.`,
+      about: `${PLACEHOLDER_NOTE} Stripes 45 mm wide, 90 mm apart, centred on the front's and back's centre lines; plain side panels and sleeves; a plain chest band for the team name and a plain back panel for the name and number.`,
       zones: { body_front: MAIN, body_back: MAIN, sleeves: SECOND, side_panels: SECOND, side_stripes: MAIN, collar: SECOND, collar_stripe: MAIN, cuffs: MAIN, cuff_stripes: SECOND },
-      shapes: [...stripesOn("front", 335.5, front.width), ...stripesOn("back", 244, back.width)],
-      slots: slots({ nameFill: MAIN, numberFill: MAIN, outline: { step: "medium", color: SECOND }, numberOutline: { step: "medium", color: SECOND } }),
+      shapes: [
+        ...stripesOn("front", 335.5, front.width),
+        ...stripesOn("back", 244, back.width),
+        // A plain band across the chest for the team name, and the back's panel for the name and number,
+        // over the stripes: the letters sit on one colour (stripes under a name make it read as hollow).
+        chestBand(product),
+        backPanel(product),
+      ],
+      slots: slots({ nameFill: SECOND, numberFill: SECOND }),
     }),
   );
 
@@ -319,10 +365,10 @@ async function jerseyTemplates(): Promise<Template[]> {
     template(product, {
       id: "sash",
       name: "Sash",
-      about: `${PLACEHOLDER_NOTE} A 120 mm sash on the front from the wearer's right shoulder to the left hip.`,
+      about: `${PLACEHOLDER_NOTE} A 120 mm sash on the front from the wearer's right shoulder to the left hip. The team name is on the upper back: across the sash, half of it would vanish into the sash.`,
       zones: { body_front: MAIN, body_back: MAIN, sleeves: MAIN, side_panels: SECOND, side_stripes: MAIN, ...trims },
       shapes: [{ group: "sash", pieceId: "front", path: strip([120, -40], [700, 700], 120), fill: SECOND }],
-      slots: slots({ nameFill: SECOND, numberFill: SECOND, outline: { step: "medium", color: MAIN } }),
+      slots: slots({ teamName: "upper-back", nameFill: SECOND, numberFill: SECOND }),
     }),
   );
 
