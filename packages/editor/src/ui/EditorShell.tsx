@@ -52,6 +52,7 @@ import { TopBar } from "./TopBar.js";
 import { hasWebGL2, readLocal, writeLocal } from "./webgl.js";
 import { toolForLayer } from "./selection.js";
 import { KitButton, OnThisKit } from "./OnThisKit.js";
+import { DonePanel } from "./DonePanel.js";
 import { itemChecks, type LogoNote } from "./checks.js";
 import { ClippedNote, ContextBar, FineTune, keyEdit } from "./SelectedItem.js";
 import { nudgeLayer, rotateLayerBy, scaleLayerBy } from "../design/item-edits.js";
@@ -67,6 +68,12 @@ export interface EditorSlots {
   share?: ReactNode;
   /** Sign-in or the account, later. */
   account?: ReactNode;
+  /**
+   * The Done panel's main action (9.2): "Add to team order" once team orders exist, the store's own
+   * button (it is the panel's one red button). Without it the panel offers "Save and go back", which
+   * calls `onDone`. A function gets the design.
+   */
+  primaryAction?: ReactNode | ((design: DesignDocument) => ReactNode);
   /** The model's credit line, shown on the stage (a licence duty for a CC BY model). Shown whole on one line where it fits. */
   credit?: ReactNode;
   /**
@@ -110,7 +117,7 @@ export interface EditorShellProps {
   onDesignChange?: (design: DesignDocument, info: { started: boolean }) => void;
   /** How the host's last save went (the top bar's save state). Null: nothing to say yet. */
   saveState?: SaveState | null;
-  /** Done (the red button): the host takes the design (E3a: save and confirm; E3b: the Done panel). */
+  /** "Save and go back" in the Done panel (9.3): the host saves the design and returns to the product page. */
   onDone?: (design: DesignDocument) => void;
   /** Close (X): leave the editor. Asked first only when the last save failed (10.6). */
   onClose?: () => void;
@@ -229,6 +236,8 @@ export function EditorShell(props: EditorShellProps) {
   const [snapOn, setSnapOn] = useState(true);
   // "On this kit" is open (4.8): on phones in the panel's place, on desktop as a popover.
   const [kitOpen, setKitOpen] = useState(false);
+  // The Done panel (9.2).
+  const [doneOpen, setDoneOpen] = useState(false);
   // What the upload checks found about each file this session (a logo without a transparent background), by asset id.
   const [logoNotes, setLogoNotes] = useState<Record<string, LogoNote>>({});
   // A drag, resize or turn is going on (draft quality, 5.3), and which.
@@ -581,7 +590,7 @@ export function EditorShell(props: EditorShellProps) {
   // gone at the first press on the stage (a drag or a tap).
   const [hintSeen, setHintSeen] = useState(() => !(props.showHint ?? props.showStartCard ?? false));
   const touchDevice = typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia("(pointer: coarse)").matches;
-  const hint = load.ready && !hintSeen && !startCard && mode === "3d" ? (touchDevice ? wording.selection.hint : wording.selection.hintPointer) : null;
+  const hint = load.ready && !hintSeen && !startCard && !doneOpen && mode === "3d" ? (touchDevice ? wording.selection.hint : wording.selection.hintPointer) : null;
   const dismissHint = () => {
     if (!hintSeen) setHintSeen(true);
   };
@@ -596,7 +605,9 @@ export function EditorShell(props: EditorShellProps) {
   const heights = panelHeights(size.height || 844);
   const editorWidth = size.width || 390;
   const stageWidth = layout === "wide" ? editorWidth - LAYOUT_SIZES.wide.rail - LAYOUT_SIZES.wide.panel : layout === "short" ? editorWidth - LAYOUT_SIZES.short.rail - (panelOpen || startCard ? LAYOUT_SIZES.short.panel : 0) : editorWidth;
-  const insets = stageInsets(layout, { open: panelOpen || startCard || (kitOpen && layout !== "wide"), height: panelSize.height, width: panelSize.width });
+  const baseInsets = stageInsets(layout, { open: panelOpen || startCard || (kitOpen && layout !== "wide"), height: panelSize.height, width: panelSize.width });
+  // The Done panel covers the stage's right side (desktop, landscape) or its lower part (phone): the garment is framed in the rest.
+  const insets = doneOpen ? (layout === "compact" ? { ...baseInsets, bottom: heights.expanded } : { ...baseInsets, right: layout === "wide" ? 400 : LAYOUT_SIZES.short.panel }) : baseInsets;
 
   const api: EditorApi = {
     product,
@@ -915,7 +926,11 @@ export function EditorShell(props: EditorShellProps) {
           saveWords={saveStateWords(layout, size.width || 390)}
           onSaveInfo={() => setSaveInfo(true)}
           onClose={() => (props.saveState === "failed" ? setLeaving(true) : props.onClose?.())}
-          onDone={() => props.onDone?.(designRef.current)}
+          onDone={() => {
+            setKitOpen(false);
+            setDoneOpen(true);
+          }}
+          doneOpen={doneOpen}
           brand={props.slots?.brand}
           price={props.slots?.price}
           share={props.slots?.share}
@@ -1016,11 +1031,11 @@ export function EditorShell(props: EditorShellProps) {
             onResize={onResize}
             onRotate={onRotate}
             onTurnTo={() => selectedId && canvas.current?.focusOn(selectedId)}
-            handlesHidden={typing}
-            contextBar={Boolean(selectedLayer) && layout !== "wide" && !typing && mode === "3d"}
+            handlesHidden={typing || doneOpen}
+            contextBar={Boolean(selectedLayer) && layout !== "wide" && !typing && mode === "3d" && !doneOpen}
             selectionWarn={selectionWarn}
             kitButton={
-              startCard || (Boolean(selectedLayer) && layout !== "wide" && !typing && mode === "3d") || (layout === "compact" && typing) ? null : (
+              startCard || doneOpen || (Boolean(selectedLayer) && layout !== "wide" && !typing && mode === "3d") || (layout === "compact" && typing) ? null : (
                 <KitButton count={design.layers.length} compact={(size.width || 390) < 480} open={kitOpen} onClick={() => setKitOpen((o) => !o)} />
               )
             }
@@ -1036,6 +1051,23 @@ export function EditorShell(props: EditorShellProps) {
           />
           {layout !== "wide" && (start ?? panel)}
         </div>
+        <DonePanel
+          open={doneOpen}
+          layout={layout}
+          productName={props.productName}
+          price={props.slots?.price}
+          primaryAction={props.slots?.primaryAction}
+          share={props.slots?.share}
+          onClose={() => setDoneOpen(false)}
+          onSaveAndGoBack={() => {
+            setDoneOpen(false);
+            props.onDone?.(designRef.current);
+          }}
+          onShow={(check) => {
+            setDoneOpen(false);
+            api.select(check.layerId, { turn: true, openTool: true });
+          }}
+        />
         <ConfirmDialog
           open={saveInfo}
           title={wording.frame.notSaved}

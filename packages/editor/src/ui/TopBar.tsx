@@ -24,6 +24,8 @@ export interface TopBarProps {
   onClose: () => void;
   onDone: () => void;
   doneDisabled?: boolean;
+  /** The Done panel is open: Done is inactive and shows a check; the panel's main button is the red one (9.1). */
+  doneOpen?: boolean;
   brand?: ReactNode;
   price?: ReactNode;
   share?: ReactNode;
@@ -90,7 +92,17 @@ export function TopBar(props: TopBarProps) {
       {wide && props.share && <div className="fmo-topbar-slot">{props.share}</div>}
       {wide && props.price && <div className="fmo-topbar-slot" data-testid="price-slot">{props.price}</div>}
       {props.account && <div className="fmo-topbar-slot">{props.account}</div>}
-      <button type="button" className="fmo-done" onClick={props.onDone} disabled={props.doneDisabled} data-testid="done">
+      <button
+        type="button"
+        className="fmo-done"
+        onClick={() => !props.doneOpen && props.onDone()}
+        disabled={props.doneDisabled}
+        aria-disabled={props.doneOpen || undefined}
+        aria-label={props.doneOpen ? wording.done.doneOpen : undefined}
+        data-open={props.doneOpen || undefined}
+        data-testid="done"
+      >
+        {props.doneOpen && <EditorIcon name="check" size={20} />}
         {f.done}
       </button>
     </header>

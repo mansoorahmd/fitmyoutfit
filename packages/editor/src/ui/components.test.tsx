@@ -21,6 +21,7 @@ import { ToolTabs, TOOL_ORDER } from "./ToolPanel";
 import { TopBar } from "./TopBar";
 import { ContextBar, FineTune } from "./SelectedItem";
 import { KitButton, OnThisKit } from "./OnThisKit";
+import { DonePanel } from "./DonePanel";
 import { loadPlaceholderFonts, loadPlaceholderPalette, loadStandInJerseyProduct } from "../test/fixtures";
 
 const product = loadStandInJerseyProduct();
@@ -209,5 +210,42 @@ describe("On this kit (06-editor.md 4.8)", () => {
     const small = inTool(<KitButton count={3} compact open={false} onClick={() => undefined} />);
     expect(small).toContain('aria-label="On this kit, 3 items"');
     expect(small).toContain('class="fmo-kit-count"');
+  });
+});
+
+describe("the Done panel (06-editor.md 9.2, 9.3)", () => {
+  const base = { open: true, layout: "compact" as const, productName: "Jersey", onSaveAndGoBack: () => undefined, onClose: () => undefined, onShow: () => undefined };
+
+  it("shows the kit, the things to check with Show, and, before team orders, Save and go back with its line; Share stays hidden", () => {
+    const html = inTool(<DonePanel {...base} />);
+    const t = text(html);
+    expect(t).toContain("Your kit");
+    expect(t).toContain("Jersey · LAHORE LIONS");
+    expect(html).toContain('data-testid="done-checks"');
+    expect(t).toMatch(/thing(s)? to check|Nothing to check/);
+    expect(html).toContain('data-testid="done-save-and-go-back"');
+    expect(html.match(/class="fmo-primary"/g)).toHaveLength(1); // the one red button in the panel
+    expect(t).toContain("Team orders open soon. Your design is saved on this device.");
+    expect(html).not.toContain('data-testid="done-share"');
+    expect(t).toContain("Keep designing");
+  });
+
+  it("takes the host's price, main action and Share in their slots", () => {
+    const html = inTool(<DonePanel {...base} price={<span>from 20</span>} primaryAction={(d) => <button className="host">Add {d.teamName}</button>} share={<a href="#s">Share</a>} />);
+    expect(html).toContain('data-testid="done-price"');
+    expect(text(html)).toContain("from 20");
+    expect(text(html)).toContain("Add LAHORE LIONS");
+    expect(html).not.toContain('data-testid="done-save-and-go-back"');
+    expect(html).toContain('data-testid="done-share"');
+  });
+
+  it("names each open warning with its item", () => {
+    const navy = { id: "placeholder-navy", hex: "#1B2A5C" };
+    let d = design;
+    for (const zone of Object.keys(d.zones)) d = { ...d, zones: { ...d.zones, [zone]: navy } };
+    d = { ...d, layers: d.layers.map((l) => (l.kind === "text" || l.kind === "number" ? { ...l, fill: navy } : l)) };
+    const html = inTool(<DonePanel {...base} />, { design: d });
+    expect(text(html)).toContain("Team name on the chest: hard to read on Navy.");
+    expect(html).toMatch(/data-testid="done-show-[^"]+-hard-to-read"/);
   });
 });

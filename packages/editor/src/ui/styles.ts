@@ -177,6 +177,22 @@ export const EDITOR_CSS = /* css */ `
 .fmo-kit-locked { cursor: default; }
 .fmo-kit-group { margin: 16px 0 4px; font-size: 13px; font-weight: 650; color: var(--fmo-ink-muted); text-transform: none; }
 .fmo-kit-menu { border: 0 !important; background: none !important; }
+.fmo-done[data-open] { display: inline-flex; align-items: center; gap: 6px; background: transparent; border: 1px solid rgb(255 255 255 / 0.7); cursor: default; }
+.fmo-done-panel { border: 0; padding: 0; margin: 0; color: var(--fmo-ink); background: var(--fmo-surface); font: 400 15px/1.4 var(--fmo-font-body); box-shadow: 0 -4px 24px rgb(11 21 48 / 0.18); max-width: 100vw; max-height: 100dvh; }
+.fmo-done-panel::backdrop { background: rgb(11 21 48 / 0.25); }
+.fmo-done-panel[data-layout="compact"] { position: fixed; inset: auto 0 0 0; width: 100%; height: min(60dvh, calc(100dvh - 56px - 160px)); min-height: 320px; border-radius: var(--fmo-radius-sheet) var(--fmo-radius-sheet) 0 0; }
+.fmo-done-panel[data-layout="wide"], .fmo-done-panel[data-layout="short"] { position: fixed; inset: 64px 0 0 auto; width: 400px; height: auto; border-inline-start: 1px solid var(--fmo-border); }
+.fmo-done-panel[data-layout="short"] { inset: 48px 0 0 auto; width: 340px; }
+.fmo-done-inner { height: 100%; overflow: auto; padding: 8px 20px 24px; box-sizing: border-box; }
+.fmo-done-kit { margin: 0; font-weight: 600; }
+.fmo-done-checks { padding: 12px; border-radius: var(--fmo-radius-card); background: var(--fmo-surface-alt); }
+.fmo-done-checks-title { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 15px; font-weight: 650; }
+.fmo-done-checks-title .fmo-icon { color: var(--fmo-warning); }
+.fmo-done-list { list-style: none; margin: 8px 0 0; padding: 0; }
+.fmo-done-list li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 0; border-top: 1px solid var(--fmo-border); }
+.fmo-done-price { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.fmo-editor .fmo-primary { display: inline-flex; align-items: center; justify-content: center; width: 100%; min-height: 48px; padding: 0 20px; border: 0; border-radius: var(--fmo-radius-control); background: var(--fmo-primary); color: #fff; font: 700 18px/1 var(--fmo-font-heading); text-transform: uppercase; letter-spacing: 0.04em; cursor: pointer; }
+.fmo-editor .fmo-primary:hover { background: var(--fmo-primary-hover); }
 .fmo-turn-to { position: absolute; transform: translateX(-50%); pointer-events: auto; box-shadow: 0 2px 8px rgb(11 21 48 / 0.16); font-weight: 600; }
 .fmo-stage-top { position: absolute; inset-inline: 0; top: var(--fmo-credit-room, 0px); display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px 12px 0; pointer-events: none; z-index: 2; }
 .fmo-stage-top > * { pointer-events: auto; }

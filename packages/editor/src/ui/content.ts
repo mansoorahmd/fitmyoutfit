@@ -297,7 +297,8 @@ export const EDITOR_WORDING = {
     checkHardToRead: "hard to read on {colour}.", // NEW (W-ED85 in the summary)
     checks: { clipped: "part of it is cut off at the seam.", blurry: "may print blurry at this size.", box: "prints as a box with its background colour.", "hard-to-read": "hard to read." } as Record<"clipped" | "blurry" | "box" | "hard-to-read", string>, // NEW (W-ED111, W-ED96, W-ED95 in the summary)
     price: "Price", // W-ED168 (the host fills the slot)
-    proofLater: "Your proof pictures come with the team order.", // NEW: E5 adds the proof here; nothing promised
+    kitLine: "{product} · {team}", // NEW: the Done panel's line ("Jersey · Lahore Lions")
+    doneOpen: "Done: the panel is open", // NEW: the top bar's Done while the Done panel is open (accessible name)
     savedHere: "Saved on this device", // W-ED4
   },
   /** What an undo or redo changed, for the status line ("Undone: Colour"), one per kind of edit (W-ED150). */
