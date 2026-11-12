@@ -118,7 +118,7 @@ export interface DesignCanvasProps {
   /** The layer outlined as selected on the model. */
   selectedLayerId?: string | null;
   /** Called with a layer's id when the customer taps (or presses) it on the model. */
-  onSelectLayer?: (layerId: string) => void;
+  onSelectLayer?: (layerId: string | null) => void;
   /**
    * When given, layers can be dragged on the model. Called at the start, for
    * every move (at most once per frame) and at the end of a drag. A layer

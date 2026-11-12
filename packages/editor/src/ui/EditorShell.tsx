@@ -24,7 +24,7 @@ import { mayMoveCamera } from "../react/camera.js";
 import { extractGarmentMeshes } from "../react/garment-geometry.js";
 import { loadModel, type LoadedModel, type ModelLoadProgress } from "../react/model-loader.js";
 import type { FontSetLike, FontStatus } from "../texture/fonts.js";
-import { renderGarmentView, type GarmentView } from "../texture/garment-view.js";
+import { renderGarmentView, type GarmentMesh, type GarmentView } from "../texture/garment-view.js";
 import type { TextFit } from "../texture/layers.js";
 import type { ZoneHighlight } from "../texture/zone-highlight.js";
 import type { SaveState } from "../storage/device-store.js";
@@ -34,7 +34,7 @@ import { EditorContext, type ColourTarget, type EditorApi, type EditorAssets, ty
 import { CARD_HEIGHT, CARD_WIDTH, DesignTool } from "./DesignTool.js";
 import { PlayersTool, TeamTool } from "./LetteringTools.js";
 import { LogosTool, TextTool } from "./LogosTool.js";
-import { LAYOUT_SIZES, START_CARD_STAGE_MIN, chooseLayout, panelHeights, saveStateShowsWords, stageInsets, type PanelDetent } from "./layout.js";
+import { LAYOUT_SIZES, START_CARD_STAGE_MIN, chooseLayout, panelHeights, saveStateWords, stageInsets, type PanelDetent } from "./layout.js";
 import { ConfirmDialog } from "./parts.js";
 import { Stage, type StageLoad } from "./Stage.js";
 import { StartCard } from "./StartCard.js";
@@ -54,8 +54,14 @@ export interface EditorSlots {
   share?: ReactNode;
   /** Sign-in or the account, later. */
   account?: ReactNode;
-  /** The model's credit line, shown on the stage (a licence duty for a CC BY model). */
+  /** The model's credit line, shown on the stage (a licence duty for a CC BY model). Shown whole on one line where it fits. */
   credit?: ReactNode;
+  /**
+   * A short form of the credit for a phone's narrow stage (for example "3D model by Wearable3D, CC BY 4.0,
+   * changed"): one line, with a button beside it that opens the full `credit`. Without it, the full credit is
+   * shown on one line, cut at the end, with the same button.
+   */
+  creditShort?: ReactNode;
 }
 
 /** One timing for the performance log (06-editor.md 11.3): a tap to the model's change. */
@@ -77,6 +83,12 @@ export interface EditorShellProps {
   initialDesign: DesignDocument;
   /** Show the start card (a new design only; 7.2). */
   showStartCard?: boolean;
+  /**
+   * Show the one-time hint ("Drag to turn. Tap something to change it.", 7.4) for this design. Default: on a
+   * new design (`showStartCard`). It shows after the start card, never over the garment, and goes at the first
+   * press on the stage.
+   */
+  showHint?: boolean;
   /** The garment's short name ("Jersey"), for the top bar and the stage's description. */
   productName: string;
   /** The host's asset storage: where logos are uploaded and drawn from. */
@@ -139,7 +151,6 @@ function useReducedMotion(): boolean {
 }
 
 const RECENT_KEY = "fmo-editor-recent";
-const HINT_KEY = "fmo-editor-hint-seen";
 
 export function EditorShell(props: EditorShellProps) {
   const { product, palette, fonts, templates, assets } = props;
@@ -179,6 +190,7 @@ export function EditorShell(props: EditorShellProps) {
   const [fontStatus, setFontStatus] = useState<FontStatus | null>(null);
   const [textFits, setTextFits] = useState<TextFit[]>([]);
   const [garmentView, setGarmentView] = useState<GarmentView | null>(null);
+  const [garmentMeshes, setGarmentMeshes] = useState<GarmentMesh[] | null>(null);
   const bodyZone = product.pieces.find((p) => p.id === product.views.front)?.zone ?? product.zones[0]!.id;
   const [colourTarget, setColourTarget] = useState<ColourTarget>({ kind: "zone", id: bodyZone });
   const [highlight, setHighlight] = useState<ZoneHighlight | null>(null);
@@ -404,7 +416,9 @@ export function EditorShell(props: EditorShellProps) {
     (model: LoadedModel) => {
       const run = () => {
         try {
-          setGarmentView(renderGarmentView(extractGarmentMeshes(model.scene, product), { width: CARD_WIDTH, height: CARD_HEIGHT }));
+          const meshes = extractGarmentMeshes(model.scene, product);
+          setGarmentMeshes(meshes);
+          setGarmentView(renderGarmentView(meshes, { width: CARD_WIDTH, height: CARD_HEIGHT }));
         } catch (error) {
           console.error("[editor] template cards:", error);
         }
@@ -503,14 +517,13 @@ export function EditorShell(props: EditorShellProps) {
     return () => window.removeEventListener("beforeunload", warn);
   }, [props.saveState]);
 
-  // ---- The one hint, once, the first time the model is shown (7.4); any touch on the stage dismisses it.
-  const [hintSeen, setHintSeen] = useState(() => readLocal(HINT_KEY) !== null);
+  // ---- The one hint, once per design (7.4; E3b): after the start card, in its own band above the garment,
+  // gone at the first press on the stage (a drag or a tap).
+  const [hintSeen, setHintSeen] = useState(() => !(props.showHint ?? props.showStartCard ?? false));
   const touchDevice = typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia("(pointer: coarse)").matches;
-  const hint = load.ready && !hintSeen ? (touchDevice ? wording.selection.hint : wording.selection.hintPointer) : null;
+  const hint = load.ready && !hintSeen && !startCard && mode === "3d" ? (touchDevice ? wording.selection.hint : wording.selection.hintPointer) : null;
   const dismissHint = () => {
-    if (hintSeen) return;
-    setHintSeen(true);
-    writeLocal(HINT_KEY, "1");
+    if (!hintSeen) setHintSeen(true);
   };
 
   // ---- The stage's description in words, debounced (11.2).
@@ -521,6 +534,8 @@ export function EditorShell(props: EditorShellProps) {
   }, [design, camera.side, wording, product, palette, props.productName, description]);
 
   const heights = panelHeights(size.height || 844);
+  const editorWidth = size.width || 390;
+  const stageWidth = layout === "wide" ? editorWidth - LAYOUT_SIZES.wide.rail - LAYOUT_SIZES.wide.panel : layout === "short" ? editorWidth - LAYOUT_SIZES.short.rail - (panelOpen || startCard ? LAYOUT_SIZES.short.panel : 0) : editorWidth;
   const insets = stageInsets(layout, { open: panelOpen || startCard, height: panelSize.height, width: panelSize.width });
 
   const api: EditorApi = {
@@ -652,6 +667,7 @@ export function EditorShell(props: EditorShellProps) {
         data-typing={typing}
         data-detent={panelOpen ? detent : "closed"}
         data-reduced-motion={reducedMotion}
+        data-selected={selectedId ?? ""}
         role="application"
         aria-label={wording.frame.editorName}
         data-testid="editor"
@@ -667,7 +683,7 @@ export function EditorShell(props: EditorShellProps) {
           onUndo={undo}
           onRedo={redo}
           saveState={props.saveState ?? null}
-          showSaveWords={saveStateShowsWords(size.width || 390)}
+          saveWords={saveStateWords(layout, size.width || 390)}
           onSaveInfo={() => setSaveInfo(true)}
           onClose={() => (props.saveState === "failed" ? setLeaving(true) : props.onClose?.())}
           onDone={() => props.onDone?.(designRef.current)}
@@ -684,7 +700,6 @@ export function EditorShell(props: EditorShellProps) {
           className="fmo-work"
           onPointerDownCapture={() => {
             pointer.current.down = true;
-            dismissHint();
           }}
           onPointerUpCapture={() => {
             pointer.current.down = false;
@@ -755,6 +770,10 @@ export function EditorShell(props: EditorShellProps) {
             onReset={() => canvas.current?.resetView()}
             onStageKey={onStageKey}
             credit={props.slots?.credit}
+            creditShort={props.slots?.creditShort}
+            garment={garmentMeshes}
+            stageWidth={stageWidth}
+            onStagePointerDown={dismissHint}
             viewControls={layout === "compact" && typing ? "none" : layout === "compact" && panelOpen && detent === "expanded" ? "reset-only" : "full"}
           />
           {layout !== "wide" && (start ?? panel)}

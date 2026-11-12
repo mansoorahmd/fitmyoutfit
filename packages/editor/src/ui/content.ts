@@ -22,6 +22,7 @@ export const EDITOR_WORDING = {
     undo: "Undo", // W-ED2
     redo: "Redo", // W-ED3
     saved: "Saved on this device", // W-ED4
+    savedShort: "Saved", // NEW (E3b): W-ED4 in a phone's top bar, where the whole sentence does not fit; the sentence stays the accessible name
     saving: "Saving…", // W-ED5
     notSaved: "Not saved", // W-ED6
     notSavedHelp: "This browser didn't let us save your design. Keep this page open, or free some space.", // W-ED6b
@@ -136,7 +137,7 @@ export const EDITOR_WORDING = {
     numberTooLong: "Use 1 or 2 digits, from 0 to 99.", // W-ED79
     numberMixed: "Use one kind of digits, not both.", // W-ED80
     numberEmpty: "Enter a number to preview.", // W-ED81
-    hardToRead: "Hard to read on {colour}.", // W-ED85
+    hardToRead: "{item} is hard to read on {colour}.", // W-ED85, NEW form (E3b): it names the item ("Number on the back is hard to read on Navy.")
     addOutline: "Add outline", // W-ED86
     darkerColour: "Choose a darker colour", // W-ED86
     useLetterColour: "Use {colour} letters", // NEW: the fix when a name crosses two colours (a sash)
@@ -204,6 +205,16 @@ export const EDITOR_WORDING = {
     logoItem: "Logo", // NEW
     textItem: "Text {value}", // NEW
     credit: "3D model", // NEW: the credit line's label (the host gives the credit)
+    creditMore: "Model credit", // NEW (E3b): the button beside the short credit line that opens the full credit
+  },
+  /**
+   * What an item on the kit is called (E3b, NEW): in warnings ("Number on the back is hard to read"),
+   * the list "On this kit", the contextual bar and the Done panel. By role.
+   */
+  items: {
+    roles: { "team-name": "Team name", "player-name": "Player name", "player-number": "Number", crest: "Logo", sponsor: "Logo", text: "Text", graphic: "Picture" } as Record<string, string>,
+    at: "{item} on the {where}", // NEW: "Number on the back"
+    named: "{item}: {value}", // NEW: "Team name: TIGERS", "Logo: crest.png" (06-editor.md 4.8)
   },
   /** States (`states`). */
   states: {

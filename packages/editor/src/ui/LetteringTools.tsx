@@ -10,7 +10,8 @@ import { addCatalogFont } from "../design/font-catalog.js";
 import { updateLayer } from "../design/edit.js";
 import { coloursCommonFirst, paletteColourRef } from "../design/palette.js";
 import { contrastRatio } from "../design/colour.js";
-import { designReadability, itemReadability, outlineColourFor, readabilityRemedy } from "../design/readability.js";
+import { itemReadability, outlineColourFor } from "../design/readability.js";
+import { readabilityWarnings } from "./checks.js";
 import { findLayers, isRoleSlotOn, outlineStepOf, placeAtPreset, setOutline, setRoleSlot, setSamplePlayer, setSizeStep, setTeamName, sizeStepOf, type LetteringStyle, type OutlineStep, type SizeStep } from "../design/roles.js";
 import { TEAM_COLOUR_ROLES, type ColorValue, type DesignDocument, type Layer, type PlacementPreset, type TeamColourRole } from "../design/schema.js";
 import { teamColourValue } from "../design/team-colours.js";
@@ -207,22 +208,25 @@ function FontList({ role, sample, onBack }: { role: ValueRole; sample: string; o
 function ReadabilityWarnings({ roles }: { roles: ValueRole[] }) {
   const api = useEditor();
   const { design, product, palette, wording } = api;
-  const failing = designReadability(product, design).filter((r) => !r.passes && roles.includes(design.layers.find((l) => l.id === r.layerId)!.role as ValueRole));
-  if (failing.length === 0) return null;
+  const warnings = readabilityWarnings(wording, product, design, palette, roles);
+  if (warnings.length === 0) return null;
   return (
     <>
-      {failing.map((r) => {
-        const remedy = readabilityRemedy(design, r, { palette });
+      {warnings.map(({ text, layerIds, remedy, readability: r }) => {
         const fixLabel = remedy.kind === "outline" ? wording.lettering.addOutline : fill(wording.lettering.useLetterColour, { colour: colourName(palette, remedy.colour) });
         return (
           <Alert key={r.layerId} kind="warning" testId={`readability-${r.layerId}`}>
-            <p>{fill(wording.lettering.hardToRead, { colour: colourName(palette, r.background.colour) })}</p>
+            <p>{text}</p>
             <button
               type="button"
               className="fmo-btn"
               onClick={() =>
                 api.commit(
-                  (d) => (remedy.kind === "outline" ? setOutline(d, r.layerId, { step: "thin", color: remedy.colour }, { product }) : updateLayer(d, r.layerId, { fill: remedy.colour }, { product })),
+                  (d) =>
+                    layerIds.reduce(
+                      (acc, id) => (remedy.kind === "outline" ? setOutline(acc, id, { step: "thin", color: remedy.colour }, { product }) : updateLayer(acc, id, { fill: remedy.colour }, { product })),
+                      d,
+                    ),
                   remedy.kind === "outline" ? "outline" : "colour",
                 )
               }

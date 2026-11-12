@@ -123,10 +123,15 @@ export const EDITOR_CSS = /* css */ `
 .fmo-status:empty { display: none; }
 .fmo-status button { height: 32px; padding: 0 12px; border: 1px solid rgb(255 255 255 / 0.7); border-radius: 16px; background: transparent; color: #fff; cursor: pointer; font-weight: 600; }
 .fmo-status-quiet { padding-inline-end: 14px; }
-.fmo-hint { padding: 8px 14px; border-radius: 18px; background: var(--fmo-overlay-control); border: 1px solid var(--fmo-border); font-size: 14px; }
+.fmo-hint { padding: 6px 12px; border-radius: 16px; background: var(--fmo-overlay-control); border: 1px solid var(--fmo-border); font-size: 13px; line-height: 18px; max-width: calc(100% - 8px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .fmo-banner { align-self: stretch; display: flex; gap: 8px; align-items: flex-start; padding: 10px 12px; border-radius: var(--fmo-radius-card); background: var(--fmo-surface); border: 1px solid var(--fmo-border); font-size: 14px; }
-.fmo-credit { position: absolute; inset-inline-start: 10px; z-index: 1; margin: 0; max-width: calc(100% - 20px); font-size: 11px; line-height: 1.35; color: var(--fmo-ink-muted); text-align: start; }
+.fmo-credit { position: absolute; top: 0; inset-inline-start: 8px; z-index: 3; height: 24px; display: flex; align-items: center; gap: 2px; margin: 0; font-size: 11px; line-height: 16px; color: var(--fmo-ink-muted); text-align: start; }
+.fmo-credit-line { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .fmo-credit a { color: inherit; }
+.fmo-credit-more { position: relative; flex: none; width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 12px; background: transparent; color: var(--fmo-ink-muted); cursor: pointer; }
+.fmo-credit-more::before { content: ""; position: absolute; inset: -10px; }
+.fmo-credit-more[aria-expanded="true"] { color: var(--fmo-ink); background: var(--fmo-overlay-control); }
+.fmo-credit-full { position: absolute; top: 26px; inset-inline-start: 0; width: max-content; max-width: min(340px, calc(100vw - 32px)); padding: 8px 10px; border: 1px solid var(--fmo-border); border-radius: var(--fmo-radius-card); background: var(--fmo-surface); color: var(--fmo-ink); font-size: 12px; line-height: 1.4; white-space: normal; box-shadow: 0 4px 14px rgb(11 21 48 / 0.14); }
 .fmo-view { position: absolute; inset-inline: 0; display: flex; align-items: flex-end; justify-content: space-between; gap: 8px; padding: 0 12px; pointer-events: none; z-index: 2; transition: bottom 200ms var(--fmo-ease); }
 .fmo-view > * { pointer-events: auto; }
 .fmo-editor[data-layout="wide"] .fmo-view { justify-content: center; }

@@ -30,6 +30,15 @@ export function nextStageTone(previous: StageTone, bodyHex: string | null): Stag
   return previous;
 }
 
+/**
+ * The model credit's form for a stage this wide (E3b): the whole credit on one line where it fits (it is
+ * about 380 px at 11 px type), else the host's short form with a button to the full one. Never two lines.
+ */
+export const CREDIT_FULL_MIN_WIDTH = 560;
+export function creditForm(stageWidth: number): "full" | "short" {
+  return stageWidth >= CREDIT_FULL_MIN_WIDTH ? "full" : "short";
+}
+
 /** "a, b and c" (with the wording's "and"). */
 export function joinWords(words: readonly string[], and: string): string {
   if (words.length <= 1) return words.join("");

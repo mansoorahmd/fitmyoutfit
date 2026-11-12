@@ -74,13 +74,15 @@ describe("the shell", () => {
 });
 
 describe("the top bar and the tabs", () => {
-  it("compact: icons with names; wide: words; the save state in words or as an icon at 360 px", () => {
+  it("compact: icons with names; wide: words; the save state as one word on a phone (never cut), the sentence on wide", () => {
     const props = { wording: W, productName: "Jersey", canUndo: true, canRedo: false, undoTitle: "u", redoTitle: "r", onUndo: () => undefined, onRedo: () => undefined, onSaveInfo: () => undefined, onClose: () => undefined, onDone: () => undefined };
-    const compact = renderToStaticMarkup(<TopBar {...props} layout="compact" saveState="saved" showSaveWords={false} />);
+    const compact = renderToStaticMarkup(<TopBar {...props} layout="compact" saveState="saved" saveWords="short" />);
     expect(compact).toContain('aria-label="Close the editor"');
     expect(compact).toContain('aria-disabled="true"'); // redo
     expect(compact).toContain('class="fmo-sr-only">Saved on this device');
-    const wide = renderToStaticMarkup(<TopBar {...props} layout="wide" saveState="failed" showSaveWords price={<span>from 20</span>} />);
+    expect(compact).toContain('<span aria-hidden="true">Saved</span>');
+    expect(renderToStaticMarkup(<TopBar {...props} layout="compact" saveState="saved" saveWords="none" />)).not.toContain('aria-hidden="true">Saved<');
+    const wide = renderToStaticMarkup(<TopBar {...props} layout="wide" saveState="failed" saveWords="full" price={<span>from 20</span>} />);
     expect(text(wide)).toContain("Undo");
     expect(text(wide)).toContain("Not saved");
     expect(wide).toContain('data-testid="price-slot"');

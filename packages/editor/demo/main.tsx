@@ -125,6 +125,21 @@ function ModelCredit({ demoProduct }: { demoProduct: DemoProduct }) {
   );
 }
 
+/** The credit's short form for a phone's narrow stage: the author, the licence (linked) and that we changed it; the full credit opens beside it. */
+function ModelCreditShort({ demoProduct }: { demoProduct: DemoProduct }) {
+  const credit = demoProduct.credit;
+  if (!credit) return null;
+  return (
+    <>
+      3D model by {credit.author},{" "}
+      <a href={credit.licenceUrl} target="_blank" rel="noreferrer">
+        {credit.licence}
+      </a>
+      {credit.changed && ", changed"}
+    </>
+  );
+}
+
 interface Session {
   key: number;
   design: DesignDocument;
@@ -227,7 +242,11 @@ function EditorPage({ data }: { data: DemoData }) {
         onClose={() => {
           void autosave.current?.flush().catch(() => undefined).finally(() => window.location.reload());
         }}
-        slots={{ brand: "FitMyOutfit", credit: DEMO_PRODUCT.credit ? <ModelCredit demoProduct={DEMO_PRODUCT} /> : undefined }}
+        slots={{
+          brand: "FitMyOutfit",
+          credit: DEMO_PRODUCT.credit ? <ModelCredit demoProduct={DEMO_PRODUCT} /> : undefined,
+          creditShort: DEMO_PRODUCT.credit ? <ModelCreditShort demoProduct={DEMO_PRODUCT} /> : undefined,
+        }}
         onTiming={onTiming}
         logTimings
       />
