@@ -429,9 +429,11 @@ medusaIntegrationTestRunner({
             based_on: date,
             standard: { days: 15, date: addCalendarDays(date, 15) },
             rush: { days: 10, date: addCalendarDays(date, 10) },
-            // Section 8: which date applies; "standard" until the rush charge exists.
+            // Section 8: which date applies; "rush" only when the cart holds the rush line.
             applies: "standard",
           },
+          // Section 9: 3 jerseys (66.00) and a T-shirt (14.00) at 20%; the fit kit is not charged.
+          rush: { available: true, in_cart: false, percentage: 20, amount: 16, currency_code: "gbp" },
         })
 
         const pakistan = await createCart("pk", [{ handle: "t-shirt", size: "M", quantity: 1 }])

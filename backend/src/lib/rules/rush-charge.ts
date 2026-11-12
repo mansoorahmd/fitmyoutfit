@@ -36,7 +36,7 @@ import {
   type Exact,
 } from "./exact-amount"
 
-/** The `metadata.kind` of the rush product (also in delivery-promise.ts, which says "rush" for it). */
+/** The `metadata.kind` of the rush product (delivery-promise.ts says "rush" for a line of it). */
 export const RUSH_KIND = "rush_add_on"
 
 /**
