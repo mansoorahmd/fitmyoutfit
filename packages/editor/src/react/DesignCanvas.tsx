@@ -15,6 +15,7 @@ import {
   Box3,
   CanvasTexture,
   DoubleSide,
+  LinearFilter,
   NeutralToneMapping,
   Raycaster,
   SRGBColorSpace,
@@ -31,6 +32,7 @@ import type { DesignDocument, Point, ProductDefinition } from "../design/schema.
 import { buildSurfaceLookup, projectItem, projectPieceLine, type ItemOnScreen, type ScreenPoint, type SurfaceLookup } from "../texture/surface-lookup.js";
 import { extractGarmentMeshes } from "./garment-geometry.js";
 import { TAP_MAX_MS, pressAction, type DragOnlySelected } from "./press-policy.js";
+import { DraftPolicy, type GestureTiming } from "./draft-quality.js";
 import { dragPosition, layerAtPoint, pieceAtMeshUv, round3, startLayerDrag, type LayerDrag } from "../design/placement.js";
 import { backgroundAt } from "../design/readability.js";
 import { DEFAULT_TEXTURE_SIZE, drawPatternTexture, type DrawPatternResult } from "../texture/pattern-texture.js";
@@ -166,6 +168,15 @@ export interface DesignCanvasProps {
   onSelectionGeometry?: (geometry: SelectionGeometry | null) => void;
   /** Lines to draw over the model with the selection (snapping guides, the print area), projected along the cloth. */
   guides?: readonly PieceGuide[];
+  /**
+   * True while the coach moves, resizes or turns an item (06-editor.md 5.3, N11). If frames then take
+   * longer than 33 ms, the texture is drawn at half size until the gesture ends, then once at full size.
+   * "always" draws every gesture at half size; "never" keeps full size.
+   */
+  gesture?: boolean;
+  draftQuality?: "auto" | "always" | "never";
+  /** Each gesture's timings: frame times during it, whether draft quality was used, and the time to full quality after it. */
+  onGestureTiming?: (timing: GestureTiming) => void;
   /**
    * When given, layers can be dragged on the model. Called at the start, for
    * every move (at most once per frame) and at the end of a drag. A layer
@@ -336,9 +347,10 @@ function defaultFontSet(): FontSetLike | null {
 }
 
 /** The 2D canvas the pattern is drawn into, and the texture that shows it on the model. */
-function usePatternSurface(requestedSize: number | undefined): PatternSurface {
+function usePatternSurface(requestedSize: number | undefined, options: { mipmaps?: boolean } = {}): PatternSurface {
   const gl = useThree((state) => state.gl);
   const size = Math.max(64, Math.min(requestedSize ?? DEFAULT_TEXTURE_SIZE, gl.capabilities.maxTextureSize));
+  const mipmaps = options.mipmaps;
   const surface = useMemo(() => {
     const canvas = document.createElement("canvas");
     canvas.width = size;
@@ -350,8 +362,13 @@ function usePatternSurface(requestedSize: number | undefined): PatternSurface {
     texture.flipY = false;
     texture.colorSpace = SRGBColorSpace;
     texture.anisotropy = Math.min(8, gl.capabilities.getMaxAnisotropy());
+    if (mipmaps === false) {
+      // A draft: no mipmap chain to build on every upload (slightly rougher when far away, for a moment).
+      texture.generateMipmaps = false;
+      texture.minFilter = LinearFilter;
+    }
     return { canvas, ctx, texture, size };
-  }, [size, gl]);
+  }, [size, gl, mipmaps]);
   useEffect(() => () => surface.texture.dispose(), [surface]);
   return surface;
 }
@@ -383,6 +400,9 @@ function ModelView({
   outlineSelected = true,
   onSelectionGeometry,
   guides,
+  gesture = false,
+  draftQuality = "auto",
+  onGestureTiming,
   assetUrl,
   fonts,
   onFontStatus,
@@ -405,6 +425,12 @@ function ModelView({
   const invalidate = useThree((state) => state.invalidate);
   const viewSize = useThree((state) => state.size);
   const surface = usePatternSurface(textureSize);
+  // Draft quality (5.3, N11): a half-size surface drawn while a gesture runs slowly; full size again on release.
+  const draftSurface = usePatternSurface(Math.max(64, Math.floor((textureSize ?? DEFAULT_TEXTURE_SIZE) / 2)), { mipmaps: false });
+  const [draft] = useState(() => new DraftPolicy());
+  const showing = useRef<CanvasTexture | null>(null);
+  const gestureTiming = useLatest(onGestureTiming);
+  const gestureNow = useLatest(gesture);
 
   const { center, size } = prepared;
   const framing: Framing = frameInFreeArea(size, FOV, viewSize, viewInsets);
@@ -423,6 +449,8 @@ function ModelView({
     });
   });
   useFrame(() => rig.frame());
+  // Frame times while a gesture runs (the draft policy watches them).
+  useFrame(() => draft.frame(performance.now()));
 
   // The layer and design the commands need, read when a command runs.
   const latest = useLatest({ design, product, onSelectLayer, onLayerDrag, touchSlopMm, controls, pickZones, onZoneTap, selectedLayerId, dragOnlySelected });
@@ -502,6 +530,7 @@ function ModelView({
   const inside = usePatternSurface(INSIDE_TEXTURE_SIZE);
   useEffect(() => {
     applyPatternTexture(prepared.pieceMaterials, surface.texture);
+    showing.current = surface.texture;
     for (const fabric of prepared.fabrics) fabric.setInsideMap(inside.texture);
     invalidate();
   }, [prepared, surface, inside, invalidate]);
@@ -559,11 +588,44 @@ function ModelView({
   // 3D context comes back. The model is not reloaded.
   const onDrawn = useLatest(onTextureDrawn);
   const outlinedLayerId = outlineSelected ? (selectedLayerId ?? null) : null;
-  useEffect(() => {
+  const fullRedraw = useLatest(() => {
     const info = redrawPattern(surface, product, design, images, outlinedLayerId, highlight);
+    applyPatternTexture(prepared.pieceMaterials, surface.texture);
+    showing.current = surface.texture;
     invalidate();
     onDrawn.current?.(info);
-  }, [design, product, surface, invalidate, images, outlinedLayerId, fontsVersion, imagesVersion, onDrawn, highlight, restored]);
+  });
+  useEffect(() => {
+    // During a slow gesture, the half-size surface; otherwise (and once on release) the full one.
+    const useDraft = draft.useDraft(gestureNow.current, draftQuality);
+    const target = useDraft ? draftSurface : surface;
+    const info = redrawPattern(target, product, design, images, outlinedLayerId, highlight);
+    draft.drawn(info.drawMs);
+    if (showing.current !== target.texture) {
+      applyPatternTexture(prepared.pieceMaterials, target.texture);
+      showing.current = target.texture;
+    }
+    invalidate();
+    onDrawn.current?.(info);
+  }, [design, product, surface, invalidate, images, outlinedLayerId, fontsVersion, imagesVersion, onDrawn, highlight, restored, draftQuality, draft, draftSurface, prepared, gestureNow]);
+
+  // A gesture's start and end: the policy starts and stops watching; after the end, the full-size frame's time.
+  useEffect(() => {
+    if (gesture) {
+      draft.start(performance.now());
+      return;
+    }
+    const timing = draft.end(performance.now());
+    if (!timing) return;
+    const ended = performance.now();
+    // Back to full quality: one drawing at full size, if the gesture drew drafts.
+    if (showing.current !== surface.texture) fullRedraw.current();
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        gestureTiming.current?.({ ...timing, fullQualityMs: performance.now() - ended });
+      }),
+    );
+  }, [gesture, draft, gestureTiming, surface, fullRedraw]);
 
   // The 3D context can be taken away (a phone under memory pressure) and given back (N16).
   const contextEvents = useLatest({ onContextLost, onContextRestored });
@@ -598,7 +660,7 @@ function ModelView({
     const ndc = new Vector2();
     const meshes = [...prepared.pieceMeshes.keys()];
     const down = new Set<number>();
-    let drag: { pointerId: number; state: LayerDrag; position: Point; pending: Point | null; frame: number | null; free: boolean; pxPerMm: number } | null = null;
+    let drag: { pointerId: number; state: LayerDrag; position: Point; pending: Point | null; pointer: { clientX: number; clientY: number } | null; frame: number | null; free: boolean; pxPerMm: number } | null = null;
     let tap: { pointerId: number; x: number; y: number; time: number; selects: string | null } | null = null;
 
     // Screen px per mm at the item, from the last projection (for snapping distances); 2 until known.
@@ -622,9 +684,17 @@ function ModelView({
       latest.current.onLayerDrag?.({ phase, layerId: drag.state.layerId, pieceId: drag.state.pieceId, position, free: drag.free, pxPerMm: drag.pxPerMm });
     };
 
+    // The ray to the model is cast once per frame, for the latest pointer position (pointer events can come
+    // faster than frames, and a ray against the whole garment is the costly part of a move).
     const flush = () => {
       if (!drag) return;
       drag.frame = null;
+      const at = drag.pointer;
+      drag.pointer = null;
+      if (at) {
+        const next = dragPosition(latest.current.product, drag.state, hitAt(at));
+        if (next) drag.pending = { x: round3(next.x), y: round3(next.y) };
+      }
       if (drag.pending) {
         drag.position = drag.pending;
         drag.pending = null;
@@ -635,10 +705,8 @@ function ModelView({
     const onMove = (event: PointerEvent) => {
       if (!drag || event.pointerId !== drag.pointerId) return;
       event.preventDefault();
-      const next = dragPosition(latest.current.product, drag.state, hitAt(event));
-      if (!next) return;
       drag.free = event.altKey;
-      drag.pending = { x: round3(next.x), y: round3(next.y) };
+      drag.pointer = { clientX: event.clientX, clientY: event.clientY };
       drag.frame ??= requestAnimationFrame(flush);
     };
 
@@ -665,7 +733,10 @@ function ModelView({
       }
       if (!drag || event.pointerId !== drag.pointerId) return;
       if (drag.frame !== null) cancelAnimationFrame(drag.frame);
-      if (phase === "end") flush();
+      if (phase === "end") {
+        drag.pointer ??= { clientX: event.clientX, clientY: event.clientY };
+        flush();
+      }
       emit(phase, drag.position);
       drag = null;
       window.removeEventListener("pointermove", onMove);
@@ -713,7 +784,7 @@ function ModelView({
       event.preventDefault();
       select?.(layer.id);
       if (!dragHandler) return;
-      drag = { pointerId: event.pointerId, state: startLayerDrag(layer, hit.point), position: layer.position, pending: null, frame: null, free: event.altKey, pxPerMm: pxPerMmAt(layer.id) };
+      drag = { pointerId: event.pointerId, state: startLayerDrag(layer, hit.point), position: layer.position, pending: null, pointer: null, frame: null, free: event.altKey, pxPerMm: pxPerMmAt(layer.id) };
       const controlsNow = latest.current.controls;
       if (controlsNow) controlsNow.enabled = false;
       canvas.style.cursor = "grabbing";

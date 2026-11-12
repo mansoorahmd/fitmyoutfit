@@ -26,6 +26,7 @@ import { layerSide } from "../design/roles.js";
 import type { EditLabel } from "../state/history.js";
 import { useDesignHistory } from "../react/useDesignHistory.js";
 import type { CameraInfo, DesignCanvasHandle, LayerDragEvent, PieceGuide, TextureDrawInfo, ZoneTap } from "../react/DesignCanvas.js";
+import type { GestureTiming } from "../react/draft-quality.js";
 import { mayMoveCamera } from "../react/camera.js";
 import { extractGarmentMeshes } from "../react/garment-geometry.js";
 import { loadModel, type LoadedModel, type ModelLoadProgress } from "../react/model-loader.js";
@@ -124,6 +125,10 @@ export interface EditorShellProps {
   injectStyles?: boolean;
   /** Called with each tap-to-change timing; with `logTimings` they also go to the console (development). */
   onTiming?: (timing: EditorTiming) => void;
+  /** Called after each drag, resize or turn with its frame times, whether draft quality was used, and the time to full quality (5.3). */
+  onGestureTiming?: (timing: GestureTiming & { name: string }) => void;
+  /** Draft quality during gestures (5.3): "auto" (default) switches below 30 frames a second. */
+  draftQuality?: "auto" | "always" | "never";
   logTimings?: boolean;
   className?: string;
   style?: CSSProperties;
@@ -220,6 +225,13 @@ export function EditorShell(props: EditorShellProps) {
   const setGuides = useCallback((next: PieceGuide[]) => setGuidesState((now) => (JSON.stringify(now) === JSON.stringify(next) ? now : next)), []);
   // Snapping can be held off: Alt with a mouse, or this setting (fine-tune) on touch and for everyone (5.2).
   const [snapOn, setSnapOn] = useState(true);
+  // A drag, resize or turn is going on (draft quality, 5.3), and which.
+  const [placing, setPlacingState] = useState<string | null>(null);
+  const [frozenDesign, setFrozenDesign] = useState<DesignDocument | null>(null);
+  const setPlacing = useCallback((kind: string | null) => {
+    setPlacingState(kind);
+    setFrozenDesign(kind ? designRef.current : null);
+  }, []);
   const lastSnap = useRef("");
   const setSelectedId = useCallback((id: string | null) => setSelectedIdState(id), []);
   const [saveInfo, setSaveInfo] = useState(false);
@@ -505,6 +517,14 @@ export function EditorShell(props: EditorShellProps) {
     onTiming.current = props.onTiming;
   });
   const logTimings = props.logTimings;
+  const onGestureTimingRef = useRef(props.onGestureTiming);
+  useEffect(() => {
+    onGestureTimingRef.current = props.onGestureTiming;
+  });
+  const lastPlacing = useRef<string | null>(null);
+  useEffect(() => {
+    if (placing) lastPlacing.current = placing;
+  }, [placing]);
   const onTextureDrawn = useCallback(
     (info: TextureDrawInfo) => {
       setTextFits(info.textFits);
@@ -576,7 +596,9 @@ export function EditorShell(props: EditorShellProps) {
     layout,
     detent,
     setDetent,
-    design,
+    // While a drag, resize or turn goes on, the tools see the design as it was when it started (5.3: the
+    // stage is what must stay quick; the panel catches up on release).
+    design: frozenDesign ?? design,
     commit,
     begin: (label) => history.begin(label),
     preview,
@@ -652,6 +674,7 @@ export function EditorShell(props: EditorShellProps) {
       if (phase === "start") {
         gestureStart.current = designRef.current.layers.find((l) => l.id === id) ?? null;
         history.begin("resize");
+        setPlacing("resize");
         return;
       }
       const start = gestureStart.current;
@@ -660,6 +683,7 @@ export function EditorShell(props: EditorShellProps) {
         history.cancel();
         gestureStart.current = null;
         setGuides([]);
+        setPlacing(null);
         return;
       }
       const piece = product.pieces.find((p) => p.id === start.pieceId);
@@ -675,9 +699,10 @@ export function EditorShell(props: EditorShellProps) {
       if (phase === "end") {
         history.end();
         gestureStart.current = null;
+        setPlacing(null);
       }
     },
-    [selectedId, history, product, setGuides],
+    [selectedId, history, product, setGuides, setPlacing],
   );
   const onRotate = useCallback(
     (phase: GesturePhase, degrees: number, free: boolean) => {
@@ -686,6 +711,7 @@ export function EditorShell(props: EditorShellProps) {
       if (phase === "start") {
         gestureStart.current = designRef.current.layers.find((l) => l.id === id) ?? null;
         history.begin("rotate");
+        setPlacing("rotate");
         return;
       }
       const start = gestureStart.current;
@@ -706,9 +732,10 @@ export function EditorShell(props: EditorShellProps) {
       if (phase === "end") {
         history.end();
         gestureStart.current = null;
+        setPlacing(null);
       }
     },
-    [selectedId, history, product, setGuides],
+    [selectedId, history, product, setGuides, setPlacing],
   );
 
   const onLayerDrag = useCallback(
@@ -718,11 +745,13 @@ export function EditorShell(props: EditorShellProps) {
         history.begin("move");
         lastSnap.current = "";
         setGuides(areaLines);
+        setPlacing("move");
         return;
       }
       if (event.phase === "cancel") {
         history.cancel();
         setGuides([]);
+        setPlacing(null);
         return;
       }
       const current = designRef.current;
@@ -738,9 +767,10 @@ export function EditorShell(props: EditorShellProps) {
       if (event.phase === "end") {
         history.end();
         setGuides([]);
+        setPlacing(null);
       } else setGuides([...areaLines, ...snapped.guides.map((g) => ({ pieceId: g.pieceId, from: g.from, to: g.to, kind: "guide" as const }))]);
     },
-    [history, product, snapOn, reducedMotion, setGuides],
+    [history, product, snapOn, reducedMotion, setGuides, setPlacing],
   );
 
   const onStageKey = (event: ReactKeyboardEvent<HTMLDivElement>) => {
@@ -886,6 +916,13 @@ export function EditorShell(props: EditorShellProps) {
               dragOnlySelected: "touch",
               outlineSelected: false,
               guides,
+              gesture: placing !== null,
+              draftQuality: props.draftQuality ?? "auto",
+              onGestureTiming: (t: GestureTiming) => {
+                const named = { ...t, name: lastPlacing.current ?? "move" };
+                onGestureTimingRef.current?.(named);
+                if (logTimings) console.info(`[editor timing] ${named.name}: ${t.frames} frames, frame p50 ${t.frameP50.toFixed(1)} ms, p95 ${t.frameP95.toFixed(1)} ms, max ${t.frameMax.toFixed(1)} ms; drawing p50 ${t.drawP50.toFixed(1)} ms; draft ${t.draft ? "on" : "off"}; full quality ${(t.fullQualityMs ?? 0).toFixed(1)} ms after release`);
+              },
               onLayerDrag,
               pickZones: activeTool === "colours" && !startCard,
               onZoneTap,

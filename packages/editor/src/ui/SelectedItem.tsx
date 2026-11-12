@@ -6,7 +6,7 @@
  * to do everything without dragging (WCAG 2.5.7). On a phone the bar sits on
  * the stage and never over the item; on a desktop it heads the panel.
  */
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { removeLayer } from "../design/edit.js";
 import { KEY_NUDGE_LARGE_MM, KEY_NUDGE_MM, NUDGE_MM, SIZE_STEP, TURN_STEP, bringForward, canDuplicate, centreLayer, duplicateLayer, nudgeLayer, rotateLayerBy, rotateLayerTo, scaleLayerBy, sendBack } from "../design/item-edits.js";
 import { isClipped, moveInside } from "../design/print-area.js";
@@ -138,8 +138,15 @@ export function StageContextBar({ bus, top, bottomInset }: { bus: Bus<SelectionG
 export function ClippedNote() {
   const api = useEditor();
   const layer = useSelectedLayer();
-  if (!layer || !isClipped(api.product, layer)) return null;
-  const at = moveInside(api.product, layer);
+  // Once per position, size and turn (the search for a place that fits is not free).
+  const key = layer ? JSON.stringify([layer.pieceId, layer.position, layer.size, layer.rotation]) : "";
+  const check = useMemo(() => {
+    if (!layer) return null;
+    return isClipped(api.product, layer) ? { at: moveInside(api.product, layer) } : null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the key holds what the check reads
+  }, [key, api.product]);
+  if (!layer || !check) return null;
+  const at = check.at;
   const w = api.wording.selection;
   return (
     <Alert kind="warning" testId="clipped-note">

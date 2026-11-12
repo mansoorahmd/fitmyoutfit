@@ -248,6 +248,11 @@ function EditorPage({ data }: { data: DemoData }) {
           creditShort: DEMO_PRODUCT.credit ? <ModelCreditShort demoProduct={DEMO_PRODUCT} /> : undefined,
         }}
         onTiming={onTiming}
+        onGestureTiming={(t) => {
+          const w = window as unknown as { __gestureTimings?: unknown[] };
+          (w.__gestureTimings ??= []).push(t);
+        }}
+        draftQuality={new URLSearchParams(window.location.search).get("draft") === "never" ? "never" : "auto"}
         logTimings
       />
       <ResumePrompt

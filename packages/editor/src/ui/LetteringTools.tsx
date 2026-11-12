@@ -5,7 +5,7 @@
  * (font, colour, outline, size). A readability warning with a one-tap fix
  * appears when letters are hard to read on the kit.
  */
-import { useId, useState, type ReactNode } from "react";
+import { useId, useState, type ReactNode, useMemo } from "react";
 import { addCatalogFont } from "../design/font-catalog.js";
 import { updateLayer } from "../design/edit.js";
 import { coloursCommonFirst, paletteColourRef } from "../design/palette.js";
@@ -208,7 +208,9 @@ function FontList({ role, sample, onBack }: { role: ValueRole; sample: string; o
 function ReadabilityWarnings({ roles }: { roles: ValueRole[] }) {
   const api = useEditor();
   const { design, product, palette, wording } = api;
-  const warnings = readabilityWarnings(wording, product, design, palette, roles);
+  // Computed once per design (the panel re-renders often; this samples every colour under every item).
+  const roleKey = roles.join(",");
+  const warnings = useMemo(() => readabilityWarnings(wording, product, design, palette, roleKey.split(",") as ValueRole[]), [wording, product, design, palette, roleKey]);
   if (warnings.length === 0) return null;
   return (
     <>
