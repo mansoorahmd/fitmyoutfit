@@ -147,6 +147,7 @@ export const EDITOR_WORDING = {
     addText: "Add text", // W-ED100
     sameOnEvery: "Printed the same on every shirt.", // W-ED101
     align: { start: "Start", center: "Centre", end: "End" }, // W-ED102
+    alignLabel: "Alignment", // NEW: the group name of W-ED102
     textLabel: "Your text", // NEW
     removeText: "Remove", // W-ED98
     fontsLoading: "Fonts are still loading. Names may change shape slightly.", // W-ED145

@@ -159,6 +159,9 @@ export const EDITOR_CSS = /* css */ `
 .fmo-stepper { display: inline-flex; align-items: center; gap: 8px; }
 .fmo-stepper-value { min-width: 72px; text-align: center; font-weight: 650; }
 .fmo-overlay-badge { position: absolute; transform: translate(-50%, -50%); pointer-events: none; }
+.fmo-segmented button:has(> .fmo-icon) { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.fmo-font-chip { font-size: 18px; max-width: 220px; overflow: hidden; }
+.fmo-font-chip > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fmo-turn-to { position: absolute; transform: translateX(-50%); pointer-events: auto; box-shadow: 0 2px 8px rgb(11 21 48 / 0.16); font-weight: 600; }
 .fmo-stage-top { position: absolute; inset-inline: 0; top: var(--fmo-credit-room, 0px); display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px 12px 0; pointer-events: none; z-index: 2; }
 .fmo-stage-top > * { pointer-events: auto; }

@@ -43,6 +43,9 @@ const PATHS = {
   straighten: "M4 12h16M7 8v8M17 8v8",
   forward: "M7 14h10v6H7zM9 4h10v8",
   back: "M5 4h10v6H5zM9 12h10v8H9z",
+  alignLeft: "M4 6h16M4 10h10M4 14h16M4 18h10",
+  alignCentre: "M4 6h16M7 10h10M4 14h16M7 18h10",
+  alignRight: "M4 6h16M10 10h10M4 14h16M10 18h10",
 } as const;
 
 export type IconName = keyof typeof PATHS;
