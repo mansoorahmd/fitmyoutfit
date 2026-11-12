@@ -5,7 +5,7 @@ import { EDITOR_WORDING, changeWords, fill, mergeWording, presetWords, shapeGrou
 import { PANEL_NORMAL_MAX, chooseLayout, panelHeights, saveStateShowsWords, stageHeight, stageInsets } from "./layout";
 import { convertDigits, digitChoiceOf, numberErrorText, numberFieldError, playerSwitches } from "./lettering";
 import { colourCodeState, normaliseCodeInput } from "./colour-code";
-import { bodyColour, describeStage, nextStageTone } from "./stage";
+import { bodyColour, describeStage, nextStageTone } from "./stage-logic";
 import { formatMegabytes, uploadRefusal, uploadRefusalText, uploadWarningTexts } from "./upload-wording";
 import { EDIT_LABELS } from "../state/history";
 import { createDesign } from "../design/create";
@@ -50,15 +50,19 @@ describe("wording (section 14)", () => {
   it("is the only place sentences live: no component holds a sentence of its own", () => {
     // A rough check: every .tsx in src/ui has no JSX text of three words or more outside the wording.
     const dir = resolve(import.meta.dirname);
-    for (const file of ["EditorShell.tsx", "TopBar.tsx", "ToolPanel.tsx", "Stage.tsx", "StartCard.tsx", "DesignTool.tsx", "ColoursTool.tsx", "LetteringTools.tsx", "LogosTool.tsx", "TextTool.tsx", "FlatView.tsx", "parts.tsx"]) {
+    for (const file of ["EditorShell.tsx", "TopBar.tsx", "ToolPanel.tsx", "Stage.tsx", "StartCard.tsx", "DesignTool.tsx", "ColoursTool.tsx", "LetteringTools.tsx", "LogosTool.tsx", "TextTool.tsx", "FlatView.tsx", "parts.tsx", "dialogs.tsx", "icons.tsx"]) {
       let source: string;
       try {
         source = readFileSync(resolve(dir, file), "utf8");
       } catch {
         continue;
       }
-      const jsxText = [...source.matchAll(/>\s*([A-Za-z][^<>{}]*[A-Za-z.!?])\s*</g)].map((m) => m[1]!.trim()).filter((t) => t.split(/\s+/).length >= 3);
+      // JSX text: between a tag's ">" and the next "<", on one line, with no code characters in it.
+      const jsxText = [...source.matchAll(/>[ \t]*([A-Za-z][^<>{}();=\n]*[A-Za-z.!?])[ \t]*</g)].map((m) => m[1]!.trim()).filter((t) => t.split(/\s+/).length >= 3);
       expect(jsxText, file).toEqual([]);
+      // And no string literal in JSX props that reads like a sentence (aria-label="Close the editor").
+      const literals = [...source.matchAll(/(?:aria-label|title|placeholder|alt)="([^"]+)"/g)].map((m) => m[1]!).filter((t) => t.split(/\s+/).length >= 2);
+      expect(literals, file).toEqual([]);
     }
   });
 

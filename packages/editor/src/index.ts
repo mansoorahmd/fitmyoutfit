@@ -24,3 +24,27 @@ export * from "./state/history.js";
 export * from "./upload/logo-upload.js";
 export * from "./upload/memory-store.js";
 export * from "./design/index.js";
+
+// The interface (task E3a-2): the editor a coach uses, and its parts a host needs.
+export { EditorShell, type EditorShellProps, type EditorSlots, type EditorTiming } from "./ui/EditorShell.js";
+export { ResumePrompt, DoneNotice } from "./ui/dialogs.js";
+export { EDITOR_WORDING, mergeWording, fill, changeWords, type EditorWording, type WordingOverrides } from "./ui/content.js";
+export { EDITOR_CSS } from "./ui/styles.js";
+export type { EditorAssets, ToolId } from "./ui/context.js";
+export { chooseLayout, panelHeights, stageInsets, type EditorLayout, type PanelDetent } from "./ui/layout.js";
+export { hasWebGL2 } from "./ui/webgl.js";
+export * from "./storage/device-store.js";
+export {
+  frameInFreeArea,
+  sideFromAzimuth,
+  zoomedDistance,
+  canZoom,
+  mayMoveCamera,
+  NO_INSETS,
+  type ViewInsets,
+  type Framing,
+} from "./react/camera.js";
+export { loadModel, type LoadedModel, type ModelLoadProgress } from "./react/model-loader.js";
+export { extractGarmentMeshes } from "./react/garment-geometry.js";
+export * from "./texture/flat-view.js";
+export * from "./texture/zone-highlight.js";
