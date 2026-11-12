@@ -3,7 +3,13 @@
  * No Medusa imports, so they can be unit tested without booting the app.
  * medusa-config.ts only calls `buildMedusaConfig`.
  */
-import { databaseUrlReadings, effectiveDatabaseLogin, type DatabaseLogin } from "./database-login"
+import {
+  databaseHostProblem,
+  databaseUrlReadings,
+  effectiveDatabaseLogin,
+  type DatabaseHostProblem,
+  type DatabaseLogin,
+} from "./database-login"
 import { describeNodeEnv, isLocalNodeEnv } from "./node-env"
 
 export type Env = Record<string, string | undefined>
@@ -77,6 +83,27 @@ export const DATABASE_URL_NOT_SET =
   "DATABASE_URL is not set. Set it to the production database's connection string, " +
   "postgres://<user>:<password>@<host>:<port>/<database>. MEDUSA_DATABASE_URL, " +
   "<MODULE>_DATABASE_URL and the PG* variables are not used in its place"
+
+/**
+ * The problems reported when DATABASE_URL is set but does not name its database server outside
+ * development and test (databaseHostProblem in database-login.ts says why each one lets
+ * something other than DATABASE_URL choose the server). Never the value itself.
+ */
+export const DATABASE_HOST_PROBLEMS: Readonly<Record<DatabaseHostProblem, string>> = {
+  not_a_url:
+    "DATABASE_URL is not a postgres:// connection URL (a socket path or the host=... user=... " +
+    "form is not accepted outside development and test). Write it as " +
+    "postgres://<user>:<password>@<host>:<port>/<database>, with special characters in the user " +
+    "or password percent-encoded (an @ as %40)",
+  no_host:
+    "DATABASE_URL names no database host after the @, so the PostgreSQL driver would take the " +
+    "server from PGHOST or its default instead. Write the server's host name or IP address " +
+    "after the @: postgres://<user>:<password>@<host>:<port>/<database>",
+  host_parameter:
+    "DATABASE_URL has a host or hostaddr query parameter, which would choose the database " +
+    "server in place of the host after the @. Remove the parameter and write the server's host " +
+    "after the @: postgres://<user>:<password>@<host>:<port>/<database>",
+}
 
 export class ConfigError extends Error {}
 
@@ -241,8 +268,14 @@ export function productionSecretProblems(env: Env): string[] {
       problems.push(devProblem)
     }
   }
-  if (!clean(env.DATABASE_URL)) {
+  const databaseUrl = clean(env.DATABASE_URL)
+  if (!databaseUrl) {
     problems.push(DATABASE_URL_NOT_SET)
+  } else {
+    const hostProblem = databaseHostProblem(env.DATABASE_URL ?? databaseUrl)
+    if (hostProblem) {
+      problems.push(DATABASE_HOST_PROBLEMS[hostProblem])
+    }
   }
   if (env.DATABASE_URL?.includes("#")) {
     problems.push(
@@ -386,8 +419,21 @@ export function buildPaymentModules(): ModuleEntry[] {
   ]
 }
 
+/**
+ * Our own modules, each with its own tables: the cash-collection record of an order
+ * (src/modules/cash-collection). The path is relative to the directory Medusa runs in, as above.
+ */
+export function buildOwnModules(): ModuleEntry[] {
+  return [{ resolve: "./src/modules/cash-collection" }]
+}
+
 export function buildModules(env: Env): ModuleEntry[] {
-  return [...buildRedisModules(env), ...buildFileModules(env), ...buildPaymentModules()]
+  return [
+    ...buildRedisModules(env),
+    ...buildFileModules(env),
+    ...buildPaymentModules(),
+    ...buildOwnModules(),
+  ]
 }
 
 /**

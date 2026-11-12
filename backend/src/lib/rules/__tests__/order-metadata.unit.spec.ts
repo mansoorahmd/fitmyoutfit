@@ -1,12 +1,13 @@
 import {
-  checkCartMetadataForCompletion,
   decideOrderPromise,
+  isOrderOwnPromise,
   isReservedKey,
   orderDeliveryPromise,
   readPromisedDelivery,
   reservedKeysIn,
   reservedKeysMessage,
 } from "../order-metadata"
+import type { PromisedDelivery } from "../delivery-promise"
 
 const days = { ok: true as const, value: { standard: 15, rush: 10 } }
 const invalidDays = { ok: false as const, error: "delivery_days_standard is not set." }
@@ -46,24 +47,6 @@ describe("reserved metadata keys", () => {
     expect(reservedKeysMessage(["cod_slip_reference", "delivery_promise"])).toBe(
       "A cart's metadata may not contain cod_slip_reference, delivery_promise: the store writes these on the order."
     )
-  })
-})
-
-describe("checkCartMetadataForCompletion", () => {
-  it("passes a cart without staff-only values, whatever promise it carries", () => {
-    for (const metadata of [null, undefined, {}, { team: "A" }, { delivery_promise: { forged: true } }]) {
-      expect(checkCartMetadataForCompletion(metadata)).toEqual({ ok: true })
-    }
-  })
-
-  it("passes staff-only keys that were emptied (carts from before the door refused them)", () => {
-    expect(checkCartMetadataForCompletion({ cod_slip_reference: null, cod_collected_by: "" })).toEqual({ ok: true })
-  })
-
-  it("refuses a cart carrying a staff-only value, any cod_ key", () => {
-    expect(
-      checkCartMetadataForCompletion({ cod_slip_reference: "forged", cod_collected_by: "me", cod_other: 1 })
-    ).toEqual({ ok: false, error: "The cart must not carry cod_collected_by, cod_other, cod_slip_reference." })
   })
 })
 
@@ -129,6 +112,39 @@ describe("orderDeliveryPromise", () => {
   })
 })
 
+describe("isOrderOwnPromise", () => {
+  const order = { createdAt: noonOn11th, applies: "standard" as const }
+  const own = (promise: object, extra: object = {}) =>
+    isOrderOwnPromise(promise as PromisedDelivery, { ...order, ...extra })
+
+  it("trusts a promise based on the order's own creation date, whatever the days", () => {
+    expect(own(kept)).toBe(true)
+    expect(own({ date: "2026-11-23", days: 12, based_on: "2026-11-11", applies: "standard" })).toBe(true)
+  })
+
+  it("refuses one based on another date, for another option, or copied from the cart", () => {
+    expect(own({ date: "2026-11-25", days: 15, based_on: "2026-11-10", applies: "standard" })).toBe(false)
+    expect(own({ date: "2026-11-21", days: 10, based_on: "2026-11-11", applies: "rush" })).toBe(false)
+    // QA's eighth review (N4): a forged promise on the right base date, copied from the cart.
+    const forged = { date: "2026-11-12", days: 1, based_on: "2026-11-11", applies: "standard" }
+    expect(own(forged, { cartKept: { ...forged } })).toBe(false)
+    // The cart's promise counts only when it is the same promise (key order does not matter).
+    expect(own(kept, { cartKept: { applies: "standard", based_on: "2026-11-11", days: 15, date: "2026-11-26" } })).toBe(false)
+    expect(own(kept, { cartKept: forged })).toBe(true)
+    expect(own(kept, { cartKept: { ...kept, note: "x" } })).toBe(true)
+    expect(own(kept, { cartKept: null })).toBe(true)
+  })
+
+  it("takes the creation date in Asia/Karachi, just before and just after midnight there", () => {
+    const on11th = { date: "2026-11-26", days: 15, based_on: "2026-11-11", applies: "standard" }
+    const on12th = { date: "2026-11-27", days: 15, based_on: "2026-11-12", applies: "standard" }
+    const before = { createdAt: new Date("2026-11-11T18:59:59.999Z") }
+    const after = { createdAt: new Date("2026-11-11T19:00:00.000Z") }
+    expect([own(on11th, before), own(on12th, before)]).toEqual([true, false])
+    expect([own(on11th, after), own(on12th, after)]).toEqual([false, true])
+  })
+})
+
 describe("decideOrderPromise", () => {
   const input = (overrides: Partial<Parameters<typeof decideOrderPromise>[0]>) =>
     decideOrderPromise({
@@ -136,21 +152,46 @@ describe("decideOrderPromise", () => {
       createdAt: noonOn11th,
       days,
       applies: "standard",
-      trust: "any_valid",
+      trust: "order_own",
       ...overrides,
     })
+  const changed = { ok: true as const, value: { standard: 12, rush: 8 } }
+  const forged = { date: "2026-11-12", days: 1, based_on: "2026-11-11", applies: "standard" }
+  const yesterday = { date: "2026-11-25", days: 15, based_on: "2026-11-10", applies: "standard" }
 
   it("writes the server's answer on an order without a promise", () => {
     expect(input({})).toEqual({ action: "write", promise: kept })
     expect(input({ kept: null, trust: "server_answer_only" })).toEqual({ action: "write", promise: kept })
   })
 
-  it("never rewrites a valid kept promise after placement, also when the days setting changed", () => {
-    const changed = { ok: true as const, value: { standard: 12, rush: 8 } }
+  it("never rewrites the order's own promise on a read, also when the days setting changed or is invalid", () => {
     expect(input({ kept, days: changed })).toEqual({ action: "keep", promise: kept })
-    // An older promise on another base date is kept as well, and the settings are not needed.
-    const older = { date: "2026-11-25", days: 15, based_on: "2026-11-10", applies: "standard" }
-    expect(input({ kept: older, days: invalidDays })).toEqual({ action: "keep", promise: older })
+    expect(input({ kept, days: invalidDays })).toEqual({ action: "keep", promise: kept })
+    // Worked out under an older setting of 12 days: kept, with today's setting of 15.
+    const olderSetting = { date: "2026-11-23", days: 12, based_on: "2026-11-11", applies: "standard" }
+    expect(input({ kept: olderSetting })).toEqual({ action: "keep", promise: olderSetting })
+  })
+
+  // QA's eighth review, N4: the read route returned a promise copied from an old cart.
+  it("on a read, replaces a promise copied from the cart, even one on the right base date", () => {
+    expect(input({ kept: forged, cartKept: forged })).toEqual({ action: "write", promise: kept })
+    // A copy that is exactly the server's answer is kept as it is.
+    expect(input({ kept, cartKept: kept })).toEqual({ action: "keep", promise: kept })
+    // ...and with invalid settings a copy is emptied, never shown.
+    expect(input({ kept: forged, cartKept: forged, days: invalidDays })).toEqual({
+      action: "fail",
+      error: invalidDays.error,
+      clear: true,
+    })
+  })
+
+  it("on a read, replaces a promise based on another date than the order's creation date", () => {
+    expect(input({ kept: yesterday })).toEqual({ action: "write", promise: kept })
+    const tomorrow = { date: "2026-11-27", days: 15, based_on: "2026-11-12", applies: "standard" }
+    expect(input({ kept: tomorrow, days: changed })).toEqual({
+      action: "write",
+      promise: { date: "2026-11-23", days: 12, based_on: "2026-11-11", applies: "standard" },
+    })
   })
 
   it("replaces a malformed promise", () => {
@@ -160,38 +201,55 @@ describe("decideOrderPromise", () => {
 
   it("at placement keeps only a promise exactly equal to the server's answer", () => {
     expect(input({ kept, trust: "server_answer_only" })).toEqual({ action: "keep", promise: kept })
-    const yesterday = { date: "2026-11-25", days: 15, based_on: "2026-11-10", applies: "standard" }
     expect(input({ kept: yesterday, trust: "server_answer_only" })).toEqual({ action: "write", promise: kept })
     const rush = { date: "2026-11-21", days: 10, based_on: "2026-11-11", applies: "rush" }
     expect(input({ kept: rush, trust: "server_answer_only" })).toEqual({ action: "write", promise: kept })
+    expect(input({ kept: forged, trust: "server_answer_only" })).toEqual({ action: "write", promise: kept })
   })
 
   it("uses the option that applies", () => {
-    expect(input({ applies: "rush" })).toEqual({
-      action: "write",
-      promise: { date: "2026-11-21", days: 10, based_on: "2026-11-11", applies: "rush" },
-    })
+    const rushPromise = { date: "2026-11-21", days: 10, based_on: "2026-11-11", applies: "rush" }
+    expect(input({ applies: "rush" })).toEqual({ action: "write", promise: rushPromise })
+    // A standard promise on an order whose rush date applies is not its own.
+    expect(input({ kept, applies: "rush" })).toEqual({ action: "write", promise: rushPromise })
   })
 
   it("never invents a date when the settings are invalid", () => {
     expect(input({ days: invalidDays })).toEqual({ action: "fail", error: invalidDays.error, clear: false })
-    expect(input({ kept: { ...kept, days: "15" }, days: invalidDays })).toEqual({
-      action: "fail",
-      error: invalidDays.error,
-      clear: false,
-    })
+    expect(input({ kept: null, days: invalidDays })).toEqual({ action: "fail", error: invalidDays.error, clear: false })
   })
 
-  it("at placement empties a promise copied from the cart that the server cannot check", () => {
-    expect(input({ kept, days: invalidDays, trust: "server_answer_only" })).toEqual({
+  it("empties a promise the server cannot vouch for when the settings are invalid", () => {
+    for (const [value, trust] of [
+      [kept, "server_answer_only"],
+      [{ ...kept, days: "15" }, "order_own"],
+      [yesterday, "order_own"],
+    ] as const) {
+      expect(input({ kept: value, days: invalidDays, trust })).toEqual({
+        action: "fail",
+        error: invalidDays.error,
+        clear: true,
+      })
+    }
+  })
+
+  it("settings invalid at placement and fixed later: nothing is shown until then, then the answer for the creation date", () => {
+    // At placement, with a promise copied from the cart: emptied.
+    expect(input({ kept: forged, cartKept: forged, days: invalidDays, trust: "server_answer_only" })).toMatchObject({
       action: "fail",
-      error: invalidDays.error,
       clear: true,
     })
-    expect(input({ kept: null, days: invalidDays, trust: "server_answer_only" })).toEqual({
+    // The order now carries null; a read while the settings are invalid fails, naming the key...
+    expect(input({ kept: null, cartKept: forged, days: invalidDays })).toEqual({
       action: "fail",
       error: invalidDays.error,
       clear: false,
+    })
+    // ...and once fixed (to 12 days), the first read writes the answer for the creation date.
+    expect(input({ kept: null, cartKept: forged, days: changed })).toEqual({
+      action: "write",
+      promise: { date: "2026-11-23", days: 12, based_on: "2026-11-11", applies: "standard" },
     })
   })
 })
+

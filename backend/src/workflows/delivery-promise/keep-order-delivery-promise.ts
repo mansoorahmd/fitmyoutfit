@@ -27,6 +27,8 @@ type OrderRow = {
   created_at: string | Date
   is_draft_order?: boolean | null
   metadata?: Record<string, unknown> | null
+  /** The cart the order was made from (Medusa's order-cart link), if any. */
+  cart?: { metadata?: Record<string, unknown> | null } | null
 }
 
 /** Attempts before giving up when other writers keep changing the promise (never seen). */
@@ -36,7 +38,7 @@ async function readOrder(container: MedusaContainer, orderId: string): Promise<O
   const query = container.resolve(ContainerRegistrationKeys.QUERY)
   const { data } = await query.graph({
     entity: "order",
-    fields: ["id", "created_at", "is_draft_order", "metadata"],
+    fields: ["id", "created_at", "is_draft_order", "metadata", "cart.metadata"],
     filters: { id: orderId },
   })
   return (data as unknown as OrderRow[])[0]
@@ -50,7 +52,10 @@ async function readStoreSettings(container: MedusaContainer) {
 
 /**
  * The order's promise after making sure it is kept. `trust` is "server_answer_only" when the
- * order has just been placed, "any_valid" afterwards (lib/rules/order-metadata.ts).
+ * order has just been placed, "order_own" on a read (lib/rules/order-metadata.ts): a kept promise
+ * is then returned only if it is the order's own (based on its creation date, not a copy of its
+ * cart's), else the server's answer is written and returned, so the read route never returns
+ * anything else, also before the order-placed subscriber has run.
  *
  * Throws NOT_FOUND for an unknown order or a draft order (a draft is not placed yet), and
  * UNEXPECTED_STATE (HTTP 500, naming the key) when no valid promise is kept and the delivery-days
@@ -69,6 +74,7 @@ export async function keepOrderDeliveryPromise(
     const kept = order.metadata?.[DELIVERY_PROMISE_KEY]
     const outcome = decideOrderPromise({
       kept,
+      cartKept: order.cart?.metadata?.[DELIVERY_PROMISE_KEY],
       createdAt: new Date(order.created_at),
       days: readDeliveryDays(await readStoreSettings(container)),
       applies: appliedDeliverySpeed(),

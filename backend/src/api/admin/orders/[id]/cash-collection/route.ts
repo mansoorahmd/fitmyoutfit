@@ -7,30 +7,35 @@
  *   The order's state (lib/rules/cash-collection.ts): whether it is paid by cash on delivery
  *   (`applies`; the panel shows only then), its `stage` (not_collected, partly_captured,
  *   captured_without_slip, recorded, unavailable), whether a slip reference may be recorded now
- *   and whether that captures the payment, the recorded slip reference and time, and who captured
- *   and when (from Medusa's own capture record, not from the order's metadata).
+ *   and whether that captures (all or the rest of) the payment, the recorded slip reference and
+ *   time (the order's cash-collection record, modules/cash-collection), and who captured and when
+ *   (from Medusa's own capture record).
  *
  * POST /admin/orders/:id/cash-collection  { "slip_reference": "..." }
- *   Captures the cash-on-delivery payment if it is still open, then keeps the slip reference on
- *   the order (workflows/cash-collection/mark-cash-collected.ts). Answers with the new state.
+ *   Captures what is still open of the cash-on-delivery payment, then records the slip reference
+ *   (workflows/cash-collection/mark-cash-collected.ts). Answers with the new state.
  *   Refused with HTTP 400: `invalid_data` for a missing or invalid reference, `not_allowed` when
- *   the order is not cash on delivery, already recorded, partly captured or canceled, or when
- *   another press recorded it at the same moment. A capture that fails answers HTTP 500 with a
- *   message saying what happened and what to do; nothing is recorded then.
+ *   the order is not cash on delivery, already recorded or canceled, or when another press
+ *   captured or recorded it at the same moment. HTTP 500 when the capture fails (nothing is
+ *   recorded) or the record fails after the capture (the capture stays; record it again).
+ *   An unknown or deleted order: 404.
+ *
+ * Every error message is a sentence for staff: never SQL, a stack trace or an internal id. An
+ * error that is not one of ours is logged and answered with a general sentence.
  *
  * Thin: the rule is in lib/rules/cash-collection.ts.
  */
 import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { ContainerRegistrationKeys, MedusaError } from "@medusajs/framework/utils"
 import type { MedusaContainer } from "@medusajs/framework/types"
-import { acquireLockStepId } from "@medusajs/medusa/core-flows"
-import { captureFailureMessage, refusalMessage } from "../../../../../lib/rules/cash-collection"
-import { loadCashCollection } from "../../../../../workflows/cash-collection/load-cash-collection"
 import {
-  DECIDE_CASH_COLLECTION_STEP,
-  markCashCollectedWorkflow,
-  RECORD_CASH_COLLECTED_STEP,
-} from "../../../../../workflows/cash-collection/mark-cash-collected"
+  RECORDED_BUT_NOT_SHOWN_MESSAGE,
+  STATE_READ_FAILURE_MESSAGE,
+  UNEXPECTED_FAILURE_MESSAGE,
+} from "../../../../../lib/rules/cash-collection"
+import { loadCashCollection } from "../../../../../workflows/cash-collection/load-cash-collection"
+import { markCashCollected } from "../../../../../workflows/cash-collection/mark-cash-collected"
+import { isStaffMessage } from "../../../../../workflows/cash-collection/staff-error"
 
 /** The state, with the capturing user's email for the panel. */
 async function describe(container: MedusaContainer, orderId: string) {
@@ -64,11 +69,33 @@ async function describe(container: MedusaContainer, orderId: string) {
   }
 }
 
-export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse): Promise<void> {
-  res.json(await describe(req.scope, req.params.id))
+/**
+ * Runs `fn`; an error that is not a sentence for staff is logged and replaced by `message`
+ * (HTTP 500).
+ */
+async function forStaff<T>(
+  container: MedusaContainer,
+  message: string,
+  fn: () => Promise<T>
+): Promise<T> {
+  try {
+    return await fn()
+  } catch (error) {
+    if (isStaffMessage(error)) {
+      throw error
+    }
+    container
+      .resolve(ContainerRegistrationKeys.LOGGER)
+      .error(`Cash collection failed: ${(error as Error)?.stack ?? error}`)
+    throw new MedusaError(MedusaError.Types.UNEXPECTED_STATE, message)
+  }
 }
 
-type StepFailure = { action?: string; error?: { type?: string; message?: string } | null }
+export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse): Promise<void> {
+  res.json(
+    await forStaff(req.scope, STATE_READ_FAILURE_MESSAGE, () => describe(req.scope, req.params.id))
+  )
+}
 
 export async function POST(req: AuthenticatedMedusaRequest, res: MedusaResponse): Promise<void> {
   const actorId = req.auth_context?.actor_id
@@ -77,43 +104,12 @@ export async function POST(req: AuthenticatedMedusaRequest, res: MedusaResponse)
   }
   const orderId = req.params.id
   const body = (req.body ?? {}) as { slip_reference?: unknown }
-  const { errors, result } = await markCashCollectedWorkflow(req.scope).run({
-    input: { order_id: orderId, slip_reference: body.slip_reference, recorded_by: actorId },
-    throwOnError: false,
-  })
-
-  const failure = (errors as StepFailure[] | undefined)?.[0]
-  if (failure) {
-    const cause = failure.error?.message ?? ""
-    if (failure.action === DECIDE_CASH_COLLECTION_STEP) {
-      // The rule's own refusal (or an unknown order): passed on as it is.
-      throw new MedusaError(failure.error?.type ?? MedusaError.Types.UNEXPECTED_STATE, cause)
-    }
-    if (failure.action === RECORD_CASH_COLLECTED_STEP) {
-      throw new MedusaError(
-        MedusaError.Types.UNEXPECTED_STATE,
-        `The payment is captured, but the slip reference could not be saved (${cause}). ` +
-          "Reload the order and record the slip reference again; the payment will not be captured a second time."
-      )
-    }
-    if (failure.action === acquireLockStepId) {
-      throw new MedusaError(
-        MedusaError.Types.NOT_ALLOWED,
-        "Another press is recording the cash for this order right now. Reload the order in a moment."
-      )
-    }
-    // The capture failed: say whether another press got there first.
-    const after = await loadCashCollection(req.scope, orderId)
-    const message = captureFailureMessage(after.state, cause)
-    const lostToAnotherPress =
-      after.state.stage === "recorded" || after.state.stage === "captured_without_slip"
-    throw new MedusaError(
-      lostToAnotherPress ? MedusaError.Types.NOT_ALLOWED : MedusaError.Types.UNEXPECTED_STATE,
-      message
-    )
-  }
-  if (!result.recorded) {
-    throw new MedusaError(MedusaError.Types.NOT_ALLOWED, refusalMessage("already_recorded"))
-  }
-  res.json(await describe(req.scope, orderId))
+  await forStaff(req.scope, UNEXPECTED_FAILURE_MESSAGE, () =>
+    markCashCollected(req.scope, {
+      order_id: orderId,
+      slip_reference: body.slip_reference,
+      recorded_by: actorId,
+    })
+  )
+  res.json(await forStaff(req.scope, RECORDED_BUT_NOT_SHOWN_MESSAGE, () => describe(req.scope, orderId)))
 }

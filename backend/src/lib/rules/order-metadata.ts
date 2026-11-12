@@ -8,12 +8,11 @@
  * order is never refused for a metadata reason, whoever completes the cart (the store route, a
  * payment provider's webhook, a draft order).
  *
- * Medusa copies a cart's metadata into the order it becomes. So the keys only the server or staff
- * write on an order (the promise, and cash on delivery collected) are refused when a customer
- * sends them on a cart (api/middlewares.ts), and the completion hook refuses a cart that carries
- * a staff-only key all the same.
+ * Medusa copies a cart's metadata into the order it becomes. So the key the server writes on an
+ * order (the promise) is refused when a customer sends it on a cart (api/middlewares.ts), and so
+ * is every `cod_` key, kept reserved for staff although cash collection is no longer kept in
+ * metadata (it has a table of its own, modules/cash-collection).
  */
-import { COD_COLLECTED_AT_KEY, COD_SLIP_REFERENCE_KEY } from "./cash-collection"
 import {
   addCalendarDays,
   calendarDateIn,
@@ -27,16 +26,15 @@ import {
 import type { DeliveryDays } from "../settings/delivery-days"
 import type { SettingResult } from "../settings/read-number-setting"
 
-type Metadata = Readonly<Record<string, unknown>> | null | undefined
-
 /** Key of the promised delivery in the order's metadata. */
 export const DELIVERY_PROMISE_KEY = "delivery_promise"
 
-/** Every key that starts with this belongs to staff (cash on delivery collected). */
+/**
+ * Every key that starts with this is reserved for staff (cash on delivery). Nothing is written
+ * under it today: the cash-collection record has a table of its own. The keys stay refused on a
+ * cart (docs/contracts/m1-checkout.md, section 8.1), so they mean nothing a customer wrote.
+ */
 export const STAFF_ONLY_KEY_PREFIX = "cod_"
-
-/** The staff-only keys written today. Every other `cod_` key is reserved for staff as well. */
-export const STAFF_ONLY_ORDER_KEYS: readonly string[] = [COD_SLIP_REFERENCE_KEY, COD_COLLECTED_AT_KEY]
 
 /** Whether only staff may write this metadata key. */
 export function isStaffOnlyKey(key: string): boolean {
@@ -66,24 +64,6 @@ export function reservedKeysMessage(keys: readonly string[]): string {
 
 function isSet(value: unknown): boolean {
   return value !== undefined && value !== null && value !== ""
-}
-
-export type CartMetadataCheck = { ok: true } | { ok: false; error: string }
-
-/**
- * The completion hook's second barrier: a cart carrying a staff-only key with a value is refused.
- * (The door, api/middlewares.ts, already refuses them; an emptied key, which carts completed
- * before this rule may carry, is harmless.) The promise is not checked: the order's own is written
- * after the order is created, whatever the cart carried.
- */
-export function checkCartMetadataForCompletion(cartMetadata: Metadata): CartMetadataCheck {
-  const staffKeys = Object.keys(cartMetadata ?? {})
-    .filter((key) => isStaffOnlyKey(key) && isSet(cartMetadata?.[key]))
-    .sort()
-  if (staffKeys.length > 0) {
-    return { ok: false, error: `The cart must not carry ${staffKeys.join(", ")}.` }
-  }
-  return { ok: true }
 }
 
 const PROMISE_KEYS = ["applies", "based_on", "date", "days"]
@@ -140,16 +120,25 @@ function samePromise(a: PromisedDelivery, b: PromisedDelivery): boolean {
 
 /**
  * How far a kept promise is trusted:
- * - `server_answer_only` when the order is placed: what the order carries came from the cart, so
- *   only a promise exactly equal to the server's answer is kept;
- * - `any_valid` afterwards: a valid kept promise is the one the order was given, and is never
- *   rewritten, also when the days setting changes later.
+ * - `server_answer_only` when the order is placed (the order-placed subscriber): what the order
+ *   carries then came from its cart or its draft, so only a promise exactly equal to the server's
+ *   answer now is kept;
+ * - `order_own` on every read (GET /store/orders/:id/delivery-promise), also before that
+ *   subscriber has run: a kept promise is trusted only if it is the order's own (isOrderOwnPromise
+ *   below), and is then never rewritten, also when the days setting changes later. Anything else
+ *   is treated as at placement.
  */
-export type PromiseTrust = "server_answer_only" | "any_valid"
+export type PromiseTrust = "server_answer_only" | "order_own"
 
 export type OrderPromiseInput = {
   /** The order's `metadata.delivery_promise`, as stored. */
   kept: unknown
+  /**
+   * The `delivery_promise` in the metadata of the cart the order was made from, as stored
+   * (undefined when the order has no cart, or the cart none). Medusa copies a cart's metadata into
+   * its order, and before the reserved-key refusal (S1-1c) a customer could write it.
+   */
+  cartKept?: unknown
   /** The order's creation time. */
   createdAt: Date
   /** The delivery days settings as they are now. */
@@ -166,24 +155,46 @@ export type OrderPromiseOutcome =
   | { action: "write"; promise: PromisedDelivery }
   /**
    * The settings are invalid, so no promise can be worked out: `error` names the key. With
-   * `clear` (only when the order is placed), the order carries a promise copied from the cart,
-   * which the server cannot vouch for: it is emptied (set to null) so it is never shown, and
-   * worked out on the first read once the settings are fixed.
+   * `clear`, the order carries a promise the server cannot vouch for (copied from the cart, or
+   * not a valid promise of this order): it is emptied (set to null) so it is never shown, also
+   * not in a customer's order list, and worked out on the first read once the settings are fixed.
    */
   | { action: "fail"; error: string; clear: boolean }
+
+/**
+ * Whether a kept promise is the order's own: a valid promise (readPromisedDelivery) for the date
+ * that applies to the order (`applies`), based on the order's own creation date in Asia/Karachi,
+ * with `date` = `based_on` + `days`, and not a copy of the promise its cart carried. The days may
+ * differ from today's setting: an order keeps the days of the setting when it was placed.
+ *
+ * Why the cart is compared: a forged promise can be based on the right date and still be false
+ * (QA's eighth review: `{ based_on: <creation date>, days: 1 }` on a cart written before the
+ * reserved-key refusal). A promise identical to the cart's came from the cart, and is kept only if
+ * it is exactly the server's answer (decideOrderPromise). The server writes its answer on the
+ * order once, so the order's own promise differs from a forged one on the cart.
+ */
+export function isOrderOwnPromise(
+  kept: PromisedDelivery,
+  input: Pick<OrderPromiseInput, "cartKept" | "createdAt" | "applies">
+): boolean {
+  if (kept.applies !== input.applies) {
+    return false
+  }
+  if (kept.based_on !== calendarDateIn(input.createdAt, DELIVERY_TIME_ZONE)) {
+    return false
+  }
+  const fromCart = readPromisedDelivery(input.cartKept)
+  return !(fromCart && samePromise(fromCart, kept))
+}
 
 /** What to do with an order's promise. Never invents a date: invalid settings are an error. */
 export function decideOrderPromise(input: OrderPromiseInput): OrderPromiseOutcome {
   const kept = readPromisedDelivery(input.kept)
-  if (kept && input.trust === "any_valid") {
+  if (kept && input.trust === "order_own" && isOrderOwnPromise(kept, input)) {
     return { action: "keep", promise: kept }
   }
   if (!input.days.ok) {
-    return {
-      action: "fail",
-      error: input.days.error,
-      clear: input.trust === "server_answer_only" && isSet(input.kept),
-    }
+    return { action: "fail", error: input.days.error, clear: isSet(input.kept) }
   }
   const server = orderDeliveryPromise(input.createdAt, input.days.value, input.applies)
   if (kept && samePromise(kept, server)) {
