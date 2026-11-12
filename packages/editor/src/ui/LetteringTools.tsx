@@ -9,6 +9,7 @@ import { useId, useState, type ReactNode } from "react";
 import { addCatalogFont } from "../design/font-catalog.js";
 import { updateLayer } from "../design/edit.js";
 import { coloursCommonFirst, paletteColourRef } from "../design/palette.js";
+import { contrastRatio } from "../design/colour.js";
 import { designReadability, itemReadability, outlineColourFor, readabilityRemedy } from "../design/readability.js";
 import { findLayers, isRoleSlotOn, outlineStepOf, placeAtPreset, setOutline, setRoleSlot, setSamplePlayer, setSizeStep, setTeamName, sizeStepOf, type LetteringStyle, type OutlineStep, type SizeStep } from "../design/roles.js";
 import { TEAM_COLOUR_ROLES, type ColorValue, type DesignDocument, type Layer, type PlacementPreset, type TeamColourRole } from "../design/schema.js";
@@ -23,6 +24,9 @@ import { Alert, PresetChips, Segmented, Swatch, SwitchRow } from "./parts.js";
 import { colourName } from "./stage-logic.js";
 
 type TextLike = Extract<Layer, { kind: "text" | "number" }>;
+
+/** Below this, a team colour outline would hardly show round the letters or on the garment (a default only; the coach can choose any). */
+const MIN_OUTLINE_CONTRAST = 1.5;
 
 function roleLayers(design: DesignDocument, role: ValueRole): TextLike[] {
   return findLayers(design, { role }).filter((l): l is TextLike => l.kind === "text" || l.kind === "number");
@@ -57,7 +61,17 @@ function StyleControls({ roles, fontRoles, onFonts }: { roles: ValueRole[]; font
   const colourFor = (d: DesignDocument, l: TextLike): ColorValue => {
     if (l.outline) return l.outline.color.teamColor && d.teamColors[l.outline.color.teamColor] ? teamColourValue(d, l.outline.color.teamColor) : l.outline.color;
     const background = itemReadability(product, d, l.id)?.background;
-    return teamColourValue(d, background ? outlineColourFor(d, l.fill, background).role : "main");
+    if (!background) return teamColourValue(d, "main");
+    const team = outlineColourFor(d, l.fill, background);
+    // A team colour that shows round the letters and on the garment; else the palette's best (a red and white
+    // team with white letters on red: neither team colour would show).
+    if (team.ratio >= MIN_OUTLINE_CONTRAST) return teamColourValue(d, team.role);
+    let best = { colour: teamColourValue(d, team.role) as ColorValue, ratio: team.ratio };
+    for (const c of palette.colors) {
+      const ratio = Math.min(contrastRatio(c.hex, l.fill.hex), contrastRatio(c.hex, background.colour.hex));
+      if (ratio > best.ratio) best = { colour: paletteColourRef(c), ratio };
+    }
+    return best.colour;
   };
   const setStep = (value: "none" | "thin" | "thick") =>
     commit((d, l) => setOutline(d, l.id, value === "none" ? null : { step: value as OutlineStep, color: colourFor(d, l) }, { product }), "outline");
@@ -115,6 +129,13 @@ function StyleControls({ roles, fontRoles, onFonts }: { roles: ValueRole[]; font
           <span className="fmo-label">{w.outlineColour}</span>
           <div className="fmo-swatches">
             {roleSwatches(outlineRole ? { ...layer.outline.color } : undefined, (r) => commit((d, l) => setOutline(d, l.id, { step: outlineStepOf(l) ?? "thin", color: teamColourValue(d, r) }, { product }), "outline"), `outline-${roles[0]}`)}
+            <span className="fmo-divider" />
+            {coloursCommonFirst(palette)
+              .slice(0, 6)
+              .map((c) => {
+                const selected = !outlineRole && layer.outline?.color.id === c.id;
+                return <Swatch key={c.id} hex={c.hex} label={selected ? fill(wording.colours.selected, { colour: c.name }) : c.name} selected={selected} onPick={() => commit((d, l) => setOutline(d, l.id, { step: outlineStepOf(l) ?? "thin", color: paletteColourRef(c) }, { product }), "outline")} testId={`outline-${roles[0]}-${c.id}`} />;
+              })}
           </div>
         </div>
       )}
