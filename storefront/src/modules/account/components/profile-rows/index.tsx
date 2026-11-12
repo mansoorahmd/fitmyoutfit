@@ -6,8 +6,8 @@ import React, { useEffect, useRef, useState } from "react"
 import { accountContent } from "@content/account"
 import { SaveResult, updateCustomerName, updateCustomerPhone } from "@lib/data/customer"
 import { authHref } from "@lib/util/account-auth"
-import { validateName, validatePhone } from "@lib/util/account-profile"
-import { ProfileRow, ProfileRowKey } from "@lib/util/account-rows"
+import { ProfileValues, afterProfileSave, validateName, validatePhone } from "@lib/util/account-profile"
+import { ProfileRow, ProfileRowKey, profileRows } from "@lib/util/account-rows"
 import { fill } from "@lib/util/wording"
 import { Button } from "@modules/common/components/button"
 import FieldError from "@modules/common/components/field-error"
@@ -20,7 +20,7 @@ const words = accountContent.profile
 const TEXT_BUTTON =
   "inline-flex min-h-[44px] min-w-[44px] items-center justify-center px-1 type-body font-semibold text-brand-ink underline underline-offset-4 hover:decoration-2 focus-visible:[outline-style:solid] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-focus"
 
-type Draft = { firstName: string; lastName: string; phone: string }
+type Draft = ProfileValues
 type DraftErrors = Partial<Record<keyof Draft, string>>
 
 /**
@@ -28,17 +28,29 @@ type DraftErrors = Partial<Record<keyof Draft, string>>
  * value and "Edit". Editing opens the fields in place with "Save"
  * (primary) and "Cancel" (text); one row at a time. Saved: a "Saved"
  * message. Failed: "We couldn't save this. Try again." under the row.
+ *
+ * The page holds the values it shows (QA S1-4c, B2): after a save they are
+ * the store's answer, shown at once and the start of the next edit, never
+ * the values the page was first rendered with.
  */
 const ProfileRows = ({
-  rows,
   initial,
+  email,
 }: {
-  rows: ProfileRow[]
-  /** The customer's current values, to start the fields from. */
+  /** The customer's values when the page was rendered. */
   initial: Draft
+  /** Shown read-only. */
+  email: string
 }) => {
   const router = useRouter()
   const { countryCode } = useParams() as { countryCode: string }
+  const [values, setValues] = useState<Draft>(initial)
+  const rows: ProfileRow[] = profileRows({
+    first_name: values.firstName,
+    last_name: values.lastName,
+    phone: values.phone,
+    email,
+  })
   const [editing, setEditing] = useState<ProfileRowKey | null>(null)
   const [draft, setDraft] = useState<Draft>(initial)
   const [errors, setErrors] = useState<DraftErrors>({})
@@ -60,7 +72,7 @@ const ProfileRows = ({
   }, [editing])
 
   const start = (key: ProfileRowKey) => {
-    setDraft(initial)
+    setDraft(values)
     setErrors({})
     setFailed(null)
     setEditing(key)
@@ -100,8 +112,11 @@ const ProfileRows = ({
       setSaving(false)
     }
     if (result?.kind === "saved") {
+      setValues((shown) => afterProfileSave(shown, key === "name" ? "name" : "phone", draft, result.profile))
       stop(key)
       setToast(Date.now())
+      // the rest of the page (the greeting, the header) reads the customer again
+      router.refresh()
       return
     }
     if (result?.kind === "signed_out") {

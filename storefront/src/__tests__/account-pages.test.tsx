@@ -7,6 +7,9 @@ const { calls } = vi.hoisted(() => ({
     loaded: [] as string[],
     removed: [] as string[],
     removeAnswer: { kind: "saved" } as unknown,
+    names: [] as { firstName: string; lastName: string }[],
+    profileAnswer: (() => ({ kind: "saved" })) as (values: Record<string, unknown>) => unknown,
+    refreshed: 0,
   },
 }))
 
@@ -18,7 +21,12 @@ vi.mock("@modules/account/load-page", () => ({
 
 vi.mock("next/navigation", () => ({
   useParams: () => ({ countryCode: "pk" }),
-  useRouter: () => ({ push: () => {}, refresh: () => {} }),
+  useRouter: () => ({
+    push: () => {},
+    refresh: () => {
+      calls.refreshed += 1
+    },
+  }),
 }))
 vi.mock("next/image", () => ({
   // eslint-disable-next-line @next/next/no-img-element
@@ -35,8 +43,11 @@ vi.mock("@lib/data/customer", () => ({
   },
   addCustomerAddress: async () => ({ kind: "saved" }),
   updateCustomerAddress: async () => ({ kind: "saved" }),
-  updateCustomerName: async () => ({ kind: "saved" }),
-  updateCustomerPhone: async () => ({ kind: "saved" }),
+  updateCustomerName: async (values: { firstName: string; lastName: string }) => {
+    calls.names.push({ firstName: values.firstName, lastName: values.lastName })
+    return calls.profileAnswer(values)
+  },
+  updateCustomerPhone: async (values: Record<string, unknown>) => calls.profileAnswer(values),
 }))
 
 import { addressCardView, sortAddresses, storeCountries } from "@lib/util/account-address"
@@ -61,6 +72,9 @@ beforeEach(() => {
   calls.loaded = []
   calls.removed = []
   calls.removeAnswer = { kind: "saved" }
+  calls.names = []
+  calls.profileAnswer = () => ({ kind: "saved" })
+  calls.refreshed = 0
 })
 
 describe("the account frame (05, 9.1)", () => {
@@ -245,7 +259,7 @@ describe("addresses (05, 9.5)", () => {
 
 describe("profile (05, 9.6)", () => {
   it("shows name, phone and a read-only email; no password row", () => {
-    render(<ProfileRows rows={profileRows(customer)} initial={{ firstName: "محمد علی", lastName: "", phone: "0300 1234567" }} />)
+    render(<ProfileRows email={customer.email} initial={{ firstName: "محمد علی", lastName: "", phone: "0300 1234567" }} />)
     expect(screen.getByRole("button", { name: "Edit Name" })).toBeInTheDocument()
     expect(screen.getByRole("button", { name: "Edit Phone" })).toBeInTheDocument()
     expect(screen.queryByRole("button", { name: "Edit Email" })).toBeNull()
@@ -254,7 +268,7 @@ describe("profile (05, 9.6)", () => {
   })
 
   it("edits a row in place and says Saved", async () => {
-    render(<ProfileRows rows={profileRows(customer)} initial={{ firstName: "محمد علی", lastName: "", phone: "0300 1234567" }} />)
+    render(<ProfileRows email={customer.email} initial={{ firstName: "محمد علی", lastName: "", phone: "0300 1234567" }} />)
     fireEvent.click(screen.getByRole("button", { name: "Edit Name" }))
     expect(screen.getByLabelText("First name")).toHaveValue("محمد علی")
     expect(screen.getByLabelText("First name")).toHaveAttribute("dir", "auto")
@@ -263,5 +277,58 @@ describe("profile (05, 9.6)", () => {
     })
     expect(screen.getByRole("status")).toHaveTextContent("Saved")
     expect(screen.queryByLabelText("First name")).toBeNull()
+  })
+
+  describe("after Saved the row shows what was saved, and the next edit starts from it (QA S1-4c, B2)", () => {
+    const edit = async (row: "Name" | "Phone", fields: Record<string, string>) => {
+      fireEvent.click(screen.getByRole("button", { name: `Edit ${row}` }))
+      for (const [label, value] of Object.entries(fields)) {
+        fireEvent.change(screen.getByLabelText(label), { target: { value } })
+      }
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Save" }))
+      })
+    }
+
+    it("the store's answer: shown at once, even when the page re-renders with the old values", async () => {
+      calls.profileAnswer = (values) => ({
+        kind: "saved",
+        profile: { first_name: String(values.firstName).trim(), last_name: String(values.lastName).trim(), phone: "+923001234567" },
+      })
+      const initial = { firstName: "Ali", lastName: "Raza", phone: "+923001234567" }
+      const { rerender } = render(<ProfileRows email={customer.email} initial={initial} />)
+      await edit("Name", { "First name": "Bilal", "Last name (optional)": "Raza" })
+      expect(screen.getByTestId("profile-value-name")).toHaveTextContent("Bilal Raza")
+      expect(calls.refreshed).toBe(1)
+      // a late render with what the page had before the save changes nothing
+      rerender(<ProfileRows email={customer.email} initial={initial} />)
+      expect(screen.getByTestId("profile-value-name")).toHaveTextContent("Bilal Raza")
+      // the next edit starts from the saved name, so nothing goes back to the old one
+      fireEvent.click(screen.getByRole("button", { name: "Edit Name" }))
+      expect(screen.getByLabelText("First name")).toHaveValue("Bilal")
+      expect(screen.getByLabelText("Last name (optional)")).toHaveValue("Raza")
+      fireEvent.click(screen.getByTestId("profile-cancel"))
+    })
+
+    it("Urdu names, six saves in a row, each shown at once; a last name is never overwritten by an older draft", async () => {
+      calls.profileAnswer = () => ({ kind: "saved" }) // no customer in the answer: the fields as sent
+      render(<ProfileRows email={customer.email} initial={{ firstName: "Ali", lastName: "", phone: "" }} />)
+      await edit("Name", { "First name": "Ali", "Last name (optional)": "Raza" })
+      expect(screen.getByTestId("profile-value-name")).toHaveTextContent("Ali Raza")
+      await edit("Name", { "First name": "Bilal" })
+      expect(screen.getByTestId("profile-value-name")).toHaveTextContent("Bilal Raza")
+      expect(calls.names.at(-1)).toEqual({ firstName: "Bilal", lastName: "Raza" })
+      const urdu = ["محمد علی", "  فاطمہ  ", "عائشہ", "زینب"]
+      for (const name of urdu) {
+        await edit("Name", { "First name": name })
+        expect(screen.getByTestId("profile-value-name")).toHaveTextContent(`${name.trim()} Raza`)
+      }
+      expect(calls.names).toHaveLength(6)
+      expect(calls.names.every((n) => n.lastName === "Raza")).toBe(true)
+      // the phone row keeps the saved name too
+      await edit("Phone", { Phone: "0300 1234567" })
+      expect(screen.getByTestId("profile-value-name")).toHaveTextContent("زینب Raza")
+      expect(screen.getByTestId("profile-value-phone")).toHaveTextContent("0300 1234567")
+    })
   })
 })

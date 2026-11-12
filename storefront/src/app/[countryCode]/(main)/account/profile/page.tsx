@@ -1,7 +1,6 @@
 import { Metadata } from "next"
 
 import { accountContent } from "@content/account"
-import { profileRows } from "@lib/util/account-rows"
 import ProfileRows from "@modules/account/components/profile-rows"
 import { requireCustomer } from "@modules/account/require-customer"
 import AccountFrame from "@modules/account/templates/account-frame"
@@ -29,12 +28,12 @@ export default async function ProfilePage(props: { params: Promise<{ countryCode
       <div className="flex flex-col gap-6" data-testid="profile-page">
         <h1 className="type-h1 text-brand-ink">{accountContent.profile.title}</h1>
         <ProfileRows
-          rows={profileRows(customer)}
           initial={{
             firstName: customer.first_name ?? "",
             lastName: customer.last_name ?? "",
             phone: customer.phone ?? "",
           }}
+          email={customer.email ?? ""}
         />
       </div>
     </AccountFrame>

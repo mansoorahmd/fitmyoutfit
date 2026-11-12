@@ -10,6 +10,40 @@ import { fill } from "./wording"
 export type NameValues = { firstName: string; lastName: string }
 export type PhoneValues = { phone: string; countryCode: string }
 
+/** The profile's values as the page holds them: what it shows and starts each edit from. */
+export type ProfileValues = { firstName: string; lastName: string; phone: string }
+
+type StoredCustomer = { first_name?: string | null; last_name?: string | null; phone?: string | null }
+
+/** The store's answer to a profile save, as the values the page shows; none when it sent no customer. */
+export const savedProfile = (
+  customer: StoredCustomer | null | undefined
+): { first_name: string; last_name: string; phone: string } | undefined =>
+  customer
+    ? { first_name: customer.first_name ?? "", last_name: customer.last_name ?? "", phone: customer.phone ?? "" }
+    : undefined
+
+/**
+ * The values after a save (QA S1-4c, B2): the store's answer when it gave
+ * one; otherwise the saved row's fields as sent (trimmed, as the server
+ * sends them) over the values shown before. Never the values the page was
+ * first rendered with, which may be older than a save made since.
+ */
+export const afterProfileSave = (
+  shown: ProfileValues,
+  row: "name" | "phone",
+  draft: ProfileValues,
+  stored: StoredCustomer | null | undefined
+): ProfileValues => {
+  const answer = savedProfile(stored)
+  if (answer) {
+    return { firstName: answer.first_name, lastName: answer.last_name, phone: answer.phone }
+  }
+  return row === "name"
+    ? { ...shown, firstName: draft.firstName.trim(), lastName: draft.lastName.trim() }
+    : { ...shown, phone: draft.phone.trim() }
+}
+
 /** The name row: a first name is needed; the last name is optional. */
 export const validateName = (values: NameValues): Partial<Record<keyof NameValues, string>> =>
   values.firstName.trim() ? {} : { firstName: checkoutContent.address.errors.firstName }

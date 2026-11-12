@@ -26,7 +26,7 @@ import {
   validateCreate,
   validateSignIn,
 } from "@lib/util/account-auth"
-import { NameValues, PhoneValues, validateName, validatePhone } from "@lib/util/account-profile"
+import { NameValues, PhoneValues, savedProfile, validateName, validatePhone } from "@lib/util/account-profile"
 import { afterSignInPath } from "@lib/util/safe-next"
 
 import { revalidateCartCaches } from "./cart-cache"
@@ -264,8 +264,12 @@ export async function transferCart() {
   await revalidateCartCaches()
 }
 
+/** What the store keeps for the profile's rows, as it answered after a save. */
+export type SavedProfile = { first_name: string; last_name: string; phone: string }
+
 export type SaveResult<E> =
-  | { kind: "saved" }
+  /** `profile`: the profile as the store now has it (name and phone saves). */
+  | { kind: "saved"; profile?: SavedProfile }
   | { kind: "invalid"; errors: E }
   /** The store refused or didn't answer: "We couldn't save … Try again." */
   | { kind: "failed" }
@@ -323,13 +327,26 @@ export async function deleteCustomerAddress(addressId: string): Promise<SaveResu
   return outcomeOf(await call(async () => sdk.store.customer.deleteAddress(addressId, headers)))
 }
 
+/**
+ * A profile save: the store's answer carries the customer as it now is,
+ * which the page shows at once and starts the next edit from (QA S1-4c, B2:
+ * the page re-rendered by the cache tag alone kept the old name).
+ */
+const profileOutcome = async <E>(
+  result: Call<{ customer?: HttpTypes.StoreCustomer }>
+): Promise<SaveResult<E>> => {
+  const outcome = await outcomeOf<E>(result)
+  if (outcome.kind !== "saved" || !result.ok) return outcome
+  return { kind: "saved", profile: savedProfile(result.body?.customer) }
+}
+
 /** The profile's name row (05, 9.6). */
 export async function updateCustomerName(values: NameValues): Promise<SaveResult<Partial<Record<keyof NameValues, string>>>> {
   const errors = validateName(values)
   if (Object.keys(errors).length > 0) return { kind: "invalid", errors }
 
   const headers = await getAuthHeaders()
-  return outcomeOf(
+  return profileOutcome(
     await call(async () =>
       sdk.store.customer.update(
         { first_name: values.firstName.trim(), last_name: values.lastName.trim() },
@@ -346,7 +363,7 @@ export async function updateCustomerPhone(values: PhoneValues): Promise<SaveResu
   if (Object.keys(errors).length > 0) return { kind: "invalid", errors }
 
   const headers = await getAuthHeaders()
-  return outcomeOf(
+  return profileOutcome(
     await call(async () => sdk.store.customer.update({ phone: values.phone.trim() }, {}, headers))
   )
 }
