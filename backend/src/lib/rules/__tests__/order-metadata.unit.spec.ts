@@ -1,5 +1,8 @@
 import {
   decideOrderPromise,
+  hideStaffOnlyKeysInOrders,
+  legacyCashCollectionPlan,
+  withoutStaffOnlyKeys,
   isOrderOwnPromise,
   isReservedKey,
   orderDeliveryPromise,
@@ -253,3 +256,80 @@ describe("decideOrderPromise", () => {
   })
 })
 
+
+// QA's tenth review, M1.
+describe("legacy cod_ keys on orders recorded before 12 Nov", () => {
+  it("plans the record from the keys, and removes every cod_ key", () => {
+    expect(
+      legacyCashCollectionPlan({
+        delivery_promise: kept,
+        cod_slip_reference: "  TCS 778812 ",
+        cod_collected_at: "2026-11-11T09:30:00.000Z",
+        cod_collected_by: "user_01ABC",
+        team: "Lahore Lions",
+      })
+    ).toEqual({
+      record: { slip_reference: "TCS 778812", collected_at: "2026-11-11T09:30:00.000Z" },
+      staffKeys: ["cod_collected_at", "cod_collected_by", "cod_slip_reference"],
+    })
+  })
+
+  it("keeps a slip reference as it was recorded, even one today's rule would refuse", () => {
+    expect(legacyCashCollectionPlan({ cod_slip_reference: "A".repeat(80) }).record?.slip_reference).toBe("A".repeat(80))
+  })
+
+  it("leaves the time to the caller when the key holds no valid time", () => {
+    for (const at of [undefined, null, "", "yesterday", 1731300000000]) {
+      expect(legacyCashCollectionPlan({ cod_slip_reference: "TCS 1", cod_collected_at: at }).record).toEqual({
+        slip_reference: "TCS 1",
+        collected_at: null,
+      })
+    }
+  })
+
+  it("records nothing without a slip reference, but still removes the keys", () => {
+    for (const slip of [undefined, null, "", "   ", 42, { ref: "TCS 1" }]) {
+      expect(legacyCashCollectionPlan({ cod_slip_reference: slip, cod_collected_by: "user_1" })).toEqual({
+        record: null,
+        staffKeys: ["cod_collected_by", "cod_slip_reference"],
+      })
+    }
+    expect(legacyCashCollectionPlan({ cod_note: "x" })).toEqual({ record: null, staffKeys: ["cod_note"] })
+  })
+
+  it("has nothing to do for metadata without cod_ keys, or that is not an object", () => {
+    for (const metadata of [{}, { team: "A" }, null, undefined, "cod_slip_reference", ["cod_x"]]) {
+      expect(legacyCashCollectionPlan(metadata)).toEqual({ record: null, staffKeys: [] })
+    }
+  })
+})
+
+describe("cod_ keys in store answers about orders", () => {
+  it("are left out of each order's metadata, other keys kept", () => {
+    const metadata = { delivery_promise: kept, cod_slip_reference: "TCS 1", cod_collected_by: "user_1", team: "A" }
+    expect(withoutStaffOnlyKeys(metadata)).toEqual({ delivery_promise: kept, team: "A" })
+    expect(hideStaffOnlyKeysInOrders({ order: { id: "o1", metadata } })).toEqual({
+      order: { id: "o1", metadata: { delivery_promise: kept, team: "A" } },
+    })
+    expect(
+      hideStaffOnlyKeysInOrders({ orders: [{ id: "o1", metadata }, { id: "o2", metadata: null }], count: 2 })
+    ).toEqual({
+      orders: [{ id: "o1", metadata: { delivery_promise: kept, team: "A" } }, { id: "o2", metadata: null }],
+      count: 2,
+    })
+    // The completion's answer.
+    expect(hideStaffOnlyKeysInOrders({ type: "order", order: { metadata: { cod_x: 1 } } })).toEqual({
+      type: "order",
+      order: { metadata: {} },
+    })
+  })
+
+  it("leaves other answers, and orders without metadata, as they are", () => {
+    const cart = { type: "cart", cart: { metadata: { cod_x: 1 } }, error: { message: "m" } }
+    expect(hideStaffOnlyKeysInOrders(cart)).toEqual(cart)
+    expect(hideStaffOnlyKeysInOrders({ order: { id: "o1" } })).toEqual({ order: { id: "o1" } })
+    for (const body of [null, "text", 42]) {
+      expect(hideStaffOnlyKeysInOrders(body)).toBe(body)
+    }
+  })
+})

@@ -89,11 +89,14 @@ export async function refuseReservedCartMetadata(
 }
 
 /**
- * Before GET /store/orders, GET /store/orders/:id and POST /store/carts/:id/complete: keys
- * starting with `cod_` (reserved for staff) are left out of each order's metadata in the answer. The data itself is cleaned by the
- * order-placed subscriber (new orders) and by the migration script
- * (migration-scripts/move-cod-metadata-to-cash-collection.ts, older orders); this covers the moment
- * in between, so a customer is never shown them.
+ * Before GET /store/orders, GET /store/orders/:id, Medusa's order-transfer routes and
+ * POST /store/carts/:id/complete: keys starting with `cod_` (reserved for staff) are left out of
+ * each order's metadata in the answer (QA's tenth review, M1). Such keys reach an order only from
+ * a cart whose metadata was written past the store routes (they refuse them), because Medusa copies
+ * a cart's metadata into its order. The data itself is cleaned by the order-placed subscriber (new
+ * orders) and by the migration script (migration-scripts/move-cod-metadata-to-cash-collection.ts,
+ * orders recorded before 12 Nov); this covers every moment in between, so a customer is never
+ * shown them.
  */
 export function hideStaffOnlyOrderKeys(
   _req: MedusaRequest,
@@ -218,6 +221,12 @@ export default defineMiddlewares({
     {
       matcher: "/store/orders/:id",
       method: ["GET"],
+      middlewares: [hideStaffOnlyOrderKeys],
+    },
+    {
+      // Medusa's order-transfer routes answer with the order too.
+      matcher: "/store/orders/:id/transfer/*",
+      method: ["POST"],
       middlewares: [hideStaffOnlyOrderKeys],
     },
   ],

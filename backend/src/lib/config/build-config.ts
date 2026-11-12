@@ -97,8 +97,9 @@ export const DATABASE_HOST_PROBLEMS: Readonly<Record<DatabaseHostProblem, string
     "or password percent-encoded (an @ as %40)",
   no_host:
     "DATABASE_URL names no database host after the @, so the PostgreSQL driver would take the " +
-    "server from PGHOST or its default instead. Write the server's host name or IP address " +
-    "after the @: postgres://<user>:<password>@<host>:<port>/<database>",
+    "server from PGHOST or its default instead, or, with a port and no host, could not read the " +
+    "URL at all. Write the server's host name or IP address after the @: " +
+    "postgres://<user>:<password>@<host>:<port>/<database>",
   host_parameter:
     "DATABASE_URL has a host or hostaddr query parameter, which would choose the database " +
     "server in place of the host after the @. Remove the parameter and write the server's host " +

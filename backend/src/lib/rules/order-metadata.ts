@@ -76,6 +76,50 @@ export function hideStaffOnlyKeysInOrders<T>(body: T): T {
   } as T
 }
 
+/** The keys an order recorded as collected before 12 Nov (S1-1c) kept in its metadata. */
+export const LEGACY_SLIP_REFERENCE_KEY = "cod_slip_reference"
+export const LEGACY_COLLECTED_AT_KEY = "cod_collected_at"
+
+/** What the move of an order's legacy `cod_*` keys into the cash-collection table does. */
+export type LegacyCashCollectionPlan = {
+  /**
+   * The record to create when the order has none: the slip reference (trimmed) and when it was
+   * collected (null when the key holds no valid time; the caller then uses the time of the move).
+   * Null when the keys hold no slip reference, so there is nothing to record.
+   */
+  record: { slip_reference: string; collected_at: string | null } | null
+  /** Every `cod_` key to remove from the order's metadata (all of them, recorded or not). */
+  staffKeys: string[]
+}
+
+/**
+ * The plan for one order's metadata (QA's tenth review, M1). The slip reference is kept as it was
+ * recorded, even if today's rule would refuse it: it is what staff entered then, and dropping it
+ * would lose the record. Who recorded it (`cod_collected_by`) is not moved: Medusa's capture record
+ * says who captured (decision 010, point 6).
+ */
+export function legacyCashCollectionPlan(metadata: unknown): LegacyCashCollectionPlan {
+  if (typeof metadata !== "object" || metadata === null || Array.isArray(metadata)) {
+    return { record: null, staffKeys: [] }
+  }
+  const values = metadata as Record<string, unknown>
+  const staffKeys = Object.keys(values).filter(isStaffOnlyKey).sort()
+  const slip = values[LEGACY_SLIP_REFERENCE_KEY]
+  const slipReference = typeof slip === "string" ? slip.trim() : ""
+  if (slipReference === "") {
+    return { record: null, staffKeys }
+  }
+  const at = values[LEGACY_COLLECTED_AT_KEY]
+  const time = typeof at === "string" ? new Date(at) : null
+  return {
+    record: {
+      slip_reference: slipReference,
+      collected_at: time && !Number.isNaN(time.getTime()) ? time.toISOString() : null,
+    },
+    staffKeys,
+  }
+}
+
 /** Whether a customer may not write this metadata key on a cart. */
 export function isReservedKey(key: string): boolean {
   return key === DELIVERY_PROMISE_KEY || isStaffOnlyKey(key)

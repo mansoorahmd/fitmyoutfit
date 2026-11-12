@@ -137,7 +137,8 @@ export function databaseUrlReadings(databaseUrl: string | undefined): (string | 
  * - a `host` query parameter wins over the host after the `@` (pg-connection-string copies every
  *   query parameter over what it parsed);
  * - a URL with an empty host (`postgres://user:pw@/db`) is read with a dummy host that is then
- *   dropped, so pg takes `PGHOST`, or else `localhost`;
+ *   dropped, so pg takes `PGHOST`, or else `localhost`; with a port but no host
+ *   (`postgres://user:pw@:5433/db`) pg cannot read the URL at all and does not connect;
  * - a string that is not a URL (a socket path, libpq's `host=... user=...` form, or anything else)
  *   gives no host either, so again `PGHOST` or `localhost`.
  *
@@ -146,8 +147,9 @@ export function databaseUrlReadings(databaseUrl: string | undefined): (string | 
  * lost by refusing it.
  *
  * - `not_a_url`: not a `postgres://` or `postgresql://` URL;
- * - `no_host`: no host after the `@`, or one that is not a plain host name, IPv4 or bracketed
- *   IPv6 address (a percent-encoded host such as `%2Ftmp` is a socket path to pg);
+ * - `no_host`: no host after the `@` (with or without a port after it), or one that is not a
+ *   plain host name, IPv4 or bracketed IPv6 address (a percent-encoded host such as `%2Ftmp` is a
+ *   socket path to pg);
  * - `host_parameter`: a `host` or `hostaddr` query parameter, in any case.
  */
 export type DatabaseHostProblem = "not_a_url" | "no_host" | "host_parameter"
@@ -160,11 +162,13 @@ function hostProblemOf(reading: string): DatabaseHostProblem | undefined {
   try {
     url = new URL(reading)
   } catch {
-    // A user and password with nothing after the @ (`postgres://u:p@/db`) is no URL to the
-    // WHATWG parser; pg reads it again with a dummy host, and so does this check.
+    // A user and password with nothing after the @ is no URL to the WHATWG parser. pg reads
+    // `postgres://u:p@/db` again with a dummy host (and then takes PGHOST); with a port and no
+    // host, `postgres://u:p@:5433/db`, pg cannot read it at all. Either way the URL names no
+    // host, and that is what it is told, not that it is no postgres:// URL (QA's tenth review, M5).
     try {
-      new URL(reading.replace("@/", "@___DUMMY___/"))
-      return "no_host"
+      const withHost = new URL(reading.replace(/@(?=[:/?#]|$)/, "@___DUMMY___"))
+      return withHost.protocol === "postgres:" || withHost.protocol === "postgresql:" ? "no_host" : "not_a_url"
     } catch {
       return "not_a_url"
     }
