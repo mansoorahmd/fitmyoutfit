@@ -1,0 +1,596 @@
+{
+  "stand-in-jersey": {
+    "schemaVersion": 2,
+    "product": {
+      "id": "stand-in-jersey"
+    },
+    "palette": {
+      "id": "placeholder-palette",
+      "version": 1
+    },
+    "zones": {
+      "body_front": {
+        "id": "placeholder-red",
+        "hex": "#C8102E"
+      },
+      "body_back": {
+        "id": "placeholder-navy",
+        "hex": "#1B2A5C"
+      },
+      "sleeves": {
+        "id": "placeholder-white",
+        "hex": "#FFFFFF"
+      },
+      "side_panels": {
+        "id": "placeholder-white",
+        "hex": "#FFFFFF"
+      },
+      "collar": {
+        "id": "placeholder-navy",
+        "hex": "#1B2A5C"
+      },
+      "collar_stripe": {
+        "id": "placeholder-navy",
+        "hex": "#1B2A5C"
+      },
+      "cuffs": {
+        "id": "placeholder-navy",
+        "hex": "#1B2A5C"
+      },
+      "cuff_stripes": {
+        "id": "placeholder-navy",
+        "hex": "#1B2A5C"
+      },
+      "side_stripes": {
+        "id": "placeholder-navy",
+        "hex": "#1B2A5C"
+      }
+    },
+    "fonts": [
+      {
+        "id": "noto-sans-arabic-700",
+        "family": "Noto Sans Arabic",
+        "weight": 700,
+        "style": "normal"
+      },
+      {
+        "id": "oswald-700",
+        "family": "Oswald",
+        "weight": 700,
+        "style": "normal",
+        "fallbackFontIds": [
+          "noto-sans-arabic-700"
+        ]
+      },
+      {
+        "id": "graduate-400",
+        "family": "Graduate",
+        "weight": 400,
+        "style": "normal",
+        "fallbackFontIds": [
+          "noto-sans-arabic-700"
+        ]
+      }
+    ],
+    "layers": [
+      {
+        "id": "text-1",
+        "kind": "text",
+        "pieceId": "front",
+        "position": {
+          "x": 335.5,
+          "y": 290
+        },
+        "size": {
+          "width": 536.712,
+          "height": 77
+        },
+        "rotation": 0,
+        "value": "TIGERS",
+        "direction": "auto",
+        "fontId": "oswald-700",
+        "fontSize": 55,
+        "fill": {
+          "id": "placeholder-white",
+          "hex": "#FFFFFF"
+        },
+        "align": "center"
+      },
+      {
+        "id": "text-2",
+        "kind": "text",
+        "pieceId": "back",
+        "position": {
+          "x": 244,
+          "y": 105
+        },
+        "size": {
+          "width": 393.152,
+          "height": 84
+        },
+        "rotation": 0,
+        "value": "محمد علی",
+        "direction": "auto",
+        "fontId": "oswald-700",
+        "fontSize": 60,
+        "fill": {
+          "id": "placeholder-gold",
+          "hex": "#F2B705"
+        },
+        "align": "center"
+      },
+      {
+        "id": "number-1",
+        "kind": "number",
+        "pieceId": "back",
+        "position": {
+          "x": 244,
+          "y": 300
+        },
+        "size": {
+          "width": 299,
+          "height": 253
+        },
+        "rotation": 0,
+        "value": "10",
+        "fontId": "graduate-400",
+        "fontSize": 230,
+        "fill": {
+          "id": "placeholder-white",
+          "hex": "#FFFFFF"
+        },
+        "align": "center"
+      },
+      {
+        "id": "number-2",
+        "kind": "number",
+        "pieceId": "front",
+        "position": {
+          "x": 335.5,
+          "y": 410
+        },
+        "size": {
+          "width": 143,
+          "height": 121
+        },
+        "rotation": 0,
+        "value": "٧",
+        "fontId": "graduate-400",
+        "fontSize": 110,
+        "fill": {
+          "id": "placeholder-gold",
+          "hex": "#F2B705"
+        },
+        "align": "center"
+      },
+      {
+        "id": "logo-1",
+        "kind": "logo",
+        "pieceId": "front",
+        "position": {
+          "x": 440,
+          "y": 195
+        },
+        "size": {
+          "width": 100,
+          "height": 100
+        },
+        "rotation": 12,
+        "asset": {
+          "assetId": "upload-badge",
+          "width": 600,
+          "height": 600,
+          "mediaType": "image/png"
+        }
+      },
+      {
+        "id": "clipart-1",
+        "kind": "clipart",
+        "pieceId": "sleeve_left",
+        "position": {
+          "x": 150,
+          "y": 90
+        },
+        "size": {
+          "width": 60,
+          "height": 60
+        },
+        "rotation": -20,
+        "asset": {
+          "assetId": "clipart-star",
+          "width": 64,
+          "height": 64,
+          "mediaType": "image/svg+xml"
+        }
+      }
+    ]
+  },
+  "stand-in-tshirt": {
+    "schemaVersion": 2,
+    "product": {
+      "id": "stand-in-tshirt"
+    },
+    "palette": {
+      "id": "placeholder-palette",
+      "version": 1
+    },
+    "zones": {
+      "body_front": {
+        "id": "placeholder-red",
+        "hex": "#C8102E"
+      },
+      "body_back": {
+        "id": "placeholder-navy",
+        "hex": "#1B2A5C"
+      },
+      "side_panels": {
+        "id": "placeholder-white",
+        "hex": "#FFFFFF"
+      },
+      "sleeves": {
+        "id": "placeholder-white",
+        "hex": "#FFFFFF"
+      },
+      "sleeve_ends": {
+        "id": "placeholder-navy",
+        "hex": "#1B2A5C"
+      },
+      "neck_band": {
+        "id": "placeholder-navy",
+        "hex": "#1B2A5C"
+      }
+    },
+    "fonts": [
+      {
+        "id": "noto-sans-arabic-700",
+        "family": "Noto Sans Arabic",
+        "weight": 700,
+        "style": "normal"
+      },
+      {
+        "id": "oswald-700",
+        "family": "Oswald",
+        "weight": 700,
+        "style": "normal",
+        "fallbackFontIds": [
+          "noto-sans-arabic-700"
+        ]
+      },
+      {
+        "id": "graduate-400",
+        "family": "Graduate",
+        "weight": 400,
+        "style": "normal",
+        "fallbackFontIds": [
+          "noto-sans-arabic-700"
+        ]
+      }
+    ],
+    "layers": [
+      {
+        "id": "text-1",
+        "kind": "text",
+        "pieceId": "front",
+        "position": {
+          "x": 260,
+          "y": 290
+        },
+        "size": {
+          "width": 416.296,
+          "height": 77
+        },
+        "rotation": 0,
+        "value": "TIGERS",
+        "direction": "auto",
+        "fontId": "oswald-700",
+        "fontSize": 55,
+        "fill": {
+          "id": "placeholder-white",
+          "hex": "#FFFFFF"
+        },
+        "align": "center"
+      },
+      {
+        "id": "text-2",
+        "kind": "text",
+        "pieceId": "back",
+        "position": {
+          "x": 261,
+          "y": 125
+        },
+        "size": {
+          "width": 417.76,
+          "height": 84
+        },
+        "rotation": 0,
+        "value": "محمد علی",
+        "direction": "auto",
+        "fontId": "oswald-700",
+        "fontSize": 60,
+        "fill": {
+          "id": "placeholder-gold",
+          "hex": "#F2B705"
+        },
+        "align": "center"
+      },
+      {
+        "id": "number-1",
+        "kind": "number",
+        "pieceId": "back",
+        "position": {
+          "x": 261,
+          "y": 320
+        },
+        "size": {
+          "width": 299,
+          "height": 253
+        },
+        "rotation": 0,
+        "value": "10",
+        "fontId": "graduate-400",
+        "fontSize": 230,
+        "fill": {
+          "id": "placeholder-white",
+          "hex": "#FFFFFF"
+        },
+        "align": "center"
+      },
+      {
+        "id": "number-2",
+        "kind": "number",
+        "pieceId": "front",
+        "position": {
+          "x": 260,
+          "y": 410
+        },
+        "size": {
+          "width": 143,
+          "height": 121
+        },
+        "rotation": 0,
+        "value": "٧",
+        "fontId": "graduate-400",
+        "fontSize": 110,
+        "fill": {
+          "id": "placeholder-gold",
+          "hex": "#F2B705"
+        },
+        "align": "center"
+      },
+      {
+        "id": "logo-1",
+        "kind": "logo",
+        "pieceId": "front",
+        "position": {
+          "x": 380,
+          "y": 185
+        },
+        "size": {
+          "width": 100,
+          "height": 100
+        },
+        "rotation": 12,
+        "asset": {
+          "assetId": "upload-badge",
+          "width": 600,
+          "height": 600,
+          "mediaType": "image/png"
+        }
+      },
+      {
+        "id": "clipart-1",
+        "kind": "clipart",
+        "pieceId": "sleeve_left",
+        "position": {
+          "x": 150,
+          "y": 90
+        },
+        "size": {
+          "width": 60,
+          "height": 60
+        },
+        "rotation": -20,
+        "asset": {
+          "assetId": "clipart-star",
+          "width": 64,
+          "height": 64,
+          "mediaType": "image/svg+xml"
+        }
+      }
+    ]
+  },
+  "placeholder-jersey": {
+    "schemaVersion": 2,
+    "product": {
+      "id": "placeholder-jersey"
+    },
+    "palette": {
+      "id": "placeholder-palette",
+      "version": 1
+    },
+    "zones": {
+      "body": {
+        "id": "placeholder-red",
+        "hex": "#C8102E"
+      },
+      "yoke": {
+        "id": "placeholder-navy",
+        "hex": "#1B2A5C"
+      },
+      "side_panels": {
+        "id": "placeholder-red",
+        "hex": "#C8102E"
+      },
+      "sleeves": {
+        "id": "placeholder-navy",
+        "hex": "#1B2A5C"
+      },
+      "cuffs": {
+        "id": "placeholder-white",
+        "hex": "#FFFFFF"
+      },
+      "collar": {
+        "id": "placeholder-red",
+        "hex": "#C8102E"
+      }
+    },
+    "fonts": [
+      {
+        "id": "noto-sans-arabic-700",
+        "family": "Noto Sans Arabic",
+        "weight": 700,
+        "style": "normal"
+      },
+      {
+        "id": "oswald-700",
+        "family": "Oswald",
+        "weight": 700,
+        "style": "normal",
+        "fallbackFontIds": [
+          "noto-sans-arabic-700"
+        ]
+      },
+      {
+        "id": "graduate-400",
+        "family": "Graduate",
+        "weight": 400,
+        "style": "normal",
+        "fallbackFontIds": [
+          "noto-sans-arabic-700"
+        ]
+      }
+    ],
+    "layers": [
+      {
+        "id": "text-1",
+        "kind": "text",
+        "pieceId": "front",
+        "position": {
+          "x": 280,
+          "y": 350
+        },
+        "size": {
+          "width": 448,
+          "height": 98
+        },
+        "rotation": 0,
+        "value": "TIGERS",
+        "direction": "auto",
+        "fontId": "oswald-700",
+        "fontSize": 70,
+        "fill": {
+          "id": "placeholder-white",
+          "hex": "#FFFFFF"
+        },
+        "align": "center"
+      },
+      {
+        "id": "text-2",
+        "kind": "text",
+        "pieceId": "back",
+        "position": {
+          "x": 280,
+          "y": 350
+        },
+        "size": {
+          "width": 448,
+          "height": 98
+        },
+        "rotation": 0,
+        "value": "محمد علی",
+        "direction": "auto",
+        "fontId": "oswald-700",
+        "fontSize": 70,
+        "fill": {
+          "id": "placeholder-gold",
+          "hex": "#F2B705"
+        },
+        "align": "center"
+      },
+      {
+        "id": "number-1",
+        "kind": "number",
+        "pieceId": "back",
+        "position": {
+          "x": 280,
+          "y": 350
+        },
+        "size": {
+          "width": 318.5,
+          "height": 269.5
+        },
+        "rotation": 0,
+        "value": "10",
+        "fontId": "graduate-400",
+        "fontSize": 245,
+        "fill": {
+          "id": "placeholder-white",
+          "hex": "#FFFFFF"
+        },
+        "align": "center"
+      },
+      {
+        "id": "number-2",
+        "kind": "number",
+        "pieceId": "front",
+        "position": {
+          "x": 280,
+          "y": 350
+        },
+        "size": {
+          "width": 318.5,
+          "height": 269.5
+        },
+        "rotation": 0,
+        "value": "٧",
+        "fontId": "graduate-400",
+        "fontSize": 245,
+        "fill": {
+          "id": "placeholder-gold",
+          "hex": "#F2B705"
+        },
+        "align": "center"
+      },
+      {
+        "id": "logo-1",
+        "kind": "logo",
+        "pieceId": "front",
+        "position": {
+          "x": 280,
+          "y": 350
+        },
+        "size": {
+          "width": 100,
+          "height": 100
+        },
+        "rotation": 12,
+        "asset": {
+          "assetId": "upload-badge",
+          "width": 600,
+          "height": 600,
+          "mediaType": "image/png"
+        }
+      },
+      {
+        "id": "clipart-1",
+        "kind": "clipart",
+        "pieceId": "sleeve_left",
+        "position": {
+          "x": 150,
+          "y": 90
+        },
+        "size": {
+          "width": 60,
+          "height": 60
+        },
+        "rotation": -20,
+        "asset": {
+          "assetId": "clipart-star",
+          "width": 64,
+          "height": 64,
+          "mediaType": "image/svg+xml"
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "productId": "stand-in-jersey",
+  "templates": [
+    "classic",
+    "hoops",
+    "stripes",
+    "sash",
+    "chevron"
+  ]
+}

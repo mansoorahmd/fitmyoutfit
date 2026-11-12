@@ -43,7 +43,7 @@ describe("validateDesign: invalid documents", () => {
   });
 
   it("explains a newer schemaVersion", () => {
-    const [message] = messages(broken((d) => (d.schemaVersion = 3)));
+    const [message] = messages(broken((d) => (d.schemaVersion = 4)));
     expect(message).toContain("schemaVersion");
     expect(message).toContain("newer");
     expect(message).toContain("update the editor package");

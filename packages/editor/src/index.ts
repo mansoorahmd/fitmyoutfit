@@ -18,6 +18,7 @@ export { orbitLimits, type OrbitLimits } from "./react/camera.js";
 export * from "./texture/pattern-texture.js";
 export * from "./texture/layers.js";
 export * from "./texture/fonts.js";
+export * from "./texture/thumbnail.js";
 export * from "./state/history.js";
 export * from "./upload/logo-upload.js";
 export * from "./upload/memory-store.js";

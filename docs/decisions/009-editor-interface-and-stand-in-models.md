@@ -38,6 +38,18 @@
 18. **CC-BY needs the author credited** wherever the model is shown, so the site needs a credits line before a CC-BY stand-in is shown to customers.
 19. **Not used:** the widely copied `shirt_baked.glb` (origin and licence cannot be traced), models with real club or brand kits, game rips, and Objaverse as a way around Sketchfab's login.
 
+## Added 12 Nov, after the engine was built (task E3a-1)
+
+Choices taken while building the engine, kept because later work depends on them:
+
+- **The team name and the sample player are stored once in the design.** Every team-name, player-name and player-number item shows that value, so the roster swap (E4) changes two values, and switching an item off keeps its text.
+- **Upgrading a version 2 design never guesses a role from a position.** Text becomes plain text; numbers become the player's number only when they all show the same value.
+- **A template switch needs the previous template** (`applyTemplate(design, template, { product, fonts, previous })`), so the coach's own switches and outlines can be told from the old template's layout. One switch is one undo step.
+- **A team with two colours:** the accent falls back to the second colour.
+- **Size steps and outline widths are placeholders:** Small, Medium and Large are 0.8, 1 and 1.25 times the preset's font size; Thin, Medium and Thick outlines are 3%, 5% and 8% of the font size, at least 1 mm. The factories' limits replace them.
+- **A colour typed as a code** is stored as the palette colour with the typed code beside it (`requested`); the typed code is never printed.
+- **Sample templates are generated** by `npm run generate:templates -w packages/editor` from the stand-ins' source records, so hoops are drawn at equal body heights and meet at the seams.
+
 ## Alternatives rejected
 
 - **One large E3:** too big to review in one step, and the founder would wait longer to see anything.

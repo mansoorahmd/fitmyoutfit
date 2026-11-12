@@ -4,7 +4,7 @@ The 3D design editor for the store. It is a standalone React + Three.js package:
 
 **A design is data, not an image.** A design is a versioned JSON document. Previews, proof renders and production files are all generated from it, so it never holds flattened pixels.
 
-Status: step E2 done. On top of E1 (vector pattern pieces drawn onto the 3D model, orbit camera, colour per zone): text layers in Latin, Arabic and Urdu, jersey number layers, logo uploads with checks (file type by content, size limits, transparency, print resolution), moving layers by dragging them on the model, resizing, rotating, ordering and deleting them, and undo and redo of every change. The document format is `schemaVersion` **2** (see "Format version 2" below); E3 to E5 will extend it.
+Status: step E3a-1 done (the engine for the E3a interface; the interface itself is the next step). On top of E1 (vector pattern pieces drawn onto the 3D model, orbit camera, colour per zone) and E2 (text in Latin, Arabic and Urdu, jersey numbers, logo uploads with checks, dragging, resizing, rotating, ordering, undo and redo): team colours, roles on items, placement presets in the product data, shapes, templates with thumbnails, text outlines, the palette with families and the CIEDE2000 colour-code match, readability, long-name reports and undo labels. The document format is `schemaVersion` **3** (see "Format version 3" below); a version 2 design is upgraded by `upgradeDesign`.
 
 ## Scripts
 
@@ -17,9 +17,10 @@ Status: step E2 done. On top of E1 (vector pattern pieces drawn onto the 3D mode
 | `npm run lint` / `typecheck` / `test` | ESLint, `tsc --noEmit`, Vitest (runs once) |
 | `npm run generate:schema` | Rewrites `schema/*.json` from the zod schemas |
 | `npm run generate:model` | Rewrites the placeholder GLB from `scripts/generate-placeholder-jersey.ts` (run with `tsx`), built from the pattern pieces in the product definition |
+| `npm run generate:templates` | Rewrites the sample templates (`samples/templates/<product>/`) from `scripts/make-sample-templates.ts`, measuring body heights on the committed models |
 | `npm run process:stand-in -- <source.glb>` | Rewrites a stand-in model and its product definition from its downloaded source file (the jersey or the T-shirt, picked by the file's SHA-256); see "Stand-in models" |
 
-To run the demo on another port: `npm run dev -w packages/editor -- --port 5184 --strictPort` from the repository root. The demo shows the stand-in football jersey; a switch in the header (or `?product=stand-in-tshirt`, `?product=placeholder-jersey`) shows the stand-in T-shirt or the old placeholder instead. A credit line over the 3D view names the model on screen and its licence. It has camera buttons for each side; controls to add a team name (Latin, Urdu and Arabic presets or typed), a number (English or Arabic digits) and a logo on a chosen piece; test files for the upload checks (made in the browser by code); the layer list (select, up, down, delete, low-DPI badge); controls for the selected layer (text, font, alignment, direction, colour, size, rotation, piece); the checks' messages; undo and redo (buttons, Ctrl+Z, Ctrl+Shift+Z or Ctrl+Y; Delete, arrow keys to nudge, Escape to deselect); the colour zones; a flat close-up of the selected piece, the flat pattern, the design JSON and the fonts' licences. Drag a layer on the model to move it. It fits a phone screen: the model stays at the top while the panel scrolls.
+To run the demo on another port: `npm run dev -w packages/editor -- --port 5184 --strictPort` from the repository root. The demo shows the stand-in football jersey; a switch in the header (or `?product=stand-in-tshirt`, `?product=placeholder-jersey`) shows the stand-in T-shirt or the old placeholder instead. A credit line over the 3D view names the model on screen and its licence. It has camera buttons for each side; controls to add a team name (Latin, Urdu and Arabic presets or typed), a number (English or Arabic digits) and a logo on a chosen piece; test files for the upload checks (made in the browser by code); the layer list (select, up, down, delete, low-DPI badge); controls for the selected layer (text, font, alignment, direction, colour, size, rotation, piece); the checks' messages; undo and redo (buttons, Ctrl+Z, Ctrl+Shift+Z or Ctrl+Y; Delete, arrow keys to nudge, Escape to deselect); the colour zones; a flat close-up of the selected piece, the flat pattern, the design JSON and the fonts' licences. Drag a layer on the model to move it. It fits a phone screen: the model stays at the top while the panel scrolls. Step E3a-1 added plain developer controls (not the interface design, which is the next step): team colours, swap, the templates with their thumbnails, the team name (Chest, Upper back, Off), a sample player's name and number, switches for name and number at their presets, outline and size per role, readability with the "add outline" fix, which lines are shrunk, the colour-code match (both colours, the difference, the match level), zones and shape groups that follow a team colour, and "Undone: <label>" after undo. The demo opens on the product's first template with a sample team name and player.
 
 ## Using it
 
@@ -74,31 +75,43 @@ One source of truth: the zod schemas in `src/design/schema.ts`. The TypeScript t
 
 ```jsonc
 {
-  "schemaVersion": 2,
-  "product": { "id": "placeholder-jersey" },
+  "schemaVersion": 3,
+  "product": { "id": "stand-in-jersey" },
   "palette": { "id": "placeholder-palette", "version": 1 },
-  "zones": { "body": { "id": "placeholder-white", "hex": "#FFFFFF" } },
-  "fonts": [
-    { "id": "noto-sans-arabic-700", "family": "Noto Sans Arabic", "weight": 700, "style": "normal" },
-    { "id": "oswald-700", "family": "Oswald", "weight": 700, "style": "normal", "fallbackFontIds": ["noto-sans-arabic-700"] }
+  "teamColors": {
+    "main": { "id": "placeholder-red", "hex": "#C8102E" },
+    "second": { "id": "placeholder-royal", "hex": "#1F4E9C", "requested": "#1A5FB4" }
+  },
+  "teamName": "LAHORE LIONS",
+  "samplePlayer": { "name": "محمد علی", "number": "٧" },
+  "template": { "id": "hoops", "version": 1 },
+  "zones": {
+    "body_front": { "id": "placeholder-red", "hex": "#C8102E", "teamColor": "main" },
+    "collar": { "id": "placeholder-white", "hex": "#FFFFFF" }
+  },
+  "fonts": [{ "id": "oswald-700", "family": "Oswald", "weight": 700, "style": "normal", "fallbackFontIds": ["noto-sans-arabic-700"] }],
+  "shapes": [
+    { "id": "shape-1", "kind": "shape", "group": "hoops", "pieceId": "front", "path": "M -40 512.3 L 0 512.3 L 10 512.1 ... Z",
+      "fill": { "id": "placeholder-royal", "hex": "#1F4E9C", "teamColor": "second" }, "locked": true }
   ],
   "layers": [
     {
-      "id": "text-1", "kind": "text", "pieceId": "back",
-      "position": { "x": 280, "y": 150 }, "size": { "width": 448, "height": 98 }, "rotation": 0,
-      "value": "محمد علی", "direction": "auto", "fontId": "oswald-700", "fontSize": 70,
-      "fill": { "id": "placeholder-navy", "hex": "#1B2A5C" }, "align": "center"
+      "id": "player-name-1", "kind": "text", "role": "player-name", "preset": "back-name", "pieceId": "back",
+      "position": { "x": 244, "y": 128 }, "size": { "width": 340, "height": 72.8 }, "rotation": 0,
+      "value": "محمد علی", "direction": "auto", "fontId": "oswald-700", "fontSize": 52,
+      "fill": { "id": "placeholder-royal", "hex": "#1F4E9C", "teamColor": "second" }, "align": "center",
+      "outline": { "color": { "id": "placeholder-red", "hex": "#C8102E", "teamColor": "main" }, "width": 1.56 }
     },
     {
-      "id": "logo-1", "kind": "logo", "pieceId": "front",
-      "position": { "x": 125, "y": 140 }, "size": { "width": 80, "height": 80 }, "rotation": 15,
+      "id": "crest", "kind": "logo", "role": "crest", "preset": "left-chest", "pieceId": "front",
+      "position": { "x": 440, "y": 200 }, "size": { "width": 80, "height": 80 }, "rotation": 0,
       "asset": { "assetId": "upload-7f3a", "mediaType": "image/png", "width": 600, "height": 600 }
     }
   ]
 }
 ```
 
-Layer kinds: `text` and `number` (value, font, size, fill, alignment), and `logo` and `clipart` (an `asset` reference). Layers are listed bottom to top: later layers are drawn over earlier ones, and `moveLayer` changes the order.
+Layer kinds: `text` and `number` (value, font, size, fill, alignment, optional outline), and `logo` and `clipart` (an `asset` reference). Every layer has a `role` and may name the placement `preset` it was put at (see "Format version 3"). Layers are listed bottom to top: later layers are drawn over earlier ones, and `moveLayer` changes the order.
 
 - A `text` value is one line of Unicode text, 1 to 200 UTF-16 code units, in any script: Latin, Arabic and Urdu names and mixed text such as `Ali علي 10`. It is stored in **Unicode NFC**, so a name typed with a combining accent and the same name typed with the precomposed letter are the same string and compare equal with `===` (the roster checks will rely on that). `addLayer` and `updateLayer` normalise; `validateDesign` refuses text that is not NFC rather than changing it silently. No line breaks, tabs or other control characters, and not only spaces. Bidi marks (LRM, RLM, ALM) are allowed.
 - A text layer's `direction` is `"auto"`, `"ltr"` or `"rtl"`. `"auto"` follows the text: the first strong letter decides (Unicode bidi rules P2 and P3), so `محمد علی` reads right to left and `Ali علي` left to right. Digits are never strong letters.
@@ -107,6 +120,23 @@ Layer kinds: `text` and `number` (value, font, size, fill, alignment), and `logo
 - `rotation` is any finite number of degrees. It is stored as given, not wrapped to 0 to 360 (`725.5` stays `725.5`). A value that is not a finite number is rejected.
 - `position` may lie outside the piece (negative, or beyond the piece size) and is accepted by the format. Dragging in the editor keeps the centre inside the piece's box; whatever reaches past the piece's outline is clipped when drawn.
 
+### Format version 3 (step E3a): what changed
+
+Decision 009-14: one clean version, and a plain function that upgrades version 2. What a design holds now, beyond version 2:
+
+- `teamColors`: Main, Second and an optional Accent, each a palette colour (with the code the coach asked for in `requested` when it came from the colour-code match).
+- Colours (zones, shapes, fills, outlines) may **follow a team colour** (`teamColor: "main"`). Such a colour always holds the team colour's `id` and `hex` (checked), so the document paints without a lookup and changing a team colour is one edit that rewrites every follower. A colour may also keep `requested`: the code typed by the coach, never printed; `id` and `hex` are always the palette colour (decision 009-6).
+- `role` on every layer (N1): `team-name`, `player-name`, `player-number`, `crest`, `sponsor`, `text`, `graphic`; the kind limits the roles (a number is `player-number` or a fixed number with role `text`; logos and clipart are `crest`, `sponsor` or `graphic`).
+- `teamName` and `samplePlayer` (name, number): **every team-name layer shows `teamName`, every player-name and player-number layer the sample player's** (checked). So the roster preview swaps two values (`designForPlayer`), and turning the team name off keeps its text. The team name and the player's name may be empty; a player-number layer needs a number.
+- `preset` on a layer: the product's placement preset it was put at (checked against the product: it must exist, be on the layer's piece and take its role).
+- `outline` on text and number layers: `{ color, width }`, width in mm (at most 20).
+- `shapes`: stripes, hoops, a sash: `{ id, kind: "shape", group, pieceId, path, fill, locked }`, SVG path data in piece millimetres, drawn over the zones and under the layers, clipped to the piece; one id space with the layers. A shape that lies wholly outside its piece is refused.
+- `template`: the template last applied (`{ id, version }`) or null.
+
+Validation (`validateDesign(input, { product, palette })`) refuses, with readable paths: a role the kind cannot have, an unknown preset or one on another piece or for another role, a shape outside any piece, an off-palette colour or a palette colour with another code (when given the palette), a team-colour reference to a team colour the design has no (an Accent that is not set), a follower that does not hold its team colour, a role layer that does not show the design's value.
+
+**Upgrading** (`upgradeDesign(input, options)`, `upgrade.ts`): a version 2 design gains team colours (Main from its first zone, Second from the first zone of another colour), an empty team name, no template, no shapes; text layers get the role `text` (guessing a team name from positions is what roles stop), logos `crest`, clipart `graphic`; number layers become `player-number` when they all show one number (which becomes the sample player's), otherwise fixed numbers (`text`). Nothing else changes, and `src/test/v2-paint.test.ts` checks that the three version 2 sample designs recorded in commit 95a6b32 paint the same pixels and the same text calls after the upgrade. `validateDesign` refuses a version 2 document and names `upgradeDesign`; version 1 stays refused.
+
 ### Format version 2 (step E2): what changed, and why old documents are refused
 
 A version 1 document is refused with `format version 1 is not supported`; no migration exists because no version 1 design was ever saved in production, and a version 1 logo cannot be migrated (it did not record its pixel size). Changes:
@@ -114,7 +144,7 @@ A version 1 document is refused with `format version 1 is not supported`; no mig
 - text layers: `align` is `start`, `center` or `end` (was `left`, `center`, `right`); a required `direction`; NFC, one line, not blank;
 - fonts: optional `fallbackFontIds` (other fonts of the document, tried in order for characters the font lacks); `family` may not contain quotes, backslashes, semicolons, braces or angle brackets, because it goes into a CSS font string;
 - asset references: required `width` and `height` in pixels (used for the DPI check); `image/webp` added; a `logo` takes PNG, JPEG or WebP only (customer uploads), `clipart` may also be SVG (our own curated files);
-- product definitions keep their own `schemaVersion` 1 (`PRODUCT_SCHEMA_VERSION`); they did not change.
+- product definitions kept their own `schemaVersion` 1 in E2; E3a made them version 2 (see "Product definitions are data").
 
 ### Pattern-piece coordinates
 
@@ -127,7 +157,7 @@ A version 1 document is refused with `format version 1 is not supported`; no mig
 
 ### Colours
 
-A colour is `{ "id": "<palette colour id>", "hex": "#RRGGBB" }`: a palette reference plus the HEX copied from the palette when it was picked. HEX is always **upper case, 6 digits**. Storing the HEX makes the document renderable without the palette and keeps old designs readable if a palette later changes; the document-level `palette` (id and version) says which palette the ids belong to. Zones hold one colour each, keyed by zone id. Fonts, text fills and zones all use the same colour shape.
+A colour is `{ "id": "<palette colour id>", "hex": "#RRGGBB" }`: a palette reference plus the HEX copied from the palette when it was picked. HEX is always **upper case, 6 digits**. Storing the HEX makes the document renderable without the palette and keeps old designs readable if a palette later changes; the document-level `palette` (id and version) says which palette the ids belong to. Zones hold one colour each, keyed by zone id. Zones, text fills, outlines and shapes use the same colour shape, which in format version 3 may also say which team colour it follows (`teamColor`) and which code the coach asked for (`requested`, never printed).
 
 ### Assets and vectors
 
@@ -150,6 +180,7 @@ A colour is `{ "id": "<palette colour id>", "hex": "#RRGGBB" }`: a palette refer
   - **Fonts that no layer uses any more stay in `fonts`** after `removeLayer` or after a layer switches font. They are harmless, the next layer can reuse them, and nothing removes data behind the caller's back. A later "tidy up" step (for example when saving) can drop them.
 - A zone id may not be `__proto__`, `constructor` or `prototype`, and a `__proto__` key in a JSON document is a validation error rather than being dropped silently.
 - `getDesignJsonSchema()`, `getProductJsonSchema()`, `getFontCatalogJsonSchema()`.
+- Format version 3 and E3a (details in "Team colours, roles, templates and the palette"): `upgradeDesign`, `upgradeV2`; team colours `setTeamColor`, `swapTeamColors`, `setZoneTeamColor`, `setShapeGroupColor`, `teamColourValue`, `teamColourRoles`, `teamColourUses`, `mapDesignColours`; roles `setTeamName`, `setSamplePlayer`, `designForPlayer`, `setRoleValue`, `roleValue`, `findLayers`, `findRoleLayersOnSide`, `layerSide`, `setRoleSlot`, `isRoleSlotOn`, `newRoleLayer`, `placeAtPreset`, `setSizeStep`, `sizeStepOf`, `setOutline`, `outlineWidthMm`, `outlineStepOf`, `presetsForRole`, `requirePreset`; templates `validateTemplate`, `applyTemplate`, `resolveTemplateColour`; palette `validatePalette`, `nearestPaletteColour`, `matchColourCode`, `matchLevel`, `coloursCommonFirst`, `coloursByFamily`, `paletteColourRef`; colour maths `parseColourCode`, `hexToLab`, `ciede2000`, `colourDifference`, `contrastRatio`, `relativeLuminance`; readability `itemReadability`, `designReadability`, `backgroundAt`, `readabilityFix`, `outlineColourFor`.
 
 The JSON Schema cannot check NFC, a visible character, font references or the number maximum; `validateDesign` does, and `json-schema.test.ts` lists each such difference.
 
@@ -219,6 +250,12 @@ A product definition (`samples/products/placeholder-jersey.json`, schema in `sch
 
 `validateProductDefinition` checks all of that, plus that every zone a piece names exists and that every zone is drawn on some piece. The JSON Schema checks the structure and the characters of the paths only; its descriptions say so. A test lists where the two differ.
 
+Product definitions are format **version 2** (step E3a), which adds:
+
+- `teamColors`: the team colours a new design starts with;
+- `views`: the pieces that show the front and the back (thumbnails, flat views);
+- `placements`: named **placement presets** (N5), in the order the interface offers them: `{ id, name, pieceId, centre, maxSize, roles, side, fontSize }`: where a layer of one of `roles` goes, centred where on which piece, its largest box, the side the camera turns to, and the font size of text and numbers at the Medium size. Validation checks each centre lies inside its piece's outline. The stand-ins' presets are in their source records and generated into the product definitions; the placeholder's are written by hand. They replace the demo's old `demo/placements.ts`. Print areas and "keep inside the area" (N6) and capabilities by decoration method are later steps.
+
 A real model replaces the placeholder by changing this JSON and the GLB file; no code changes. The demo now shows such a model by default: `samples/products/stand-in-jersey.json` (see "Stand-in models").
 
 ### From the design to the model
@@ -284,7 +321,11 @@ The text layout rule, which proofs and production files must repeat:
 - the line is drawn as text by the browser's text engine (it shapes Arabic and Urdu and orders mixed text inside the line by the Unicode bidi algorithm), with the paragraph direction this package resolves (`direction`, or the first strong letter for `auto`; number layers are always left to right);
 - at `fontSize` mm per em, vertically centred on the box (CSS "middle" baseline), anchored at the box's start edge, centre or end edge by `align`;
 - a line wider than the box is shrunk evenly to the box's width; it never wraps and is never stretched;
-- the font stack is the layer's font, its `fallbackFontIds` in order, then `sans-serif` (`layerFont`).
+- the font stack is the layer's font, its `fallbackFontIds` in order, then `sans-serif` (`layerFont`);
+- an **outline** (`outline.width` mm) is a stroke round the glyphs, twice the width wide with round joins, drawn under the fill, so `width` mm show outside the letters; the line then fits the box less twice the width, so the outline stays inside the box; the width stays in mm when a long line is shrunk;
+- `drawPatternTexture` reports for each text and number layer whether it was shrunk and by how much (`textFits`, also in `onTextureDrawn`): the interface says "long names get smaller" from it (N12).
+
+**Shapes** are drawn with the zones, piece by piece, after the zone regions and before every layer, clipped as the regions are: to the outline in the flat view, to the piece's area plus its margin in the texture (so seams bleed in the shape's colour, and nothing reaches another piece).
 
 Logos and clipart are drawn as large as fits inside the box, keeping the image's proportions, centred. An image not loaded yet is drawn as a grey placeholder and listed in `missingImages`. The selected layer can be outlined (`selectedLayerId`, editor view only; never for proofs).
 
@@ -339,18 +380,37 @@ With `onLayerDrag`, a press on a layer drags it instead of turning the garment. 
 
 ### Undo and redo
 
-`state/history.ts` is a plain immutable history over any value: `commit` records a step; a gesture (`beginGesture`, `updateGesture` for every pointer move or slider value, `endGesture`) records **one** step from its start to its end, or none if nothing changed; `undo` and `redo` end an open gesture first; equal values (`sameJson` for designs) are never a step; at most `limit` (200) steps are kept. `useDesignHistory` wraps it for React. Selection is not part of the history (it is not part of the design).
+`state/history.ts` is a plain immutable history over any value: `commit` records a step; a gesture (`beginGesture`, `updateGesture` for every pointer move or slider value, `endGesture`) records **one** step from its start to its end, or none if nothing changed; `undo` and `redo` end an open gesture first; equal values (`sameJson` for designs) are never a step; at most `limit` (200) steps are kept. `useDesignHistory` wraps it for React. Selection is not part of the history (it is not part of the design). Every step can carry a **label key** (`commit(next, label)`, `beginGesture(h, label)`; the keys are `EDIT_LABELS`: "zone-colour", "template", "move" ...), and `undoLabel` and `redoLabel` say what the next undo or redo changes, so the interface can announce "Undone: Body colour" in its own words (N18).
+
+## Team colours, roles, templates and the palette (step E3a)
+
+All plain functions on the `/design` entry (no React, no Three.js), except the thumbnails (root entry, any 2D context).
+
+**Team colours** (06-editor 4.2): `setTeamColor(design, role, colour | null)` sets Main, Second or Accent (null removes the Accent; what followed it keeps its colour) and recolours every follower; `swapTeamColors(design)` swaps Main and Second across the kit; `setZoneTeamColor`, `setShapeGroupColor` and `teamColourValue(design, role)` (a fill or outline that follows a team colour) make things follow. Each is one document change, so one undo step.
+
+**Roles and presets** (4.5): `setTeamName`, `setSamplePlayer`; `designForPlayer(design, { name, number })` is the roster preview's swap (Latin, Arabic and Urdu names in NFC; English, Arabic or Urdu digits under the jersey number rule). `findLayers(design, { role, preset, pieceId, kind })` and `findRoleLayersOnSide(design, product, "player-number", "back")` answer "which item is the player's number on the back" from data. `setRoleSlot(design, role, preset, on, { product, fonts, style })` is a Players switch (on: a layer in the style of the role's layer already on the kit; off: removed, the value kept). `placeAtPreset` is a "Where" chip; `setSizeStep` (Small 0.8, Medium 1, Large 1.25 times the preset's font size) and `setOutline` (Thin 3%, Medium 5%, Thick 8% of the font size, at least 1 mm) are the style controls.
+
+**Templates** (4.1, N2; `template.ts`, `samples/templates/<product>/`): a template gives every zone a team colour role or a fixed palette colour, carries shapes with colour roles and groups, and places the role slots at presets with their style (font and colour always; outline and size only if it sets them). `applyTemplate(design, template, { product, fonts, previous })` keeps the team colours, team name, logos and free text with their presets, the sample player, the coach's own slot switches and the style choices the template leaves open; it changes the zone colours, the shapes, the slots' positions and the fonts and colours the template sets. `previous` (the template the design has) lets it tell the coach's switches and outlines from the old template's. An Accent role falls back to Second (or the template's `accentFallback`) when the team has two colours.
+
+The sample templates are **placeholders we drew** from generic sports shapes, generated by `scripts/make-sample-templates.ts`: the jersey has Classic, Hoops, Vertical stripes, Sash and Chevron; the T-shirt Plain, Contrast sides and Chest band. Hoops and the chest band are lines of **equal body height measured on the committed 3D model** (each piece's vertices give their piece millimetres and their height), so their edges meet at every seam, front to side panel to back; the gap between hoops is centred on the chest name's measured height.
+
+**Thumbnails** (N13): `drawTemplateThumbnail(ctx, product, design, template, { fonts, width, height, images })` applies the template to the current design and draws its front flat with `drawPatternTexture` (on the product narrowed to one piece, fitted into the box: `drawPieceView`, `pieceViewProduct`).
+
+**Palette and the colour-code match** (4.3, N14): a palette (`samples/palettes/placeholder-palette.json`, `validatePalette`) lists colours with families, a `common` order for the start card, and `printTested`. The sample palette is 30 placeholder colours in the specification's seven families and says **not print-tested**. `matchColourCode(palette, input)` reads 3 or 6 hex digits (with or without `#`), finds the nearest palette colour by **CIEDE2000** (`colour.ts`, written by hand: sRGB to CIELAB with D65 as Bruce Lindbloom publishes it, and the formula checked against all 34 test pairs of Sharma, Wu and Dalal 2005), and returns the difference, the match level (`very-close` up to 2, `close` up to 6, `different` above, `DEFAULT_MATCH_THRESHOLDS`) and the value to apply: the palette colour, with `requested` beside it. An invalid code is refused with `code: "invalid-code"`.
+
+**Readability** (N15): `itemReadability(product, design, layerId)` gives the WCAG contrast between an item's fill (and its outline) and what is actually under its centre (a shape there, else the zone), and whether it reaches 3:1 (`READABILITY_MIN_CONTRAST`). `readabilityFix` names the team colour with the most contrast on that background for the "Add outline" fix; `outlineColourFor` picks a default outline colour that shows against both the letters and the garment.
 
 ## Deliberately left for later
 
 - Choosing a zone by tapping the model (the lookup, `zoneAtUv`, exists; the raycast and the UI do not).
-- Palette data (the demo's swatches are placeholder data in `samples/palettes/`), snapping a custom HEX to the nearest palette colour and its warning (E3), templates (E3).
-- Font metrics for a maximum length per field (E4); the text layout above (shrink to the box) is where they plug in. Curved or arched text. Text outlines (strokes) and multi-line text.
-- Roster preview (E4): swapping each player's name and number into the text and number layers. The values are plain text in NFC and numbers under the number rule, so the swap is a data change.
+- The print-tested palette and the designer's templates (inputs from the founders and the graphic designer): the placeholders are data and are replaced by files only.
+- Print areas and "keep inside the area" (N6), product capabilities by decoration method (4.9), and the interface (E3a's next step).
+- Font metrics for a maximum length per field (E4); the text layout above (shrink to the box) is where they plug in. Curved or arched text and multi-line text.
+- Roster preview (E4): the swap exists (`designForPlayer`); the player list, previous and next, and the per-font maximum lengths do not.
 - Proof renders (E5): draw with `drawPatternTexture` after `loadDesignFonts`, refuse when `missingImages` is not empty, and never pass `selectedLayerId`.
 - SVG logo uploads (see "Logo uploads"); a malware scan of uploads (M4).
 - On-model resize and rotate handles (today: sliders and buttons), snapping and guides.
-- Migrations between `schemaVersion`s (version 1 is refused with a clear message; no migration).
-- Mirrored or rotated pieces in UV space, per-layer visibility or locking.
+- Migrations other than version 2 to 3 (version 1 is refused with a clear message).
+- Mirrored or rotated pieces in UV space, per-layer visibility or locking (shapes carry `locked`; layers do not).
 - Saving, design versions ("every save creates a new version") and share links: backend concerns. `schemaVersion` is the format version only.
 - Thinning the stand-in jersey's mesh (103,266 triangles; the simulation mesh is far denser than a phone needs) and compressing the T-shirt's (1.06 MB as floats; quantising it as the jersey's would save about a third). Thinning needs a mesh simplifier (meshoptimizer's, for example), which is a new dependency. Performance tuning for mid-range phones. The component renders on demand (`frameloop="demand"`) and caps the pixel ratio at 2, but no phone measurements have been made. If phones struggle, pass `textureSize={1024}` (a quarter of the memory).

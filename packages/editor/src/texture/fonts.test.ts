@@ -13,6 +13,7 @@ function name(value: string, fontId = "oswald-700"): Layer {
   return {
     id: "name",
     kind: "text",
+    role: "text",
     pieceId: "back",
     position: { x: 280, y: 150 },
     size: { width: 400, height: 80 },

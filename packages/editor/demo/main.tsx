@@ -5,14 +5,27 @@ import { createRoot } from "react-dom/client";
 import "@fontsource/oswald/700.css";
 import "@fontsource/graduate/400.css";
 import "@fontsource/noto-sans-arabic/700.css";
-import { colorRefSchema, validateFontCatalog, validateProductDefinition, type FontCatalog, type ProductDefinition } from "../src";
+import {
+  coloursCommonFirst,
+  paletteColourRef,
+  validateFontCatalog,
+  validatePalette,
+  validateProductDefinition,
+  validateTemplate,
+  type FontCatalog,
+  type Palette,
+  type ProductDefinition,
+  type Template,
+} from "../src";
 import { Editor, type Swatch } from "./Editor";
 import { chooseProduct } from "./products";
 
 interface DemoData {
   product: ProductDefinition;
   swatches: Swatch[];
+  palette: Palette;
   fonts: FontCatalog;
+  templates: Template[];
 }
 
 // The stand-in football jersey (see samples/models/stand-in-jersey.LICENSE.txt) by default. The stand-in
@@ -20,9 +33,12 @@ interface DemoData {
 // ?product=placeholder-jersey (and the switch in the header).
 const DEMO_PRODUCT = chooseProduct(window.location.search);
 const PRODUCT_URL = `/products/${DEMO_PRODUCT.id}.json`;
-// Placeholder colours, as data. The real print-tested palette (with HEX snapping) is step E3.
+// Placeholder colours, as data, NOT print-tested: the founders' print-tested palette replaces the file.
 const PALETTE_URL = "/palettes/placeholder-palette.json";
 const FONTS_URL = "/fonts/placeholder-fonts.json";
+
+// The product's sample templates (samples/templates/<product>/index.json lists them); none for the placeholder.
+const TEMPLATES_URL = `/templates/${DEMO_PRODUCT.id}`;
 
 async function fetchJson(url: string): Promise<unknown> {
   const response = await fetch(url);
@@ -30,19 +46,28 @@ async function fetchJson(url: string): Promise<unknown> {
   return response.json() as Promise<unknown>;
 }
 
-/** Reads the placeholder palette file: each colour must be a valid colour reference. */
-function readPalette(json: unknown, product: ProductDefinition): Swatch[] {
-  const data = json as { id?: unknown; colors?: unknown };
-  if (data.id !== product.palette.id) {
-    throw new Error(`the palette file is "${String(data.id)}" but the product uses "${product.palette.id}"`);
+/** Reads the placeholder palette file (validated as a palette). */
+function readPalette(json: unknown, product: ProductDefinition): Palette {
+  const palette = validatePalette(json);
+  if (!palette.ok) throw new Error(palette.errors.map((e) => e.message).join("; "));
+  if (palette.value.id !== product.palette.id) {
+    throw new Error(`the palette file is "${palette.value.id}" but the product uses "${product.palette.id}"`);
   }
-  if (!Array.isArray(data.colors)) throw new Error("the palette file has no colours");
-  return data.colors.map((entry: unknown, i) => {
-    const { name, ...ref } = entry as { name?: unknown };
-    const parsed = colorRefSchema.safeParse(ref);
-    if (!parsed.success) throw new Error(`palette colour ${i} is not a valid colour reference`);
-    return { color: parsed.data, name: typeof name === "string" ? name : parsed.data.id };
-  });
+  return palette.value;
+}
+
+/** The product's templates, each validated against the product and the fonts; none when the product has no index. */
+async function loadTemplates(product: ProductDefinition, fonts: FontCatalog): Promise<Template[]> {
+  const response = await fetch(`${TEMPLATES_URL}/index.json`);
+  if (!response.ok || !(response.headers.get("content-type") ?? "").includes("json")) return [];
+  const index = (await response.json()) as { templates: string[] };
+  return Promise.all(
+    index.templates.map(async (id) => {
+      const checked = validateTemplate(await fetchJson(`${TEMPLATES_URL}/${id}.json`), { product, fonts });
+      if (!checked.ok) throw new Error(`template ${id}: ${checked.errors.map((e) => e.message).join("; ")}`);
+      return checked.value;
+    }),
+  );
 }
 
 function App() {
@@ -52,19 +77,22 @@ function App() {
   // The product definition, the colours and the fonts are data: fetched as JSON and validated, not imported as code.
   useEffect(() => {
     Promise.all([fetchJson(PRODUCT_URL), fetchJson(PALETTE_URL), fetchJson(FONTS_URL)])
-      .then(([productJson, paletteJson, fontsJson]) => {
+      .then(async ([productJson, paletteJson, fontsJson]) => {
         const product = validateProductDefinition(productJson);
         if (!product.ok) throw new Error(product.errors.map((e) => e.message).join("; "));
         const fonts = validateFontCatalog(fontsJson);
         if (!fonts.ok) throw new Error(fonts.errors.map((e) => e.message).join("; "));
-        setData({ product: product.value, swatches: readPalette(paletteJson, product.value), fonts: fonts.value });
+        const palette = readPalette(paletteJson, product.value);
+        const swatches = coloursCommonFirst(palette).map((c) => ({ color: paletteColourRef(c), name: c.name }));
+        const templates = await loadTemplates(product.value, fonts.value);
+        setData({ product: product.value, swatches, palette, fonts: fonts.value, templates });
       })
       .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)));
   }, []);
 
   if (error) return <p role="alert">Could not load the demo data: {error}</p>;
   if (!data) return <p>Loading product...</p>;
-  return <Editor product={data.product} swatches={data.swatches} fonts={data.fonts} demoProduct={DEMO_PRODUCT} />;
+  return <Editor product={data.product} swatches={data.swatches} palette={data.palette} fonts={data.fonts} templates={data.templates} demoProduct={DEMO_PRODUCT} />;
 }
 
 const container = document.getElementById("root");
