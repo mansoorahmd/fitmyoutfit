@@ -8,6 +8,7 @@ import { sdk } from "@lib/config"
 import {
   AddressErrors,
   AddressFormValues,
+  shouldSaveToAccount,
   toCartAddress,
   toCartUpdate,
   validateAddressForm,
@@ -181,20 +182,23 @@ export async function saveAddressStep(values: AddressFormValues): Promise<SaveAd
         cache: "no-store",
       })
     )
-    const first = account.ok && (account.body.customer.addresses?.length ?? 0) === 0
-    const saved = await call(async () =>
-      sdk.store.customer.createAddress(
-        {
-          ...toCartAddress(values.shipping, values.phone),
-          ...(first ? { is_default_shipping: true, is_default_billing: true } : {}),
-        },
-        {},
-        await headers()
+    const address = toCartAddress(values.shipping, values.phone)
+    if (shouldSaveToAccount(account.ok ? account.body.customer.addresses ?? [] : null, address)) {
+      const first = account.ok && (account.body.customer.addresses?.length ?? 0) === 0
+      const saved = await call(async () =>
+        sdk.store.customer.createAddress(
+          {
+            ...address,
+            ...(first ? { is_default_shipping: true, is_default_billing: true } : {}),
+          },
+          {},
+          await headers()
+        )
       )
-    )
-    if (saved.ok) {
-      const tag = await getCacheTag("customers")
-      if (tag) revalidateTag(tag)
+      if (saved.ok) {
+        const tag = await getCacheTag("customers")
+        if (tag) revalidateTag(tag)
+      }
     }
   }
 

@@ -128,6 +128,24 @@ describe("checkoutView", () => {
     expect(view.address.initial.email).toBe("member@example.com")
   })
 
+  it("after Change, the saved address the cart holds is selected, not 'Use a new address' (QA S1-4c, S1)", () => {
+    const twice = { country_code: "pk", first_name: "Ali", last_name: "", address_1: "99 Twice Road", city: "Lahore", province: "pk-pb", postal_code: "", phone: "+923001234567" }
+    const customer = {
+      email: "member@example.com",
+      addresses: [
+        { id: "a2", country_code: "pk", first_name: "Ali", address_1: "2 Canal Road", city: "Lahore", province: "pk-pb", phone: "0300 2222222", is_default_shipping: true },
+        { id: "a9", ...twice, is_default_shipping: false },
+      ],
+    } as any
+    const view = pk({ cart: checkoutCartPk({ shipping_address: twice, billing_address: twice }), customer })
+    expect(view.address.savedSelected).toBe("a9")
+    expect(view.address.initial.shipping.address_1).toBe("99 Twice Road")
+    // a cart address the account doesn't hold: "Use a new address", as before
+    const other = pk({ cart: checkoutCartPk({ shipping_address: { ...twice, address_1: "7 Other Road" } }), customer })
+    expect(other.address.savedSelected).toBeNull()
+    expect(other.address.initial.shipping.address_1).toBe("7 Other Road")
+  })
+
   it("lists the lines with size, quantity and amount", () => {
     expect(gb().lines.map((l) => ({ ...l, total: plain(l.total) }))).toEqual([
       { id: "cali_gb", title: "Jersey", size: "M", quantity: 10, total: "GBP 220.00", thumbnail: null },

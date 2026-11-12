@@ -243,6 +243,28 @@ describe("saveAddressStep (05, 6.4, 'What happens on save')", () => {
     expect(second.is_default_shipping).toBeUndefined()
   })
 
+  it("Continue, Change, Continue: the address is saved to the account once (QA S1-4c, S1)", async () => {
+    await saveAddressStep(values({ saveToAccount: true }))
+    const created = state.calls.filter((c) => c.name === "createAddress")
+    expect(created).toHaveLength(1)
+    // the account now holds it, as the store keeps it
+    state.addresses = [{ id: "caddr_1", ...(created[0].args[0] as object) }]
+    state.calls = []
+    // the same address again, typed with other spacing and case
+    await saveAddressStep(
+      values({
+        saveToAccount: true,
+        phone: "+92 300 1234567",
+        shipping: { ...values().shipping, address_1: "  house 12,  street 4 ", city: "LAHORE" },
+      })
+    )
+    expect(names()).not.toContain("createAddress")
+    expect(names()).toContain("update")
+    // another address is still saved
+    await saveAddressStep(values({ saveToAccount: true, shipping: { ...values().shipping, address_1: "99 Twice Road" } }))
+    expect(names()).toContain("createAddress")
+  })
+
   it("retryDelivery adds the option again", async () => {
     expect(await retryDelivery()).toEqual({ ok: true })
     expect(names()).toContain("addShippingMethod")

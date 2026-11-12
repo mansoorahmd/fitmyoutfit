@@ -447,6 +447,34 @@ export const addressLines = (
     .filter(Boolean)
 }
 
+/**
+ * The same address, as the store keeps it (QA S1-4c, S1): every field
+ * compared in its stored form (trimmed, the postcode and the phone
+ * normalized, the province as its code), letters case-blind. Used so that
+ * saving an address to the account twice keeps one, and so that "Change"
+ * selects the saved address the cart holds.
+ */
+export const sameAddress = (a: AddressLike | null | undefined, b: AddressLike | null | undefined): boolean => {
+  if (!a || !b || !a.country_code || !b.country_code) return false
+  const stored = (x: AddressLike) => {
+    const country = (x.country_code ?? "").toLowerCase()
+    const fields = toCartAddress(addressFields(x, country), x.phone ?? "")
+    return Object.values(fields).map((v) => v.toLowerCase().replace(/\s+/g, " "))
+  }
+  const left = stored(a)
+  const right = stored(b)
+  return left.every((value, i) => value === right[i])
+}
+
+/**
+ * "Save this address to my account" on Continue: only when the account
+ * doesn't hold the same address already, so passing the step again (Continue,
+ * Change, Continue) keeps one copy. `saved` null: the account couldn't be
+ * read, and the address is saved (a failure here never stops the order).
+ */
+export const shouldSaveToAccount = (saved: AddressLike[] | null, address: AddressLike): boolean =>
+  !saved || !saved.some((a) => sameAddress(a, address))
+
 /** A customer's saved addresses in this region, the default one first. */
 export const savedAddressesInRegion = <
   T extends AddressLike & { id: string; is_default_shipping?: boolean | null }

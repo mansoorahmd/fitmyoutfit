@@ -12,6 +12,7 @@ import {
   addressLines,
   addressStepDone,
   initialAddressValues,
+  sameAddress,
   savedAddressesInRegion,
   withNewAddress,
   withSavedAddress,
@@ -188,15 +189,23 @@ export const checkoutView = ({
       phone: a.phone,
     },
   }))
-  // A cart that already has an address keeps it in the form; otherwise
+  // A cart that already has an address keeps it in the form, with the
+  // saved address it is selected when the account holds the same one (QA
+  // S1-4c, S1: after "Change" an address just saved to the account is
+  // chosen, not "Use a new address" with the box still ticked); otherwise
   // the default saved address is chosen first (05, 6.4).
-  const savedSelected = !cart.shipping_address?.address_1 && saved[0] ? saved[0].id : null
+  const cartHasAddress = !!cart.shipping_address?.address_1
+  const savedSelected = cartHasAddress
+    ? saved.find((a) => sameAddress(a, cart.shipping_address))?.id ?? null
+    : saved[0]?.id ?? null
   const accountName = customer
     ? { first_name: customer.first_name ?? "", last_name: customer.last_name ?? "" }
     : null
   // A signed-in customer with nothing saved starts from the account's
   // name, as "Use a new address" does (QA S1-4, D14).
-  const initial = savedSelected
+  const initial = cartHasAddress
+    ? fromCart
+    : savedSelected
     ? withSavedAddress(fromCart, saved[0])
     : accountName && !cart.shipping_address?.address_1 && !fromCart.shipping.first_name
       ? withNewAddress(fromCart, accountName)

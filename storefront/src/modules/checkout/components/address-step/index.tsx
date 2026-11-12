@@ -78,9 +78,12 @@ const AddressStep = ({
 }) => {
   const { address } = view
   const countryCodes = address.countries.map((c) => c.code)
-  const [values, setValues] = useState<AddressFormValues>(
-    () => addressDraft(view.cartId, countryCodes) ?? address.initial
-  )
+  const [values, setValues] = useState<AddressFormValues>(() => {
+    const start = addressDraft(view.cartId, countryCodes) ?? address.initial
+    // A saved address is chosen (after "Change", the one just saved to the
+    // account; QA S1-4c, S1): nothing is waiting to be saved.
+    return address.savedSelected ? { ...start, saveToAccount: false } : start
+  })
   const [savedChoice, setSavedChoice] = useState<string>(address.savedSelected ?? NEW)
   const [errors, setErrors] = useState<AddressErrors>({})
   const [listShown, setListShown] = useState(false)
