@@ -50,6 +50,14 @@ Choices taken while building the engine, kept because later work depends on them
 - **A colour typed as a code** is stored as the palette colour with the typed code beside it (`requested`); the typed code is never printed.
 - **Sample templates are generated** by `npm run generate:templates -w packages/editor` from the stand-ins' source records, so hoops are drawn at equal body heights and meet at the seams.
 
+## Added 12 Nov, after the interface was built (task E3a-2)
+
+- **Design cards are a software render of the real model,** made once per product and coloured per design. No WebGL is needed, so the cards also work in the flat view. They cost more than the specification's budget and are measured on a real phone before more is spent on them.
+- **Readability rule:** letters must stand out on every colour under the item's box; an outline rescues the item only when the letters stand out on none of those colours and the outline on all of them.
+- **The package ships its own stylesheet** (`EDITOR_CSS`, injected by the shell) and takes its colours and fonts from CSS custom properties. The interface fonts are provided by the host.
+- **Saving on the device** is an optional helper (IndexedDB for the design and its uploaded images); the host decides to use it. "Done" is a host callback until the Done panel exists (E3b).
+- **Every sentence of the interface is in one module** (`packages/editor/src/ui/content.ts`), grouped as in section 14 of the specification.
+
 ## Alternatives rejected
 
 - **One large E3:** too big to review in one step, and the founder would wait longer to see anything.
