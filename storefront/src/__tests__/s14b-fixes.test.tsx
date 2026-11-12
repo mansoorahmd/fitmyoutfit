@@ -262,6 +262,18 @@ describe("D14: saved addresses in the checkout form", () => {
     expect(screen.getByLabelText("City")).toHaveValue("")
   })
 
+  it("an account with nothing saved starts from the account's name too", () => {
+    const view = checkoutView({
+      cart: checkoutCartPk({ id: "cart_d14b", email: null, shipping_address: null, billing_address: null, shipping_methods: [] }),
+      rules: parseCheckoutRules(rulesPkAvailable),
+      shippingOptions: [optionPk],
+      providerIds: providersPk,
+      customer: { ...customer, first_name: "Bilal", last_name: "Ahmed", addresses: [] },
+      countryCode: "pk",
+    })
+    expect(view.address.initial.shipping).toMatchObject({ first_name: "Bilal", last_name: "Ahmed", address_1: "" })
+  })
+
   it("fields have their maximum lengths", () => {
     render(<CheckoutPage view={signedIn()} />)
     fireEvent.click(screen.getByLabelText("Use a new address"))

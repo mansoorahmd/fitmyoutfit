@@ -13,6 +13,7 @@ import {
   addressStepDone,
   initialAddressValues,
   savedAddressesInRegion,
+  withNewAddress,
   withSavedAddress,
 } from "./checkout-address"
 import { PaymentChoiceView, paymentChoice, sessionProviderId } from "./checkout-payment"
@@ -190,7 +191,16 @@ export const checkoutView = ({
   // A cart that already has an address keeps it in the form; otherwise
   // the default saved address is chosen first (05, 6.4).
   const savedSelected = !cart.shipping_address?.address_1 && saved[0] ? saved[0].id : null
-  const initial = savedSelected ? withSavedAddress(fromCart, saved[0]) : fromCart
+  const accountName = customer
+    ? { first_name: customer.first_name ?? "", last_name: customer.last_name ?? "" }
+    : null
+  // A signed-in customer with nothing saved starts from the account's
+  // name, as "Use a new address" does (QA S1-4, D14).
+  const initial = savedSelected
+    ? withSavedAddress(fromCart, saved[0])
+    : accountName && !cart.shipping_address?.address_1 && !fromCart.shipping.first_name
+      ? withNewAddress(fromCart, accountName)
+      : fromCart
   const pieces = pieceCount(cart.items)
 
   return {
@@ -216,9 +226,7 @@ export const checkoutView = ({
       saved: savedViews,
       savedSelected,
       signedIn: !!customer,
-      accountName: customer
-        ? { first_name: customer.first_name ?? "", last_name: customer.last_name ?? "" }
-        : null,
+      accountName,
       done,
       summary: done
         ? {
