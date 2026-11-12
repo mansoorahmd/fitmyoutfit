@@ -183,8 +183,8 @@ describe("readSlipReference", () => {
     expect(readSlipReference("TCS-778812")).toEqual({ ok: true, value: "TCS-778812" })
     expect(readSlipReference("  Leopards   12/34  ")).toEqual({ ok: true, value: "Leopards 12/34" })
     // A no-break space is a visible space: it becomes an ordinary one.
-    expect(readSlipReference("TCS 12")).toEqual({ ok: true, value: "TCS 12" })
-    expect(readSlipReference("TCS　 12")).toEqual({ ok: true, value: "TCS 12" })
+    expect(readSlipReference("TCS\u00A012")).toEqual({ ok: true, value: "TCS 12" })
+    expect(readSlipReference("TCS\u3000\u200912")).toEqual({ ok: true, value: "TCS 12" })
     expect(readSlipReference("<script>alert(1)</script>")).toEqual({ ok: true, value: "<script>alert(1)</script>" })
   })
 
@@ -222,7 +222,7 @@ describe("readSlipReference", () => {
   })
 
   it("refuses a missing or blank reference", () => {
-    for (const raw of [undefined, null, "", "   ", " ", 42, {}, ["A1"]]) {
+    for (const raw of [undefined, null, "", "   ", "\u00A0", 42, {}, ["A1"]]) {
       expect(readSlipReference(raw)).toEqual({
         ok: false,
         error: "Enter the slip reference from the courier's slip.",
@@ -247,15 +247,15 @@ describe("readSlipReference", () => {
       "AB\tCD", // tab
       "TCS 12\n", // a trailing line break is not trimmed away either
       "AB\u0085CD", // next line (C1)
-      "AB CD", // line separator
-      "AB CD", // paragraph separator
-      "A​B", // zero-width space
-      "‮A1", // right-to-left override
-      "A‎B", // left-to-right mark
-      "A⁦B⁩", // isolates
-      "﻿A1", // byte order mark
-      "A­B", // soft hyphen
-      "رسید‌42", // zero-width non-joiner
+      "AB\u2028CD", // line separator
+      "AB\u2029CD", // paragraph separator
+      "A\u200BB", // zero-width space
+      "\u202EA1", // right-to-left override
+      "A\u200EB", // left-to-right mark
+      "A\u2066B\u2069", // isolates
+      "\uFEFFA1", // byte order mark
+      "A\u00ADB", // soft hyphen
+      "رسید\u200C42", // zero-width non-joiner
       "A\ud800B", // lone surrogate
       "TCS\u{E0041}1", // tag character
     ]) {
@@ -266,24 +266,24 @@ describe("readSlipReference", () => {
   // QA's eighth review, N5: characters that render as nothing or as blank space.
   it("refuses Hangul fillers, the Braille blank, variation selectors and other default-ignorable characters", () => {
     for (const raw of [
-      "ㅤㅤ", // Hangul filler (a letter, Lo, that shows as blank)
-      "TCSㅤ1", // ...inside a reference
-      "ᅟ1", // Hangul choseong filler
-      "AᅠB", // Hangul jungseong filler
-      "ﾠTCS1", // halfwidth Hangul filler
-      "⠀", // Braille pattern blank
-      "TCS⠀1", // ...inside a reference
-      "TCS️1", // variation selector 16
-      "TCS︀1", // variation selector 1
+      "\u3164\u3164", // Hangul filler (a letter, Lo, that shows as blank)
+      "TCS\u31641", // ...inside a reference
+      "\u115F1", // Hangul choseong filler
+      "A\u1160B", // Hangul jungseong filler
+      "\uFFA0TCS1", // halfwidth Hangul filler
+      "\u2800", // Braille pattern blank
+      "TCS\u28001", // ...inside a reference
+      "TCS\uFE0F1", // variation selector 16
+      "TCS\uFE001", // variation selector 1
       "TCS\u{E0100}1", // variation selector 17
       "TCS\u{E01EF}1", // variation selector 256
-      "A᠋B", // Mongolian free variation selector
-      "A͏B", // combining grapheme joiner (a mark, but default-ignorable)
-      "឴A1", // Khmer inherent vowel
-      "A⁠B", // word joiner
-      "A⁤B", // invisible plus
+      "A\u180BB", // Mongolian free variation selector
+      "A\u034FB", // combining grapheme joiner (a mark, but default-ignorable)
+      "\u17B4A1", // Khmer inherent vowel
+      "A\u2060B", // word joiner
+      "A\u2064B", // invisible plus
       "A\u{1D173}B", // musical symbol begin beam
-      "AB", // private use
+      "A\uE000B", // private use
       "A\u{10FFFF}B", // noncharacter (unassigned)
       "A͸B", // unassigned
     ]) {
@@ -340,7 +340,7 @@ describe("decideCashCollection", () => {
 
   it("refuses an invalid reference", () => {
     expect(decideCashCollection(open, "")).toMatchObject({ ok: false, reason: "invalid_reference" })
-    expect(decideCashCollection(open, "ㅤ")).toMatchObject({ ok: false, reason: "invalid_reference" })
+    expect(decideCashCollection(open, "\u3164")).toMatchObject({ ok: false, reason: "invalid_reference" })
   })
 
   it("refuses when recording is not allowed, whatever the reference", () => {

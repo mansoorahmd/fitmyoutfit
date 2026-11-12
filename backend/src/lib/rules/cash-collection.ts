@@ -197,7 +197,7 @@ export type SlipReferenceResult =
  * Visible spaces (Zs) are allowed and tidied; combining marks are allowed after a letter, a digit
  * or another mark (Arabic and Urdu text uses them), and refused anywhere else.
  */
-const FORBIDDEN_RE = /[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}\p{Default_Ignorable_Code_Point}⠀\p{Co}\p{Cn}]/u
+const FORBIDDEN_RE = /[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}\p{Default_Ignorable_Code_Point}\u2800\p{Co}\p{Cn}]/u
 /** A combining mark that does not follow a letter, a digit or another mark. */
 const LOOSE_MARK_RE = /(?:^|[^\p{L}\p{N}\p{M}])\p{M}/u
 const LETTER_OR_DIGIT_RE = /[\p{L}\p{N}]/u

@@ -1417,16 +1417,16 @@ medusaIntegrationTestRunner({
           const orderId = await placeCashOnDeliveryOrder()
           for (const slip of [
             "AB\nCD",
-            "‮A1",
-            "A​B",
+            "\u202EA1",
+            "A\u200BB",
             "TCS\t1",
-            "ㅤㅤ",
-            "TCSㅤ1",
-            "⠀",
-            "TCS️1",
+            "\u3164\u3164",
+            "TCS\u31641",
+            "\u2800",
+            "TCS\uFE0F1",
             "TCS\u{E0100}1",
-            "AᅠB",
-            "ﾠA1",
+            "A\u1160B",
+            "\uFFA0A1",
             "A".repeat(65),
           ]) {
             const response = await record(orderId, slip)
