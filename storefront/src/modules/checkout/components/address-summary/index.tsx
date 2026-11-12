@@ -23,7 +23,7 @@ const AddressSummary = ({
 }) => {
   const row = delivery?.delivery
   return (
-    <div className={clx("flex flex-col gap-3 type-body text-brand-ink", className)} data-testid="address-summary">
+    <div className={clx("flex min-w-0 flex-col gap-3 type-body text-brand-ink wrap-anywhere", className)} data-testid="address-summary">
       <div>
         <p className="type-small font-semibold text-brand-ink-muted">{words.check.contact}</p>
         <p dir="ltr" className="text-start break-all">{summary.email}</p>

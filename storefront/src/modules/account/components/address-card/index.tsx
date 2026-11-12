@@ -35,7 +35,7 @@ const AddressCard = ({
     data-testid="address-card"
     data-default={view.isDefault ? "true" : undefined}
   >
-    <div className="flex flex-col gap-0.5 type-body text-brand-ink">
+    <div className="flex min-w-0 flex-col gap-0.5 type-body text-brand-ink wrap-anywhere">
       {view.name && (
         <p className="font-semibold" data-testid="address-card-name">
           <bdi>{view.name}</bdi>

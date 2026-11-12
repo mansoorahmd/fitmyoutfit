@@ -149,7 +149,7 @@ const ProfileRows = ({
                   {!open && (
                     <p
                       dir={row.direction}
-                      className={`text-start type-body break-words ${row.empty ? "text-brand-ink-muted" : "text-brand-ink"}`}
+                      className={`text-start type-body wrap-anywhere ${row.empty ? "text-brand-ink-muted" : "text-brand-ink"}`}
                       data-testid={`profile-value-${row.key}`}
                     >
                       {row.value}
