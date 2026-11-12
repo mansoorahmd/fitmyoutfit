@@ -65,6 +65,7 @@ vi.mock("next/image", () => ({
 
 import { parseCheckoutRules } from "@lib/util/checkout-rules"
 import { checkoutView } from "@lib/util/checkout-view"
+import { LOOK_EVERY_MS, LOOKS } from "@lib/util/order-status"
 import CheckoutPage from "@modules/checkout/templates/checkout-page"
 import { checkoutLayout } from "@modules/checkout/templates/checkout-page/layout"
 
@@ -537,7 +538,7 @@ describe("Place order (05, 6.6 to 6.8)", () => {
     expect(screen.getByTestId("place-order")).toHaveTextContent("Try again")
   })
 
-  it("unknown (409 twice, or no answer): 'Check my order' instead of Place order; it finds the cart not placed", async () => {
+  it("unknown (409 twice, or no answer): 'Check my order' instead of Place order; an open cart is 'not yet', never 'not placed' (QA S1-4c, B1)", async () => {
     actions.answers.placeOrder = () => ({ kind: "unknown" })
     ready()
     await act(async () => {
@@ -552,8 +553,153 @@ describe("Place order (05, 6.6 to 6.8)", () => {
     const check = status.requests.at(-1)!
     expect(check.url).toBe("/pk/checkout/order-status")
     expect(check.body).toEqual({ cartId: pkView().cartId })
-    expect(screen.getByTestId("place-order-alert")).toHaveTextContent("We couldn't place your order")
-    expect(screen.getByTestId("place-order")).toBeInTheDocument()
+    const alert = screen.getByTestId("place-order-alert")
+    expect(alert).toHaveTextContent("We can't see your order yet")
+    expect(alert).toHaveTextContent("This page checks again by itself")
+    expect(alert).not.toHaveTextContent("not placed")
+    expect(alert).not.toHaveTextContent("We couldn't place your order")
+    // no second order from this page while the first may still be running
+    expect(screen.queryByTestId("place-order")).toBeNull()
+    expect(screen.getByTestId("check-my-order")).toBeInTheDocument()
+  })
+
+  describe("after an unknown outcome the page looks again by itself (QA S1-4c, B1)", () => {
+    const flush = async (ms: number) => {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(ms)
+      })
+    }
+
+    it("a completion that takes 40 s: the cart is open for a while, then the page opens the order by itself, with one completion only", async () => {
+      vi.useFakeTimers()
+      try {
+        actions.answers.placeOrder = () => ({ kind: "unknown" })
+        // the first look and the next seven find the cart open; the ninth finds the order
+        status.answers = [...Array(8).fill({ kind: "open" }), { kind: "order", url: "/pk/order/order_40/confirmed" }]
+        ready()
+        await act(async () => {
+          fireEvent.click(screen.getByTestId("place-order"))
+        })
+        await flush(LOOK_EVERY_MS * 3)
+        // still unknown: never "not placed", no Place order
+        expect(screen.getByTestId("place-order-alert")).toHaveTextContent("We lost the connection")
+        expect(document.body).not.toHaveTextContent("not placed")
+        expect(screen.queryByTestId("place-order")).toBeNull()
+        await flush(LOOK_EVERY_MS * 5)
+        expect(nav.replaced).toEqual(["/pk/order/order_40/confirmed"])
+        expect(status.requests).toHaveLength(9)
+        expect(callsOf("placeOrder")).toHaveLength(1)
+        // no look after the order opened
+        await flush(LOOK_EVERY_MS * 4)
+        expect(status.requests).toHaveLength(9)
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it("'Check my order' while the backend is still completing says 'not yet', and the looks still open the order", async () => {
+      vi.useFakeTimers()
+      try {
+        actions.answers.placeOrder = () => ({ kind: "unknown" })
+        status.answers = [{ kind: "open" }, { kind: "open" }, { kind: "open" }, { kind: "order", url: "/pk/order/order_2/confirmed" }]
+        ready()
+        await act(async () => {
+          fireEvent.click(screen.getByTestId("place-order"))
+        })
+        await act(async () => {
+          fireEvent.click(screen.getByTestId("check-my-order"))
+        })
+        expect(screen.getByTestId("place-order-alert")).toHaveTextContent("We can't see your order yet")
+        expect(document.body).not.toHaveTextContent("not placed")
+        await flush(LOOK_EVERY_MS * 2)
+        expect(nav.replaced).toEqual(["/pk/order/order_2/confirmed"])
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it("the looks run out with the cart still open: only what is true, and Try again (which cannot make a second order)", async () => {
+      vi.useFakeTimers()
+      try {
+        actions.answers.placeOrder = () => ({ kind: "unknown" })
+        ready()
+        await act(async () => {
+          fireEvent.click(screen.getByTestId("place-order"))
+        })
+        await flush(LOOK_EVERY_MS * (LOOKS + 2))
+        expect(status.requests).toHaveLength(LOOKS)
+        const alert = screen.getByTestId("place-order-alert")
+        expect(alert).toHaveTextContent("We still can't see an order")
+        expect(alert).toHaveTextContent("if your first try went through, you get that same order, not a second one")
+        expect(document.body).not.toHaveTextContent("not placed")
+        expect(screen.getByTestId("place-order")).toHaveTextContent("Try again")
+        // no more looks after they ran out
+        await flush(LOOK_EVERY_MS * 3)
+        expect(status.requests).toHaveLength(LOOKS)
+        await act(async () => {
+          fireEvent.click(screen.getByTestId("place-order"))
+        })
+        expect(callsOf("placeOrder")).toHaveLength(2)
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it("a 5xx: the same looks; a look with no answer keeps looking", async () => {
+      vi.useFakeTimers()
+      try {
+        actions.answers.placeOrder = () => ({ kind: "server" })
+        status.answers = ["hang", { kind: "open" }, { kind: "order", url: "/pk/order/order_5/confirmed" }]
+        ready()
+        await act(async () => {
+          fireEvent.click(screen.getByTestId("place-order"))
+        })
+        await flush(15_000 + LOOK_EVERY_MS * 2)
+        expect(nav.replaced).toEqual(["/pk/order/order_5/confirmed"])
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it("no looks while the tab is hidden; they go on when it is visible again", async () => {
+      vi.useFakeTimers()
+      const visibility = vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible")
+      try {
+        actions.answers.placeOrder = () => ({ kind: "unknown" })
+        ready()
+        await act(async () => {
+          fireEvent.click(screen.getByTestId("place-order"))
+        })
+        expect(status.requests).toHaveLength(1)
+        visibility.mockReturnValue("hidden")
+        document.dispatchEvent(new Event("visibilitychange"))
+        await flush(LOOK_EVERY_MS * 10)
+        expect(status.requests).toHaveLength(1)
+        status.answers = [{ kind: "order", url: "/pk/order/order_v/confirmed" }]
+        visibility.mockReturnValue("visible")
+        await act(async () => {
+          document.dispatchEvent(new Event("visibilitychange"))
+        })
+        await flush(0)
+        expect(status.requests).toHaveLength(2)
+        expect(nav.replaced).toEqual(["/pk/order/order_v/confirmed"])
+      } finally {
+        visibility.mockRestore()
+        vi.useRealTimers()
+      }
+    })
+
+    it("a definite refusal (the rules' 400) still says the order was not placed, and no looks start", async () => {
+      actions.answers.placeOrder = () => ({ kind: "refused" })
+      ready()
+      await act(async () => {
+        fireEvent.click(screen.getByTestId("place-order"))
+      })
+      expect(screen.getByTestId("place-order-alert")).toHaveTextContent(
+        "Your order was not placed. Try again, or go back to your cart and check it."
+      )
+      expect(status.requests).toHaveLength(0)
+    })
   })
 
   it("the client gives up on 'Place order' at 30 s exactly, with the lost-connection alert (6.8 c)", async () => {

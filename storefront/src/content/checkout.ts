@@ -357,6 +357,14 @@ export const checkoutContent = {
     placedTitle: "Your order is placed",
     // DRAFT WORDING. No id: its text.
     placedText: "We couldn't open it just now. Check again in a moment.",
+    // DRAFT WORDING. No id (P): after a lost connection the cart is not an order yet, but the first try may still be running (QA S1-4c, B1). Never "not placed" here.
+    pendingTitle: "We can't see your order yet",
+    // DRAFT WORDING. No id (P): its text, while the page looks again by itself.
+    pendingText: "It can take a minute. This page checks again by itself and opens your order as soon as it's there. Don't order again for now.",
+    // DRAFT WORDING. No id (P): the page has looked for about a minute and a half and still sees no order (QA S1-4c, B1).
+    notSeenTitle: "We still can't see an order",
+    // DRAFT WORDING. No id (P): its text. Completing the same cart again returns the same order, never a second one (contract 8.1).
+    notSeenText: "We've checked for about a minute and a half and there's no order for this cart yet. Try again: if your first try went through, you get that same order, not a second one.",
     // DRAFT WORDING. No id (P): an HTTP 5xx at "Place order" (QA S1-4, D13). The order may or may not exist.
     serverText: "We don't know yet if your order went through. Check before you try again, so you don't order twice.",
     // DRAFT WORDING. W-E14

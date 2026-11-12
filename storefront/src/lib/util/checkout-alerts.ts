@@ -15,6 +15,13 @@ export type PlaceOrderAlertState =
   | { kind: "unknown"; rechecked?: boolean }
   /** "Check my order" found the order, but couldn't open it just now. */
   | { kind: "placed" }
+  /**
+   * After an unknown outcome the cart is not an order yet, and the first
+   * completion may still be running (QA S1-4c, B1): the page keeps looking.
+   */
+  | { kind: "pending" }
+  /** The looks ran out and the cart is still not an order: "Try again" is safe (contract 8.1). */
+  | { kind: "not_seen" }
   | { kind: "cart_lost" }
   /** HTTP 5xx: the order may or may not exist (QA S1-4, D13). */
   | { kind: "server" }
@@ -111,6 +118,23 @@ export const placeOrderAlert = (state: PlaceOrderAlertState): PlaceOrderAlert =>
         text: errors.placedText,
         action: "check_order",
         hidePlaceOrder: true,
+      }
+    case "pending":
+      // never "not placed": the first try may still become the order
+      return {
+        ...base,
+        title: errors.pendingTitle,
+        text: errors.pendingText,
+        action: "check_order",
+        hidePlaceOrder: true,
+      }
+    case "not_seen":
+      // only what is true: no order to see; trying again cannot make a second one
+      return {
+        ...base,
+        title: errors.notSeenTitle,
+        text: errors.notSeenText,
+        retryLabel: true,
       }
     case "cart_lost":
       return {

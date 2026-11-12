@@ -20,7 +20,11 @@ export type OrderStatus =
   | { kind: "order"; url: string }
   /** The cart is an order, but the order couldn't be read just now. */
   | { kind: "placed" }
-  /** The cart is not an order: nothing was placed. */
+  /**
+   * The cart is not an order yet. After a definite answer that means
+   * nothing was placed; after an unknown outcome the first completion may
+   * still be running, so it means only "no order to see yet" (QA S1-4c, B1).
+   */
   | { kind: "open" }
   /** The backend doesn't know the cart. */
   | { kind: "cart_lost" }
@@ -32,6 +36,17 @@ export const CHECK_ORDER_TIMEOUT_MS = 15_000
 
 /** The route's own limit for its calls to the backend, so it answers before the browser gives up. */
 export const ORDER_STATUS_BACKEND_MS = 12_000
+
+/**
+ * After "Place order" ended without a definite answer (no answer, a time
+ * limit, a 5xx), the first completion may still be running on the backend
+ * (QA S1-4c, B1: one took 40 s). The checkout then looks again by itself:
+ * once at once, then every LOOK_EVERY_MS, LOOKS times in all (about a minute
+ * and a half), only while the tab is visible, and opens the order the
+ * moment it exists. An "open" cart in that time is never "not placed".
+ */
+export const LOOK_EVERY_MS = 5_000
+export const LOOKS = 19
 
 /** The order confirmation, under the order's country (the URL's when the order has none). */
 export const confirmationPath = (
