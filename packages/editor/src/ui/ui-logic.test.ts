@@ -43,7 +43,7 @@ describe("wording (section 14)", () => {
     const walk = (value: unknown, path: string): void => {
       if (typeof value === "string") {
         expect(value.trim().length, path).toBeGreaterThan(0);
-        for (const m of value.matchAll(/\{(\w+)\}/g)) expect(["zone", "colour", "code", "role", "file", "size", "percent", "change", "font", "product", "side", "summary", "zones", "item", "where", "value", "name", "number", "width", "height", "degrees", "count"], path).toContain(m[1]);
+        for (const m of value.matchAll(/\{(\w+)\}/g)) expect(["zone", "colour", "code", "role", "file", "size", "percent", "change", "font", "product", "side", "summary", "zones", "item", "where", "value", "name", "number", "width", "height", "degrees", "count", "cm", "reason"], path).toContain(m[1]);
       } else if (value && typeof value === "object") for (const [k, v] of Object.entries(value)) walk(v, `${path}.${k}`);
     };
     walk(W, "wording");
@@ -262,7 +262,8 @@ describe("the start card's picks and where new items go", () => {
     const presets = jersey.placements.filter((p) => p.roles.includes("crest"));
     expect(nextFreePreset({ layers: [] }, presets, LOGO_ORDER)!.id).toBe("left-chest");
     const withCrest = { layers: [{ preset: "left-chest" }, { preset: "chest-centre" }] } as never;
-    expect(nextFreePreset(withCrest, presets, LOGO_ORDER)!.id).toBe("right-chest");
+    // 4.6: a third logo goes on the upper back.
+    expect(nextFreePreset(withCrest, presets, LOGO_ORDER)!.id).toBe("upper-back");
     expect(nextFreePreset({ layers: [] }, jersey.placements.filter((p) => p.roles.includes("text")), TEXT_ORDER)!.id).toBe("lower-back");
     expect(nextFreePreset({ layers: [] }, [], LOGO_ORDER)).toBeNull();
   });

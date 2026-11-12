@@ -179,6 +179,14 @@ export const EDITOR_WORDING = {
     rights: "Only upload logos you have the right to use.", // W-ED99 P
     logoName: "Logo: {file}", // 06-editor.md 4.8 ("Logo: crest.png")
     yourLogo: "Your logo", // NEW: a logo whose file name is not known (restored from the device)
+    size: "Size", // W-ED64
+    sizeSteps: { small: "Small", medium: "Medium", large: "Large" }, // W-ED66 (the stepper says the nearest)
+    smaller: "Smaller", // NEW: the stepper's − (accessible name)
+    bigger: "Bigger", // NEW: the stepper's +
+    sharpSize: "{cm} cm wide", // NEW: the {size} of W-ED96 ("Sharp up to 9 cm wide.")
+    replaceName: "Replace {file}", // NEW: accessible names of a logo's buttons
+    removeName: "Remove {file}", // NEW
+    selectName: "Select {file} on the kit", // NEW
   },
   /** Selection and the list (`selection`). Mostly E3b. */
   selection: {
@@ -271,6 +279,17 @@ export const EDITOR_WORDING = {
     saveAndGoBack: "Save and go back", // W-ED163
     teamOrdersSoon: "Team orders open soon. Your design is saved on this device.", // W-ED164 P (copy from founders)
     keepDesigning: "Keep designing", // W-ED166
+    close: "Close", // NEW: the Done panel's close button (accessible name)
+    checksMany: "{count} things to check", // W-ED161
+    checksOne: "1 thing to check", // W-ED161
+    checksNone: "Nothing to check. Your kit looks ready.", // NEW
+    show: "Show", // W-ED161
+    checkLine: "{item}: {reason}", // NEW: one line of the summary ("Logo on the left chest: may print blurry at this size.")
+    checkHardToRead: "hard to read on {colour}.", // NEW (W-ED85 in the summary)
+    checks: { clipped: "part of it is cut off at the seam.", blurry: "may print blurry at this size.", box: "prints as a box with its background colour.", "hard-to-read": "hard to read." } as Record<"clipped" | "blurry" | "box" | "hard-to-read", string>, // NEW (W-ED111, W-ED96, W-ED95 in the summary)
+    price: "Price", // W-ED168 (the host fills the slot)
+    proofLater: "Your proof pictures come with the team order.", // NEW: E5 adds the proof here; nothing promised
+    savedHere: "Saved on this device", // W-ED4
   },
   /** What an undo or redo changed, for the status line ("Undone: Colour"), one per kind of edit (W-ED150). */
   changes: {

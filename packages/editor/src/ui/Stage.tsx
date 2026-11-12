@@ -85,6 +85,8 @@ export interface StageProps {
   handlesHidden?: boolean;
   /** The contextual bar on the stage (phones, with an item selected): the garment is framed below it. */
   contextBar?: boolean;
+  /** The selected item has a warning: a badge beside its handles. */
+  selectionWarn?: boolean;
 }
 
 export function Stage({ canvasRef, ...props }: StageProps) {
@@ -117,6 +119,7 @@ export function Stage({ canvasRef, ...props }: StageProps) {
             onRotate={props.onRotate ?? (() => undefined)}
             onTurnTo={props.onTurnTo ?? (() => undefined)}
             hidden={props.handlesHidden}
+            warn={props.selectionWarn}
           />
           {props.contextBar && <StageContextBar bus={bus} top={barTop} bottomInset={canvasInsets.bottom} />}
         </div>

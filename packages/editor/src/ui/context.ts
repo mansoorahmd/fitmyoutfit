@@ -16,6 +16,7 @@ import type { AssetUrlResolver } from "../react/asset-images.js";
 import type { AssetUploader } from "../upload/logo-upload.js";
 import type { EditorWording } from "./content.js";
 import type { EditorLayout, PanelDetent } from "./layout.js";
+import type { LogoNote } from "./checks.js";
 
 export type ToolId = "design" | "colours" | "team" | "players" | "logos" | "text";
 
@@ -79,6 +80,9 @@ export interface EditorApi {
    * slot); with `openTool`, its tool opens. A tap on the model does neither turn nor move the camera.
    */
   select(layerId: string | null, options?: { turn?: boolean; openTool?: boolean }): void;
+  /** What the upload checks found about each uploaded file this session (a box behind the logo), by asset id. */
+  logoNotes: Readonly<Record<string, LogoNote>>;
+  setLogoNote(assetId: string, note: LogoNote): void;
   /** Snapping to guides while placing (on by default; Alt holds it off with a mouse). */
   snapping: boolean;
   setSnapping(on: boolean): void;

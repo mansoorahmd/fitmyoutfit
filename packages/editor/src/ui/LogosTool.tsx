@@ -1,32 +1,32 @@
 /**
- * Logos and Text: the simple panels of E3a (06-editor.md 4.6, 4.7), so
- * nothing the old developer demo could do is lost. A coach picks an image
- * file; the upload checks run; a refusal is said in the coach's words; an
- * accepted logo is placed at a preset (the first on the left chest) and can be
- * moved between presets or removed. Text adds a line of free text at a preset.
- *
- * E3b CONTINUES HERE: the full Logos flow (the logo card with Replace, the
- * size stepper, "Make it sharp", the resolution warning and its badge, Keep
- * it and the design-help link, drop-zone polish) and the full Text tool
- * (style, alignment, several lines in "On this kit") replace these panels.
+ * Logos (06-editor.md 4.6, 10.4): the drop zone and the file picker; the
+ * upload checks, each refusal said in the coach's words (never the engine's);
+ * an accepted logo placed at once in the usual place (left chest, then the
+ * centre of the chest, then the upper back), selected, with the camera on it.
+ * Each logo has its own card: Replace and Remove, Where (presets), Size (a
+ * stepper), and the warnings that never block: the "box" of a logo without a
+ * transparent background (Keep it), and "May print blurry at this size" with
+ * Make it sharp, recomputed live as the logo is resized.
  */
 import { useId, useRef, useState } from "react";
-import { addCatalogFont } from "../design/font-catalog.js";
-import { addLayer, removeLayer, updateLayer } from "../design/edit.js";
-import { newLogoLayer, newTextLayer, nextLayerId } from "../design/new-layers.js";
-import { normalizeText } from "../design/text.js";
+import { addLayer, removeLayer } from "../design/edit.js";
+import { scaleLayerBy } from "../design/item-edits.js";
+import { newLogoLayer, nextLayerId } from "../design/new-layers.js";
 import { placeAtPreset } from "../design/roles.js";
-import type { DesignDocument, ItemRole, Layer, PlacementPreset } from "../design/schema.js";
-import { teamColourValue } from "../design/team-colours.js";
-import type { UploadIssue } from "../design/upload-checks.js";
+import type { DesignDocument, ItemRole, Layer, LogoAssetRef, PlacementPreset } from "../design/schema.js";
 import { LOGO_MEDIA_TYPES } from "../design/schema.js";
+import type { UploadIssue } from "../design/upload-checks.js";
 import { uploadLogo } from "../upload/logo-upload.js";
 import { fill, presetWords } from "./content.js";
 import { useEditor } from "./context.js";
 import { EditorIcon } from "./icons.js";
 import { presetsFor } from "./lettering.js";
+import { LOGO_ORDER, LOGO_SIZE_STEP, logoIsBlurry, logoSizeLimits, logoSizeWord, makeLogoSharp, nextLogoPreset, replaceLogoAsset, sharpWidth, type LogoLayer } from "./logos.js";
 import { Alert, PresetChips } from "./parts.js";
-import { uploadRefusal, uploadRefusalText, uploadWarningTexts } from "./upload-wording.js";
+import { uploadRefusal, uploadRefusalText } from "./upload-wording.js";
+
+export { LOGO_ORDER };
+export { TextTool } from "./TextTool.js";
 
 /** Where the next item of a role goes: the first of these presets that is free (nothing there yet). */
 export function nextFreePreset(design: Pick<DesignDocument, "layers">, presets: PlacementPreset[], order: string[]): PlacementPreset | null {
@@ -35,12 +35,11 @@ export function nextFreePreset(design: Pick<DesignDocument, "layers">, presets: 
   return ordered.find((p) => !used.has(p.id)) ?? ordered[0] ?? null;
 }
 
-/** The usual order of logos on club kits (06-editor.md 4.6): crest on the left chest, then a sponsor, then the upper back. */
-export const LOGO_ORDER = ["left-chest", "chest-centre", "right-chest", "upper-back", "lower-back", "sleeve-left", "sleeve-right"];
 /** Free text: a motto low on the back first, then the upper back (4.7). */
 export const TEXT_ORDER = ["lower-back", "upper-back"];
 
-function ItemWhere({ layer, role }: { layer: Layer; role: ItemRole }) {
+/** The "Where" chips for an item (presets for its role); a preset moves it and turns the camera. */
+export function ItemWhere({ layer, role }: { layer: Layer; role: ItemRole }) {
   const api = useEditor();
   const { product, wording } = api;
   return (
@@ -50,36 +49,29 @@ function ItemWhere({ layer, role }: { layer: Layer; role: ItemRole }) {
       current={layer.preset ?? null}
       words={(p) => presetWords(wording, p)}
       onPick={(p) => {
-        if (api.commit((d) => placeAtPreset(d, layer.id, p.id, { product }), "placement")) api.showSide(p.side);
+        if (api.commit((d) => placeAtPreset(d, layer.id, p.id, { product }), "placement")) {
+          api.select(layer.id);
+          api.showSide(p.side);
+        }
       }}
       testIdPrefix={`where-${layer.id}`}
     />
   );
 }
 
-export function LogosTool() {
-  const api = useEditor();
-  const { design, product, wording, assets } = api;
-  const w = wording.logos;
-  const input = useRef<HTMLInputElement>(null);
-  const id = useId();
-  const [busy, setBusy] = useState(false);
-  const [over, setOver] = useState(false);
-  const [refusal, setRefusal] = useState<{ text: string; retry: File | null } | null>(null);
-  const [warnings, setWarnings] = useState<Record<string, string[]>>({});
-  const logos = design.layers.filter((l): l is Extract<Layer, { kind: "logo" }> => l.kind === "logo");
-  const pointer = typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia("(pointer: fine)").matches;
+type Checked = { ok: true; asset: LogoAssetRef; issues: UploadIssue[] } | { ok: false; text: string; retry: File | null };
 
-  const handle = async (file: File) => {
-    setBusy(true);
-    setRefusal(null);
+/** Runs the checks and the host's upload; a refusal comes back in the coach's words. */
+function useLogoUpload() {
+  const api = useEditor();
+  return async (file: File): Promise<Checked> => {
     let networkFailed = false;
     try {
       const head = new Uint8Array(await file.slice(0, 65536).arrayBuffer());
       const result = await uploadLogo(file, {
         upload: async (request) => {
           try {
-            return await assets.upload(request);
+            return await api.assets.upload(request);
           } catch (error) {
             networkFailed = true;
             throw error;
@@ -88,20 +80,77 @@ export function LogosTool() {
       });
       if (!result.ok) {
         const kind = uploadRefusal(result.issues, { head, size: file.size, networkFailed });
-        setRefusal({ text: uploadRefusalText(wording, kind ?? "damaged", file.name, file.size), retry: networkFailed ? file : null });
+        // The engine's message goes to the console for developers; the coach reads the wording.
+        console.info("[editor] logo refused:", result.issues.map((i) => `${i.code}: ${i.message}`).join("; "));
+        return { ok: false, text: uploadRefusalText(api.wording, kind ?? "damaged", file.name, file.size), retry: networkFailed ? file : null };
+      }
+      return { ok: true, asset: result.asset, issues: result.issues };
+    } catch (error) {
+      console.info("[editor] logo refused:", error);
+      return { ok: false, text: uploadRefusalText(api.wording, networkFailed ? "network" : "damaged", file.name, file.size), retry: networkFailed ? file : null };
+    }
+  };
+}
+
+export function LogosTool() {
+  const api = useEditor();
+  const { design, product, wording } = api;
+  const w = wording.logos;
+  const input = useRef<HTMLInputElement>(null);
+  const replaceInput = useRef<HTMLInputElement>(null);
+  const replacing = useRef<string | null>(null);
+  const id = useId();
+  const [busy, setBusy] = useState(false);
+  const [over, setOver] = useState(false);
+  const [refusal, setRefusal] = useState<{ text: string; retry: File | null; replace: string | null } | null>(null);
+  const check = useLogoUpload();
+  const logos = design.layers.filter((l): l is LogoLayer => l.kind === "logo");
+  const pointer = typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia("(pointer: fine)").matches;
+
+  const noteIssues = (asset: LogoAssetRef, issues: readonly UploadIssue[]) => {
+    const box = issues.some((i) => i.severity === "warning" && i.code === "transparency");
+    api.setLogoNote(asset.assetId, { box, kept: false });
+  };
+
+  const add = async (file: File) => {
+    setBusy(true);
+    setRefusal(null);
+    try {
+      const result = await check(file);
+      if (!result.ok) {
+        setRefusal({ text: result.text, retry: result.retry, replace: null });
         return;
       }
-      const presets = presetsFor(product, logos.length === 0 ? "crest" : "sponsor");
-      const preset = nextFreePreset(api.design, presets.filter((p) => !(p.id === "chest-centre" && api.design.layers.some((l) => l.role === "team-name" && l.preset === "chest-centre"))), LOGO_ORDER);
-      const layerId = nextLayerId(api.design, "logo");
-      const role = logos.length === 0 ? "crest" : "sponsor";
+      const current = api.design;
+      const role = current.layers.some((l) => l.kind === "logo") ? "sponsor" : "crest";
+      // The centre of the chest is the team name's place when it is there: the next free place then.
+      const presets = presetsFor(product, role).filter((p) => !(p.id === "chest-centre" && current.layers.some((l) => l.role === "team-name" && l.preset === "chest-centre")));
+      const preset = nextLogoPreset(current, presets);
+      const layerId = nextLayerId(current, "logo");
       const ok = api.commit((d) => addLayer(d, newLogoLayer(product, { id: layerId, preset: preset?.id, pieceId: preset ? undefined : product.views.front, role, asset: result.asset }), { product }), "add-item");
       if (ok) {
-        setWarnings((all) => ({ ...all, [result.asset.assetId]: uploadWarningTexts(wording, result.issues as UploadIssue[]) }));
+        noteIssues(result.asset, result.issues);
+        api.select(layerId);
         api.showSide(preset?.side ?? "front");
       }
-    } catch {
-      setRefusal({ text: uploadRefusalText(wording, "damaged", file.name, file.size), retry: null });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const replace = async (layerId: string, file: File) => {
+    setBusy(true);
+    setRefusal(null);
+    try {
+      const result = await check(file);
+      if (!result.ok) {
+        setRefusal({ text: result.text, retry: result.retry, replace: layerId });
+        return;
+      }
+      if (api.commit((d) => replaceLogoAsset(d, layerId, result.asset, { product }), "add-item")) {
+        noteIssues(result.asset, result.issues);
+        api.select(layerId);
+      }
     } finally {
       setBusy(false);
     }
@@ -109,7 +158,7 @@ export function LogosTool() {
 
   const pick = (files: FileList | null) => {
     const file = files?.[0];
-    if (file) void handle(file);
+    if (file) void add(file);
   };
 
   return (
@@ -118,43 +167,47 @@ export function LogosTool() {
         <Alert kind="error" role="alert" focus testId="logo-error">
           <p>{refusal.text}</p>
           {refusal.retry && (
-            <button type="button" className="fmo-btn" onClick={() => void handle(refusal.retry!)}>
+            <button type="button" className="fmo-btn" onClick={() => void (refusal.replace ? replace(refusal.replace, refusal.retry!) : add(refusal.retry!))} data-testid="logo-retry">
               {w.tryAgain}
             </button>
           )}
         </Alert>
       )}
-      {logos.map((logo) => {
-        const name = assets.fileName?.(logo.asset.assetId) || w.yourLogo;
-        const url = assets.url(logo.asset);
-        return (
-          <div key={logo.id} className="fmo-item" data-testid={`logo-${logo.id}`}>
-            <div className="fmo-item-head">
-              {url ? <img src={url} alt="" /> : <EditorIcon name="logos" />}
-              <span className="fmo-item-name fmo-bdi" dir="auto">
-                {fill(w.logoName, { file: name })}
-              </span>
-              <button type="button" className="fmo-btn fmo-btn-text" onClick={() => api.commit((d) => removeLayer(d, logo.id), "remove-item")} data-testid={`remove-${logo.id}`}>
-                {w.remove}
-              </button>
-            </div>
-            <span className="fmo-label">{w.where}</span>
-            <ItemWhere layer={logo} role={logo.role} />
-            {(warnings[logo.asset.assetId] ?? []).map((text) => (
-              <Alert key={text} kind="warning">
-                <p>{text}</p>
-                <button type="button" className="fmo-btn" onClick={() => setWarnings((all) => ({ ...all, [logo.asset.assetId]: [] }))}>
-                  {w.keepIt}
-                </button>
-              </Alert>
-            ))}
-          </div>
-        );
-      })}
-      <input ref={input} id={id} type="file" accept={LOGO_MEDIA_TYPES.join(",")} hidden onChange={(e) => {
-        pick(e.target.files);
-        e.target.value = "";
-      }} data-testid="logo-file" />
+      {logos.map((logo) => (
+        <LogoCard
+          key={logo.id}
+          logo={logo}
+          onReplace={() => {
+            replacing.current = logo.id;
+            replaceInput.current?.click();
+          }}
+        />
+      ))}
+      <input
+        ref={input}
+        id={id}
+        type="file"
+        accept={LOGO_MEDIA_TYPES.join(",")}
+        hidden
+        onChange={(e) => {
+          pick(e.target.files);
+          e.target.value = "";
+        }}
+        data-testid="logo-file"
+      />
+      <input
+        ref={replaceInput}
+        type="file"
+        accept={LOGO_MEDIA_TYPES.join(",")}
+        hidden
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          const target = replacing.current;
+          e.target.value = "";
+          if (file && target) void replace(target, file);
+        }}
+        data-testid="logo-replace-file"
+      />
       {busy ? (
         <div className="fmo-drop" role="status" aria-live="polite" data-testid="logo-checking">
           <span className="fmo-spinner" aria-hidden="true" />
@@ -186,87 +239,86 @@ export function LogosTool() {
           </span>
         </button>
       )}
+      {logos.length === 0 && <p className="fmo-muted">{w.designHelp}</p>}
       <p className="fmo-muted">{w.rights}</p>
     </>
   );
 }
 
-export function TextTool() {
+/** One logo: its file, Replace and Remove, Where, Size, and its warnings. */
+function LogoCard({ logo, onReplace }: { logo: LogoLayer; onReplace: () => void }) {
   const api = useEditor();
-  const { design, product, wording, fonts } = api;
-  const w = wording.lettering;
-  const id = useId();
-  const [draft, setDraft] = useState("");
-  const texts = design.layers.filter((l): l is Extract<Layer, { kind: "text" }> => l.kind === "text" && l.role === "text");
-  const font = fonts.fonts.find((f) => f.uses.includes("text"))!;
-
-  const add = () => {
-    const value = normalizeText(draft.trim());
-    if (!value) return;
-    const preset = nextFreePreset(api.design, presetsFor(product, "text"), TEXT_ORDER);
-    const layerId = nextLayerId(api.design, "text");
-    const ok = api.commit((d) => addLayer(addCatalogFont(d, fonts, font.id), newTextLayer(product, { id: layerId, preset: preset?.id, pieceId: preset ? undefined : product.views.back, value, fontId: font.id, fill: teamColourValue(d, "second") }), { product }), "add-item");
-    if (ok) {
-      setDraft("");
-      api.showSide(preset?.side ?? "back");
-    }
-  };
-
+  const { product, wording, assets } = api;
+  const w = wording.logos;
+  const name = assets.fileName?.(logo.asset.assetId) || w.yourLogo;
+  const url = assets.url(logo.asset);
+  const note = api.logoNotes[logo.asset.assetId];
+  const blurry = logoIsBlurry(logo);
+  const sizeWord = logoSizeWord(product, logo);
+  const limits = logoSizeLimits(product, logo);
+  const selected = api.selectedId === logo.id;
   return (
-    <>
-      <div data-keep-typing>
-        <label className="fmo-label" htmlFor={id}>
-          {w.textLabel}
-        </label>
-        <div className="fmo-row" style={{ flexWrap: "nowrap" }}>
-          <input id={id} className="fmo-field" dir="auto" maxLength={60} value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} data-testid="text-input" />
-          <button type="button" className="fmo-btn" style={{ minHeight: 48 }} onClick={add} disabled={draft.trim() === ""} data-testid="text-add">
-            {w.addText}
-          </button>
-        </div>
-        <p className="fmo-muted">{w.sameOnEvery}</p>
-      </div>
-      {texts.map((t) => (
-        <TextItem key={t.id} layer={t} />
-      ))}
-    </>
-  );
-}
-
-function TextItem({ layer }: { layer: Extract<Layer, { kind: "text" }> }) {
-  const api = useEditor();
-  const { product, wording } = api;
-  const [draft, setDraft] = useState<string | null>(null);
-  return (
-    <div className="fmo-item" data-testid={`text-${layer.id}`}>
+    <div className="fmo-item" data-testid={`logo-${logo.id}`} data-selected={selected}>
       <div className="fmo-item-head">
-        <input
-          className="fmo-field"
-          dir="auto"
-          aria-label={wording.lettering.textLabel}
-          value={draft ?? layer.value}
-          maxLength={60}
-          onFocus={() => {
-            api.begin("text");
-            api.setTyping(layer.id);
+        <button type="button" className="fmo-item-pick" aria-label={fill(w.selectName, { file: name })} aria-pressed={selected} onClick={() => api.select(logo.id, { turn: true })} data-testid={`select-${logo.id}`}>
+          {url ? <img src={url} alt="" /> : <EditorIcon name="logos" />}
+          <span className="fmo-item-name fmo-bdi" dir="auto">
+            {fill(w.logoName, { file: name })}
+          </span>
+          {(blurry || (note?.box && !note.kept)) && (
+            <span className="fmo-badge" aria-hidden="true">
+              <EditorIcon name="alert" size={16} />
+            </span>
+          )}
+        </button>
+        <button type="button" className="fmo-btn fmo-btn-text" aria-label={fill(w.replaceName, { file: name })} onClick={onReplace} data-testid={`replace-${logo.id}`}>
+          {w.replace}
+        </button>
+        <button
+          type="button"
+          className="fmo-btn fmo-btn-text"
+          aria-label={fill(w.removeName, { file: name })}
+          onClick={() => {
+            if (api.commit((d) => removeLayer(d, logo.id), "remove-item") && selected) api.select(null);
           }}
-          onBlur={() => {
-            api.end();
-            api.setTyping(null);
-            setDraft(null);
-          }}
-          onChange={(e) => {
-            setDraft(e.target.value);
-            const value = normalizeText(e.target.value);
-            if (value.trim()) api.preview((d) => updateLayer(d, layer.id, { value }, { product }));
-          }}
-        />
-        <button type="button" className="fmo-btn fmo-btn-text" onClick={() => api.commit((d) => removeLayer(d, layer.id), "remove-item")} data-testid={`remove-${layer.id}`}>
-          {wording.lettering.removeText}
+          data-testid={`remove-${logo.id}`}
+        >
+          {w.remove}
         </button>
       </div>
-      <ItemWhere layer={layer} role="text" />
+      <span className="fmo-label">{w.where}</span>
+      <ItemWhere layer={logo} role={logo.role} />
+      <div className="fmo-stepper-row">
+        <span className="fmo-label">{w.size}</span>
+        <div className="fmo-stepper" role="group" aria-label={w.size}>
+          <button type="button" className="fmo-round" aria-label={w.smaller} title={w.smaller} aria-disabled={!limits.canShrink} onClick={() => limits.canShrink && api.commit((d) => scaleLayerBy(d, logo.id, 1 / LOGO_SIZE_STEP, { product }), "resize")} data-testid={`size-down-${logo.id}`}>
+            <EditorIcon name="minus" />
+          </button>
+          <span className="fmo-stepper-value" aria-live="polite" data-testid={`size-word-${logo.id}`}>
+            {w.sizeSteps[sizeWord]}
+          </span>
+          <button type="button" className="fmo-round" aria-label={w.bigger} title={w.bigger} aria-disabled={!limits.canGrow} onClick={() => limits.canGrow && api.commit((d) => scaleLayerBy(d, logo.id, LOGO_SIZE_STEP, { product }), "resize")} data-testid={`size-up-${logo.id}`}>
+            <EditorIcon name="plus" />
+          </button>
+        </div>
+      </div>
+      {note?.box && !note.kept && (
+        <Alert kind="warning" testId={`logo-box-${logo.id}`}>
+          <p>{w.noTransparency}</p>
+          <p className="fmo-muted">{w.designHelp}</p>
+          <button type="button" className="fmo-btn" onClick={() => api.setLogoNote(logo.asset.assetId, { kept: true })} data-testid={`keep-${logo.id}`}>
+            {w.keepIt}
+          </button>
+        </Alert>
+      )}
+      {blurry && (
+        <Alert kind="warning" testId={`logo-blurry-${logo.id}`}>
+          <p>{fill(w.blurry, { size: fill(w.sharpSize, { cm: sharpWidth(logo).cm }) })}</p>
+          <button type="button" className="fmo-btn" onClick={() => api.commit((d) => makeLogoSharp(d, logo.id, { product }), "resize")} data-testid={`make-sharp-${logo.id}`}>
+            {w.makeSharp}
+          </button>
+        </Alert>
+      )}
     </div>
   );
 }
-

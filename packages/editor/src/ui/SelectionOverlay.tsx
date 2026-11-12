@@ -33,6 +33,8 @@ export interface SelectionOverlayProps {
   onTurnTo: () => void;
   /** Hidden while the coach types (the keyboard leaves room for the item only). */
   hidden?: boolean;
+  /** The item has a warning (blurry, cut off, a box, hard to read): a badge at its top right corner (4.6). */
+  warn?: boolean;
 }
 
 const points = (list: readonly Pt[]) => list.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
@@ -108,6 +110,11 @@ export function SelectionOverlay(props: SelectionOverlayProps) {
           </>
         )}
       </svg>
+      {g.facing && props.warn && (
+        <span className="fmo-badge fmo-overlay-badge" style={{ left: g.corners[1]!.x + 14, top: g.corners[1]!.y - 14 }} aria-hidden="true" data-testid="selection-badge">
+          <EditorIcon name="alert" size={16} />
+        </span>
+      )}
       {!g.facing && (
         <button type="button" className="fmo-chip fmo-turn-to" style={{ top: props.top + 8, left: freeCentre }} onClick={props.onTurnTo} data-testid="turn-to-edit">
           <EditorIcon name="reset" size={20} />

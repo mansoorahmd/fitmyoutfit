@@ -150,6 +150,15 @@ export const EDITOR_CSS = /* css */ `
 .fmo-finetune > .fmo-stack { padding-bottom: 12px; }
 .fmo-ft-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .fmo-ft-row > .fmo-label { min-width: 48px; margin: 0; }
+.fmo-item-head:has(> .fmo-item-pick) { flex-wrap: wrap; row-gap: 0; }
+.fmo-item-pick { flex: 1 1 100%; min-width: 0; display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0; border: 0; background: none; color: inherit; cursor: pointer; text-align: start; font: inherit; }
+.fmo-item[data-selected="true"] .fmo-item-name { text-decoration: underline; text-underline-offset: 3px; }
+.fmo-badge { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 12px; background: var(--fmo-warning-surface, #FFF7E6); color: var(--fmo-warning, #8A5A00); border: 1px solid currentColor; }
+.fmo-stepper-row { display: flex; align-items: center; gap: 12px; }
+.fmo-stepper-row > .fmo-label { margin: 0; min-width: 48px; }
+.fmo-stepper { display: inline-flex; align-items: center; gap: 8px; }
+.fmo-stepper-value { min-width: 72px; text-align: center; font-weight: 650; }
+.fmo-overlay-badge { position: absolute; transform: translate(-50%, -50%); pointer-events: none; }
 .fmo-turn-to { position: absolute; transform: translateX(-50%); pointer-events: auto; box-shadow: 0 2px 8px rgb(11 21 48 / 0.16); font-weight: 600; }
 .fmo-stage-top { position: absolute; inset-inline: 0; top: var(--fmo-credit-room, 0px); display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px 12px 0; pointer-events: none; z-index: 2; }
 .fmo-stage-top > * { pointer-events: auto; }

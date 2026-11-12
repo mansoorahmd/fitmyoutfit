@@ -51,6 +51,7 @@ import { TOOL_ORDER, ToolPanel, ToolTabs } from "./ToolPanel.js";
 import { TopBar } from "./TopBar.js";
 import { hasWebGL2, readLocal, writeLocal } from "./webgl.js";
 import { toolForLayer } from "./selection.js";
+import { itemChecks, type LogoNote } from "./checks.js";
 import { ClippedNote, ContextBar, FineTune, keyEdit } from "./SelectedItem.js";
 import { nudgeLayer, rotateLayerBy, scaleLayerBy } from "../design/item-edits.js";
 import { removeLayer } from "../design/edit.js";
@@ -225,6 +226,8 @@ export function EditorShell(props: EditorShellProps) {
   const setGuides = useCallback((next: PieceGuide[]) => setGuidesState((now) => (JSON.stringify(now) === JSON.stringify(next) ? now : next)), []);
   // Snapping can be held off: Alt with a mouse, or this setting (fine-tune) on touch and for everyone (5.2).
   const [snapOn, setSnapOn] = useState(true);
+  // What the upload checks found about each file this session (a logo without a transparent background), by asset id.
+  const [logoNotes, setLogoNotes] = useState<Record<string, LogoNote>>({});
   // A drag, resize or turn is going on (draft quality, 5.3), and which.
   const [placing, setPlacingState] = useState<string | null>(null);
   const [frozenDesign, setFrozenDesign] = useState<DesignDocument | null>(null);
@@ -644,6 +647,8 @@ export function EditorShell(props: EditorShellProps) {
         if (side && side !== canvas.current?.getSide()) canvas.current?.focusOn(layer.id);
       }
     },
+    logoNotes,
+    setLogoNote: (assetId, note) => setLogoNotes((all) => ({ ...all, [assetId]: { ...all[assetId], ...note } })),
     snapping: snapOn,
     setSnapping: setSnapOn,
     markTiming: (name) => {
@@ -801,6 +806,11 @@ export function EditorShell(props: EditorShellProps) {
 
   const fontsNote = fontsLoading ? wording.lettering.fontsLoading : null;
   const selectedLayer = selectedId ? (design.layers.find((l) => l.id === selectedId) ?? null) : null;
+  const toolDesign = frozenDesign ?? design;
+  const selectionWarn = useMemo(() => {
+    const layer = selectedId ? toolDesign.layers.find((l) => l.id === selectedId) : undefined;
+    return layer ? itemChecks(product, toolDesign, layer, { notes: logoNotes }).length > 0 : false;
+  }, [selectedId, toolDesign, product, logoNotes]);
   const panel =
     panelOpen && activeTool ? (
       <ToolPanel
@@ -976,6 +986,7 @@ export function EditorShell(props: EditorShellProps) {
             onTurnTo={() => selectedId && canvas.current?.focusOn(selectedId)}
             handlesHidden={typing}
             contextBar={Boolean(selectedLayer) && layout !== "wide" && !typing && mode === "3d"}
+            selectionWarn={selectionWarn}
             viewControls={layout === "compact" && typing ? "none" : layout === "compact" && panelOpen && detent === "expanded" ? "reset-only" : "full"}
           />
           {layout !== "wide" && (start ?? panel)}
