@@ -1,6 +1,5 @@
 import {
   Component,
-  Suspense,
   useEffect,
   useImperativeHandle,
   useMemo,
@@ -11,7 +10,7 @@ import {
   type Ref,
 } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { OrbitControls, useGLTF } from "@react-three/drei";
+import { OrbitControls } from "@react-three/drei";
 import {
   Box3,
   CanvasTexture,
@@ -26,14 +25,19 @@ import {
   type Mesh,
   type MeshStandardMaterial,
   type Object3D,
+  type PerspectiveCamera,
 } from "three";
 import type { DesignDocument, Point, ProductDefinition } from "../design/schema.js";
 import { dragPosition, layerAtPoint, pieceAtMeshUv, round3, startLayerDrag, type LayerDrag } from "../design/placement.js";
+import { backgroundAt } from "../design/readability.js";
 import { DEFAULT_TEXTURE_SIZE, drawPatternTexture, type DrawPatternResult } from "../texture/pattern-texture.js";
+import type { ZoneHighlight } from "../texture/zone-highlight.js";
 import { FontWatcher, type FontSetLike, type FontStatus } from "../texture/fonts.js";
 import { AssetImageCache, type AssetUrlResolver } from "./asset-images.js";
-import { orbitLimits } from "./camera.js";
+import { NO_INSETS, frameInFreeArea, type Framing, type ViewInsets } from "./camera.js";
+import { CameraRig } from "./camera-rig.js";
 import { makeFabric, type Fabric } from "./fabric.js";
+import { loadModel, type LoadedModel, type ModelLoadProgress } from "./model-loader.js";
 import { STUDIO_BACKGROUND, STUDIO_LIGHTS, studioLightPosition } from "./studio.js";
 
 /** What it cost to redraw the pattern texture, for a caller that reports performance. */
@@ -53,10 +57,40 @@ export interface LayerDragEvent {
 /** Which side of the garment the camera looks at. "left" is the wearer's left. */
 export type CameraSide = "front" | "back" | "left" | "right";
 
-/** Imperative controls, through `ref`. */
+/** Where the camera is, for the interface's view buttons (06-editor.md 6.1). */
+export interface CameraInfo {
+  /** The side the camera faces, or null when the coach turned the garment freely. */
+  side: CameraSide | null;
+  canZoomIn: boolean;
+  canZoomOut: boolean;
+}
+
+/** A tap on the model while zones are picked (N8): the piece, and the zone or group of shapes under the finger. */
+export interface ZoneTap {
+  pieceId: string;
+  zoneId: string | null;
+  /** The group of shapes on top there ("hoops"), when a shape is under the finger. */
+  shapeGroup: string | null;
+}
+
+/** Imperative controls, through `ref`. Every move is the coach's own action (06-editor.md 6.3); the host decides when. */
 export interface DesignCanvasHandle {
-  /** Turns the camera to look at one side of the garment, keeping the zoom. */
-  showSide(side: CameraSide): void;
+  /** Turns the camera to one side of the garment, keeping the zoom. Animated (350 ms) unless `animate` is false or motion is reduced. */
+  showSide(side: CameraSide, options?: { animate?: boolean }): void;
+  /**
+   * Turns to the side a layer is on; with `zoom`, also zooms in and moves the
+   * layer's height into the middle of the free area (the item being typed).
+   * `null` returns from such a zoom to the zoom before it.
+   */
+  focusOn(layerId: string | null, options?: { zoom?: boolean; animate?: boolean }): void;
+  zoomIn(): void;
+  zoomOut(): void;
+  /** Back to the front, at the fitting distance. */
+  resetView(): void;
+  /** Turns the garment round by `degrees` (the stage's arrow keys). */
+  turnBy(degrees: number): void;
+  /** The side the camera faces now, or null. */
+  getSide(): CameraSide | null;
 }
 
 export interface DesignCanvasProps {
@@ -67,8 +101,13 @@ export interface DesignCanvasProps {
   className?: string;
   /** The canvas fills its container, so give the container (or this style) a height. */
   style?: CSSProperties;
-  /** Called when the model fails to load. The canvas shows a short message instead. */
+  /** Called when the model fails to load. */
   onError?: (error: Error) => void;
+  /**
+   * Shown instead of the model when it fails to load. Default: a short
+   * developer message. An interface passes its own (or null, and shows its own).
+   */
+  errorFallback?: ReactNode;
   /**
    * Edge of the square pattern texture in pixels (default 2048, lowered to the
    * device's limit). 2048 costs about 21 MiB of GPU memory with mipmaps; 1024 a quarter of that.
@@ -97,10 +136,40 @@ export interface DesignCanvasProps {
   onFontStatus?: (status: FontStatus) => void;
   /** How much larger than its box a layer is for a tap, in mm (fingers are wide). Default 8. */
   touchSlopMm?: number;
+  /**
+   * How much of the canvas a panel covers (CSS px per edge): the garment is
+   * framed in the rest, re-framed over 200 ms when it changes (N7).
+   */
+  viewInsets?: ViewInsets;
+  /** Cut instead of animating camera moves (the host follows `prefers-reduced-motion`). */
+  reducedMotion?: boolean;
+  /** Called when the side the camera faces, or whether it can zoom further, changes. */
+  onCameraChange?: (info: CameraInfo) => void;
+  /** Called when the coach starts and stops turning or zooming the garment by hand (the camera keeps still for a while after). */
+  onUserTurn?: (phase: "start" | "end", moved: boolean) => void;
+  /**
+   * Taps choose zones instead of layers (the Colours tool, N8): a tap on the
+   * model calls `onZoneTap` with the zone (or shapes) under the finger, and
+   * layers are neither selected nor dragged. Drags still turn the garment.
+   */
+  pickZones?: boolean;
+  onZoneTap?: (tap: ZoneTap) => void;
+  /** A zone or group of shapes to show on the model (the zone flash; editor only). */
+  highlight?: ZoneHighlight | null;
+  /** The model's download progress (N17). */
+  onLoadProgress?: (progress: ModelLoadProgress) => void;
+  /** Called once the model has loaded (the host can build template cards from its geometry). */
+  onModelReady?: (model: LoadedModel) => void;
+  /** Called when the browser takes the 3D context away (memory pressure), and when it gives it back (N16). */
+  onContextLost?: () => void;
+  onContextRestored?: () => void;
   ref?: Ref<DesignCanvasHandle>;
 }
 
 const FOV = 35;
+
+/** How far a tap may move and still be a tap, in CSS pixels. */
+const TAP_SLOP_PX = 8;
 
 /**
  * Edge of the inside texture (the colour zones without prints, for the inside
@@ -201,9 +270,10 @@ function redrawPattern(
   design: DesignDocument,
   images: AssetImageCache | null,
   selectedLayerId: string | null,
+  highlight: ZoneHighlight | null = null,
 ): TextureDrawInfo {
   const start = performance.now();
-  const result = drawPatternTexture(surface.ctx, product, design, { size: surface.size, images: images?.lookup, selectedLayerId });
+  const result = drawPatternTexture(surface.ctx, product, design, { size: surface.size, images: images?.lookup, selectedLayerId, highlight });
   const drawMs = performance.now() - start;
   surface.texture.needsUpdate = true;
   return { ...result, drawMs };
@@ -248,18 +318,13 @@ function useLatest<T>(value: T) {
   return ref;
 }
 
-const SIDE_DIRECTIONS: Record<CameraSide, [number, number, number]> = {
-  front: [0, 0.12, 1],
-  back: [0, 0.12, -1],
-  left: [1, 0.12, 0],
-  right: [-1, 0.12, 0],
-};
-
-type ModelViewProps = Omit<DesignCanvasProps, "className" | "style" | "onError" | "ref"> & {
+type ModelViewProps = Omit<DesignCanvasProps, "className" | "style" | "onError" | "ref" | "errorFallback" | "onLoadProgress" | "onModelReady"> & {
+  model: LoadedModel;
   handle: { current: DesignCanvasHandle | null };
 };
 
 function ModelView({
+  model,
   design,
   product,
   textureSize,
@@ -271,11 +336,19 @@ function ModelView({
   fonts,
   onFontStatus,
   touchSlopMm = 8,
+  viewInsets = NO_INSETS,
+  reducedMotion = false,
+  onCameraChange,
+  onUserTurn,
+  pickZones = false,
+  onZoneTap,
+  highlight = null,
+  onContextLost,
+  onContextRestored,
   handle,
 }: ModelViewProps) {
-  const gltf = useGLTF(product.model.url, false);
-  const prepared = useMemo(() => prepareModel(gltf.scene, product), [gltf, product]);
-  const camera = useThree((state) => state.camera);
+  const prepared = useMemo(() => prepareModel(model.scene, product), [model, product]);
+  const camera = useThree((state) => state.camera) as PerspectiveCamera;
   const gl = useThree((state) => state.gl);
   const controls = useThree((state) => state.controls) as unknown as { enabled: boolean; update(): void } | null;
   const invalidate = useThree((state) => state.invalidate);
@@ -283,36 +356,39 @@ function ModelView({
   const surface = usePatternSurface(textureSize);
 
   const { center, size } = prepared;
-  const limits = orbitLimits(size, FOV, viewSize.width / Math.max(1, viewSize.height));
+  const framing: Framing = frameInFreeArea(size, FOV, viewSize, viewInsets);
+  const fit = framing.fit;
 
-  // Frame the model from the front, once per loaded model.
-  const fit = limits.fit;
-  const framed = useRef<PreparedModel | null>(null);
+  // The camera (camera-rig.ts): framed in the free area, re-framed when it changes, animated moves.
+  const [rig] = useState(() => new CameraRig(camera, invalidate));
+  const callbacks = useLatest({ onCameraChange, onUserTurn });
   useEffect(() => {
-    if (framed.current === prepared) return;
-    framed.current = prepared;
-    const direction = new Vector3(...SIDE_DIRECTIONS.front).normalize().multiplyScalar(fit);
-    camera.position.set(center[0] + direction.x, center[1] + direction.y, center[2] + direction.z);
-    camera.lookAt(center[0], center[1], center[2]);
-    camera.updateProjectionMatrix();
-    invalidate();
-  }, [camera, center, fit, prepared, invalidate]);
+    rig.update(prepared, center, size, {
+      framing,
+      viewport: { width: viewSize.width, height: viewSize.height },
+      reducedMotion,
+      fovDegrees: FOV,
+      onChange: (info) => callbacks.current.onCameraChange?.(info),
+    });
+  });
+  useFrame(() => rig.frame());
 
-  // Camera presets, for the host's buttons.
+  // The layer and design the commands need, read when a command runs.
+  const latest = useLatest({ design, product, onSelectLayer, onLayerDrag, touchSlopMm, controls, pickZones, onZoneTap });
+
+  // Camera commands, for the host's buttons and tools.
   useEffect(() => {
     setHandle(handle, {
-      showSide(side) {
-        const target = new Vector3(...center);
-        const distance = camera.position.distanceTo(target) || fit;
-        const direction = new Vector3(...SIDE_DIRECTIONS[side]).normalize().multiplyScalar(distance);
-        camera.position.copy(target).add(direction);
-        camera.lookAt(target);
-        controls?.update();
-        invalidate();
-      },
+      showSide: (side, options) => rig.showSide(side, options?.animate !== false),
+      focusOn: (layerId, options) => rig.focusOn(latest.current.design, latest.current.product, layerId, options),
+      zoomIn: () => rig.zoom("in"),
+      zoomOut: () => rig.zoom("out"),
+      resetView: () => rig.reset(),
+      turnBy: (degrees) => rig.turnBy(degrees),
+      getSide: () => rig.side(),
     });
     return () => setHandle(handle, null);
-  }, [handle, camera, center, fit, controls, invalidate]);
+  }, [handle, rig, latest]);
 
   // The pieces' materials show the pattern texture; their inside shows the colour zones only.
   const inside = usePatternSurface(INSIDE_TEXTURE_SIZE);
@@ -340,10 +416,11 @@ function ModelView({
     }),
     [zones, product],
   );
+  const [restored, setRestored] = useState(0);
   useEffect(() => {
     redrawPattern(inside, product, zonesOnly, null, null);
     invalidate();
-  }, [zonesOnly, product, inside, invalidate]);
+  }, [zonesOnly, product, inside, invalidate, restored]);
 
   // Fonts: load what the text needs, and redraw when it arrives (never stay in a fallback silently).
   const [fontsVersion, setFontsVersion] = useState(0);
@@ -370,18 +447,41 @@ function ModelView({
   useEffect(() => images.watch(design, assetUrl), [images, design, assetUrl]);
 
   // Document to render: redraw the pattern from the product and the design on every change,
-  // when fonts or images arrive, and when the selection changes. The model is not reloaded.
+  // when fonts or images arrive, when the selection or the highlight changes, and after the
+  // 3D context comes back. The model is not reloaded.
   const onDrawn = useLatest(onTextureDrawn);
   useEffect(() => {
-    const info = redrawPattern(surface, product, design, images, selectedLayerId ?? null);
+    const info = redrawPattern(surface, product, design, images, selectedLayerId ?? null, highlight);
     invalidate();
     onDrawn.current?.(info);
-  }, [design, product, surface, invalidate, images, selectedLayerId, fontsVersion, imagesVersion, onDrawn]);
+  }, [design, product, surface, invalidate, images, selectedLayerId, fontsVersion, imagesVersion, onDrawn, highlight, restored]);
 
-  // Dragging layers on the model. A capture listener on the canvas's parent sees the pointer
-  // before the orbit controls (on the canvas) do; a press on a layer becomes a drag, anything
-  // else is left to the orbit controls.
-  const latest = useLatest({ design, product, onSelectLayer, onLayerDrag, touchSlopMm, controls });
+  // The 3D context can be taken away (a phone under memory pressure) and given back (N16).
+  const contextEvents = useLatest({ onContextLost, onContextRestored });
+  useEffect(() => {
+    const canvas = gl.domElement;
+    const lost = (event: Event) => {
+      event.preventDefault(); // lets the browser give the context back
+      contextEvents.current.onContextLost?.();
+    };
+    const back = () => {
+      surface.texture.needsUpdate = true;
+      inside.texture.needsUpdate = true;
+      setRestored((n) => n + 1);
+      invalidate();
+      contextEvents.current.onContextRestored?.();
+    };
+    canvas.addEventListener("webglcontextlost", lost);
+    canvas.addEventListener("webglcontextrestored", back);
+    return () => {
+      canvas.removeEventListener("webglcontextlost", lost);
+      canvas.removeEventListener("webglcontextrestored", back);
+    };
+  }, [gl, surface, inside, invalidate, contextEvents]);
+
+  // Pointer on the model. A capture listener on the canvas's parent sees the pointer before the
+  // orbit controls (on the canvas) do: a press on a layer becomes a drag; with `pickZones`, a tap
+  // chooses the zone under the finger; anything else is left to the orbit controls.
   useEffect(() => {
     const canvas = gl.domElement;
     const host = canvas.parentElement ?? canvas;
@@ -390,8 +490,9 @@ function ModelView({
     const meshes = [...prepared.pieceMeshes.keys()];
     const down = new Set<number>();
     let drag: { pointerId: number; state: LayerDrag; position: Point; pending: Point | null; frame: number | null } | null = null;
+    let tap: { pointerId: number; x: number; y: number; time: number } | null = null;
 
-    const hitAt = (event: PointerEvent) => {
+    const hitAt = (event: { clientX: number; clientY: number }) => {
       const rect = canvas.getBoundingClientRect();
       ndc.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1);
       raycaster.setFromCamera(ndc, camera);
@@ -427,6 +528,23 @@ function ModelView({
 
     const finish = (event: PointerEvent, phase: "end" | "cancel") => {
       down.delete(event.pointerId);
+      if (tap && event.pointerId === tap.pointerId) {
+        const t = tap;
+        tap = null;
+        const still = Math.hypot(event.clientX - t.x, event.clientY - t.y) <= TAP_SLOP_PX && performance.now() - t.time < 700;
+        if (phase === "end" && still) {
+          const hit = hitAt(event);
+          const { design: current, product: currentProduct, onZoneTap: zoneTap } = latest.current;
+          if (hit && zoneTap) {
+            const background = backgroundAt(currentProduct, current, hit.piece.id, hit.point);
+            zoneTap({
+              pieceId: hit.piece.id,
+              zoneId: background?.kind === "zone" ? background.zoneId : null,
+              shapeGroup: background?.kind === "shape" ? background.group : null,
+            });
+          }
+        }
+      }
       if (!drag || event.pointerId !== drag.pointerId) return;
       if (drag.frame !== null) cancelAnimationFrame(drag.frame);
       if (phase === "end") flush();
@@ -443,13 +561,23 @@ function ModelView({
     const onDown = (event: PointerEvent) => {
       const busy = down.size > 0;
       down.add(event.pointerId);
-      const { design: current, onSelectLayer: select, onLayerDrag: dragHandler, touchSlopMm: slop } = latest.current;
+      const { design: current, onSelectLayer: select, onLayerDrag: dragHandler, touchSlopMm: slop, pickZones: zones } = latest.current;
       if (drag) {
         // A second finger during a drag: ignore it, and keep it from the orbit controls.
         event.stopPropagation();
         return;
       }
-      if (busy || event.button !== 0 || (!select && !dragHandler)) return;
+      if (busy) {
+        tap = null; // two fingers: a pinch, not a tap
+        return;
+      }
+      if (event.button !== 0) return;
+      if (zones) {
+        // Zones: remember the press; the orbit controls still turn the garment if it moves.
+        tap = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, time: performance.now() };
+        return;
+      }
+      if (!select && !dragHandler) return;
       const hit = hitAt(event);
       if (!hit) return;
       const layer = layerAtPoint(current, hit.piece.id, hit.point, slop);
@@ -484,6 +612,16 @@ function ModelView({
     return () => materials.forEach((m) => m.dispose());
   }, [prepared]);
 
+  // The coach turning or zooming by hand: stop any camera move of ours, and tell the host.
+  const onStart = () => {
+    rig.userStart();
+    callbacks.current.onUserTurn?.("start", false);
+  };
+  const onEnd = () => {
+    const moved = rig.userEnd();
+    callbacks.current.onUserTurn?.("end", moved);
+  };
+
   return (
     <>
       <StudioLights target={center} distance={fit} />
@@ -492,11 +630,13 @@ function ModelView({
         makeDefault
         target={center}
         enablePan={false}
-        minDistance={limits.minDistance}
-        maxDistance={limits.maxDistance}
-        minPolarAngle={limits.minPolarAngle}
-        maxPolarAngle={limits.maxPolarAngle}
+        minDistance={framing.minDistance}
+        maxDistance={framing.maxDistance}
+        minPolarAngle={framing.minPolarAngle}
+        maxPolarAngle={framing.maxPolarAngle}
         enableDamping={false}
+        onStart={onStart}
+        onEnd={onEnd}
       />
     </>
   );
@@ -533,7 +673,7 @@ function StudioLights({ target, distance }: { target: [number, number, number]; 
 }
 
 class ModelErrorBoundary extends Component<
-  { onError?: (error: Error) => void; children: ReactNode },
+  { onError?: (error: Error) => void; fallback?: ReactNode; children: ReactNode },
   { error: Error | null }
 > {
   override state = { error: null as Error | null };
@@ -548,6 +688,7 @@ class ModelErrorBoundary extends Component<
 
   override render() {
     if (this.state.error) {
+      if (this.props.fallback !== undefined) return this.props.fallback;
       return (
         <div role="alert" style={{ padding: 16, font: "14px system-ui, sans-serif" }}>
           The 3D model could not be shown: {this.state.error.message}
@@ -558,6 +699,11 @@ class ModelErrorBoundary extends Component<
   }
 }
 
+/** Throws a load error inside the error boundary, so a failed model and a failed 3D context end in one place. */
+function Throw({ error }: { error: Error }): never {
+  throw error;
+}
+
 /**
  * Shows a product's 3D model with the design drawn on it: the pattern pieces,
  * coloured per zone, and the design's text, numbers and logos, drawn into a
@@ -566,24 +712,60 @@ class ModelErrorBoundary extends Component<
  * With `onLayerDrag`, pressing a layer drags it instead. Renders only when
  * something changes, to save battery.
  */
-export function DesignCanvas({ className, style, onError, ref, ...view }: DesignCanvasProps) {
+export function DesignCanvas({ className, style, onError, errorFallback, onLoadProgress, onModelReady, ref, ...view }: DesignCanvasProps) {
   const handle = useRef<DesignCanvasHandle | null>(null);
-  useImperativeHandle(ref, () => ({ showSide: (side) => handle.current?.showSide(side) }), []);
+  useImperativeHandle(
+    ref,
+    () => ({
+      showSide: (side, options) => handle.current?.showSide(side, options),
+      focusOn: (layerId, options) => handle.current?.focusOn(layerId, options),
+      zoomIn: () => handle.current?.zoomIn(),
+      zoomOut: () => handle.current?.zoomOut(),
+      resetView: () => handle.current?.resetView(),
+      turnBy: (degrees) => handle.current?.turnBy(degrees),
+      getSide: () => handle.current?.getSide() ?? null,
+    }),
+    [],
+  );
+  const url = view.product.model.url;
+  const [loaded, setLoaded] = useState<{ url: string; model: LoadedModel | null; error: Error | null } | null>(null);
+  const callbacks = useLatest({ onLoadProgress, onModelReady });
+  useEffect(() => {
+    let alive = true;
+    const { promise, unsubscribe } = loadModel(url, { onProgress: (p) => callbacks.current.onLoadProgress?.(p) });
+    promise.then(
+      (model) => {
+        if (!alive) return;
+        setLoaded({ url, model, error: null });
+        callbacks.current.onModelReady?.(model);
+      },
+      (error: Error) => {
+        if (alive) setLoaded({ url, model: null, error });
+      },
+    );
+    return () => {
+      alive = false;
+      unsubscribe();
+    };
+  }, [url, callbacks]);
+  const current = loaded?.url === url ? loaded : null;
   return (
     <div className={className} style={{ width: "100%", height: "100%", minHeight: 240, background: STUDIO_BACKGROUND, ...style }}>
-      <ModelErrorBoundary onError={onError}>
-        <Canvas
-          frameloop="demand"
-          dpr={[1, 2]}
-          camera={{ fov: FOV, near: 0.05, far: 50, position: [0, 0.4, 2] }}
-          // Neutral tone mapping (Khronos PBR Neutral) keeps the palette's colours true where the light is
-          // even, and rolls highlights off softly instead of clipping them to flat white.
-          gl={{ antialias: true, preserveDrawingBuffer: false, toneMapping: NeutralToneMapping }}
-        >
-          <Suspense fallback={null}>
-            <ModelView {...view} handle={handle} />
-          </Suspense>
-        </Canvas>
+      <ModelErrorBoundary onError={onError} fallback={errorFallback}>
+        {current?.error ? (
+          <Throw error={current.error} />
+        ) : (
+          <Canvas
+            frameloop="demand"
+            dpr={[1, 2]}
+            camera={{ fov: FOV, near: 0.05, far: 50, position: [0, 0.4, 2] }}
+            // Neutral tone mapping (Khronos PBR Neutral) keeps the palette's colours true where the light is
+            // even, and rolls highlights off softly instead of clipping them to flat white.
+            gl={{ antialias: true, preserveDrawingBuffer: false, toneMapping: NeutralToneMapping }}
+          >
+            {current?.model && <ModelView {...view} model={current.model} handle={handle} />}
+          </Canvas>
+        )}
       </ModelErrorBoundary>
     </div>
   );

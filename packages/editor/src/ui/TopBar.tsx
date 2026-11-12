@@ -1,0 +1,90 @@
+/**
+ * The navy top bar (06-editor.md 3.5, 3.6): close, undo and redo, the save
+ * state, the host's slots (brand, price, share), and Done, the one red button.
+ */
+import type { ReactNode } from "react";
+import type { SaveState } from "../storage/device-store.js";
+import type { EditorWording } from "./content.js";
+import { EditorIcon } from "./icons.js";
+import type { EditorLayout } from "./layout.js";
+
+export interface TopBarProps {
+  layout: EditorLayout;
+  wording: EditorWording;
+  productName: string;
+  canUndo: boolean;
+  canRedo: boolean;
+  undoTitle: string;
+  redoTitle: string;
+  onUndo: () => void;
+  onRedo: () => void;
+  saveState: SaveState | null;
+  showSaveWords: boolean;
+  onSaveInfo: () => void;
+  onClose: () => void;
+  onDone: () => void;
+  doneDisabled?: boolean;
+  brand?: ReactNode;
+  price?: ReactNode;
+  share?: ReactNode;
+  account?: ReactNode;
+}
+
+function SaveStateView({ state, wording, showWords, onInfo }: { state: SaveState | null; wording: EditorWording; showWords: boolean; onInfo: () => void }) {
+  if (!state) return <div className="fmo-save-state" />;
+  const f = wording.frame;
+  const words = state === "saving" ? f.saving : state === "saved" ? f.saved : f.notSaved;
+  const icon = state === "failed" ? "alert" : state === "saved" ? "saved" : null;
+  const content = (
+    <>
+      {icon && <EditorIcon name={icon} size={20} />}
+      {showWords ? <span>{words}</span> : <span className="fmo-sr-only">{words}</span>}
+    </>
+  );
+  return (
+    <div className="fmo-save-state" data-state={state} role="status" aria-live="polite" data-testid="save-state">
+      {state === "failed" ? (
+        <button type="button" onClick={onInfo} aria-label={words}>
+          {content}
+        </button>
+      ) : (
+        content
+      )}
+    </div>
+  );
+}
+
+export function TopBar(props: TopBarProps) {
+  const { wording, layout } = props;
+  const f = wording.frame;
+  const wide = layout === "wide";
+  return (
+    <header className="fmo-topbar" data-testid="top-bar">
+      <button type="button" className="fmo-tb-btn fmo-icon-only" aria-label={f.closeName} title={f.closeName} onClick={props.onClose} data-testid="close">
+        <EditorIcon name="close" />
+      </button>
+      {wide && (
+        <div className="fmo-topbar-brand">
+          {props.brand}
+          <small>{props.productName}</small>
+        </div>
+      )}
+      <button type="button" className={wide ? "fmo-tb-btn" : "fmo-tb-btn fmo-icon-only"} aria-label={f.undo} title={props.undoTitle} aria-disabled={!props.canUndo} onClick={() => props.canUndo && props.onUndo()} data-testid="undo">
+        <EditorIcon name="undo" />
+        {wide && <span>{f.undo}</span>}
+      </button>
+      <button type="button" className={wide ? "fmo-tb-btn" : "fmo-tb-btn fmo-icon-only"} aria-label={f.redo} title={props.redoTitle} aria-disabled={!props.canRedo} onClick={() => props.canRedo && props.onRedo()} data-testid="redo">
+        <EditorIcon name="redo" />
+        {wide && <span>{f.redo}</span>}
+      </button>
+      <SaveStateView state={props.saveState} wording={wording} showWords={props.showSaveWords} onInfo={props.onSaveInfo} />
+      {wide && <div className="fmo-topbar-spacer" />}
+      {wide && props.share && <div className="fmo-topbar-slot">{props.share}</div>}
+      {wide && props.price && <div className="fmo-topbar-slot" data-testid="price-slot">{props.price}</div>}
+      {props.account && <div className="fmo-topbar-slot">{props.account}</div>}
+      <button type="button" className="fmo-done" onClick={props.onDone} disabled={props.doneDisabled} data-testid="done">
+        {f.done}
+      </button>
+    </header>
+  );
+}

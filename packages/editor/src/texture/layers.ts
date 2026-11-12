@@ -16,9 +16,12 @@
  * - Number layers always read left to right (digits do, in Arabic too).
  * - An outline (`outline`, `width` mm) is a stroke round the glyphs, twice
  *   the width wide with round joins, drawn under the fill, so `width` mm show
- *   outside the letters. The line then fits the box less twice the width, so
- *   the outline stays inside the box too. Its width stays in mm when a long
- *   line is shrunk.
+ *   outside the letters. The line and its outline together fit the box, so
+ *   the outline stays inside the box too. When a long line is shrunk, its
+ *   outline shrinks with it (it follows the size the letters are drawn at, so
+ *   a thick outline never crowds a shrunk name), but never below
+ *   `MIN_OUTLINE_MM` (thinner does not print), or the outline's own width
+ *   when that is thinner still.
  *
  * Logos and clipart are drawn as large as fits inside the box, keeping the
  * image's proportions, centred.
@@ -28,6 +31,7 @@ import { pieceGeometry } from "../design/pattern.js";
 import { traceSvgPath } from "../design/svg-path.js";
 import { physicalAlign, resolveTextDirection, type PhysicalAlign, type ResolvedDirection } from "../design/text.js";
 import { logoPrintSize } from "../design/upload-checks.js";
+import { MIN_OUTLINE_MM } from "../design/roles.js";
 import { layerFont } from "./fonts.js";
 
 type TextLike = Extract<Layer, { kind: "text" | "number" }>;
@@ -75,6 +79,8 @@ export interface TextLayout {
   textAlign: PhysicalAlign;
   /** Even shrink applied so the line fits the box's width (1 when it fits). */
   scale: number;
+  /** The outline width drawn, in mm on the garment (0 without an outline): it follows the shrink. */
+  outlineWidth: number;
   /** Anchor X in the layer's frame after the shrink (divide by `scale` already applied). */
   x: number;
 }
@@ -84,21 +90,43 @@ export function layerDirection(layer: TextLike): ResolvedDirection {
   return layer.kind === "number" ? "ltr" : resolveTextDirection(layer.value, layer.direction);
 }
 
-/** The width a line may take in its box: the box less the outline on both ends. */
+/** The width a line may take in its box at its full size: the box less the outline on both ends. */
 export function textRoom(layer: Pick<TextLike, "size" | "outline">): number {
   const outline = layer.outline ? 2 * layer.outline.width : 0;
   return Math.max(layer.size.width * 0.05, layer.size.width - outline);
+}
+
+/**
+ * The shrink and the drawn outline width for a line measured at its font
+ * size: the letters and the outline round them fit the box's width, and the
+ * outline shrinks with the letters (but not below `MIN_OUTLINE_MM`, or the
+ * outline's own width when that is thinner).
+ */
+export function fitLine(layer: Pick<TextLike, "size" | "outline">, measuredWidth: number): { scale: number; outlineWidth: number } {
+  const box = layer.size.width;
+  const full = layer.outline ? layer.outline.width : 0;
+  if (!(measuredWidth > 0) || measuredWidth + 2 * full <= box) return { scale: 1, outlineWidth: full };
+  // The outline follows the letters: s * (measured + 2 * full) = box.
+  let scale = box / (measuredWidth + 2 * full);
+  let outlineWidth = full * scale;
+  const floor = Math.min(full, MIN_OUTLINE_MM);
+  if (outlineWidth < floor) {
+    // Thinner than prints: the outline stays at the floor, the letters take the rest.
+    outlineWidth = floor;
+    scale = Math.max(box * 0.05, box - 2 * floor) / measuredWidth;
+  }
+  return { scale, outlineWidth };
 }
 
 /** Where and how big a line is drawn in its box, given its measured width at `fontSize`. */
 export function textLayout(layer: TextLike, measuredWidth: number): TextLayout {
   const direction = layerDirection(layer);
   const textAlign = physicalAlign(layer.align, direction);
-  const width = textRoom(layer);
-  const scale = measuredWidth > width && measuredWidth > 0 ? width / measuredWidth : 1;
-  const edge = width / 2 / scale;
+  const { scale, outlineWidth } = fitLine(layer, measuredWidth);
+  // The letters start inside the outline: (box / 2 - outline) mm from the centre, in the shrunk frame.
+  const edge = (layer.size.width / 2 - outlineWidth) / scale;
   const x = textAlign === "left" ? -edge : textAlign === "right" ? edge : 0;
-  return { direction, textAlign, scale, x };
+  return { direction, textAlign, scale, x, outlineWidth };
 }
 
 /**
@@ -214,12 +242,12 @@ function drawTextLine(ctx: LayerCanvasContext, design: DesignDocument, layer: Te
   ctx.textAlign = layout.textAlign;
   ctx.scale(layout.scale, layout.scale);
   if (layer.outline && layer.value.length > 0) {
-    // A stroke is centred on the glyph edge: twice the width, so `width` mm show outside the
-    // letters once the fill covers the inner half. Kept in mm when the line is shrunk.
+    // A stroke is centred on the glyph edge: twice the width, so the outline's width shows outside the
+    // letters once the fill covers the inner half. It shrinks with a shrunk line (layout.outlineWidth mm).
     ctx.lineJoin = "round";
     ctx.miterLimit = 2;
     ctx.strokeStyle = layer.outline.color.hex;
-    ctx.lineWidth = (2 * layer.outline.width) / layout.scale;
+    ctx.lineWidth = (2 * layout.outlineWidth) / layout.scale;
     ctx.strokeText(layer.value, layout.x, 0);
   }
   ctx.fillStyle = layer.fill.hex;
