@@ -2,7 +2,6 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { chooseProduct, DEMO_PRODUCTS } from "./products";
-import { START_PLACEMENTS } from "./placements";
 
 const root = resolve(import.meta.dirname, "..");
 
@@ -38,11 +37,15 @@ describe("the demo's products", () => {
     expect(DEMO_PRODUCTS.find((p) => p.id === "stand-in-jersey")!.credit!.licence).toBe("CC BY 4.0");
   });
 
-  it("has print positions for the jersey's front, back and sleeves", () => {
-    const jersey = START_PLACEMENTS["stand-in-jersey"]!;
-    expect(jersey.back!.text!.position.y).toBeLessThan(jersey.back!.number!.position.y); // name above the number
-    expect(jersey.front!.logo!.position.x).toBeGreaterThan(jersey.front!.text!.position.x); // badge on the wearer's left chest
-    expect(jersey.sleeve_left!.logo).toBeDefined();
-    expect(jersey.sleeve_right!.logo).toBeDefined();
+  it("has print positions for the jersey's front, back and sleeves, now as placement presets in the generated product", () => {
+    const jersey = JSON.parse(readFileSync(resolve(root, "samples/products/stand-in-jersey.json"), "utf8")) as {
+      placements: Array<{ id: string; pieceId: string; centre: { x: number; y: number } }>;
+    };
+    const at = (id: string) => jersey.placements.find((p) => p.id === id)!;
+    expect(at("back-name").centre.y).toBeLessThan(at("back-number").centre.y); // name above the number
+    expect(at("left-chest").centre.x).toBeGreaterThan(at("chest-centre").centre.x); // badge on the wearer's left chest
+    expect(at("sleeve-left").pieceId).toBe("sleeve_left");
+    expect(at("sleeve-right").pieceId).toBe("sleeve_right");
+    expect(existsSync(resolve(root, "demo/placements.ts"))).toBe(false); // the positions live in the product data only
   });
 });
