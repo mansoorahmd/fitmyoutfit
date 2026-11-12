@@ -6,7 +6,7 @@ import type { ReactNode } from "react";
 import type { SaveState } from "../storage/device-store.js";
 import type { EditorWording } from "./content.js";
 import { EditorIcon } from "./icons.js";
-import type { EditorLayout } from "./layout.js";
+import type { EditorLayout, SaveStateWords } from "./layout.js";
 
 export interface TopBarProps {
   layout: EditorLayout;
@@ -19,26 +19,36 @@ export interface TopBarProps {
   onUndo: () => void;
   onRedo: () => void;
   saveState: SaveState | null;
-  showSaveWords: boolean;
+  saveWords: SaveStateWords;
   onSaveInfo: () => void;
   onClose: () => void;
   onDone: () => void;
   doneDisabled?: boolean;
+  /** The Done panel is open: Done is inactive and shows a check; the panel's main button is the red one (9.1). */
+  doneOpen?: boolean;
   brand?: ReactNode;
   price?: ReactNode;
   share?: ReactNode;
   account?: ReactNode;
 }
 
-function SaveStateView({ state, wording, showWords, onInfo }: { state: SaveState | null; wording: EditorWording; showWords: boolean; onInfo: () => void }) {
+function SaveStateView({ state, wording, form, onInfo }: { state: SaveState | null; wording: EditorWording; form: SaveStateWords; onInfo: () => void }) {
   if (!state) return <div className="fmo-save-state" />;
   const f = wording.frame;
   const words = state === "saving" ? f.saving : state === "saved" ? f.saved : f.notSaved;
+  const short = state === "saved" ? f.savedShort : words;
   const icon = state === "failed" ? "alert" : state === "saved" ? "saved" : null;
   const content = (
     <>
       {icon && <EditorIcon name={icon} size={20} />}
-      {showWords ? <span>{words}</span> : <span className="fmo-sr-only">{words}</span>}
+      {form === "full" ? (
+        <span>{words}</span>
+      ) : (
+        <>
+          {form === "short" && <span aria-hidden="true">{short}</span>}
+          <span className="fmo-sr-only">{words}</span>
+        </>
+      )}
     </>
   );
   return (
@@ -77,12 +87,22 @@ export function TopBar(props: TopBarProps) {
         <EditorIcon name="redo" />
         {wide && <span>{f.redo}</span>}
       </button>
-      <SaveStateView state={props.saveState} wording={wording} showWords={props.showSaveWords} onInfo={props.onSaveInfo} />
+      <SaveStateView state={props.saveState} wording={wording} form={props.saveWords} onInfo={props.onSaveInfo} />
       {wide && <div className="fmo-topbar-spacer" />}
       {wide && props.share && <div className="fmo-topbar-slot">{props.share}</div>}
       {wide && props.price && <div className="fmo-topbar-slot" data-testid="price-slot">{props.price}</div>}
       {props.account && <div className="fmo-topbar-slot">{props.account}</div>}
-      <button type="button" className="fmo-done" onClick={props.onDone} disabled={props.doneDisabled} data-testid="done">
+      <button
+        type="button"
+        className="fmo-done"
+        onClick={() => !props.doneOpen && props.onDone()}
+        disabled={props.doneDisabled}
+        aria-disabled={props.doneOpen || undefined}
+        aria-label={props.doneOpen ? wording.done.doneOpen : undefined}
+        data-open={props.doneOpen || undefined}
+        data-testid="done"
+      >
+        {props.doneOpen && <EditorIcon name="check" size={20} />}
         {f.done}
       </button>
     </header>

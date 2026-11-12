@@ -22,6 +22,7 @@ export const EDITOR_WORDING = {
     undo: "Undo", // W-ED2
     redo: "Redo", // W-ED3
     saved: "Saved on this device", // W-ED4
+    savedShort: "Saved", // NEW (E3b): W-ED4 in a phone's top bar, where the whole sentence does not fit; the sentence stays the accessible name
     saving: "Saving…", // W-ED5
     notSaved: "Not saved", // W-ED6
     notSavedHelp: "This browser didn't let us save your design. Keep this page open, or free some space.", // W-ED6b
@@ -136,7 +137,7 @@ export const EDITOR_WORDING = {
     numberTooLong: "Use 1 or 2 digits, from 0 to 99.", // W-ED79
     numberMixed: "Use one kind of digits, not both.", // W-ED80
     numberEmpty: "Enter a number to preview.", // W-ED81
-    hardToRead: "Hard to read on {colour}.", // W-ED85
+    hardToRead: "{item} is hard to read on {colour}.", // W-ED85, NEW form (E3b): it names the item ("Number on the back is hard to read on Navy.")
     addOutline: "Add outline", // W-ED86
     darkerColour: "Choose a darker colour", // W-ED86
     useLetterColour: "Use {colour} letters", // NEW: the fix when a name crosses two colours (a sash)
@@ -146,6 +147,7 @@ export const EDITOR_WORDING = {
     addText: "Add text", // W-ED100
     sameOnEvery: "Printed the same on every shirt.", // W-ED101
     align: { start: "Start", center: "Centre", end: "End" }, // W-ED102
+    alignLabel: "Alignment", // NEW: the group name of W-ED102
     textLabel: "Your text", // NEW
     removeText: "Remove", // W-ED98
     fontsLoading: "Fonts are still loading. Names may change shape slightly.", // W-ED145
@@ -178,13 +180,58 @@ export const EDITOR_WORDING = {
     rights: "Only upload logos you have the right to use.", // W-ED99 P
     logoName: "Logo: {file}", // 06-editor.md 4.8 ("Logo: crest.png")
     yourLogo: "Your logo", // NEW: a logo whose file name is not known (restored from the device)
+    size: "Size", // W-ED64
+    sizeSteps: { small: "Small", medium: "Medium", large: "Large" }, // W-ED66 (the stepper says the nearest)
+    smaller: "Smaller", // NEW: the stepper's − (accessible name)
+    bigger: "Bigger", // NEW: the stepper's +
+    sharpSize: "{cm} cm wide", // NEW: the {size} of W-ED96 ("Sharp up to 9 cm wide.")
+    replaceName: "Replace {file}", // NEW: accessible names of a logo's buttons
+    removeName: "Remove {file}", // NEW
+    selectName: "Select {file} on the kit", // NEW
   },
   /** Selection and the list (`selection`). Mostly E3b. */
   selection: {
     delete: "Delete", // W-ED110
+    duplicate: "Duplicate", // W-ED110
+    more: "More", // W-ED110
+    done: "Done", // W-ED110
+    bringForward: "Bring forward", // W-ED110b
+    sendBack: "Send back", // W-ED110b
+    edit: "Edit", // W-ED110b
+    actionsFor: "Actions for {item}", // NEW: the contextual bar's accessible name
+    clipped: "Part of this is cut off at the seam.", // W-ED111
+    moveIn: "Move it in", // W-ED111b
+    tooBigToFit: "Make it smaller so it fits on the shirt.", // NEW: when no place fits ("Move it in" cannot help)
+    turnToEdit: "Turn to edit", // W-ED112
+    fineTune: "Fine-tune", // W-ED113
+    bigger: "Bigger", // W-ED114
+    smaller: "Smaller", // W-ED114
+    turnLeft: "Turn left", // W-ED114
+    turnRight: "Turn right", // W-ED114
+    straighten: "Straighten", // W-ED114
+    centre: "Centre on the shirt", // W-ED114
+    moveLeft: "Move left", // NEW (fine-tune's arrows)
+    moveRight: "Move right", // NEW
+    moveUp: "Move up", // NEW
+    moveDown: "Move down", // NEW
+    size: "Size", // NEW (fine-tune rows)
+    turn: "Turn", // NEW
+    move: "Move", // NEW
+    sizeMm: "{width} × {height} mm", // NEW: desktop only, secondary text
+    degrees: "{degrees}°", // NEW: desktop only, secondary text
+    snap: "Snap to guides", // NEW: snapping on or off (touch has no Alt key)
+    keys: "Arrows move it, Shift for bigger steps. [ and ] resize, with Shift they turn. Delete removes it. Esc lets go.", // NEW: keyboard help in fine-tune (desktop)
     hint: "Drag to turn. Tap something to change it.", // W-ED116
     hintPointer: "Drag to turn. Click something to change it.", // W-ED116
     onThisKit: "On this kit", // W-ED130
+    onThisKitCount: "On this kit ({count})", // W-ED130 with the count
+    onThisKitName: "On this kit, {count} items", // NEW: the button's accessible name (4.8)
+    kitEmpty: "Nothing added yet. Add your team name, players or a logo.", // W-ED131
+    fromDesign: "From the design", // W-ED132
+    locked: "Locked", // W-ED132
+    moreFor: "More for {item}", // NEW: a row's menu button (accessible name)
+    needsALook: "Needs a look", // NEW: the warning badge's accessible name
+    colourAction: "Colour", // NEW: the only action for the design's shapes
   },
   /** View (`view`). */
   view: {
@@ -204,6 +251,16 @@ export const EDITOR_WORDING = {
     logoItem: "Logo", // NEW
     textItem: "Text {value}", // NEW
     credit: "3D model", // NEW: the credit line's label (the host gives the credit)
+    creditMore: "Model credit", // NEW (E3b): the button beside the short credit line that opens the full credit
+  },
+  /**
+   * What an item on the kit is called (E3b, NEW): in warnings ("Number on the back is hard to read"),
+   * the list "On this kit", the contextual bar and the Done panel. By role.
+   */
+  items: {
+    roles: { "team-name": "Team name", "player-name": "Player name", "player-number": "Number", crest: "Logo", sponsor: "Logo", text: "Text", graphic: "Picture" } as Record<string, string>,
+    at: "{item} on the {where}", // NEW: "Number on the back"
+    named: "{item}: {value}", // NEW: "Team name: TIGERS", "Logo: crest.png" (06-editor.md 4.8)
   },
   /** States (`states`). */
   states: {
@@ -231,6 +288,18 @@ export const EDITOR_WORDING = {
     saveAndGoBack: "Save and go back", // W-ED163
     teamOrdersSoon: "Team orders open soon. Your design is saved on this device.", // W-ED164 P (copy from founders)
     keepDesigning: "Keep designing", // W-ED166
+    close: "Close", // NEW: the Done panel's close button (accessible name)
+    checksMany: "{count} things to check", // W-ED161
+    checksOne: "1 thing to check", // W-ED161
+    checksNone: "Nothing to check. Your kit looks ready.", // NEW
+    show: "Show", // W-ED161
+    checkLine: "{item}: {reason}", // NEW: one line of the summary ("Logo on the left chest: may print blurry at this size.")
+    checkHardToRead: "hard to read on {colour}.", // NEW (W-ED85 in the summary)
+    checks: { clipped: "part of it is cut off at the seam.", blurry: "may print blurry at this size.", box: "prints as a box with its background colour.", "hard-to-read": "hard to read." } as Record<"clipped" | "blurry" | "box" | "hard-to-read", string>, // NEW (W-ED111, W-ED96, W-ED95 in the summary)
+    price: "Price", // W-ED168 (the host fills the slot)
+    kitLine: "{product} · {team}", // NEW: the Done panel's line ("Jersey · Lahore Lions")
+    doneOpen: "Done: the panel is open", // NEW: the top bar's Done while the Done panel is open (accessible name)
+    savedHere: "Saved on this device", // W-ED4
   },
   /** What an undo or redo changed, for the status line ("Undone: Colour"), one per kind of edit (W-ED150). */
   changes: {

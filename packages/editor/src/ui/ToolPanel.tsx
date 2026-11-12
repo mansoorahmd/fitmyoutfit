@@ -70,6 +70,8 @@ export interface ToolPanelProps {
   onClose: () => void;
   /** The panel's size as it settles (for the camera's framing). */
   onSize: (size: { width: number; height: number }) => void;
+  /** A title of its own (the list "On this kit" in the panel's place); it has no tool tip. */
+  title?: string;
   children: ReactNode;
 }
 
@@ -161,11 +163,13 @@ export function ToolPanel(props: ToolPanelProps) {
       )}
       <div className="fmo-panel-head">
         <h2 className="fmo-panel-title" id="fmo-panel-title">
-          {wording.tools[tool]}
+          {props.title ?? wording.tools[tool]}
         </h2>
-        <button type="button" className="fmo-round" style={{ border: 0, background: "none" }} aria-label={wording.tools.help} aria-expanded={help} title={wording.tools.help} onClick={() => setHelp((h) => !h)} data-testid="panel-help">
-          <EditorIcon name="help" />
-        </button>
+        {!props.title && (
+          <button type="button" className="fmo-round" style={{ border: 0, background: "none" }} aria-label={wording.tools.help} aria-expanded={help} title={wording.tools.help} onClick={() => setHelp((h) => !h)} data-testid="panel-help">
+            <EditorIcon name="help" />
+          </button>
+        )}
         {compact && (!fitsNormal || detent === "expanded") && (
           <button type="button" className="fmo-btn fmo-btn-text" style={{ minHeight: 44, padding: "0 8px" }} onClick={() => props.onDetent(detent === "expanded" ? "normal" : "expanded")} data-testid="panel-expand">
             {detent === "expanded" ? wording.tools.showLess : wording.tools.showAll}
@@ -177,7 +181,7 @@ export function ToolPanel(props: ToolPanelProps) {
           </button>
         )}
       </div>
-      {help && <p className="fmo-help">{wording.help[tool]}</p>}
+      {help && !props.title && <p className="fmo-help">{wording.help[tool]}</p>}
       <div className="fmo-panel-body">
         <div ref={inner} className="fmo-panel-inner fmo-stack">
           {props.children}

@@ -16,15 +16,22 @@ import type { Palette } from "../design/palette.js";
 import type { DesignDocument, ProductDefinition } from "../design/schema.js";
 import type { Template } from "../design/template.js";
 import { updateLayer } from "../design/edit.js";
+import { scaleLayer } from "../design/placement.js";
+import { clampToPrintArea, maxScaleInArea, printAreaOf } from "../design/print-area.js";
+import { printAreaLines, snapPosition, snapReachMm } from "../design/snapping.js";
+import type { Layer } from "../design/schema.js";
+import { snapAngle } from "./handles.js";
+import type { GesturePhase } from "./SelectionOverlay.js";
 import { layerSide } from "../design/roles.js";
 import type { EditLabel } from "../state/history.js";
 import { useDesignHistory } from "../react/useDesignHistory.js";
-import type { CameraInfo, DesignCanvasHandle, LayerDragEvent, TextureDrawInfo, ZoneTap } from "../react/DesignCanvas.js";
+import type { CameraInfo, DesignCanvasHandle, LayerDragEvent, PieceGuide, TextureDrawInfo, ZoneTap } from "../react/DesignCanvas.js";
+import type { GestureTiming } from "../react/draft-quality.js";
 import { mayMoveCamera } from "../react/camera.js";
 import { extractGarmentMeshes } from "../react/garment-geometry.js";
 import { loadModel, type LoadedModel, type ModelLoadProgress } from "../react/model-loader.js";
 import type { FontSetLike, FontStatus } from "../texture/fonts.js";
-import { renderGarmentView, type GarmentView } from "../texture/garment-view.js";
+import { renderGarmentView, type GarmentMesh, type GarmentView } from "../texture/garment-view.js";
 import type { TextFit } from "../texture/layers.js";
 import type { ZoneHighlight } from "../texture/zone-highlight.js";
 import type { SaveState } from "../storage/device-store.js";
@@ -34,7 +41,7 @@ import { EditorContext, type ColourTarget, type EditorApi, type EditorAssets, ty
 import { CARD_HEIGHT, CARD_WIDTH, DesignTool } from "./DesignTool.js";
 import { PlayersTool, TeamTool } from "./LetteringTools.js";
 import { LogosTool, TextTool } from "./LogosTool.js";
-import { LAYOUT_SIZES, START_CARD_STAGE_MIN, chooseLayout, panelHeights, saveStateShowsWords, stageInsets, type PanelDetent } from "./layout.js";
+import { LAYOUT_SIZES, START_CARD_STAGE_MIN, chooseLayout, panelHeights, saveStateWords, stageInsets, type PanelDetent } from "./layout.js";
 import { ConfirmDialog } from "./parts.js";
 import { Stage, type StageLoad } from "./Stage.js";
 import { StartCard } from "./StartCard.js";
@@ -43,6 +50,13 @@ import { EDITOR_CSS } from "./styles.js";
 import { TOOL_ORDER, ToolPanel, ToolTabs } from "./ToolPanel.js";
 import { TopBar } from "./TopBar.js";
 import { hasWebGL2, readLocal, writeLocal } from "./webgl.js";
+import { toolForLayer } from "./selection.js";
+import { KitButton, OnThisKit } from "./OnThisKit.js";
+import { DonePanel } from "./DonePanel.js";
+import { itemChecks, type LogoNote } from "./checks.js";
+import { ClippedNote, ContextBar, FineTune, keyEdit } from "./SelectedItem.js";
+import { nudgeLayer, rotateLayerBy, scaleLayerBy } from "../design/item-edits.js";
+import { removeLayer } from "../design/edit.js";
 
 /** Places the host fills with its own components (06-editor.md 13.1, 9.1). */
 export interface EditorSlots {
@@ -54,8 +68,20 @@ export interface EditorSlots {
   share?: ReactNode;
   /** Sign-in or the account, later. */
   account?: ReactNode;
-  /** The model's credit line, shown on the stage (a licence duty for a CC BY model). */
+  /**
+   * The Done panel's main action (9.2): "Add to team order" once team orders exist, the store's own
+   * button (it is the panel's one red button). Without it the panel offers "Save and go back", which
+   * calls `onDone`. A function gets the design.
+   */
+  primaryAction?: ReactNode | ((design: DesignDocument) => ReactNode);
+  /** The model's credit line, shown on the stage (a licence duty for a CC BY model). Shown whole on one line where it fits. */
   credit?: ReactNode;
+  /**
+   * A short form of the credit for a phone's narrow stage (for example "3D model by Wearable3D, CC BY 4.0,
+   * changed"): one line, with a button beside it that opens the full `credit`. Without it, the full credit is
+   * shown on one line, cut at the end, with the same button.
+   */
+  creditShort?: ReactNode;
 }
 
 /** One timing for the performance log (06-editor.md 11.3): a tap to the model's change. */
@@ -77,6 +103,12 @@ export interface EditorShellProps {
   initialDesign: DesignDocument;
   /** Show the start card (a new design only; 7.2). */
   showStartCard?: boolean;
+  /**
+   * Show the one-time hint ("Drag to turn. Tap something to change it.", 7.4) for this design. Default: on a
+   * new design (`showStartCard`). It shows after the start card, never over the garment, and goes at the first
+   * press on the stage.
+   */
+  showHint?: boolean;
   /** The garment's short name ("Jersey"), for the top bar and the stage's description. */
   productName: string;
   /** The host's asset storage: where logos are uploaded and drawn from. */
@@ -85,7 +117,7 @@ export interface EditorShellProps {
   onDesignChange?: (design: DesignDocument, info: { started: boolean }) => void;
   /** How the host's last save went (the top bar's save state). Null: nothing to say yet. */
   saveState?: SaveState | null;
-  /** Done (the red button): the host takes the design (E3a: save and confirm; E3b: the Done panel). */
+  /** "Save and go back" in the Done panel (9.3): the host saves the design and returns to the product page. */
   onDone?: (design: DesignDocument) => void;
   /** Close (X): leave the editor. Asked first only when the last save failed (10.6). */
   onClose?: () => void;
@@ -102,6 +134,10 @@ export interface EditorShellProps {
   injectStyles?: boolean;
   /** Called with each tap-to-change timing; with `logTimings` they also go to the console (development). */
   onTiming?: (timing: EditorTiming) => void;
+  /** Called after each drag, resize or turn with its frame times, whether draft quality was used, and the time to full quality (5.3). */
+  onGestureTiming?: (timing: GestureTiming & { name: string }) => void;
+  /** Draft quality during gestures (5.3): "auto" (default) switches below 30 frames a second. */
+  draftQuality?: "auto" | "always" | "never";
   logTimings?: boolean;
   className?: string;
   style?: CSSProperties;
@@ -139,7 +175,6 @@ function useReducedMotion(): boolean {
 }
 
 const RECENT_KEY = "fmo-editor-recent";
-const HINT_KEY = "fmo-editor-hint-seen";
 
 export function EditorShell(props: EditorShellProps) {
   const { product, palette, fonts, templates, assets } = props;
@@ -179,6 +214,7 @@ export function EditorShell(props: EditorShellProps) {
   const [fontStatus, setFontStatus] = useState<FontStatus | null>(null);
   const [textFits, setTextFits] = useState<TextFit[]>([]);
   const [garmentView, setGarmentView] = useState<GarmentView | null>(null);
+  const [garmentMeshes, setGarmentMeshes] = useState<GarmentMesh[] | null>(null);
   const bodyZone = product.pieces.find((p) => p.id === product.views.front)?.zone ?? product.zones[0]!.id;
   const [colourTarget, setColourTarget] = useState<ColourTarget>({ kind: "zone", id: bodyZone });
   const [highlight, setHighlight] = useState<ZoneHighlight | null>(null);
@@ -192,7 +228,27 @@ export function EditorShell(props: EditorShellProps) {
     }
   });
   const [hover, setHover] = useState<DesignDocument | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedIdState] = useState<string | null>(null);
+  // While placing (a drag, a handle): the print area's edges and the lines snapped to, drawn over the model (5.2).
+  const [guides, setGuidesState] = useState<PieceGuide[]>([]);
+  const setGuides = useCallback((next: PieceGuide[]) => setGuidesState((now) => (JSON.stringify(now) === JSON.stringify(next) ? now : next)), []);
+  // Snapping can be held off: Alt with a mouse, or this setting (fine-tune) on touch and for everyone (5.2).
+  const [snapOn, setSnapOn] = useState(true);
+  // "On this kit" is open (4.8): on phones in the panel's place, on desktop as a popover.
+  const [kitOpen, setKitOpen] = useState(false);
+  // The Done panel (9.2).
+  const [doneOpen, setDoneOpen] = useState(false);
+  // What the upload checks found about each file this session (a logo without a transparent background), by asset id.
+  const [logoNotes, setLogoNotes] = useState<Record<string, LogoNote>>({});
+  // A drag, resize or turn is going on (draft quality, 5.3), and which.
+  const [placing, setPlacingState] = useState<string | null>(null);
+  const [frozenDesign, setFrozenDesign] = useState<DesignDocument | null>(null);
+  const setPlacing = useCallback((kind: string | null) => {
+    setPlacingState(kind);
+    setFrozenDesign(kind ? designRef.current : null);
+  }, []);
+  const lastSnap = useRef("");
+  const setSelectedId = useCallback((id: string | null) => setSelectedIdState(id), []);
   const [saveInfo, setSaveInfo] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const timing = useRef<{ name: string; start: number } | null>(null);
@@ -284,11 +340,14 @@ export function EditorShell(props: EditorShellProps) {
   const fontsLoading = (fontStatus?.loading.length ?? 0) > 0;
   const fontsFailed = (fontStatus?.failed.length ?? 0) > 0 || (fontStatus?.missing.length ?? 0) > 0;
   const openTool = useCallback(
-    (next: ToolId, nextDetent: PanelDetent = "normal") => {
+    (next: ToolId, nextDetent: PanelDetent = "normal", options: { turn?: boolean } = {}) => {
       setTool(next);
       setDetent(nextDetent);
       setStartCard(false);
-      // The camera turns to the side the tool works on (6.3).
+      setKitOpen(false);
+      // The camera turns to the side the tool works on (6.3), unless the coach tapped an item on the model
+      // (they are already looking at it).
+      if (options.turn === false) return;
       if (next === "players") showSide("back");
       else if (next === "team") {
         const name = designRef.current.layers.find((l) => l.role === "team-name");
@@ -303,6 +362,10 @@ export function EditorShell(props: EditorShellProps) {
       return;
     }
     if (startCard) setStartCard(false);
+    if (kitOpen) {
+      openTool(next, detent === "expanded" ? "expanded" : "normal");
+      return;
+    }
     if (activeTool === next && layout !== "wide") {
       setTool(null);
       return;
@@ -356,13 +419,23 @@ export function EditorShell(props: EditorShellProps) {
         event.preventDefault();
         redo();
       } else if (event.key === "Escape" && !typingInField) {
-        if (selectedId) setSelectedId(null);
+        if (kitOpen) setKitOpen(false);
+        else if (selectedId) setSelectedId(null);
         else if (panelOpen && layout !== "wide") closePanel();
+      } else if (selectedId && !typingInField && !mod && (target === document.body || target?.closest?.(".fmo-stage, .fmo-context"))) {
+        const step = keyEdit(event.key, event.shiftKey);
+        if (!step) return;
+        event.preventDefault();
+        if (step.kind === "delete") {
+          if (commit((d) => removeLayer(d, selectedId), "remove-item")) setSelectedId(null);
+        } else if (step.kind === "nudge") commit((d) => nudgeLayer(d, selectedId, step.dx, step.dy, { product }), "move");
+        else if (step.kind === "scale") commit((d) => scaleLayerBy(d, selectedId, step.factor, { product }), "resize");
+        else commit((d) => rotateLayerBy(d, selectedId, step.degrees, { product }), "rotate");
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [undo, redo, selectedId, panelOpen, layout, closePanel]);
+  }, [undo, redo, selectedId, setSelectedId, panelOpen, layout, closePanel, commit, product, kitOpen]);
 
   // ---- The zone flash (4.3): white then ink, 600 ms, fading; a still outline for 1.5 s with reduced motion.
   const chooseColourTarget = useCallback(
@@ -404,7 +477,9 @@ export function EditorShell(props: EditorShellProps) {
     (model: LoadedModel) => {
       const run = () => {
         try {
-          setGarmentView(renderGarmentView(extractGarmentMeshes(model.scene, product), { width: CARD_WIDTH, height: CARD_HEIGHT }));
+          const meshes = extractGarmentMeshes(model.scene, product);
+          setGarmentMeshes(meshes);
+          setGarmentView(renderGarmentView(meshes, { width: CARD_WIDTH, height: CARD_HEIGHT }));
         } catch (error) {
           console.error("[editor] template cards:", error);
         }
@@ -463,6 +538,14 @@ export function EditorShell(props: EditorShellProps) {
     onTiming.current = props.onTiming;
   });
   const logTimings = props.logTimings;
+  const onGestureTimingRef = useRef(props.onGestureTiming);
+  useEffect(() => {
+    onGestureTimingRef.current = props.onGestureTiming;
+  });
+  const lastPlacing = useRef<string | null>(null);
+  useEffect(() => {
+    if (placing) lastPlacing.current = placing;
+  }, [placing]);
   const onTextureDrawn = useCallback(
     (info: TextureDrawInfo) => {
       setTextFits(info.textFits);
@@ -503,14 +586,13 @@ export function EditorShell(props: EditorShellProps) {
     return () => window.removeEventListener("beforeunload", warn);
   }, [props.saveState]);
 
-  // ---- The one hint, once, the first time the model is shown (7.4); any touch on the stage dismisses it.
-  const [hintSeen, setHintSeen] = useState(() => readLocal(HINT_KEY) !== null);
+  // ---- The one hint, once per design (7.4; E3b): after the start card, in its own band above the garment,
+  // gone at the first press on the stage (a drag or a tap).
+  const [hintSeen, setHintSeen] = useState(() => !(props.showHint ?? props.showStartCard ?? false));
   const touchDevice = typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia("(pointer: coarse)").matches;
-  const hint = load.ready && !hintSeen ? (touchDevice ? wording.selection.hint : wording.selection.hintPointer) : null;
+  const hint = load.ready && !hintSeen && !startCard && !doneOpen && mode === "3d" ? (touchDevice ? wording.selection.hint : wording.selection.hintPointer) : null;
   const dismissHint = () => {
-    if (hintSeen) return;
-    setHintSeen(true);
-    writeLocal(HINT_KEY, "1");
+    if (!hintSeen) setHintSeen(true);
   };
 
   // ---- The stage's description in words, debounced (11.2).
@@ -521,7 +603,11 @@ export function EditorShell(props: EditorShellProps) {
   }, [design, camera.side, wording, product, palette, props.productName, description]);
 
   const heights = panelHeights(size.height || 844);
-  const insets = stageInsets(layout, { open: panelOpen || startCard, height: panelSize.height, width: panelSize.width });
+  const editorWidth = size.width || 390;
+  const stageWidth = layout === "wide" ? editorWidth - LAYOUT_SIZES.wide.rail - LAYOUT_SIZES.wide.panel : layout === "short" ? editorWidth - LAYOUT_SIZES.short.rail - (panelOpen || startCard ? LAYOUT_SIZES.short.panel : 0) : editorWidth;
+  const baseInsets = stageInsets(layout, { open: panelOpen || startCard || (kitOpen && layout !== "wide"), height: panelSize.height, width: panelSize.width });
+  // The Done panel covers the stage's right side (desktop, landscape) or its lower part (phone): the garment is framed in the rest.
+  const insets = doneOpen ? (layout === "compact" ? { ...baseInsets, bottom: heights.expanded } : { ...baseInsets, right: layout === "wide" ? 400 : LAYOUT_SIZES.short.panel }) : baseInsets;
 
   const api: EditorApi = {
     product,
@@ -533,7 +619,9 @@ export function EditorShell(props: EditorShellProps) {
     layout,
     detent,
     setDetent,
-    design,
+    // While a drag, resize or turn goes on, the tools see the design as it was when it started (5.3: the
+    // stage is what must stay quick; the panel catches up on release).
+    design: frozenDesign ?? design,
     commit,
     begin: (label) => history.begin(label),
     preview,
@@ -564,22 +652,155 @@ export function EditorShell(props: EditorShellProps) {
     setTyping,
     openTool,
     reducedMotion,
+    selectedId,
+    select: (layerId, options = {}) => {
+      setSelectedId(layerId);
+      const layer = layerId ? designRef.current.layers.find((l) => l.id === layerId) : undefined;
+      if (!layer) return;
+      if (options.openTool) {
+        const next = toolForLayer(layer);
+        if (tools.includes(next)) openTool(next, detent === "expanded" ? "normal" : detent, { turn: false });
+      }
+      if (options.turn) {
+        const side = layerSide(product, layer);
+        // Only when the item faces away: the camera never moves for what the coach already sees (6.3).
+        if (side && side !== canvas.current?.getSide()) canvas.current?.focusOn(layer.id);
+      }
+    },
+    logoNotes,
+    setLogoNote: (assetId, note) => setLogoNotes((all) => ({ ...all, [assetId]: { ...all[assetId], ...note } })),
+    snapping: snapOn,
+    setSnapping: setSnapOn,
     markTiming: (name) => {
       timing.current = { name, start: performance.now() };
     },
   };
 
+  const selectOnModel = useCallback(
+    (layerId: string | null) => {
+      // Pressing the item that is already selected (to drag it) changes nothing: no tool opens, the camera keeps still.
+      if (layerId === selectedId) return;
+      setSelectedId(layerId);
+      const layer = layerId ? designRef.current.layers.find((l) => l.id === layerId) : undefined;
+      if (!layer || startCard) return;
+      const next = toolForLayer(layer);
+      if (next !== activeTool && tools.includes(next)) openTool(next, detent === "expanded" ? "normal" : detent, { turn: false });
+    },
+    [selectedId, setSelectedId, startCard, activeTool, tools, openTool, detent],
+  );
+
+  // The handles (5.2): a corner scales the item evenly about its centre, the turn handle turns it (snapping at
+  // 0, 15, 45 and 90 degrees unless Alt is held). Each gesture is one undo step.
+  const gestureStart = useRef<Layer | null>(null);
+  const onResize = useCallback(
+    (phase: GesturePhase, factor: number) => {
+      const id = selectedId;
+      if (!id) return;
+      if (phase === "start") {
+        gestureStart.current = designRef.current.layers.find((l) => l.id === id) ?? null;
+        history.begin("resize");
+        setPlacing("resize");
+        return;
+      }
+      const start = gestureStart.current;
+      if (!start) return;
+      if (phase === "cancel") {
+        history.cancel();
+        gestureStart.current = null;
+        setGuides([]);
+        setPlacing(null);
+        return;
+      }
+      const piece = product.pieces.find((p) => p.id === start.pieceId);
+      const limited = piece ? Math.min(factor, maxScaleInArea(printAreaOf(piece), start)) : factor;
+      const scaled = scaleLayer(start, limited);
+      const position = clampToPrintArea(product, { ...start, size: scaled.size });
+      setGuides(phase === "end" ? [] : printAreaLines(product, start.pieceId).map((l) => ({ ...l, kind: "area" as const })));
+      try {
+        history.preview((d) => updateLayer(d, id, { ...scaled, position }, { product }));
+      } catch (error) {
+        console.error("[editor] resize refused:", error);
+      }
+      if (phase === "end") {
+        history.end();
+        gestureStart.current = null;
+        setPlacing(null);
+      }
+    },
+    [selectedId, history, product, setGuides, setPlacing],
+  );
+  const onRotate = useCallback(
+    (phase: GesturePhase, degrees: number, free: boolean) => {
+      const id = selectedId;
+      if (!id) return;
+      if (phase === "start") {
+        gestureStart.current = designRef.current.layers.find((l) => l.id === id) ?? null;
+        history.begin("rotate");
+        setPlacing("rotate");
+        return;
+      }
+      const start = gestureStart.current;
+      if (!start) return;
+      if (phase === "cancel") {
+        history.cancel();
+        gestureStart.current = null;
+        return;
+      }
+      const rotation = snapAngle(start.rotation + degrees, free).angle;
+      const position = clampToPrintArea(product, { ...start, rotation });
+      setGuides(phase === "end" ? [] : printAreaLines(product, start.pieceId).map((l) => ({ ...l, kind: "area" as const })));
+      try {
+        history.preview((d) => updateLayer(d, id, { rotation, position }, { product }));
+      } catch (error) {
+        console.error("[editor] turn refused:", error);
+      }
+      if (phase === "end") {
+        history.end();
+        gestureStart.current = null;
+        setPlacing(null);
+      }
+    },
+    [selectedId, history, product, setGuides, setPlacing],
+  );
+
   const onLayerDrag = useCallback(
     (event: LayerDragEvent) => {
-      if (event.phase === "start") history.begin("move");
-      else if (event.phase === "move") history.preview((d) => updateLayer(d, event.layerId, { position: event.position }, { product }));
-      else if (event.phase === "end") history.end();
-      else history.cancel();
+      const areaLines = printAreaLines(product, event.pieceId).map((l) => ({ ...l, kind: "area" as const }));
+      if (event.phase === "start") {
+        history.begin("move");
+        lastSnap.current = "";
+        setGuides(areaLines);
+        setPlacing("move");
+        return;
+      }
+      if (event.phase === "cancel") {
+        history.cancel();
+        setGuides([]);
+        setPlacing(null);
+        return;
+      }
+      const current = designRef.current;
+      const layer = current.layers.find((l) => l.id === event.layerId);
+      if (!layer) return;
+      const snapped = snapPosition(product, current, layer, event.position, { reachMm: snapReachMm(event.pxPerMm), free: Boolean(event.free) || !snapOn });
+      const position = clampToPrintArea(product, layer, snapped.position);
+      history.preview((d) => updateLayer(d, event.layerId, { position }, { product }));
+      // A short buzz on Android when a new line catches the item (7.5), never with reduced motion.
+      const snapKey = snapped.guides.map((g) => `${g.axis}${g.from.x},${g.from.y}`).join("|");
+      if (snapKey && snapKey !== lastSnap.current && !reducedMotion && typeof navigator !== "undefined" && typeof navigator.vibrate === "function") navigator.vibrate(10);
+      lastSnap.current = snapKey;
+      if (event.phase === "end") {
+        history.end();
+        setGuides([]);
+        setPlacing(null);
+      } else setGuides([...areaLines, ...snapped.guides.map((g) => ({ pieceId: g.pieceId, from: g.from, to: g.to, kind: "guide" as const }))]);
     },
-    [history, product],
+    [history, product, snapOn, reducedMotion, setGuides, setPlacing],
   );
 
   const onStageKey = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    // With an item selected, the arrows move it (the window's key handler, 5.1); the garment does not turn.
+    if (selectedId && event.key.startsWith("Arrow")) return;
     const turn = { ArrowLeft: -15, ArrowRight: 15 }[event.key as "ArrowLeft" | "ArrowRight"];
     if (turn !== undefined) {
       event.preventDefault();
@@ -606,8 +827,37 @@ export function EditorShell(props: EditorShellProps) {
   };
 
   const fontsNote = fontsLoading ? wording.lettering.fontsLoading : null;
-  const panel =
-    panelOpen && activeTool ? (
+  const selectedLayer = selectedId ? (design.layers.find((l) => l.id === selectedId) ?? null) : null;
+  const toolDesign = frozenDesign ?? design;
+  const selectionWarn = useMemo(() => {
+    const layer = selectedId ? toolDesign.layers.find((l) => l.id === selectedId) : undefined;
+    return layer ? itemChecks(product, toolDesign, layer, { notes: logoNotes }).length > 0 : false;
+  }, [selectedId, toolDesign, product, logoNotes]);
+  const kitInPanel = kitOpen && layout !== "wide" && !startCard;
+  const kitPanel = kitInPanel ? (
+    <ToolPanel
+      key={`kit-${layout}`}
+      layout={layout}
+      tool={activeTool ?? tools[0]!}
+      title={wording.selection.onThisKit}
+      wording={wording}
+      detent={detent}
+      heights={heights}
+      typing={typing}
+      onDetent={(d) => (d === "closed" ? setKitOpen(false) : setDetent(d))}
+      onClose={() => setKitOpen(false)}
+      onSize={setPanelSize}
+    >
+      <div className="fmo-back-row">
+        <button type="button" onClick={() => setKitOpen(false)} data-testid="kit-back">
+          {wording.tools.back}
+        </button>
+      </div>
+      <OnThisKit onDone={() => setKitOpen(false)} />
+    </ToolPanel>
+  ) : null;
+  const panel = kitPanel ??
+    (panelOpen && activeTool ? (
       <ToolPanel
         key={layout}
         layout={layout}
@@ -620,10 +870,17 @@ export function EditorShell(props: EditorShellProps) {
         onClose={closePanel}
         onSize={setPanelSize}
       >
+        {selectedLayer && layout === "wide" && <ContextBar variant="panel" />}
+        {selectedLayer && toolForLayer(selectedLayer) === activeTool && (
+          <div className="fmo-stack" data-testid="selected-item-section">
+            <ClippedNote />
+            <FineTune />
+          </div>
+        )}
         {toolBody(activeTool)}
         {fontsNote && (activeTool === "team" || activeTool === "players") && <p className="fmo-muted">{fontsNote}</p>}
       </ToolPanel>
-    ) : null;
+    ) : null);
   const start = startCard ? (
     <div style={layout === "compact" ? { position: "absolute", inset: 0, pointerEvents: "none" } : layout === "short" ? { position: "absolute", inset: 0, pointerEvents: "none" } : { display: "contents" }}>
       <StartCardFrame layout={layout} maxHeight={(size.height || 844) - LAYOUT_SIZES.compact.topBar - START_CARD_STAGE_MIN} onSize={setPanelSize}>
@@ -652,6 +909,7 @@ export function EditorShell(props: EditorShellProps) {
         data-typing={typing}
         data-detent={panelOpen ? detent : "closed"}
         data-reduced-motion={reducedMotion}
+        data-selected={selectedId ?? ""}
         role="application"
         aria-label={wording.frame.editorName}
         data-testid="editor"
@@ -667,10 +925,14 @@ export function EditorShell(props: EditorShellProps) {
           onUndo={undo}
           onRedo={redo}
           saveState={props.saveState ?? null}
-          showSaveWords={saveStateShowsWords(size.width || 390)}
+          saveWords={saveStateWords(layout, size.width || 390)}
           onSaveInfo={() => setSaveInfo(true)}
           onClose={() => (props.saveState === "failed" ? setLeaving(true) : props.onClose?.())}
-          onDone={() => props.onDone?.(designRef.current)}
+          onDone={() => {
+            setKitOpen(false);
+            setDoneOpen(true);
+          }}
+          doneOpen={doneOpen}
           brand={props.slots?.brand}
           price={props.slots?.price}
           share={props.slots?.share}
@@ -684,7 +946,6 @@ export function EditorShell(props: EditorShellProps) {
           className="fmo-work"
           onPointerDownCapture={() => {
             pointer.current.down = true;
-            dismissHint();
           }}
           onPointerUpCapture={() => {
             pointer.current.down = false;
@@ -710,7 +971,17 @@ export function EditorShell(props: EditorShellProps) {
               fonts: props.fontSet,
               reducedMotion,
               selectedLayerId: selectedId,
-              onSelectLayer: setSelectedId,
+              onSelectLayer: selectOnModel,
+              dragOnlySelected: "touch",
+              outlineSelected: false,
+              guides,
+              gesture: placing !== null,
+              draftQuality: props.draftQuality ?? "auto",
+              onGestureTiming: (t: GestureTiming) => {
+                const named = { ...t, name: lastPlacing.current ?? "move" };
+                onGestureTimingRef.current?.(named);
+                if (logTimings) console.info(`[editor timing] ${named.name}: ${t.frames} frames, frame p50 ${t.frameP50.toFixed(1)} ms, p95 ${t.frameP95.toFixed(1)} ms, max ${t.frameMax.toFixed(1)} ms; drawing p50 ${t.drawP50.toFixed(1)} ms; draft ${t.draft ? "on" : "off"}; full quality ${(t.fullQualityMs ?? 0).toFixed(1)} ms after release`);
+              },
               onLayerDrag,
               pickZones: activeTool === "colours" && !startCard,
               onZoneTap,
@@ -755,10 +1026,50 @@ export function EditorShell(props: EditorShellProps) {
             onReset={() => canvas.current?.resetView()}
             onStageKey={onStageKey}
             credit={props.slots?.credit}
+            creditShort={props.slots?.creditShort}
+            garment={garmentMeshes}
+            stageWidth={stageWidth}
+            onStagePointerDown={dismissHint}
+            onResize={onResize}
+            onRotate={onRotate}
+            onTurnTo={() => selectedId && canvas.current?.focusOn(selectedId)}
+            handlesHidden={typing || doneOpen}
+            contextBar={Boolean(selectedLayer) && layout !== "wide" && !typing && mode === "3d" && !doneOpen}
+            selectionWarn={selectionWarn}
+            kitButton={
+              startCard || doneOpen || (Boolean(selectedLayer) && layout !== "wide" && !typing && mode === "3d") || (layout === "compact" && typing) ? null : (
+                <KitButton count={design.layers.length} compact={(size.width || 390) < 480} open={kitOpen} onClick={() => setKitOpen((o) => !o)} />
+              )
+            }
+            kitPopover={
+              kitOpen && layout === "wide" ? (
+                <div className="fmo-kit-popover" role="dialog" aria-label={wording.selection.onThisKit} data-testid="kit-popover">
+                  <h2 className="fmo-panel-title">{wording.selection.onThisKit}</h2>
+                  <OnThisKit onDone={() => setKitOpen(false)} />
+                </div>
+              ) : null
+            }
             viewControls={layout === "compact" && typing ? "none" : layout === "compact" && panelOpen && detent === "expanded" ? "reset-only" : "full"}
           />
           {layout !== "wide" && (start ?? panel)}
         </div>
+        <DonePanel
+          open={doneOpen}
+          layout={layout}
+          productName={props.productName}
+          price={props.slots?.price}
+          primaryAction={props.slots?.primaryAction}
+          share={props.slots?.share}
+          onClose={() => setDoneOpen(false)}
+          onSaveAndGoBack={() => {
+            setDoneOpen(false);
+            props.onDone?.(designRef.current);
+          }}
+          onShow={(check) => {
+            setDoneOpen(false);
+            api.select(check.layerId, { turn: true, openTool: true });
+          }}
+        />
         <ConfirmDialog
           open={saveInfo}
           title={wording.frame.notSaved}

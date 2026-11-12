@@ -1,8 +1,8 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { EDITOR_WORDING, changeWords, fill, mergeWording, presetWords, shapeGroupWords } from "./content";
-import { PANEL_NORMAL_MAX, chooseLayout, panelHeights, saveStateShowsWords, stageHeight, stageInsets } from "./layout";
+import { PANEL_NORMAL_MAX, chooseLayout, panelHeights, saveStateWords, stageHeight, stageInsets } from "./layout";
 import { convertDigits, digitChoiceOf, numberErrorText, numberFieldError, playerSwitches } from "./lettering";
 import { colourCodeState, normaliseCodeInput } from "./colour-code";
 import { bodyColour, describeStage, nextStageTone } from "./stage-logic";
@@ -43,7 +43,7 @@ describe("wording (section 14)", () => {
     const walk = (value: unknown, path: string): void => {
       if (typeof value === "string") {
         expect(value.trim().length, path).toBeGreaterThan(0);
-        for (const m of value.matchAll(/\{(\w+)\}/g)) expect(["zone", "colour", "code", "role", "file", "size", "percent", "change", "font", "product", "side", "summary", "zones", "item", "where", "value", "name", "number"], path).toContain(m[1]);
+        for (const m of value.matchAll(/\{(\w+)\}/g)) expect(["zone", "colour", "code", "role", "file", "size", "percent", "change", "font", "product", "side", "summary", "zones", "item", "where", "value", "name", "number", "width", "height", "degrees", "count", "cm", "reason", "team"], path).toContain(m[1]);
       } else if (value && typeof value === "object") for (const [k, v] of Object.entries(value)) walk(v, `${path}.${k}`);
     };
     walk(W, "wording");
@@ -52,7 +52,10 @@ describe("wording (section 14)", () => {
   it("is the only place sentences live: no component holds a sentence of its own", () => {
     // A rough check: every .tsx in src/ui has no JSX text of three words or more outside the wording.
     const dir = resolve(import.meta.dirname);
-    for (const file of ["EditorShell.tsx", "TopBar.tsx", "ToolPanel.tsx", "Stage.tsx", "StartCard.tsx", "DesignTool.tsx", "ColoursTool.tsx", "LetteringTools.tsx", "LogosTool.tsx", "TextTool.tsx", "FlatView.tsx", "parts.tsx", "dialogs.tsx", "icons.tsx"]) {
+    // Every component of the interface (E3b: read from the folder, so a new one is checked too).
+    const files = readdirSync(dir).filter((name) => name.endsWith(".tsx") && !name.endsWith(".test.tsx"));
+    expect(files.length).toBeGreaterThanOrEqual(13);
+    for (const file of files) {
       let source: string;
       try {
         source = readFileSync(resolve(dir, file), "utf8");
@@ -110,8 +113,13 @@ describe("layouts (3.1)", () => {
     expect(stageInsets("short", { open: true, height: 0 })).toEqual({ top: 0, right: 320, bottom: 0, left: 0 });
     expect(stageInsets("wide", { open: true, height: 500 })).toEqual({ top: 0, right: 0, bottom: 0, left: 0 });
     expect(stageInsets("compact", { open: false, height: 172 }).bottom).toBe(0);
-    expect(saveStateShowsWords(360)).toBe(false);
-    expect(saveStateShowsWords(390)).toBe(true);
+    // E3b: nothing in the top bar is cut at 360 px: one word on a phone, the sentence where it fits.
+    expect(saveStateWords("compact", 360)).toBe("short");
+    expect(saveStateWords("compact", 390)).toBe("short");
+    expect(saveStateWords("compact", 320)).toBe("none");
+    expect(saveStateWords("compact", 768)).toBe("full");
+    expect(saveStateWords("short", 844)).toBe("full");
+    expect(saveStateWords("wide", 1366)).toBe("full");
   });
 });
 
@@ -254,7 +262,8 @@ describe("the start card's picks and where new items go", () => {
     const presets = jersey.placements.filter((p) => p.roles.includes("crest"));
     expect(nextFreePreset({ layers: [] }, presets, LOGO_ORDER)!.id).toBe("left-chest");
     const withCrest = { layers: [{ preset: "left-chest" }, { preset: "chest-centre" }] } as never;
-    expect(nextFreePreset(withCrest, presets, LOGO_ORDER)!.id).toBe("right-chest");
+    // 4.6: a third logo goes on the upper back.
+    expect(nextFreePreset(withCrest, presets, LOGO_ORDER)!.id).toBe("upper-back");
     expect(nextFreePreset({ layers: [] }, jersey.placements.filter((p) => p.roles.includes("text")), TEXT_ORDER)!.id).toBe("lower-back");
     expect(nextFreePreset({ layers: [] }, [], LOGO_ORDER)).toBeNull();
   });

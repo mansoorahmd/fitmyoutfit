@@ -115,6 +115,8 @@ interface Config {
    * product definition, whose validation checks that each centre lies on its piece).
    */
   placements: PlacementPreset[];
+  /** Print areas by piece id, in the generated pieces' millimetres (N6; placeholders until the factories give theirs). */
+  printAreas?: Record<string, { x: number; y: number; width: number; height: number }>;
   outlineToleranceMm: number;
   /** How the pieces are packed into the texture (model-prep/packing.ts; default "shelf"). */
   packing?: "shelf" | "skyline" | "best";
@@ -408,6 +410,7 @@ const productJson = {
         height: roundTo(p.height * packed.scale, 12),
       },
       outline: polygonToSvgPath(p.outline, 2),
+      ...(config.printAreas?.[p.config.id] ? { printArea: config.printAreas[p.config.id] } : {}),
       zone: p.config.zone,
       regions: p.config.bands.map((band) => ({ zone: band.zone, path: edgeBandPath(p.outline, band) })),
     };
