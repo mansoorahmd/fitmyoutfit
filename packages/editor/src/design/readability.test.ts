@@ -39,9 +39,11 @@ describe("readability (3:1)", () => {
     const onYoke = updateLayer(kit(NAVY), "name", { position: { x: 280, y: 60 } }, { product });
     expect(itemReadability(product, onYoke, "name")!.background).toMatchObject({ kind: "zone", zoneId: "yoke" });
     expect(itemReadability(product, onYoke, "name")!.passes).toBe(false);
-    // Onto a side panel (x below 92 mm, from y 230 mm).
+    // Half onto a side panel (x below 92 mm, from y 230 mm): both zones are under it, the navy body is the worst.
     const onSide = updateLayer(kit(NAVY), "name", { position: { x: 40, y: 400 } }, { product });
-    expect(itemReadability(product, onSide, "name")!.background).toMatchObject({ kind: "zone", zoneId: "side_panels" });
+    const side = itemReadability(product, onSide, "name")!;
+    expect(side.backgrounds.map((b) => b.kind === "zone" && b.zoneId).sort()).toEqual(["body", "side_panels"]);
+    expect(side.background).toMatchObject({ kind: "zone", zoneId: "body" });
   });
 
   it("follows a shape over the zone (a hoop under the name)", () => {
