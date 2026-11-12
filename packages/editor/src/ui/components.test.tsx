@@ -20,6 +20,7 @@ import { StartCard } from "./StartCard";
 import { ToolTabs, TOOL_ORDER } from "./ToolPanel";
 import { TopBar } from "./TopBar";
 import { ContextBar, FineTune } from "./SelectedItem";
+import { KitButton, OnThisKit } from "./OnThisKit";
 import { loadPlaceholderFonts, loadPlaceholderPalette, loadStandInJerseyProduct } from "../test/fixtures";
 
 const product = loadStandInJerseyProduct();
@@ -181,5 +182,32 @@ describe("the selected item's controls (06-editor.md 5.2)", () => {
     expect(html).toContain('aria-expanded="false"');
     expect(text(html)).toContain("Fine-tune");
     expect(html).not.toContain('data-testid="ft-bigger"');
+  });
+});
+
+describe("On this kit (06-editor.md 4.8)", () => {
+  it("lists every item top first in the coach's words, with where it is, and the design's shapes as locked", () => {
+    const html = inTool(<OnThisKit onDone={() => undefined} />);
+    const t = text(html);
+    expect(t).toContain("Team name: LAHORE LIONS");
+    expect(t).toContain("Chest");
+    for (const layer of design.layers) expect(html).toContain(`data-testid="kit-row-${layer.id}"`);
+    // Top first: the last layer is the first row.
+    const first = html.indexOf(`kit-row-${design.layers[design.layers.length - 1]!.id}`);
+    const last = html.indexOf(`kit-row-${design.layers[0]!.id}`);
+    expect(first).toBeLessThan(last);
+    expect(html).toContain('aria-label="More for Team name: LAHORE LIONS"');
+  });
+
+  it("says what to do when nothing is on the kit yet", () => {
+    const html = inTool(<OnThisKit onDone={() => undefined} />, { design: { ...design, layers: [], shapes: [] } });
+    expect(text(html)).toContain("Nothing added yet. Add your team name, players or a logo.");
+  });
+
+  it("the stage's button: words and the count; icon and a number below 480 px", () => {
+    expect(text(inTool(<KitButton count={3} compact={false} open={false} onClick={() => undefined} />))).toContain("On this kit (3)");
+    const small = inTool(<KitButton count={3} compact open={false} onClick={() => undefined} />);
+    expect(small).toContain('aria-label="On this kit, 3 items"');
+    expect(small).toContain('class="fmo-kit-count"');
   });
 });

@@ -51,6 +51,7 @@ import { TOOL_ORDER, ToolPanel, ToolTabs } from "./ToolPanel.js";
 import { TopBar } from "./TopBar.js";
 import { hasWebGL2, readLocal, writeLocal } from "./webgl.js";
 import { toolForLayer } from "./selection.js";
+import { KitButton, OnThisKit } from "./OnThisKit.js";
 import { itemChecks, type LogoNote } from "./checks.js";
 import { ClippedNote, ContextBar, FineTune, keyEdit } from "./SelectedItem.js";
 import { nudgeLayer, rotateLayerBy, scaleLayerBy } from "../design/item-edits.js";
@@ -226,6 +227,8 @@ export function EditorShell(props: EditorShellProps) {
   const setGuides = useCallback((next: PieceGuide[]) => setGuidesState((now) => (JSON.stringify(now) === JSON.stringify(next) ? now : next)), []);
   // Snapping can be held off: Alt with a mouse, or this setting (fine-tune) on touch and for everyone (5.2).
   const [snapOn, setSnapOn] = useState(true);
+  // "On this kit" is open (4.8): on phones in the panel's place, on desktop as a popover.
+  const [kitOpen, setKitOpen] = useState(false);
   // What the upload checks found about each file this session (a logo without a transparent background), by asset id.
   const [logoNotes, setLogoNotes] = useState<Record<string, LogoNote>>({});
   // A drag, resize or turn is going on (draft quality, 5.3), and which.
@@ -332,6 +335,7 @@ export function EditorShell(props: EditorShellProps) {
       setTool(next);
       setDetent(nextDetent);
       setStartCard(false);
+      setKitOpen(false);
       // The camera turns to the side the tool works on (6.3), unless the coach tapped an item on the model
       // (they are already looking at it).
       if (options.turn === false) return;
@@ -349,6 +353,10 @@ export function EditorShell(props: EditorShellProps) {
       return;
     }
     if (startCard) setStartCard(false);
+    if (kitOpen) {
+      openTool(next, detent === "expanded" ? "expanded" : "normal");
+      return;
+    }
     if (activeTool === next && layout !== "wide") {
       setTool(null);
       return;
@@ -402,7 +410,8 @@ export function EditorShell(props: EditorShellProps) {
         event.preventDefault();
         redo();
       } else if (event.key === "Escape" && !typingInField) {
-        if (selectedId) setSelectedId(null);
+        if (kitOpen) setKitOpen(false);
+        else if (selectedId) setSelectedId(null);
         else if (panelOpen && layout !== "wide") closePanel();
       } else if (selectedId && !typingInField && !mod && (target === document.body || target?.closest?.(".fmo-stage, .fmo-context"))) {
         const step = keyEdit(event.key, event.shiftKey);
@@ -417,7 +426,7 @@ export function EditorShell(props: EditorShellProps) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [undo, redo, selectedId, setSelectedId, panelOpen, layout, closePanel, commit, product]);
+  }, [undo, redo, selectedId, setSelectedId, panelOpen, layout, closePanel, commit, product, kitOpen]);
 
   // ---- The zone flash (4.3): white then ink, 600 ms, fading; a still outline for 1.5 s with reduced motion.
   const chooseColourTarget = useCallback(
@@ -587,7 +596,7 @@ export function EditorShell(props: EditorShellProps) {
   const heights = panelHeights(size.height || 844);
   const editorWidth = size.width || 390;
   const stageWidth = layout === "wide" ? editorWidth - LAYOUT_SIZES.wide.rail - LAYOUT_SIZES.wide.panel : layout === "short" ? editorWidth - LAYOUT_SIZES.short.rail - (panelOpen || startCard ? LAYOUT_SIZES.short.panel : 0) : editorWidth;
-  const insets = stageInsets(layout, { open: panelOpen || startCard, height: panelSize.height, width: panelSize.width });
+  const insets = stageInsets(layout, { open: panelOpen || startCard || (kitOpen && layout !== "wide"), height: panelSize.height, width: panelSize.width });
 
   const api: EditorApi = {
     product,
@@ -811,8 +820,31 @@ export function EditorShell(props: EditorShellProps) {
     const layer = selectedId ? toolDesign.layers.find((l) => l.id === selectedId) : undefined;
     return layer ? itemChecks(product, toolDesign, layer, { notes: logoNotes }).length > 0 : false;
   }, [selectedId, toolDesign, product, logoNotes]);
-  const panel =
-    panelOpen && activeTool ? (
+  const kitInPanel = kitOpen && layout !== "wide" && !startCard;
+  const kitPanel = kitInPanel ? (
+    <ToolPanel
+      key={`kit-${layout}`}
+      layout={layout}
+      tool={activeTool ?? tools[0]!}
+      title={wording.selection.onThisKit}
+      wording={wording}
+      detent={detent}
+      heights={heights}
+      typing={typing}
+      onDetent={(d) => (d === "closed" ? setKitOpen(false) : setDetent(d))}
+      onClose={() => setKitOpen(false)}
+      onSize={setPanelSize}
+    >
+      <div className="fmo-back-row">
+        <button type="button" onClick={() => setKitOpen(false)} data-testid="kit-back">
+          {wording.tools.back}
+        </button>
+      </div>
+      <OnThisKit onDone={() => setKitOpen(false)} />
+    </ToolPanel>
+  ) : null;
+  const panel = kitPanel ??
+    (panelOpen && activeTool ? (
       <ToolPanel
         key={layout}
         layout={layout}
@@ -835,7 +867,7 @@ export function EditorShell(props: EditorShellProps) {
         {toolBody(activeTool)}
         {fontsNote && (activeTool === "team" || activeTool === "players") && <p className="fmo-muted">{fontsNote}</p>}
       </ToolPanel>
-    ) : null;
+    ) : null);
   const start = startCard ? (
     <div style={layout === "compact" ? { position: "absolute", inset: 0, pointerEvents: "none" } : layout === "short" ? { position: "absolute", inset: 0, pointerEvents: "none" } : { display: "contents" }}>
       <StartCardFrame layout={layout} maxHeight={(size.height || 844) - LAYOUT_SIZES.compact.topBar - START_CARD_STAGE_MIN} onSize={setPanelSize}>
@@ -987,6 +1019,19 @@ export function EditorShell(props: EditorShellProps) {
             handlesHidden={typing}
             contextBar={Boolean(selectedLayer) && layout !== "wide" && !typing && mode === "3d"}
             selectionWarn={selectionWarn}
+            kitButton={
+              startCard || (Boolean(selectedLayer) && layout !== "wide" && !typing && mode === "3d") || (layout === "compact" && typing) ? null : (
+                <KitButton count={design.layers.length} compact={(size.width || 390) < 480} open={kitOpen} onClick={() => setKitOpen((o) => !o)} />
+              )
+            }
+            kitPopover={
+              kitOpen && layout === "wide" ? (
+                <div className="fmo-kit-popover" role="dialog" aria-label={wording.selection.onThisKit} data-testid="kit-popover">
+                  <h2 className="fmo-panel-title">{wording.selection.onThisKit}</h2>
+                  <OnThisKit onDone={() => setKitOpen(false)} />
+                </div>
+              ) : null
+            }
             viewControls={layout === "compact" && typing ? "none" : layout === "compact" && panelOpen && detent === "expanded" ? "reset-only" : "full"}
           />
           {layout !== "wide" && (start ?? panel)}

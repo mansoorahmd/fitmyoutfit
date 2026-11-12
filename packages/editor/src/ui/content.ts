@@ -224,6 +224,14 @@ export const EDITOR_WORDING = {
     hint: "Drag to turn. Tap something to change it.", // W-ED116
     hintPointer: "Drag to turn. Click something to change it.", // W-ED116
     onThisKit: "On this kit", // W-ED130
+    onThisKitCount: "On this kit ({count})", // W-ED130 with the count
+    onThisKitName: "On this kit, {count} items", // NEW: the button's accessible name (4.8)
+    kitEmpty: "Nothing added yet. Add your team name, players or a logo.", // W-ED131
+    fromDesign: "From the design", // W-ED132
+    locked: "Locked", // W-ED132
+    moreFor: "More for {item}", // NEW: a row's menu button (accessible name)
+    needsALook: "Needs a look", // NEW: the warning badge's accessible name
+    colourAction: "Colour", // NEW: the only action for the design's shapes
   },
   /** View (`view`). */
   view: {

@@ -87,6 +87,9 @@ export interface StageProps {
   contextBar?: boolean;
   /** The selected item has a warning: a badge beside its handles. */
   selectionWarn?: boolean;
+  /** "On this kit" (4.8): its button at the top right of the stage, and (desktop) its popover under it. */
+  kitButton?: ReactNode;
+  kitPopover?: ReactNode;
 }
 
 export function Stage({ canvasRef, ...props }: StageProps) {
@@ -195,6 +198,12 @@ export function Stage({ canvasRef, ...props }: StageProps) {
           )}
         </div>
       </div>
+      {props.kitButton && (
+        <div className="fmo-kit-place" style={{ insetInlineEnd: (layout === "short" ? insets.right : 0) + 8 }}>
+          {props.kitButton}
+          {props.kitPopover}
+        </div>
+      )}
       {props.credit && mode === "3d" && <Credit full={props.credit} short={props.creditShort} form={creditForm(props.stageWidth)} right={insets.right} label={v.creditMore} />}
       {mode === "3d" && props.viewControls !== "none" && (
         <div className="fmo-view" data-controls={props.viewControls} style={{ bottom: controlsBottom, right: layout === "short" ? insets.right : 0 }} data-testid="view-controls">

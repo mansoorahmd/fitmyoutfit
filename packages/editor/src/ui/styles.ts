@@ -162,6 +162,21 @@ export const EDITOR_CSS = /* css */ `
 .fmo-segmented button:has(> .fmo-icon) { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
 .fmo-font-chip { font-size: 18px; max-width: 220px; overflow: hidden; }
 .fmo-font-chip > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fmo-kit-place { position: absolute; top: 4px; z-index: 4; display: flex; flex-direction: column; align-items: flex-end; }
+.fmo-kit-button { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 14px; border: 1px solid var(--fmo-border-strong); border-radius: 22px; background: var(--fmo-surface); color: var(--fmo-ink); cursor: pointer; font-size: 14px; font-weight: 600; position: relative; }
+.fmo-kit-icon { width: 44px; padding: 0; justify-content: center; }
+.fmo-kit-count { position: absolute; top: -4px; inset-inline-end: -4px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px; background: var(--fmo-ink); color: #fff; font-size: 12px; line-height: 20px; text-align: center; }
+.fmo-kit-popover { margin-top: 8px; width: 320px; max-height: min(520px, calc(100vh - 160px)); overflow: auto; padding: 12px 16px; border: 1px solid var(--fmo-border); border-radius: var(--fmo-radius-card); background: var(--fmo-surface); box-shadow: 0 8px 28px rgb(11 21 48 / 0.18); }
+.fmo-kit-rows { list-style: none; margin: 0; padding: 0; }
+.fmo-kit-row { display: flex; align-items: center; gap: 4px; min-height: 56px; border-bottom: 1px solid var(--fmo-border); }
+.fmo-kit-row[data-selected="true"] { background: var(--fmo-surface-alt); }
+.fmo-kit-pick { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 0 4px; border: 0; background: none; color: var(--fmo-ink); cursor: pointer; text-align: start; font: inherit; }
+.fmo-kit-words { display: flex; flex-direction: column; min-width: 0; flex: 1 1 auto; }
+.fmo-kit-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fmo-kit-words .fmo-muted { font-size: 13px; display: inline-flex; align-items: center; gap: 4px; }
+.fmo-kit-locked { cursor: default; }
+.fmo-kit-group { margin: 16px 0 4px; font-size: 13px; font-weight: 650; color: var(--fmo-ink-muted); text-transform: none; }
+.fmo-kit-menu { border: 0 !important; background: none !important; }
 .fmo-turn-to { position: absolute; transform: translateX(-50%); pointer-events: auto; box-shadow: 0 2px 8px rgb(11 21 48 / 0.16); font-weight: 600; }
 .fmo-stage-top { position: absolute; inset-inline: 0; top: var(--fmo-credit-room, 0px); display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px 12px 0; pointer-events: none; z-index: 2; }
 .fmo-stage-top > * { pointer-events: auto; }
