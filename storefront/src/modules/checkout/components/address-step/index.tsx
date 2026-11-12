@@ -11,8 +11,10 @@ import {
   AddressFieldKey,
   AddressFields,
   AddressFormValues,
+  FIELD_MAX,
   countryFieldRules,
   validateAddressForm,
+  withNewAddress,
   withSavedAddress,
 } from "@lib/util/checkout-address"
 import { CheckoutView } from "@lib/util/checkout-view"
@@ -131,8 +133,22 @@ const AddressStep = ({
     element?.scrollIntoView?.({ block: "center" })
   }
 
+  // What was typed under "Use a new address", kept while a saved one is chosen.
+  const newDraft = useRef<AddressFields | null>(null)
+
   const chooseSaved = (id: string) => {
+    if (id === savedChoice) return
+    if (savedChoice === NEW) newDraft.current = values.shipping
     setSavedChoice(id)
+    if (id === NEW) {
+      // empty, with the account's name (QA S1-4, D14), or what was typed before
+      setValues((current) =>
+        newDraft.current
+          ? { ...current, shipping: newDraft.current }
+          : withNewAddress(current, address.accountName)
+      )
+      return
+    }
     const saved = address.saved.find((a) => a.id === id)
     if (saved) setValues((current) => withSavedAddress(current, saved.address))
   }
@@ -221,6 +237,7 @@ const AddressStep = ({
         value={value}
         onChange={(e) => setField(key, e.target.value)}
         onBlur={() => checkOne(key)}
+        maxLength={name in FIELD_MAX ? FIELD_MAX[name as keyof typeof FIELD_MAX] : undefined}
         data-testid={`field-${key}`}
         {...input}
       />
@@ -290,7 +307,7 @@ const AddressStep = ({
             name={`${group}.province`}
             label={rules.province.label}
             value={a.province}
-            placeholder={words.fields.chooseProvince}
+            placeholder={rules.province.placeholder}
             options={rules.province.options}
             error={errors[`${group}.province`]}
             onChange={(e) => setField(`${group}.province`, e.target.value)}
@@ -367,7 +384,7 @@ const AddressStep = ({
               name="saved-address"
               value={NEW}
               checked={savedChoice === NEW}
-              onSelect={setSavedChoice}
+              onSelect={chooseSaved}
               title={words.useNew}
             />
           </div>

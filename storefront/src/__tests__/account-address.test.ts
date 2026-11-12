@@ -69,10 +69,10 @@ describe("validateAccountAddress: the checkout's own rules", () => {
 
   it("follows the country: postcode required in the UK and US, none in the UAE, provinces from the lists", () => {
     expect(validateAccountAddress(values({ country_code: "gb", province: "", postal_code: "" }, "07700 900123"), codes).postal_code).toBe(
-      "Enter a postcode / ZIP code"
+      "Enter a postcode"
     )
     expect(validateAccountAddress(values({ country_code: "ae", province: "pk-pb" }), codes).province).toBe(
-      "Choose a province / state / emirate"
+      "Choose an emirate"
     )
     expect(validateAccountAddress(values({ country_code: "fr", province: "" }), codes).country_code).toBe("Choose a country")
   })

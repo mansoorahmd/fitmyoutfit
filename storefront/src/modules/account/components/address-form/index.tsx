@@ -12,7 +12,7 @@ import {
   AccountAddressValues,
   validateAccountAddress,
 } from "@lib/util/account-address"
-import { AddressFields, CountryChoice, countryFieldRules } from "@lib/util/checkout-address"
+import { AddressFields, CountryChoice, FIELD_MAX, countryFieldRules } from "@lib/util/checkout-address"
 import Alert from "@modules/common/components/alert"
 import { Button } from "@modules/common/components/button"
 import CheckField from "@modules/common/components/check-field"
@@ -143,6 +143,7 @@ const AddressForm = ({
       value={key === "phone" ? values.phone : a[key]}
       onChange={(e) => setField(key, e.target.value)}
       onBlur={() => checkOne(key)}
+      maxLength={key === "country_code" || key === "province" ? undefined : FIELD_MAX[key]}
       data-testid={`address-field-${key}`}
       {...props}
     />
@@ -185,7 +186,7 @@ const AddressForm = ({
             name="province"
             label={rules.province.label}
             value={a.province}
-            placeholder={fieldWords.chooseProvince}
+            placeholder={rules.province.placeholder}
             options={rules.province.options}
             error={errors.province}
             onChange={(e) => setField("province", e.target.value)}

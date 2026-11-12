@@ -4,13 +4,17 @@ import {
   AddressFormValues,
   addressLines,
   addressStepDone,
+  FIELD_MAX,
   countryFieldRules,
   initialAddressValues,
   isEmail,
   isPhone,
+  normalizePkMobile,
+  normalizePostalCode,
   savedAddressesInRegion,
   toCartUpdate,
   validateAddressForm,
+  withNewAddress,
   withSavedAddress,
 } from "@lib/util/checkout-address"
 import { subdivisionName } from "@lib/util/subdivisions"
@@ -122,8 +126,22 @@ describe("validateAddressForm", () => {
       "shipping.first_name": "Enter your first name",
       "shipping.address_1": "Enter the house and street",
       "shipping.city": "Enter the city",
-      "shipping.province": "Choose a province / state / emirate",
+      "shipping.province": "Choose a province",
     })
+  })
+
+  it("names the region field for the country: province, state, emirate (QA S1-4, D9)", () => {
+    const missing = (country: string) => {
+      const values = form(country)
+      values.shipping.province = ""
+      return validateAddressForm(values, [country])["shipping.province"]
+    }
+    expect(missing("pk")).toBe("Choose a province")
+    expect(missing("us")).toBe("Choose a state")
+    expect(missing("ae")).toBe("Choose an emirate")
+    expect(countryFieldRules("pk").province.placeholder).toBe("Choose a province")
+    expect(countryFieldRules("us").province.placeholder).toBe("Choose a state")
+    expect(countryFieldRules("ae").province.placeholder).toBe("Choose an emirate")
   })
 
   it("requires the phone in every region (decision 008, 2)", () => {
@@ -140,14 +158,55 @@ describe("validateAddressForm", () => {
     expect(errors.phone).toBe("Enter a phone number, like 07700 900123")
   })
 
+  it("a delivery in Pakistan needs a Pakistan mobile number; other countries take any valid number (QA S1-4, D15)", () => {
+    for (const ok of ["0300 1234567", "0300-1234567", "+92 300 1234567", "923001234567", "0092 300 1234567"]) {
+      expect(validateAddressForm(form("pk", { phone: ok }), ["pk"]).phone, ok).toBeUndefined()
+    }
+    for (const bad of ["07700 900123", "+44 7700 900123", "042 35761234", "0300 123456", "+1 201 555 0123"]) {
+      expect(validateAddressForm(form("pk", { phone: bad }), ["pk"]).phone, bad).toBe(
+        "Enter a Pakistan mobile number, like 0300 1234567 or +92 300 1234567"
+      )
+    }
+    expect(validateAddressForm(form("gb", { phone: "+92 300 1234567" }), ["gb"]).phone).toBeUndefined()
+    expect(validateAddressForm(form("us", { phone: "07700 900123" }), ["us"]).phone).toBeUndefined()
+  })
+
   it("requires the postcode in the UK and the ZIP code in the US, not in Pakistan", () => {
     const gb = form("gb")
     gb.shipping.postal_code = ""
-    expect(validateAddressForm(gb, ["gb"])["shipping.postal_code"]).toBe("Enter a postcode / ZIP code")
+    expect(validateAddressForm(gb, ["gb"])["shipping.postal_code"]).toBe("Enter a postcode")
     const us = form("us")
     us.shipping.postal_code = ""
-    expect(validateAddressForm(us, ["us"])["shipping.postal_code"]).toBe("Enter a postcode / ZIP code")
+    expect(validateAddressForm(us, ["us"])["shipping.postal_code"]).toBe("Enter a ZIP code")
     expect(validateAddressForm(form("pk"), ["pk"])["shipping.postal_code"]).toBeUndefined()
+  })
+
+  it("checks the postal code's format for the country (QA S1-4, D7)", () => {
+    const withPostal = (country: string, postal: string) => {
+      const values = form(country)
+      values.shipping.postal_code = postal
+      return validateAddressForm(values, [country])["shipping.postal_code"]
+    }
+    expect(withPostal("gb", "ABC")).toBe("Enter a UK postcode, like SW1A 1AA")
+    expect(withPostal("gb", "sw1a1aa")).toBeUndefined()
+    expect(withPostal("us", "1")).toBe(
+      "Enter a ZIP code of five digits, like 10001, or ZIP+4, like 10001-1234"
+    )
+    expect(withPostal("us", "10001-1234")).toBeUndefined()
+    expect(withPostal("pk", "5400")).toBe("Enter a postal code of five digits, like 54000, or leave it empty")
+    expect(withPostal("pk", "54000")).toBeUndefined()
+    expect(withPostal("pk", "")).toBeUndefined()
+  })
+
+  it("refuses a field longer than the store keeps, saying the limit (QA S1-4, D11)", () => {
+    const values = form("pk")
+    values.shipping.address_1 = "x".repeat(FIELD_MAX.address_1 + 1)
+    values.shipping.last_name = "y".repeat(FIELD_MAX.last_name + 1)
+    const errors = validateAddressForm(values, ["pk"])
+    expect(errors["shipping.address_1"]).toBe(`Use ${FIELD_MAX.address_1} characters or fewer`)
+    expect(errors["shipping.last_name"]).toBe(`Use ${FIELD_MAX.last_name} characters or fewer`)
+    values.shipping.address_1 = "x".repeat(190) // a 190-character word fits, and wraps on the page
+    expect(validateAddressForm(values, ["pk"])["shipping.address_1"]).toBeUndefined()
   })
 
   it("refuses a province that isn't on the country's list", () => {
@@ -182,9 +241,34 @@ describe("what the cart receives", () => {
       first_name: "محمد علی",
       country_code: "pk",
       province: "pk-pb",
-      phone: "0300 1234567",
+      phone: "+923001234567",
     })
     expect(update.billing_address).toEqual(update.shipping_address)
+  })
+
+  it("stores each postal code and the Pakistan mobile in one form (QA S1-4, D7 and D15)", () => {
+    const gb = form("gb", { phone: "07700 900123" })
+    gb.shipping.postal_code = " sw1a1aa "
+    expect(toCartUpdate(gb).shipping_address).toMatchObject({ postal_code: "SW1A 1AA", phone: "07700 900123" })
+    const us = form("us")
+    us.shipping.postal_code = "100011234"
+    expect(toCartUpdate(us).shipping_address.postal_code).toBe("10001-1234")
+    for (const typed of ["0300 1234567", "+92 300 1234567", "92-300-1234567", "0092 300 1234567"]) {
+      expect(toCartUpdate(form("pk", { phone: typed })).shipping_address.phone, typed).toBe("+923001234567")
+    }
+  })
+
+  it("normalizes as the stored forms say", () => {
+    expect(normalizePostalCode("gb", "ec1a 1bb")).toBe("EC1A 1BB")
+    expect(normalizePostalCode("gb", "M1 1AE")).toBe("M1 1AE")
+    expect(normalizePostalCode("gb", "12345")).toBeNull()
+    expect(normalizePostalCode("us", "12345 6789")).toBe("12345-6789")
+    expect(normalizePostalCode("us", "1234")).toBeNull()
+    expect(normalizePostalCode("pk", "540000")).toBeNull()
+    expect(normalizePkMobile("0300 1234567")).toBe("+923001234567")
+    expect(normalizePkMobile("+923001234567")).toBe("+923001234567")
+    expect(normalizePkMobile("+44 7700 900123")).toBeNull()
+    expect(normalizePkMobile("0423 5761234")).toBeNull()
   })
 
   it("leaves out the fields the country doesn't have", () => {
@@ -294,10 +378,21 @@ describe("saved addresses", () => {
     expect(savedAddressesInRegion(saved, ["pk"]).map((a) => a.id)).toEqual(["a3", "a1"])
   })
 
-  it("fill the form, and the phone only when the form has none", () => {
+  it("fill the form with the chosen address's own phone (QA S1-4, D14)", () => {
     const empty = form("pk", { phone: "" })
     expect(withSavedAddress(empty, saved[2]).phone).toBe("0321 7654321")
-    expect(withSavedAddress(form("pk"), saved[2]).phone).toBe("0300 1234567")
+    // the default's phone was in the form; the second address brings its own
+    expect(withSavedAddress(form("pk"), saved[2]).phone).toBe("0321 7654321")
     expect(withSavedAddress(form("pk"), saved[2]).shipping.address_1).toBe("2 Canal Road")
+    // an address saved without a phone keeps the one in the form
+    expect(withSavedAddress(form("pk"), saved[0]).phone).toBe("0300 1234567")
+  })
+
+  it("'Use a new address' is empty apart from the account's name (QA S1-4, D14)", () => {
+    const fromSaved = withSavedAddress(form("pk"), saved[2])
+    const fresh = withNewAddress(fromSaved, { first_name: "Ali", last_name: "Raza" })
+    expect(fresh.shipping).toEqual({ ...blankAddress("pk"), first_name: "Ali", last_name: "Raza" })
+    expect(fresh.email).toBe(fromSaved.email)
+    expect(withNewAddress(fromSaved, null).shipping).toEqual(blankAddress("pk"))
   })
 })

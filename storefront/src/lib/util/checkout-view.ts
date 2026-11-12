@@ -108,6 +108,8 @@ export type CheckoutView = {
     /** The saved address the form starts with (the default), or null for a new one. */
     savedSelected: string | null
     signedIn: boolean
+    /** The account's name, for "Use a new address" (QA S1-4, D14). Null for a guest. */
+    accountName: { first_name: string; last_name: string } | null
     done: boolean
     summary: AddressSummaryView | null
   }
@@ -122,6 +124,8 @@ export type CheckoutView = {
 
 type CustomerLike = {
   email?: string | null
+  first_name?: string | null
+  last_name?: string | null
   addresses?: (HttpTypes.StoreCustomerAddress & { is_default_shipping?: boolean | null })[] | null
 } | null
 
@@ -212,6 +216,9 @@ export const checkoutView = ({
       saved: savedViews,
       savedSelected,
       signedIn: !!customer,
+      accountName: customer
+        ? { first_name: customer.first_name ?? "", last_name: customer.last_name ?? "" }
+        : null,
       done,
       summary: done
         ? {

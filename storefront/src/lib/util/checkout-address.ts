@@ -47,7 +47,10 @@ export type CountryFieldRules = {
   province: {
     shown: boolean
     required: boolean
+    /** Named for the country: "Province", "State", "Emirate" (W-K9). */
     label: string
+    /** The list's empty first choice, named the same way. */
+    placeholder: string
     options: { value: string; label: string }[]
   }
   postalCode: { shown: boolean; required: boolean; label: string }
@@ -55,34 +58,113 @@ export type CountryFieldRules = {
 
 const words = checkoutContent.address
 
+/** The country's own entry in a per-country table of words, else Pakistan's. */
+const forCountry = (table: Record<string, string>, code: string): string => table[code] ?? table.pk
+
 /**
  * The fields that depend on the country (05, 6.4, fields 10 and 11):
  * - Province / State / Emirate: a list in Pakistan, the US and the UAE, all
- *   required; none in the UK.
+ *   required; none in the UK (the specification hides it there).
  * - Postal code: required in the UK and the US, optional in Pakistan, none
  *   in the UAE (it has no postal codes).
- * Any other country gets an optional postal code and no province.
+ * Any other country gets an optional postal code and no province. Labels,
+ * the list's first choice and the messages are named for the country (QA
+ * S1-4, D9).
  */
 export const countryFieldRules = (countryCode: string | null | undefined): CountryFieldRules => {
   const code = (countryCode ?? "").toLowerCase()
   const options = subdivisionsOf(code).map((s) => ({ value: s.code, label: s.name }))
-  const provinceLabel = words.fields.province[code] ?? words.fields.province.pk
-  const postalLabel = words.fields.postalCode[code] ?? words.fields.postalCode.pk
 
   return {
     province: {
       shown: options.length > 0,
       required: options.length > 0,
-      label: provinceLabel,
+      label: forCountry(words.fields.province, code),
+      placeholder: forCountry(words.fields.chooseProvince, code),
       options,
     },
     postalCode: {
       shown: code !== "ae",
       required: code === "gb" || code === "us",
-      label: postalLabel,
+      label: forCountry(words.fields.postalCode, code),
     },
   }
 }
+
+/**
+ * The most characters each field keeps (QA S1-4, D11). Medusa stores these
+ * as text without a limit, so the limits are the store's: long enough for
+ * any real name or address line, short enough that one field can't take
+ * over a page or a courier label. 254 is the longest email address (RFC
+ * 5321).
+ */
+export const FIELD_MAX = {
+  email: 254,
+  phone: 25,
+  first_name: 100,
+  last_name: 100,
+  company: 100,
+  address_1: 200,
+  address_2: 200,
+  city: 100,
+  postal_code: 12,
+} as const
+
+export type LimitedField = keyof typeof FIELD_MAX
+
+/**
+ * A postal code in the country's one stored form, or null when it isn't one
+ * (QA S1-4, D7):
+ * - UK: the postcode format (outward code, inward code), stored upper case
+ *   with one space: "sw1a1aa" becomes "SW1A 1AA";
+ * - US: five digits, or ZIP+4 stored as "12345-6789";
+ * - Pakistan: five digits;
+ * - other countries: as typed, trimmed.
+ */
+export const normalizePostalCode = (
+  countryCode: string | null | undefined,
+  value: string
+): string | null => {
+  const code = (countryCode ?? "").toLowerCase()
+  const trimmed = value.trim()
+  if (code === "gb") {
+    const compact = trimmed.toUpperCase().replace(/\s+/g, "")
+    if (compact === "GIR0AA") return "GIR 0AA"
+    const match = /^([A-Z]{1,2}\d[A-Z\d]?)(\d[A-Z]{2})$/.exec(compact)
+    return match ? `${match[1]} ${match[2]}` : null
+  }
+  if (code === "us") {
+    const match = /^(\d{5})(?:[\s-]?(\d{4}))?$/.exec(trimmed)
+    return match ? (match[2] ? `${match[1]}-${match[2]}` : match[1]) : null
+  }
+  if (code === "pk") {
+    return /^\d{5}$/.test(trimmed) ? trimmed : null
+  }
+  return trimmed
+}
+
+/**
+ * A Pakistan mobile number in its one stored form, "+923001234567", or
+ * null when it isn't one (QA S1-4, D15). Accepted as people write it:
+ * "0300 1234567", "0300-1234567", "+92 300 1234567", "92 300 1234567",
+ * "0092 300 1234567". A delivery in Pakistan needs one: the courier calls
+ * before a cash delivery.
+ */
+export const normalizePkMobile = (value: string): string | null => {
+  const trimmed = value.trim()
+  if (!/^\+?[\d\s().-]+$/.test(trimmed)) return null
+  const digits = trimmed.replace(/\D/g, "")
+  let national: string | null = null
+  if (trimmed.startsWith("+")) national = digits.startsWith("92") ? digits.slice(2) : null
+  else if (digits.startsWith("0092")) national = digits.slice(4)
+  else if (digits.startsWith("92") && digits.length === 12) national = digits.slice(2)
+  else if (digits.startsWith("0")) national = digits.slice(1)
+  return national && /^3\d{9}$/.test(national) ? `+92${national}` : null
+}
+
+/** The phone as it is stored: Pakistan's one form for a delivery there; elsewhere trimmed. */
+export const normalizePhone = (value: string, countryCode: string | null | undefined): string =>
+  (countryCode ?? "").toLowerCase() === "pk" ? normalizePkMobile(value) ?? value.trim() : value.trim()
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -106,6 +188,22 @@ export const isPhone = (value: string): boolean => {
 
 const blank = (value: string | null | undefined) => !value || !value.trim()
 
+/** "Use 100 characters or fewer" when the value is longer than the field keeps. */
+const tooLong = (field: LimitedField, value: string | null | undefined): string | null =>
+  (value ?? "").trim().length > FIELD_MAX[field]
+    ? fill(words.errors.tooLong, { max: FIELD_MAX[field] })
+    : null
+
+const LIMITED_ADDRESS_FIELDS = [
+  "first_name",
+  "last_name",
+  "company",
+  "address_1",
+  "address_2",
+  "city",
+  "postal_code",
+] as const
+
 const checkAddress = (
   prefix: "shipping" | "billing",
   address: AddressFields,
@@ -113,19 +211,31 @@ const checkAddress = (
   errors: AddressErrors
 ) => {
   const e = words.errors
+  const code = address.country_code.toLowerCase()
   if (blank(address.first_name)) errors[`${prefix}.first_name`] = e.firstName
-  if (!countryCodes.includes(address.country_code.toLowerCase())) {
+  if (!countryCodes.includes(code)) {
     errors[`${prefix}.country_code`] = e.country
   }
   if (blank(address.address_1)) errors[`${prefix}.address_1`] = e.address1
   if (blank(address.city)) errors[`${prefix}.city`] = e.city
 
-  const rules = countryFieldRules(address.country_code)
-  if (rules.province.required && !subdivisionCode(address.country_code, address.province)) {
-    errors[`${prefix}.province`] = e.province
+  const rules = countryFieldRules(code)
+  if (rules.province.required && !subdivisionCode(code, address.province)) {
+    errors[`${prefix}.province`] = forCountry(e.province, code)
   }
-  if (rules.postalCode.required && blank(address.postal_code)) {
-    errors[`${prefix}.postal_code`] = e.postalCode
+  if (rules.postalCode.shown) {
+    if (blank(address.postal_code)) {
+      if (rules.postalCode.required) errors[`${prefix}.postal_code`] = forCountry(e.postalCode, code)
+    } else if (normalizePostalCode(code, address.postal_code) === null) {
+      errors[`${prefix}.postal_code`] = fill(forCountry(e.postalCodeFormat, code), {
+        example: forCountry(words.postalExamples, code),
+      })
+    }
+  }
+
+  for (const field of LIMITED_ADDRESS_FIELDS) {
+    const message = errors[`${prefix}.${field}`] ? null : tooLong(field, address[field])
+    if (message) errors[`${prefix}.${field}`] = message
   }
 }
 
@@ -142,13 +252,25 @@ export const validateAddressForm = (
   const e = words.errors
   const codes = countryCodes.map((c) => c.toLowerCase())
 
+  const country = values.shipping.country_code.toLowerCase()
+
   if (!isEmail(values.email)) errors.email = e.email
+  else {
+    const long = tooLong("email", values.email)
+    if (long) errors.email = long
+  }
   if (blank(values.phone)) {
     errors.phone = e.phone
+  } else if (tooLong("phone", values.phone)) {
+    errors.phone = tooLong("phone", values.phone) ?? e.phone
+  } else if (country === "pk") {
+    // The courier calls before a cash delivery: a Pakistan mobile number
+    // (QA S1-4, D15). Other countries take any valid number.
+    if (!normalizePkMobile(values.phone)) {
+      errors.phone = fill(e.phonePk, { example: words.phoneExamples.pk })
+    }
   } else if (!isPhone(values.phone)) {
-    const example =
-      words.phoneExamples[values.shipping.country_code.toLowerCase()] ?? words.phoneExamples.pk
-    errors.phone = fill(e.phoneInvalid, { example })
+    errors.phone = fill(e.phoneInvalid, { example: forCountry(words.phoneExamples, country) })
   }
 
   checkAddress("shipping", values.shipping, codes, errors)
@@ -165,10 +287,16 @@ export const errorFor = (
   key: AddressFieldKey
 ): string | undefined => validateAddressForm(values, countryCodes)[key]
 
-/** The address Medusa receives for the cart: trimmed, and only the fields the country has. */
+/**
+ * The address Medusa receives for the cart: trimmed, only the fields the
+ * country has, and the postal code and phone in their one stored form (a
+ * UK postcode upper case with its space; a Pakistan mobile as
+ * "+923001234567").
+ */
 export const toCartAddress = (address: AddressFields, phone: string) => {
   const rules = countryFieldRules(address.country_code)
   const t = (value: string) => value.trim()
+  const postal = t(address.postal_code)
   return {
     first_name: t(address.first_name),
     last_name: t(address.last_name),
@@ -180,8 +308,11 @@ export const toCartAddress = (address: AddressFields, phone: string) => {
     province: rules.province.shown
       ? subdivisionCode(address.country_code, address.province) ?? ""
       : "",
-    postal_code: rules.postalCode.shown ? t(address.postal_code) : "",
-    phone: t(phone),
+    postal_code:
+      rules.postalCode.shown && postal
+        ? normalizePostalCode(address.country_code, postal) ?? postal
+        : "",
+    phone: normalizePhone(phone, address.country_code),
   }
 }
 
@@ -327,12 +458,33 @@ export const savedAddressesInRegion = <
     .filter((a) => !!a.country_code && countryCodes.includes(a.country_code.toLowerCase()))
     .sort((a, b) => Number(!!b.is_default_shipping) - Number(!!a.is_default_shipping))
 
-/** The fields of a saved address put into the form (the phone only when the form has none). */
+/**
+ * The fields of a saved address put into the form, with its own phone
+ * (QA S1-4, D14: choosing a second address kept the first one's phone).
+ * A saved address without a phone keeps the one in the form.
+ */
 export const withSavedAddress = (
   values: AddressFormValues,
   saved: AddressLike
 ): AddressFormValues => ({
   ...values,
-  phone: values.phone.trim() ? values.phone : saved.phone ?? "",
+  phone: saved.phone?.trim() ? saved.phone : values.phone,
   shipping: addressFields(saved, values.shipping.country_code),
+})
+
+/**
+ * "Use a new address" (W-K5): empty address fields in the region's
+ * country, with only the account's name filled in (QA S1-4, D14). The
+ * email and phone stay: they are the contact, not the address.
+ */
+export const withNewAddress = (
+  values: AddressFormValues,
+  name: { first_name?: string | null; last_name?: string | null } | null | undefined
+): AddressFormValues => ({
+  ...values,
+  shipping: {
+    ...addressFields(null, values.shipping.country_code),
+    first_name: name?.first_name ?? "",
+    last_name: name?.last_name ?? "",
+  },
 })
