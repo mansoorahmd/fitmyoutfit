@@ -755,6 +755,7 @@ export function EditorShell(props: EditorShellProps) {
             onReset={() => canvas.current?.resetView()}
             onStageKey={onStageKey}
             credit={props.slots?.credit}
+            viewControls={layout === "compact" && typing ? "none" : layout === "compact" && panelOpen && detent === "expanded" ? "reset-only" : "full"}
           />
           {layout !== "wide" && (start ?? panel)}
         </div>

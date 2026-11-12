@@ -76,7 +76,10 @@ export interface ToolPanelProps {
 export function ToolPanel(props: ToolPanelProps) {
   const { layout, wording, detent, heights, tool } = props;
   const ref = useRef<HTMLElement>(null);
+  const inner = useRef<HTMLDivElement>(null);
   const [help, setHelp] = useState(false);
+  /** The content's own height: when it fits the normal height there is nothing more to show. */
+  const [natural, setNatural] = useState(0);
   const [drag, setDrag] = useState<{ start: number; startHeight: number; height: number } | null>(null);
   const compact = layout === "compact";
   const onSize = useRef(props.onSize);
@@ -94,6 +97,28 @@ export function ToolPanel(props: ToolPanelProps) {
     observer.observe(el);
     return () => observer.disconnect();
   }, [layout]);
+
+  useEffect(() => {
+    const el = inner.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const measure = () => setNatural(el.scrollHeight);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [tool]);
+  // Chrome round the content: the grab strip, the header, the body's padding.
+  const fitsNormal = natural > 0 && natural + 24 + 48 + 16 <= heights.normal;
+  // Changing tools keeps an expanded panel expanded only when the new tool has more to show (3.3).
+  const onDetent = useRef(props.onDetent);
+  useEffect(() => {
+    onDetent.current = props.onDetent;
+  });
+  useEffect(() => {
+    if (compact && detent === "expanded" && fitsNormal) onDetent.current("normal");
+    // Only when the tool changes, not while the coach is looking at an expanded panel.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tool, fitsNormal]);
 
   const height = compact ? (drag ? drag.height : detent === "expanded" ? heights.expanded : undefined) : undefined;
   const maxHeight = compact && detent !== "expanded" && !drag ? heights.normal : undefined;
@@ -141,7 +166,7 @@ export function ToolPanel(props: ToolPanelProps) {
         <button type="button" className="fmo-round" style={{ border: 0, background: "none" }} aria-label={wording.tools.help} aria-expanded={help} title={wording.tools.help} onClick={() => setHelp((h) => !h)} data-testid="panel-help">
           <EditorIcon name="help" />
         </button>
-        {compact && (
+        {compact && (!fitsNormal || detent === "expanded") && (
           <button type="button" className="fmo-btn fmo-btn-text" style={{ minHeight: 44, padding: "0 8px" }} onClick={() => props.onDetent(detent === "expanded" ? "normal" : "expanded")} data-testid="panel-expand">
             {detent === "expanded" ? wording.tools.showLess : wording.tools.showAll}
           </button>
@@ -154,7 +179,9 @@ export function ToolPanel(props: ToolPanelProps) {
       </div>
       {help && <p className="fmo-help">{wording.help[tool]}</p>}
       <div className="fmo-panel-body">
-        <div className="fmo-panel-inner fmo-stack">{props.children}</div>
+        <div ref={inner} className="fmo-panel-inner fmo-stack">
+          {props.children}
+        </div>
       </div>
     </section>
   );

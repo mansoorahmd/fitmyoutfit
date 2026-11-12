@@ -195,7 +195,8 @@ export const EDITOR_WORDING = {
     reset: "Reset view", // W-ED121
     description: "{product}, {side} view. {summary}", // W-ED122
     sideWords: { front: "front", back: "back", left: "left side", right: "right side", turned: "turned" }, // NEW, for W-ED122
-    zonesSummary: "{zones}.", // NEW, for W-ED122: "Body navy, sleeves white."
+    zonesSummary: "{zones}.", // NEW, for W-ED122: "Body navy; sleeves and collar white."
+    and: "and", // NEW, for W-ED122
     zonePart: "{zone} {colour}", // NEW
     itemOn: "{item} on the {where}.", // NEW, for W-ED122: "Team name TIGERS on the chest."
     teamNameItem: "Team name {value}", // NEW

@@ -95,7 +95,7 @@ export const EDITOR_CSS = /* css */ `
 .fmo-editor[data-layout="wide"] .fmo-rail { border-inline-end: 1px solid var(--fmo-border); padding-top: 8px; }
 .fmo-editor[data-layout="short"] .fmo-rail { border-inline-start: 1px solid var(--fmo-border); justify-content: center; }
 .fmo-tab { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; height: 64px; padding: 6px 0 4px; border: 0; background: transparent; color: var(--fmo-ink-muted); font: 500 12px/16px var(--fmo-font-body); cursor: pointer; position: relative; }
-.fmo-dock .fmo-tab { max-width: 96px; }
+.fmo-dock .fmo-tab { max-width: 96px; height: 63px; }
 .fmo-tab-label { white-space: nowrap; }
 .fmo-tab[aria-selected="true"] { color: var(--fmo-ink); font-weight: 650; }
 .fmo-dock .fmo-tab[aria-selected="true"]::after { content: ""; position: absolute; inset-inline: 22%; top: 0; height: 3px; background: var(--fmo-ink); border-radius: 0 0 2px 2px; }
@@ -146,8 +146,9 @@ export const EDITOR_CSS = /* css */ `
 .fmo-progress[data-unknown="true"] > span { width: 30% !important; animation: fmo-slide 1.2s ease-in-out infinite; }
 @keyframes fmo-slide { from { transform: translateX(-100%); } to { transform: translateX(340%); } }
 .fmo-loading p { margin: 0; font-size: 13px; color: var(--fmo-ink-muted); }
-.fmo-flat { position: absolute; inset: 0; display: flex; flex-direction: column; }
-.fmo-flat canvas { flex: 1 1 auto; min-height: 0; width: 100%; height: 100%; }
+.fmo-flat-host { display: flex; flex-direction: column; gap: 8px; padding: 8px 12px 0; }
+.fmo-flat-box { position: relative; flex: 1 1 auto; min-height: 0; }
+.fmo-flat-box canvas { position: absolute; inset: 0; display: block; }
 
 /* Panels */
 .fmo-panel { display: flex; flex-direction: column; background: var(--fmo-surface); min-height: 0; }
@@ -195,7 +196,7 @@ export const EDITOR_CSS = /* css */ `
 .fmo-fields { display: grid; grid-template-columns: 1fr 88px; gap: 8px; }
 .fmo-code-field { position: relative; }
 .fmo-code-field .fmo-field { padding-inline-start: 12px; text-transform: uppercase; font-variant-numeric: tabular-nums; letter-spacing: 0.04em; }
-.fmo-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 0 16px; border: 1px solid var(--fmo-ink); border-radius: var(--fmo-radius-control); background: var(--fmo-surface); color: var(--fmo-ink); cursor: pointer; font-weight: 600; text-align: center; }
+.fmo-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 0 16px; border: 1px solid var(--fmo-ink); border-radius: var(--fmo-radius-control); background: var(--fmo-surface); color: var(--fmo-ink); cursor: pointer; font-weight: 600; text-align: center; white-space: nowrap; }
 .fmo-btn:hover:not(:disabled) { background: var(--fmo-surface-alt); }
 .fmo-btn-block { display: flex; width: 100%; min-height: 48px; }
 .fmo-font-button { justify-content: space-between; text-align: start; }
@@ -262,8 +263,11 @@ export const EDITOR_CSS = /* css */ `
 .fmo-cards[data-grid="true"] .fmo-card { width: auto; }
 .fmo-editor[data-layout="compact"] .fmo-cards:not([data-grid="true"]) .fmo-card { width: 88px; }
 .fmo-editor[data-layout="compact"] .fmo-cards:not([data-grid="true"]) { padding-bottom: 2px; gap: 8px; }
+/* A panel open on a phone: the side buttons and Reset stay, zoom goes (06-editor.md 3.3's drawing); expanded: only Reset. */
+.fmo-editor[data-layout="compact"][data-detent="normal"] .fmo-zoom > :not(:last-child) { display: none; }
 /* An expanded panel leaves a short stage: only Reset stays over the garment (06-editor.md 3.3). */
-.fmo-editor[data-layout="compact"][data-detent="expanded"] .fmo-sides, .fmo-editor[data-layout="compact"][data-detent="expanded"] .fmo-zoom > :not(:last-child), .fmo-editor[data-layout="compact"][data-detent="expanded"] .fmo-hint { display: none; }
+.fmo-view[data-controls="reset-only"] { justify-content: flex-end; }
+.fmo-view[data-controls="reset-only"] .fmo-sides, .fmo-view[data-controls="reset-only"] .fmo-zoom > :not(:last-child), .fmo-editor[data-layout="compact"][data-detent="expanded"] .fmo-hint { display: none; }
 .fmo-card-pic { position: relative; display: block; width: 100%; aspect-ratio: 4 / 5; border-radius: var(--fmo-radius-card); background: var(--fmo-surface-alt); overflow: hidden; }
 .fmo-card-pic canvas { width: 100%; height: 100%; display: block; }
 .fmo-card[aria-pressed="true"] .fmo-card-pic { box-shadow: 0 0 0 2px var(--fmo-ink); }

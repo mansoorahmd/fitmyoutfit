@@ -184,6 +184,8 @@ function EditorPage({ data }: { data: DemoData }) {
 
   const onDesignChange = useCallback((design: DesignDocument, info: { started: boolean }) => {
     started.current = info.started;
+    // For the review scripts: the current design (never shown on the page).
+    (window as unknown as { __editorDesign: DesignDocument }).__editorDesign = design;
     autosave.current?.schedule(design);
   }, []);
 
@@ -231,7 +233,11 @@ function EditorPage({ data }: { data: DemoData }) {
       />
       <ResumePrompt
         open={session.resume}
-        onContinue={() => setSession((s) => s && { ...s, resume: false })}
+        onContinue={() => {
+          setSession((s) => s && { ...s, resume: false });
+          // It is the design saved on this device.
+          setSaveState("saved");
+        }}
         onStartAgain={() => {
           autosave.current?.dispose();
           void store.designs.clearDesign(product.id).finally(() => {

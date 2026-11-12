@@ -8,7 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import { applyTemplate, type Template } from "../design/template.js";
 import type { DesignDocument } from "../design/schema.js";
 import { samplerFromRgba } from "../texture/garment-view.js";
-import { drawTemplateCard } from "../texture/thumbnail.js";
+import { drawDesignView } from "../texture/thumbnail.js";
 import { AssetImageCache } from "../react/asset-images.js";
 import { useEditor } from "./context.js";
 import { EditorIcon } from "./icons.js";
@@ -18,6 +18,28 @@ export const CARD_WIDTH = 180;
 export const CARD_HEIGHT = 225;
 /** The pattern texture drawn for a card: small, enough for 180 px. */
 const CARD_TEXTURE = 512;
+
+/**
+ * Card drawing runs one card per task (a short queue), so a change never blocks the page for all cards
+ * at once; a card whose picture would not change is not drawn again.
+ */
+const queue: Array<() => void> = [];
+let pumping = false;
+function scheduleCard(job: () => void): void {
+  queue.push(job);
+  if (pumping) return;
+  pumping = true;
+  const pump = () => {
+    const next = queue.shift();
+    if (!next) {
+      pumping = false;
+      return;
+    }
+    next();
+    setTimeout(pump, 0);
+  };
+  setTimeout(pump, 0);
+}
 
 /** One shared canvas for the cards' textures, made when first needed. */
 let scratch: { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D } | null = null;
@@ -37,6 +59,7 @@ function TemplateCard({ template, design, previous, current, onPick, images, ver
   const { product, fonts, garmentView, wording } = useEditor();
   const ref = useRef<HTMLCanvasElement>(null);
   const [visible, setVisible] = useState(false);
+  const drawn = useRef<string | null>(null);
 
   // Drawn lazily, as the card scrolls into view (06-editor.md 11.3).
   useEffect(() => {
@@ -58,28 +81,43 @@ function TemplateCard({ template, design, previous, current, onPick, images, ver
   useEffect(() => {
     const canvas = ref.current;
     if (!canvas || !visible || !garmentView) return;
+    let cancelled = false;
     // A short wait, so typing a team name does not redraw every card on every key.
     const timer = setTimeout(() => {
-      const tex = scratchTexture();
-      const ctx = canvas.getContext("2d");
-      if (!tex || !ctx) return;
-      const start = performance.now();
+      let applied: DesignDocument;
       try {
-        const out = ctx.createImageData(garmentView.width, garmentView.height);
-        drawTemplateCard(out.data, product, design, template, {
-          fonts,
-          previous,
-          view: garmentView,
-          images: images.lookup,
-          texture: { ctx: tex.ctx, size: CARD_TEXTURE, read: () => samplerFromRgba(tex.ctx.getImageData(0, 0, CARD_TEXTURE, CARD_TEXTURE).data, CARD_TEXTURE, CARD_TEXTURE) },
-        });
-        ctx.putImageData(out, 0, 0);
-        canvas.dataset.drawMs = (performance.now() - start).toFixed(1);
+        applied = applyTemplate(design, template, { product, fonts, previous });
       } catch (error) {
         console.error("template card", template.id, error);
+        return;
       }
+      // The same picture as last time (after a tap, most cards do not change): nothing to draw.
+      const key = `${version}|${JSON.stringify(applied)}`;
+      if (key === drawn.current) return;
+      scheduleCard(() => {
+        const tex = scratchTexture();
+        const ctx = canvas.getContext("2d");
+        if (cancelled || !tex || !ctx) return;
+        const start = performance.now();
+        try {
+          const out = ctx.createImageData(garmentView.width, garmentView.height);
+          drawDesignView(out.data, product, applied, {
+            view: garmentView,
+            images: images.lookup,
+            texture: { ctx: tex.ctx, size: CARD_TEXTURE, read: () => samplerFromRgba(tex.ctx.getImageData(0, 0, CARD_TEXTURE, CARD_TEXTURE).data, CARD_TEXTURE, CARD_TEXTURE) },
+          });
+          ctx.putImageData(out, 0, 0);
+          drawn.current = key;
+          canvas.dataset.drawMs = (performance.now() - start).toFixed(1);
+        } catch (error) {
+          console.error("template card", template.id, error);
+        }
+      });
     }, 120);
-    return () => clearTimeout(timer);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, [visible, garmentView, product, design, template, fonts, previous, images, version]);
 
   const label = current ? `${template.name}, ${wording.templates.current}` : template.name;

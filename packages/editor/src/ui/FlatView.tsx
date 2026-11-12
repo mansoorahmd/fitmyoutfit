@@ -4,13 +4,13 @@
  * that paints the model. Static in E3a: every tool still works (colours,
  * designs, names, numbers, logos, text); dragging in the flat view is later.
  */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { DesignDocument, ProductDefinition } from "../design/schema.js";
 import { flatViewProduct } from "../texture/flat-view.js";
 import { drawPatternTexture } from "../texture/pattern-texture.js";
 import { AssetImageCache, type AssetUrlResolver } from "../react/asset-images.js";
 
-export function FlatView({ product, design, assetUrl, captions, label }: { product: ProductDefinition; design: DesignDocument; assetUrl: AssetUrlResolver; captions: { front: string; back: string }; label: string }) {
+export function FlatView({ product, design, assetUrl, captionFront, captionBack, label }: { product: ProductDefinition; design: DesignDocument; assetUrl: AssetUrlResolver; captionFront: string; captionBack: string; label: string }) {
   const box = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
@@ -37,7 +37,7 @@ export function FlatView({ product, design, assetUrl, captions, label }: { produ
     return () => document.fonts.removeEventListener("loadingdone", bump);
   }, []);
 
-  const layout = size.width > 0 && size.height > 0 ? flatViewProduct(product, { width: size.width, height: size.height - 20 }) : null;
+  const layout = useMemo(() => (size.width > 0 && size.height > 0 ? flatViewProduct(product, { width: size.width, height: size.height - 20 }) : null), [product, size.width, size.height]);
   useEffect(() => {
     const el = canvas.current;
     if (!el || !layout) return;
@@ -59,13 +59,13 @@ export function FlatView({ product, design, assetUrl, captions, label }: { produ
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
     for (const place of layout.places) {
-      const caption = place.pieceId === product.views.front ? captions.front : place.pieceId === product.views.back ? captions.back : null;
+      const caption = place.pieceId === product.views.front ? captionFront : place.pieceId === product.views.back ? captionBack : null;
       if (caption) ctx.fillText(caption, (place.x + place.width / 2) * dpr, 2 * dpr);
     }
-  }, [layout, design, images, version, size, product, captions]);
+  }, [layout, design, images, version, size, product, captionFront, captionBack]);
 
   return (
-    <div ref={box} className="fmo-flat" role="img" aria-label={label} data-testid="flat-view">
+    <div ref={box} className="fmo-flat-box" role="img" aria-label={label} data-testid="flat-view">
       <canvas ref={canvas} style={{ width: "100%", height: "100%" }} />
     </div>
   );

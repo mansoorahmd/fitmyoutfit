@@ -16,6 +16,10 @@ import { EditorIcon, ShirtSilhouette } from "./icons.js";
 import type { EditorLayout } from "./layout.js";
 import type { StageTone } from "./stage-logic.js";
 
+/** Room kept at the top for the model's credit line, and at the bottom for the view buttons (CSS px). */
+export const CREDIT_ROOM = 36;
+export const VIEW_ROW = 60;
+
 export interface StageLoad {
   /** 0 to 1, or null when unknown. */
   fraction: number | null;
@@ -50,6 +54,11 @@ export interface StageProps {
   onReset: () => void;
   onStageKey: (event: React.KeyboardEvent<HTMLDivElement>) => void;
   credit?: ReactNode;
+  /**
+   * The view buttons over the stage: all of them; only Reset (a phone with an expanded panel: the stage is
+   * short); or none (a phone while typing: the keyboard leaves room only for the item being typed).
+   */
+  viewControls: "full" | "reset-only" | "none";
 }
 
 export function Stage({ canvasRef, ...props }: StageProps) {
@@ -58,19 +67,27 @@ export function Stage({ canvasRef, ...props }: StageProps) {
   const percent = load.fraction === null ? null : Math.round(load.fraction * 100);
   const showLoading = mode === "3d" && !load.ready;
   const controlsBottom = insets.bottom + 12;
+  // The garment is framed between the credit line and the view buttons, above (or beside) the panel.
+  const canvasInsets = { top: props.credit ? CREDIT_ROOM : 0, right: insets.right, bottom: insets.bottom + (mode === "3d" && props.viewControls === "full" ? VIEW_ROW : 0), left: insets.left };
   const sides = ["front", "back", "left", "right"] as const;
   return (
-    <div className="fmo-stage" data-tone={props.tone} data-testid="stage" style={props.credit ? ({ "--fmo-credit-room": "36px" } as React.CSSProperties) : undefined}>
+    <div className="fmo-stage" data-tone={props.tone} data-testid="stage" style={props.credit && mode === "3d" ? ({ "--fmo-credit-room": `${CREDIT_ROOM}px` } as React.CSSProperties) : undefined}>
       <div className="fmo-stage-deep" />
       {/* The soft contact shadow under the hem: the garment fills about two thirds of the free area's height, centred. */}
-      <div className="fmo-stage-shadow" style={{ bottom: `calc(${insets.bottom}px + (100% - ${insets.bottom}px) * 0.13)`, left: `calc((100% - ${insets.right}px) / 2)` }} aria-hidden="true" />
+      <div className="fmo-stage-shadow" style={{ bottom: `calc(${canvasInsets.bottom}px + (100% - ${canvasInsets.bottom + canvasInsets.top}px) * 0.13)`, left: `calc((100% - ${insets.right}px) / 2)` }} aria-hidden="true" />
       {mode === "3d" ? (
         <div className="fmo-canvas" tabIndex={0} role="img" aria-label={props.description} onKeyDown={props.onStageKey} data-testid="stage-canvas">
-          <DesignCanvas {...props.canvasProps} ref={canvasRef} design={props.design} product={props.product} viewInsets={insets} assetUrl={props.assetUrl} style={{ background: "transparent", minHeight: 0 }} errorFallback={null} />
+          <DesignCanvas {...props.canvasProps} ref={canvasRef} design={props.design} product={props.product} viewInsets={canvasInsets} assetUrl={props.assetUrl} style={{ background: "transparent", minHeight: 0 }} errorFallback={null} />
         </div>
       ) : (
-        <div className="fmo-canvas" style={{ bottom: insets.bottom, right: insets.right, top: 92 }}>
-          <FlatView product={props.product} design={props.design} assetUrl={props.assetUrl} captions={{ front: wording.states.flatFront, back: wording.states.flatBack }} label={props.description} />
+        <div className="fmo-canvas fmo-flat-host" style={{ bottom: insets.bottom, right: insets.right }}>
+          {props.banner && (
+            <div className="fmo-banner" role="status" data-testid="stage-banner">
+              <EditorIcon name="info" size={20} />
+              <span>{props.banner}</span>
+            </div>
+          )}
+          <FlatView product={props.product} design={props.design} assetUrl={props.assetUrl} captionFront={wording.states.flatFront} captionBack={wording.states.flatBack} label={props.description} />
         </div>
       )}
       {showLoading && (
@@ -99,8 +116,8 @@ export function Stage({ canvasRef, ...props }: StageProps) {
           )}
         </div>
       )}
-      <div className="fmo-stage-top">
-        {props.banner && (
+      <div className="fmo-stage-top" style={{ right: insets.right }}>
+        {props.banner && mode === "3d" && (
           <div className="fmo-banner" role="status" data-testid="stage-banner">
             <EditorIcon name="info" size={20} />
             <span>{props.banner}</span>
@@ -118,19 +135,19 @@ export function Stage({ canvasRef, ...props }: StageProps) {
             </>
           )}
         </div>
-        {props.hint && (
+        {props.hint && props.viewControls !== "none" && (
           <div className="fmo-hint" data-testid="stage-hint">
             {props.hint}
           </div>
         )}
       </div>
-      {props.credit && (
-        <div className="fmo-credit" style={{ top: props.banner ? undefined : 6, bottom: props.banner ? controlsBottom + 52 : undefined }} data-testid="model-credit">
+      {props.credit && mode === "3d" && (
+        <div className="fmo-credit" style={{ top: 6, maxWidth: `calc(100% - ${insets.right + 20}px)` }} data-testid="model-credit">
           {props.credit}
         </div>
       )}
-      {mode === "3d" && (
-        <div className="fmo-view" style={{ bottom: controlsBottom, right: layout === "short" ? insets.right : 0 }} data-testid="view-controls">
+      {mode === "3d" && props.viewControls !== "none" && (
+        <div className="fmo-view" data-controls={props.viewControls} style={{ bottom: controlsBottom, right: layout === "short" ? insets.right : 0 }} data-testid="view-controls">
           <div className="fmo-sides" role="group" aria-label={v.sidesName}>
             {sides.map((side) => (
               <button key={side} type="button" aria-pressed={camera.side === side} onClick={() => props.onSide(side)} data-testid={`view-${side}`}>

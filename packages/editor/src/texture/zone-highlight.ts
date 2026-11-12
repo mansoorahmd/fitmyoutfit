@@ -1,8 +1,8 @@
 /**
  * The editor-only zone highlight (N8, 06-editor.md 4.3): when the coach
  * chooses a colour zone (or a group of shapes, such as the hoops), its edge
- * flashes on the model: a white band with an ink line inside it, along the
- * zone's edge on every piece it covers, inside the garment. Drawn into the
+ * flashes on the model: a light white veil over the part, and a white band
+ * with an ink line inside it along its edge, on every piece it covers. Drawn into the
  * texture after the layers, like the selection outline; never for proofs.
  */
 import type { DesignDocument, PatternPiece, ProductDefinition } from "../design/schema.js";
@@ -25,6 +25,9 @@ export interface ZoneHighlight {
   /** 0 (gone) to 1 (full): the flash fades out. Default 1. */
   alpha?: number;
 }
+
+/** How much the part is veiled in white at full strength. */
+export const HIGHLIGHT_VEIL = 0.35;
 
 /** The ink of the highlight's inner line (the store's ink). */
 export const HIGHLIGHT_INK = "11, 21, 48";
@@ -65,8 +68,15 @@ export function drawZoneHighlight(
     ctx.beginPath();
     traceSvgPath(ctx, geometry.outline.commands);
     ctx.clip();
+    // A light veil over the part, so it lights up even where its edge is small on screen (a phone).
+    ctx.fillStyle = `rgba(255, 255, 255, ${HIGHLIGHT_VEIL * alpha})`;
+    for (const commands of usable) {
+      ctx.beginPath();
+      traceSvgPath(ctx, commands);
+      ctx.fill();
+    }
     ctx.lineJoin = "round";
-    for (const [colour, width] of [[`rgba(255, 255, 255, ${alpha})`, 14], [`rgba(${HIGHLIGHT_INK}, ${alpha})`, 6]] as const) {
+    for (const [colour, width] of [[`rgba(255, 255, 255, ${alpha})`, 36], [`rgba(${HIGHLIGHT_INK}, ${alpha})`, 14]] as const) {
       ctx.strokeStyle = colour;
       ctx.lineWidth = (width * pxPerTexel) / pxPerMm;
       for (const commands of usable) {

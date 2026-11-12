@@ -30,6 +30,12 @@ export function nextStageTone(previous: StageTone, bodyHex: string | null): Stag
   return previous;
 }
 
+/** "a, b and c" (with the wording's "and"). */
+export function joinWords(words: readonly string[], and: string): string {
+  if (words.length <= 1) return words.join("");
+  return `${words.slice(0, -1).join(", ")} ${and} ${words[words.length - 1]}`;
+}
+
 /** A colour's name from the palette, else its code. */
 export function colourName(palette: Pick<Palette, "colors"> | null | undefined, colour: Pick<ColorValue, "id" | "hex">): string {
   return palette?.colors.find((c) => c.id === colour.id)?.name ?? colour.hex;
@@ -48,14 +54,18 @@ export function describeStage(
 ): string {
   const v = wording.view;
   const side = options.side ? v.sideWords[options.side] : v.sideWords.turned;
-  // Zones, with consecutive repeats of one colour kept short.
-  const parts = product.zones.map((zone) => {
-    const colour = design.zones[zone.id] ?? zone.defaultColor;
-    return fill(v.zonePart, { zone: zone.name, colour: colourName(options.palette, colour).toLowerCase() });
-  });
+  // Zones grouped by colour, in the product's order: "Body front, body back and sleeves white; side panels navy."
+  const byColour = new Map<string, string[]>();
+  for (const zone of product.zones) {
+    const colour = colourName(options.palette, design.zones[zone.id] ?? zone.defaultColor).toLowerCase();
+    const list = byColour.get(colour) ?? [];
+    list.push(zone.name.toLowerCase());
+    byColour.set(colour, list);
+  }
+  const parts = [...byColour].map(([colour, zones]) => fill(v.zonePart, { zone: joinWords(zones, v.and), colour }));
   const sentences: string[] = [];
   if (parts.length > 0) {
-    const joined = parts.join(", ");
+    const joined = parts.join("; ");
     sentences.push(fill(v.zonesSummary, { zones: joined.charAt(0).toUpperCase() + joined.slice(1) }));
   }
   const where = (presetId: string | undefined, pieceId: string) => {

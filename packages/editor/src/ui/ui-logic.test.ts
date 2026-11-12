@@ -190,10 +190,10 @@ describe("the stage (12.2, 11.2)", () => {
     let d = createDesign(jersey, { teamName: "TIGERS", samplePlayer: { name: "ALI RAZA", number: "10" }, teamColors: { main: { id: "placeholder-navy", hex: "#1B2A5C" }, second: { id: "placeholder-white", hex: "#FFFFFF" } } });
     d = applyTemplate(d, classic, { product: jersey, fonts });
     const text = describeStage(W, jersey, d, { productName: "Jersey", side: "back", palette });
-    expect(text).toMatch(/^Jersey, back view\. Body front navy, /);
+    expect(text).toMatch(/^Jersey, back view\. Body front, body back and sleeves navy; side panels/);
     expect(text).toContain("Team name TIGERS on the chest.");
     expect(text).toContain("Name ALI RAZA and number 10 on the back.");
-    expect(describeStage(W, jersey, setZoneColor(d, "sleeves", { id: "placeholder-red", hex: "#C8102E" }), { productName: "Jersey", side: null, palette })).toMatch(/turned view.*Sleeves red/);
+    expect(describeStage(W, jersey, setZoneColor(d, "sleeves", { id: "placeholder-red", hex: "#C8102E" }), { productName: "Jersey", side: null, palette })).toMatch(/turned view\. Body front and body back navy; sleeves red;/);
   });
 });
 
