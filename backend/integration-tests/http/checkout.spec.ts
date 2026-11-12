@@ -650,7 +650,7 @@ medusaIntegrationTestRunner({
           }
         })
 
-        it("never rewrites a valid kept promise, also when the days setting changes later", async () => {
+        it("never rewrites the order's own promise, also when the days setting changes later", async () => {
           const container = getContainer()
           const orderId = await placeCashOnDeliveryOrder()
           const kept = (await orderMetadata(container, orderId)).delivery_promise
@@ -658,9 +658,10 @@ medusaIntegrationTestRunner({
           const previous = await setStoreMetadata(container, { delivery_days_standard: 12 })
           try {
             expect((await readPromise(orderId)).data).toEqual({ delivery_promise: kept })
-            // An older valid promise (another base date) is kept as well.
-            const older = { date: "2026-11-25", days: 15, based_on: "2026-11-10", applies: "standard" }
-            await rewriteOrder(orderId, { metadata: { delivery_promise: older } })
+            expect((await orderMetadata(container, orderId)).delivery_promise).toEqual(kept)
+            // An order placed on 10 Nov, under a setting of 20 days, keeps that promise.
+            const older = { date: "2026-11-30", days: 20, based_on: "2026-11-10", applies: "standard" }
+            await rewriteOrder(orderId, { createdAt: "2026-11-10T07:00:00.000Z", metadata: { delivery_promise: older } })
             expect((await readPromise(orderId)).data).toEqual({ delivery_promise: older })
             expect((await orderMetadata(container, orderId)).delivery_promise).toEqual(older)
             // A new order gets the new setting.
@@ -669,6 +670,74 @@ medusaIntegrationTestRunner({
           } finally {
             await setStoreMetadata(container, { delivery_days_standard: previous?.delivery_days_standard })
           }
+        })
+
+        it("replaces, on the first read, a kept promise that is not based on the order's creation date", async () => {
+          const container = getContainer()
+          const orderId = await placeCashOnDeliveryOrder()
+          // Valid in itself, but based on another date than the order's creation (today).
+          const otherDate = { date: "2026-11-25", days: 15, based_on: "2026-11-10", applies: "standard" }
+          const rush = { date: addCalendarDays(today(), 10), days: 10, based_on: today(), applies: "rush" }
+          for (const wrong of [otherDate, rush]) {
+            await rewriteOrder(orderId, { metadata: { team: "Lahore Lions", delivery_promise: wrong } })
+            expect((await readPromise(orderId)).data).toEqual({ delivery_promise: promisedToday() })
+            expect(await orderMetadata(container, orderId)).toEqual({
+              team: "Lahore Lions",
+              delivery_promise: promisedToday(),
+            })
+          }
+        })
+
+        // QA's eighth review, N4: a cart that carried a delivery_promise from before the
+        // reserved-key refusal. The read route returned the copied promise before the subscriber
+        // replaced it, because it was valid and based on the right date.
+        it("never returns a promise copied from the cart, also before the subscriber has run", async () => {
+          const container = getContainer()
+          const forged = { date: addCalendarDays(today(), 1), days: 1, based_on: today(), applies: "standard" }
+          for (let i = 0; i < 6; i++) {
+            const cart = await createCart("pk", [{ handle: "t-shirt", size: "M", quantity: 1 }])
+            await addShipping(cart.id)
+            expect((await choosePayment(cart.id, COD)).status).toBe(200)
+            // Written in the database, as a cart from before the door refused the key.
+            await sql(`UPDATE cart SET metadata = CAST(? AS jsonb) WHERE id = ?`, [
+              JSON.stringify({ delivery_promise: forged }),
+              cart.id,
+            ])
+            const completed = await complete(cart.id)
+            expect(completed.data.type).toBe("order")
+            const orderId = completed.data.order.id
+            const reads = await Promise.all([readPromise(orderId), readPromise(orderId)])
+            for (const read of reads) {
+              expect(read.data).toEqual({ delivery_promise: promisedToday() })
+            }
+            // As if the subscriber had not run yet: the order carries the cart's copy.
+            await metadataOncePlaced(orderId)
+            await rewriteOrder(orderId, { metadata: { delivery_promise: forged } })
+            expect((await readPromise(orderId)).data).toEqual({ delivery_promise: promisedToday() })
+            expect((await orderMetadata(container, orderId)).delivery_promise).toEqual(promisedToday())
+          }
+          // With the days setting invalid, a copied promise is emptied and never shown.
+          const cart = await createCart("pk", [{ handle: "t-shirt", size: "M", quantity: 1 }])
+          await addShipping(cart.id)
+          expect((await choosePayment(cart.id, COD)).status).toBe(200)
+          await sql(`UPDATE cart SET metadata = CAST(? AS jsonb) WHERE id = ?`, [
+            JSON.stringify({ delivery_promise: forged }),
+            cart.id,
+          ])
+          const orderId = (await complete(cart.id)).data.order.id
+          await metadataOncePlaced(orderId)
+          await rewriteOrder(orderId, { metadata: { delivery_promise: forged } })
+          const previous = await setStoreMetadata(container, { delivery_days_standard: "" })
+          try {
+            const response = await readPromise(orderId)
+            expect(response.status).toBe(500)
+            expect(response.data.message).toContain("delivery_days_standard")
+            expect((await orderMetadata(container, orderId)).delivery_promise).toBeNull()
+          } finally {
+            await setStoreMetadata(container, { delivery_days_standard: previous?.delivery_days_standard })
+          }
+          // Settings fixed: the first read gives the answer for the order's creation date.
+          expect((await readPromise(orderId)).data).toEqual({ delivery_promise: promisedToday() })
         })
 
         it("answers 500 naming the key when no promise is kept and the settings are invalid, and never invents one", async () => {
@@ -828,16 +897,23 @@ medusaIntegrationTestRunner({
           })
         })
 
-        it("still refuses, at completion, a cart that carries a staff-only key some other way", async () => {
+        it("completes a cart that carries a cod_ key some other way: the key records nothing", async () => {
           const container = getContainer()
           const cart = await createCart("pk", [{ handle: "t-shirt", size: "M", quantity: 1 }])
           // Past the door: the cart module directly.
           await container.resolve(Modules.CART).updateCarts(cart.id, {
-            metadata: { cod_slip_reference: "forged" },
+            metadata: { cod_slip_reference: "forged", cod_collected_at: "2026-11-12T00:00:00Z" },
           })
           await addShipping(cart.id)
           expect((await choosePayment(cart.id, COD)).status).toBe(200)
-          await expectRefused(cart.id, /The cart must not carry cod_slip_reference\./)
+          const completed = await complete(cart.id)
+          expect(completed.status).toBe(200)
+          expect(completed.data.type).toBe("order")
+          // Cash collection is not read from metadata: the order is not collected.
+          const { data } = await api.get(`/admin/orders/${completed.data.order.id}/cash-collection`, {
+            headers: adminHeaders,
+          })
+          expect(data.cash_collection).toMatchObject({ stage: "not_collected", slip_reference: null, collected_at: null })
         })
 
         it("never lets a promise planted during completion reach the order (QA's race, D1)", async () => {
@@ -936,17 +1012,28 @@ medusaIntegrationTestRunner({
         const collection = (orderId: string) => `/admin/orders/${orderId}/cash-collection`
         const record = (orderId: string, slip: unknown) =>
           api.post(collection(orderId), { slip_reference: slip }, { headers: adminHeaders, ...allow })
+        const panel = async (orderId: string) =>
+          (await api.get(collection(orderId), { headers: adminHeaders })).data.cash_collection
+
+        /** The order's cash-collection records (live and soft-deleted), from our own table. */
+        async function records(orderId: string) {
+          return sql(
+            `SELECT slip_reference, collected_at, deleted_at FROM cash_collection WHERE order_id = ? ORDER BY created_at`,
+            [orderId]
+          )
+        }
 
         async function payments(container: MedusaContainer, orderId: string) {
           const query = container.resolve(ContainerRegistrationKeys.QUERY)
-          // payment_status is worked out by Medusa's admin order route, not stored.
-          const { data: admin } = await api.get(`/admin/orders/${orderId}?fields=payment_status`, {
+          // payment_status and the summary are worked out by Medusa's admin order route.
+          const { data: admin } = await api.get(`/admin/orders/${orderId}?fields=payment_status,summary`, {
             headers: adminHeaders,
           })
           const { data } = await query.graph({
             entity: "order",
             fields: [
               "transactions.reference",
+              "transactions.amount",
               "payment_collections.payments.id",
               "payment_collections.payments.provider_id",
               "payment_collections.payments.captured_at",
@@ -957,10 +1044,14 @@ medusaIntegrationTestRunner({
             filters: { id: orderId },
           })
           const order = data[0] as any
+          const captureTransactions = (order.transactions ?? []).filter((t: any) => t.reference === "capture")
           return {
             payment_status: admin.order.payment_status,
+            paid_total: admin.order.summary.paid_total,
+            pending_difference: admin.order.summary.pending_difference,
             payments: order.payment_collections.flatMap((c: any) => c.payments),
-            captureTransactions: (order.transactions ?? []).filter((t: any) => t.reference === "capture").length,
+            captureTransactions: captureTransactions.length,
+            captureTransactionTotal: captureTransactions.reduce((sum: number, t: any) => sum + Number(t.amount), 0),
           }
         }
 
@@ -972,22 +1063,7 @@ medusaIntegrationTestRunner({
             amount === undefined ? {} : { amount },
             { headers: adminHeaders, ...allow }
           )
-          expect(response.status).toBe(200)
-        }
-
-        /** Runs `fn` with the in-memory lock on cash collection switched off (as on several servers). */
-        async function withoutCashLock<T>(fn: () => Promise<T>): Promise<T> {
-          const locking = getContainer().resolve(Modules.LOCKING) as any
-          const { acquire, release } = locking
-          const ours = (key: unknown) => String(key).startsWith("cash-collection:")
-          locking.acquire = async (...args: any[]) => (ours(args[0]) ? undefined : acquire.apply(locking, args))
-          locking.release = async (...args: any[]) => (ours(args[0]) ? undefined : release.apply(locking, args))
-          try {
-            return await fn()
-          } finally {
-            locking.acquire = acquire
-            locking.release = release
-          }
+          return response
         }
 
         /** Runs `fn` with every capture slowed down, so presses overlap. */
@@ -1005,12 +1081,34 @@ medusaIntegrationTestRunner({
           }
         }
 
-        it("goes from a completed cash-on-delivery order to a captured payment with the slip reference kept", async () => {
+        /** Runs `fn` while the database refuses every new cash-collection record (QA's N1 trigger). */
+        async function withRecordRefused<T>(fn: () => Promise<T>): Promise<T> {
+          await sql(
+            `CREATE OR REPLACE FUNCTION s11d_refuse_cash_collection() RETURNS trigger AS $body$
+             BEGIN RAISE EXCEPTION 'insert into cash_collection refused by the test'; END $body$ LANGUAGE plpgsql`
+          )
+          await sql(
+            `CREATE TRIGGER s11d_refuse_cash_collection BEFORE INSERT ON cash_collection
+             FOR EACH ROW EXECUTE FUNCTION s11d_refuse_cash_collection()`
+          )
+          try {
+            return await fn()
+          } finally {
+            await sql(`DROP TRIGGER IF EXISTS s11d_refuse_cash_collection ON cash_collection`)
+            await sql(`DROP FUNCTION IF EXISTS s11d_refuse_cash_collection()`)
+          }
+        }
+
+        /** No SQL, stack trace or internal id in what staff are told. */
+        function expectReadable(message: string) {
+          expect(message).not.toMatch(/insert|select|update|cash_collection|\$\d|\bat \S+:\d+|(order|pay|capt|cashcol)_[0-9A-Z]{10,}/i)
+        }
+
+        it("goes from a completed cash-on-delivery order to a captured payment with the slip recorded", async () => {
           const container = getContainer()
           const orderId = await placeCashOnDeliveryOrder()
 
-          const before = await api.get(collection(orderId), { headers: adminHeaders })
-          expect(before.data.cash_collection).toEqual({
+          expect(await panel(orderId)).toEqual({
             applies: true,
             stage: "not_collected",
             collected: false,
@@ -1050,7 +1148,7 @@ medusaIntegrationTestRunner({
           expect(collectedAt).toBeLessThanOrEqual(Date.now() + 1000)
 
           const after = await payments(container, orderId)
-          expect(after.payment_status).toBe("captured")
+          expect(after).toMatchObject({ payment_status: "captured", paid_total: 2250, pending_difference: 0 })
           expect(after.payments).toHaveLength(1)
           expect(after.payments[0].provider_id).toBe(COD)
           expect(after.payments[0].captured_at).not.toBeNull()
@@ -1058,12 +1156,12 @@ medusaIntegrationTestRunner({
           expect(after.payments[0].captures[0].created_by).toBe(adminUserId)
           expect(after.captureTransactions).toBe(1)
 
-          // Who recorded it is Medusa's capture record, not the order's metadata.
-          expect(await orderMetadata(container, orderId)).toEqual({
-            delivery_promise: promisedToday(),
-            cod_slip_reference: "TCS 778812",
-            cod_collected_at: marked.data.cash_collection.collected_at,
-          })
+          // The record is a row of its own; nothing about it is in the order's metadata.
+          const rows = await records(orderId)
+          expect(rows).toHaveLength(1)
+          expect(rows[0].slip_reference).toBe("TCS 778812")
+          expect(new Date(rows[0].collected_at).toISOString()).toBe(marked.data.cash_collection.collected_at)
+          expect(await orderMetadata(container, orderId)).toEqual({ delivery_promise: promisedToday() })
 
           // It cannot be recorded twice.
           const again = await record(orderId, "TCS 999")
@@ -1073,79 +1171,140 @@ medusaIntegrationTestRunner({
             message: "The cash for this order is already recorded as collected.",
           })
           expect((await payments(container, orderId)).payments[0].captures).toHaveLength(1)
-          expect((await orderMetadata(container, orderId)).cod_slip_reference).toBe("TCS 778812")
+          expect(await records(orderId)).toHaveLength(1)
         })
 
-        for (const lock of ["with", "without"] as const) {
-          it(`captures once and keeps the winner's slip when six presses arrive at once, ${lock} the in-memory lock`, async () => {
-            const container = getContainer()
-            for (let round = 0; round < 2; round++) {
-              const orderId = await placeCashOnDeliveryOrder()
-              const press = () =>
-                Promise.all(Array.from({ length: 6 }, (_, i) => record(orderId, `SLIP-${round}-${i}`)))
-              const responses = await withSlowCapture(200, () =>
-                lock === "with" ? press() : withoutCashLock(press)
+        it("captures once and keeps the winner's slip when six presses arrive at once", async () => {
+          const container = getContainer()
+          for (let round = 0; round < 3; round++) {
+            const orderId = await placeCashOnDeliveryOrder()
+            const responses = await withSlowCapture(round === 0 ? 0 : 200, () =>
+              Promise.all(Array.from({ length: 6 }, (_, i) => record(orderId, `SLIP-${round}-${i}`)))
+            )
+            const statuses = responses.map((r) => r.status).sort()
+            expect(statuses).toEqual([200, 400, 400, 400, 400, 400])
+            for (const refused of responses.filter((r) => r.status !== 200)) {
+              expect(refused.data.type).toBe("not_allowed")
+              expect(refused.data.message).toMatch(
+                /already recorded as collected|captured by another request at the same moment/
               )
-              const statuses = responses.map((r) => r.status).sort()
-              expect(statuses).toEqual([200, 400, 400, 400, 400, 400])
-              for (const refused of responses.filter((r) => r.status !== 200)) {
-                expect(refused.data.type).toBe("not_allowed")
-                expect(refused.data.message).toMatch(
-                  /already recorded as collected|captured by another request at the same moment/
-                )
-              }
-              const winner = responses.find((r) => r.status === 200)!.data.cash_collection.slip_reference
-              const after = await payments(container, orderId)
-              expect(after.payments[0].captures).toHaveLength(1)
-              expect(after.captureTransactions).toBe(1)
-              expect((await orderMetadata(container, orderId)).cod_slip_reference).toBe(winner)
             }
-          })
-        }
+            const winner = responses.find((r) => r.status === 200)!.data.cash_collection.slip_reference
+            const after = await payments(container, orderId)
+            expect(after.payments[0].captures).toHaveLength(1)
+            expect(after.captureTransactions).toBe(1)
+            expect((await records(orderId)).map((r: any) => r.slip_reference)).toEqual([winner])
+          }
+        })
 
-        it("leaves no reference when the capture fails, tells staff what happened, and a retry works", async () => {
+        // QA's eighth review, N1: the record failed after the capture, and the workflow undid the
+        // capture's order transaction while the capture stayed.
+        it("keeps the capture and the order's payment intact when the record fails after it, and a retry records", async () => {
+          const container = getContainer()
+          const orderId = await placeCashOnDeliveryOrder()
+          const failed: any = await withRecordRefused(() => record(orderId, "N1-FAIL"))
+          expect(failed.status).toBe(500)
+          expect(failed.data).toEqual({
+            type: "unexpected_state",
+            message:
+              "The payment is captured, but the slip reference could not be saved. Reload the order and " +
+              "enter the slip reference again; the payment will not be captured a second time.",
+          })
+          expectReadable(failed.data.message)
+
+          const after = await payments(container, orderId)
+          expect(after).toMatchObject({
+            payment_status: "captured",
+            paid_total: 2250,
+            pending_difference: 0,
+            captureTransactions: 1,
+            captureTransactionTotal: 2250,
+          })
+          expect(after.payments[0].captured_at).not.toBeNull()
+          expect(after.payments[0].captures).toHaveLength(1)
+          expect(await records(orderId)).toEqual([])
+          expect(await panel(orderId)).toMatchObject({
+            stage: "captured_without_slip",
+            can_record: true,
+            capture_needed: false,
+          })
+
+          const retry = await record(orderId, "N1-OK")
+          expect(retry.status).toBe(200)
+          expect(retry.data.cash_collection).toMatchObject({ stage: "recorded", slip_reference: "N1-OK" })
+          const final = await payments(container, orderId)
+          expect(final.payments[0].captures).toHaveLength(1)
+          expect(final).toMatchObject({ captureTransactions: 1, paid_total: 2250, pending_difference: 0 })
+          expect((await records(orderId)).map((r: any) => r.slip_reference)).toEqual(["N1-OK"])
+        })
+
+        it("records nothing when the capture fails, tells staff what happened without the cause, and a retry works", async () => {
           const container = getContainer()
           const orderId = await placeCashOnDeliveryOrder()
           const payment = container.resolve(Modules.PAYMENT) as any
           const original = payment.capturePayment
           payment.capturePayment = async () => {
-            throw new Error("The courier's payment gateway did not answer.")
+            throw new Error(`select "id" from "payment" where "id" = $1 for update - lock timeout`)
           }
-          let failed
+          let failed: any
           try {
             failed = await record(orderId, "FAIL-1")
           } finally {
             payment.capturePayment = original
           }
           expect(failed.status).toBe(500)
-          expect(failed.data).toMatchObject({
+          expect(failed.data).toEqual({
             type: "unexpected_state",
             message:
-              "The payment could not be captured (The courier's payment gateway did not answer). " +
-              "Nothing was recorded. Reload the order and try again; if it fails again, check the " +
-              "Payments section of the order.",
+              "The payment could not be captured. Nothing was recorded. Reload the order and try again; " +
+              "if it fails again, check the Payments section of the order.",
           })
-          const metadata = await orderMetadata(container, orderId)
-          expect(metadata.cod_slip_reference).toBeUndefined()
-          expect(metadata.cod_collected_at).toBeUndefined()
+          expectReadable(failed.data.message)
+          expect(await records(orderId)).toEqual([])
           expect((await payments(container, orderId)).payments[0].captures).toHaveLength(0)
-          expect((await api.get(collection(orderId), { headers: adminHeaders })).data.cash_collection).toMatchObject({
-            stage: "not_collected",
-            can_record: true,
-          })
+          expect(await panel(orderId)).toMatchObject({ stage: "not_collected", can_record: true })
 
           const retry = await record(orderId, "OK-2")
           expect(retry.status).toBe(200)
-          expect((await orderMetadata(container, orderId)).cod_slip_reference).toBe("OK-2")
+          expect((await records(orderId)).map((r: any) => r.slip_reference)).toEqual(["OK-2"])
           expect((await payments(container, orderId)).payments[0].captures).toHaveLength(1)
+        })
+
+        it("answers an error that is not one of its own with a sentence, never the error itself", async () => {
+          const orderId = await placeCashOnDeliveryOrder()
+          const service = getContainer().resolve("cashCollection") as any
+          const original = service.listCashCollections
+          service.listCashCollections = async () => {
+            throw new Error(`relation "cash_collection" does not exist at Object.query (pg.js:12:3)`)
+          }
+          let read: any
+          let marked: any
+          try {
+            read = await api.get(collection(orderId), { headers: adminHeaders, ...allow })
+            marked = await record(orderId, "X-1")
+          } finally {
+            service.listCashCollections = original
+          }
+          expect(read.status).toBe(500)
+          expect(read.data.message).toBe(
+            "The cash-on-delivery state of this order could not be loaded because of an unexpected error. Reload the order."
+          )
+          expect(marked.status).toBe(500)
+          expect(marked.data.message).toBe(
+            "The cash could not be recorded because of an unexpected error. Reload the order to see what is captured and recorded, and try again."
+          )
+          for (const message of [read.data.message, marked.data.message]) {
+            expectReadable(message)
+          }
+          expect((await payments(getContainer(), orderId)).payments[0].captures).toHaveLength(0)
         })
 
         it("records the slip once on a payment captured with Medusa's own button, without capturing again", async () => {
           const container = getContainer()
           const orderId = await placeCashOnDeliveryOrder()
-          await captureInMedusa(orderId)
-          const state = await api.get(collection(orderId), { headers: adminHeaders })
-          expect(state.data.cash_collection).toMatchObject({
+          expect((await captureInMedusa(orderId)).status).toBe(200)
+          const state = await panel(orderId)
+          expect(state).toMatchObject({
             stage: "captured_without_slip",
             collected: true,
             can_record: true,
@@ -1154,18 +1313,15 @@ medusaIntegrationTestRunner({
             captured_by: adminUserId,
             captured_by_email: ADMIN_EMAIL,
           })
-          expect(state.data.cash_collection.captured_at).not.toBeNull()
+          expect(state.captured_at).not.toBeNull()
 
-          // Several presses at once, on several servers: one records it.
-          const responses = await withoutCashLock(() =>
-            Promise.all(Array.from({ length: 5 }, (_, i) => record(orderId, `LATE-${i}`)))
-          )
+          const responses = await Promise.all(Array.from({ length: 5 }, (_, i) => record(orderId, `LATE-${i}`)))
           expect(responses.map((r) => r.status).sort()).toEqual([200, 400, 400, 400, 400])
           const winner = responses.find((r) => r.status === 200)!
           expect(winner.data.cash_collection).toMatchObject({ stage: "recorded", collected: true })
-          expect((await orderMetadata(container, orderId)).cod_slip_reference).toBe(
-            winner.data.cash_collection.slip_reference
-          )
+          expect((await records(orderId)).map((r: any) => r.slip_reference)).toEqual([
+            winner.data.cash_collection.slip_reference,
+          ])
           const after = await payments(container, orderId)
           expect(after.payments[0].captures).toHaveLength(1)
           expect(after.captureTransactions).toBe(1)
@@ -1175,39 +1331,104 @@ medusaIntegrationTestRunner({
           expect(again.data.message).toBe("The cash for this order is already recorded as collected.")
         })
 
-        it("does not count a partly captured payment as collected, and refuses the slip until the rest is captured", async () => {
+        // QA's eighth review, N3: Medusa's "Capture payment" button sends the full amount, which
+        // Medusa 2.22.6 refuses once part is captured; a capture with no amount is refused as well.
+        it("captures the rest of a partly captured payment and records the slip, in one press", async () => {
           const container = getContainer()
           const orderId = await placeCashOnDeliveryOrder()
-          await captureInMedusa(orderId, 1000)
-          const state = await api.get(collection(orderId), { headers: adminHeaders })
-          expect(state.data.cash_collection).toMatchObject({
+          expect((await captureInMedusa(orderId, 1000)).status).toBe(200)
+          // What Medusa itself does with the rest: the full amount, or no amount, is refused.
+          const full = await captureInMedusa(orderId, 2250)
+          const noAmount = await captureInMedusa(orderId)
+          for (const response of [full, noAmount]) {
+            expect(response.status).toBe(400)
+            expect(response.data.message).toBe(
+              "You cannot capture more than the authorized amount substracted by what is already captured."
+            )
+          }
+          expect(await panel(orderId)).toMatchObject({
             stage: "partly_captured",
             collected: false,
-            can_record: false,
-            reason: "partly_captured",
+            can_record: true,
+            capture_needed: true,
+            reason: null,
             amount: 2250,
             captured_amount: 1000,
           })
-          const refused = await record(orderId, "TCS 1")
-          expect(refused.status).toBe(400)
-          expect(refused.data).toEqual({
-            type: "not_allowed",
-            message:
-              "Only part of this payment is captured. Capture the rest in the order's Payments section " +
-              "(Capture payment), then record the slip reference here.",
-          })
-          expect((await orderMetadata(container, orderId)).cod_slip_reference).toBeUndefined()
 
-          await captureInMedusa(orderId, 1250)
-          const recorded = await record(orderId, "TCS 1")
+          const recorded = await record(orderId, "TCS PART")
           expect(recorded.status).toBe(200)
-          expect(recorded.data.cash_collection).toMatchObject({ stage: "recorded", captured_amount: 2250 })
-          expect((await payments(container, orderId)).payments[0].captures).toHaveLength(2)
+          expect(recorded.data.cash_collection).toMatchObject({
+            stage: "recorded",
+            collected: true,
+            captured_amount: 2250,
+            slip_reference: "TCS PART",
+          })
+          const after = await payments(container, orderId)
+          expect(after.payments[0].captures.map((c: any) => Number(c.amount)).sort((a: number, b: number) => a - b)).toEqual([1000, 1250])
+          expect(after.payments[0].captured_at).not.toBeNull()
+          expect(after).toMatchObject({
+            payment_status: "captured",
+            paid_total: 2250,
+            pending_difference: 0,
+            captureTransactions: 2,
+            captureTransactionTotal: 2250,
+          })
+          expect((await records(orderId)).map((r: any) => r.slip_reference)).toEqual(["TCS PART"])
         })
 
-        it("refuses line breaks and invisible characters in the slip reference, and keeps Urdu", async () => {
+        it("captures the rest once when several presses arrive at once on a partly captured payment", async () => {
+          const container = getContainer()
           const orderId = await placeCashOnDeliveryOrder()
-          for (const slip of ["AB\nCD", "‮A1", "A​B", "TCS\t1"]) {
+          expect((await captureInMedusa(orderId, 750)).status).toBe(200)
+          const responses = await withSlowCapture(200, () =>
+            Promise.all(Array.from({ length: 5 }, (_, i) => record(orderId, `PART-${i}`)))
+          )
+          expect(responses.map((r) => r.status).sort()).toEqual([200, 400, 400, 400, 400])
+          const winner = responses.find((r) => r.status === 200)!.data.cash_collection.slip_reference
+          const after = await payments(container, orderId)
+          expect(after.payments[0].captures.map((c: any) => Number(c.amount)).sort((a: number, b: number) => a - b)).toEqual([750, 1500])
+          expect(after).toMatchObject({ paid_total: 2250, pending_difference: 0, captureTransactions: 2 })
+          expect((await records(orderId)).map((r: any) => r.slip_reference)).toEqual([winner])
+        })
+
+        // QA's eighth review, N2: Medusa's own order update saves the metadata whole and dropped a
+        // slip kept there. The record is not in the metadata any more.
+        it("keeps the record when the order's metadata is edited through Medusa's admin at the same moment", async () => {
+          for (let round = 0; round < 3; round++) {
+            const orderId = await placeCashOnDeliveryOrder()
+            const edits = Array.from({ length: 8 }, async (_, k) => {
+              await sleep(k * 10)
+              return api.post(
+                `/admin/orders/${orderId}`,
+                { metadata: { staff_note: `note ${k}` } },
+                { headers: adminHeaders, ...allow }
+              )
+            })
+            const [marked, ...edited] = await Promise.all([record(orderId, `EDIT-${round}`), ...edits])
+            expect(marked.status).toBe(200)
+            expect(new Set(edited.map((r) => r.status))).toEqual(new Set([200]))
+            expect((await records(orderId)).map((r: any) => r.slip_reference)).toEqual([`EDIT-${round}`])
+            expect(await panel(orderId)).toMatchObject({ stage: "recorded", slip_reference: `EDIT-${round}` })
+          }
+        })
+
+        it("refuses invisible and blank characters in the slip reference, and keeps Urdu and Arabic with marks", async () => {
+          const orderId = await placeCashOnDeliveryOrder()
+          for (const slip of [
+            "AB\nCD",
+            "\u202EA1",
+            "A\u200BB",
+            "TCS\t1",
+            "\u3164\u3164",
+            "TCS\u31641",
+            "\u2800",
+            "TCS\uFE0F1",
+            "TCS\u{E0100}1",
+            "A\u1160B",
+            "\uFFA0A1",
+            "A".repeat(65),
+          ]) {
             const response = await record(orderId, slip)
             expect({ slip, status: response.status, type: response.data.type }).toEqual({
               slip,
@@ -1215,10 +1436,17 @@ medusaIntegrationTestRunner({
               type: "invalid_data",
             })
           }
-          expect((await orderMetadata(getContainer(), orderId)).cod_slip_reference).toBeUndefined()
-          const urdu = await record(orderId, "رسید ۴۲")
+          expect(await records(orderId)).toEqual([])
+          expect((await payments(getContainer(), orderId)).payments[0].captures).toHaveLength(0)
+          const urdu = await record(orderId, "رَسِید ۴۲")
           expect(urdu.status).toBe(200)
-          expect(urdu.data.cash_collection.slip_reference).toBe("رسید ۴۲")
+          expect(urdu.data.cash_collection.slip_reference).toBe("رَسِید ۴۲")
+          const second = await placeCashOnDeliveryOrder()
+          const longest = await record(second, "A".repeat(64))
+          expect(longest.status).toBe(200)
+          const third = await placeCashOnDeliveryOrder()
+          const arabic = await record(third, "إيصال مُحَمَّد ٤٢")
+          expect(arabic.status).toBe(200)
         })
 
         it("does not apply to an order paid another way", async () => {
@@ -1227,8 +1455,7 @@ medusaIntegrationTestRunner({
           expect((await choosePayment(cart.id, PLACEHOLDER)).status).toBe(200)
           const orderId = (await complete(cart.id)).data.order.id
 
-          const state = await api.get(collection(orderId), { headers: adminHeaders })
-          expect(state.data.cash_collection).toMatchObject({
+          expect(await panel(orderId)).toMatchObject({
             applies: false,
             can_record: false,
             reason: "not_cash_on_delivery",
@@ -1236,7 +1463,29 @@ medusaIntegrationTestRunner({
           const refused = await record(orderId, "TCS 1")
           expect(refused.status).toBe(400)
           expect(refused.data).toMatchObject({ type: "not_allowed", message: "This order is not paid by cash on delivery." })
-          expect((await orderMetadata(getContainer(), orderId)).cod_slip_reference).toBeUndefined()
+          expect(await records(orderId)).toEqual([])
+        })
+
+        it("answers 404 for a deleted order and keeps its record, which comes back with the order", async () => {
+          const orderId = await placeCashOnDeliveryOrder()
+          expect((await record(orderId, "DEL-1")).status).toBe(200)
+          const orders = getContainer().resolve(Modules.ORDER) as any
+          await orders.softDeleteOrders([orderId])
+          for (const response of [
+            await api.get(collection(orderId), { headers: adminHeaders, ...allow }),
+            await record(orderId, "DEL-2"),
+          ]) {
+            expect(response.status).toBe(404)
+            expect(response.data).toEqual({
+              type: "not_found",
+              message: "This order was not found. It may have been deleted.",
+            })
+          }
+          // The record of cash received stays, like Medusa's own payment and capture.
+          const rows = await records(orderId)
+          expect(rows.map((r: any) => [r.slip_reference, r.deleted_at])).toEqual([["DEL-1", null]])
+          await orders.restoreOrders([orderId])
+          expect(await panel(orderId)).toMatchObject({ stage: "recorded", slip_reference: "DEL-1" })
         })
 
         describe("as a signed-in customer", () => {
@@ -1245,7 +1494,7 @@ medusaIntegrationTestRunner({
            * database to its state after seeding before every test.
            */
           async function signInCustomer(): Promise<Record<string, string>> {
-            const email = "customer-s11c@example.com"
+            const email = "customer-s11d@example.com"
             const password = "customer-test-password"
             const { data: registered } = await api.post("/auth/customer/emailpass/register", { email, password })
             await api.post(
@@ -1267,10 +1516,10 @@ medusaIntegrationTestRunner({
               ).toBe(401)
             }
             expect((await api.get(collection("order_unknown"), { headers: adminHeaders, ...allow })).status).toBe(404)
-            expect((await orderMetadata(getContainer(), orderId)).cod_slip_reference).toBeUndefined()
+            expect(await records(orderId)).toEqual([])
           })
 
-          it("sees the promise, the slip reference and the time on their orders, and no staff id", async () => {
+          it("sees the promise on their orders, and no cash-collection data or staff id", async () => {
             const customerHeaders = await signInCustomer()
             const cart = await createCart("pk", [{ handle: "t-shirt", size: "M", quantity: 1 }], customerHeaders)
             await addShipping(cart.id)
@@ -1279,18 +1528,20 @@ medusaIntegrationTestRunner({
             await metadataOncePlaced(orderId)
             const marked = await record(orderId, "TCS 4242")
             expect(marked.status).toBe(200)
+            const collectedAt = marked.data.cash_collection.collected_at
 
             const { data: list } = await api.get("/store/orders", { headers: customerHeaders })
             const listed = list.orders.find((o: any) => o.id === orderId)
-            expect(listed.metadata).toEqual({
-              delivery_promise: promisedToday(),
-              cod_slip_reference: "TCS 4242",
-              cod_collected_at: marked.data.cash_collection.collected_at,
-            })
-            expect(JSON.stringify(list)).not.toContain(adminUserId)
+            expect(listed.metadata).toEqual({ delivery_promise: promisedToday() })
             const { data: one } = await api.get(`/store/orders/${orderId}`, { headers: customerHeaders })
             expect(one.order.metadata).toBeUndefined()
-            expect(JSON.stringify(one)).not.toContain(adminUserId)
+            for (const body of [JSON.stringify(list), JSON.stringify(one)]) {
+              expect(body).not.toContain("TCS 4242")
+              expect(body).not.toContain(collectedAt)
+              expect(body).not.toContain("cod_")
+              expect(body).not.toContain("cash_collection")
+              expect(body).not.toContain(adminUserId)
+            }
           })
         })
       })

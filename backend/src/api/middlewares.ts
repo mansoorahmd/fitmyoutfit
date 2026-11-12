@@ -7,9 +7,9 @@
  * Completion is checked again by workflows/hooks/complete-cart-checkout-rules.ts, because the cart
  * can change after the payment method was chosen.
  *
- * Keys only the server or staff write on an order (the promised delivery date, cash on delivery
- * collected) are refused when a customer sends them in a cart's metadata, because Medusa copies a
- * cart's metadata into the order (refuseReservedCartMetadata, below).
+ * The key the server writes on an order (the promised delivery date) and every `cod_` key
+ * (reserved for staff) are refused when a customer sends them in a cart's metadata, because Medusa
+ * copies a cart's metadata into the order (refuseReservedCartMetadata, below).
  */
 import {
   defineMiddlewares,

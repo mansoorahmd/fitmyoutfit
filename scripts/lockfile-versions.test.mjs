@@ -16,21 +16,90 @@ function copiesOf(lockfile, name) {
     .map(([location, entry]) => ({ location, version: entry.version }));
 }
 
-/** Compares two plain x.y.z versions: negative, 0 or positive. */
+const SEMVER_RE = /^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/;
+
+/** The parts of a semver version (x.y.z, an optional -prerelease and an optional +build). */
+function parseVersion(version) {
+  const match = SEMVER_RE.exec(String(version).trim());
+  if (!match) throw new Error(`not a semver version: ${JSON.stringify(version)}`);
+  const [, major, minor, patch, prerelease] = match;
+  return { core: [major, minor, patch].map(Number), prerelease: prerelease ? prerelease.split(".") : [] };
+}
+
+/** Semver order of two prerelease identifiers: numbers below words, numbers by value. */
+function compareIdentifiers(a, b) {
+  const numeric = /^\d+$/;
+  if (numeric.test(a) && numeric.test(b)) return Number(a) - Number(b);
+  if (numeric.test(a)) return -1;
+  if (numeric.test(b)) return 1;
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+/**
+ * Compares two semver versions: negative, 0 or positive, by the precedence rules of semver 2.0.0
+ * (section 11). A prerelease (8.5.32-beta.1) comes before its release (8.5.32) but after every
+ * earlier release (8.5.31); build metadata (+sha.1) does not count. Throws on anything else, so a
+ * version the test cannot read fails it loudly instead of comparing as NaN.
+ */
 function compareVersions(a, b) {
-  const pa = a.split(".").map(Number);
-  const pb = b.split(".").map(Number);
+  const pa = parseVersion(a);
+  const pb = parseVersion(b);
   for (let i = 0; i < 3; i += 1) {
-    if (pa[i] !== pb[i]) return pa[i] - pb[i];
+    if (pa.core[i] !== pb.core[i]) return pa.core[i] - pb.core[i];
+  }
+  if (pa.prerelease.length === 0 || pb.prerelease.length === 0) {
+    return pb.prerelease.length - pa.prerelease.length;
+  }
+  for (let i = 0; i < Math.max(pa.prerelease.length, pb.prerelease.length); i += 1) {
+    if (pa.prerelease[i] === undefined) return -1;
+    if (pb.prerelease[i] === undefined) return 1;
+    const order = compareIdentifiers(pa.prerelease[i], pb.prerelease[i]);
+    if (order !== 0) return order;
   }
   return 0;
 }
 
-test("compareVersions", () => {
+test("compareVersions: plain x.y.z", () => {
   assert.ok(compareVersions("7.3.8", "6.4.3") > 0);
   assert.ok(compareVersions("5.4.21", "6.4.3") < 0);
   assert.equal(compareVersions("8.5.32", "8.5.32"), 0);
   assert.ok(compareVersions("8.4.31", "8.5.22") < 0);
+  assert.ok(compareVersions("10.0.0", "9.99.99") > 0);
+});
+
+test("compareVersions: prerelease and build suffixes", () => {
+  // Above the fixed version, whatever the suffix.
+  assert.ok(compareVersions("8.5.32-beta.1", "8.5.22") > 0);
+  assert.ok(compareVersions("8.5.23-rc.0", "8.5.22") > 0);
+  assert.ok(compareVersions("7.3.8+sha.5114f85", "6.4.3") > 0);
+  // A prerelease comes before its own release, and after the release before it.
+  assert.ok(compareVersions("8.5.22-beta.1", "8.5.22") < 0);
+  assert.ok(compareVersions("8.5.22", "8.5.22-beta.1") > 0);
+  assert.ok(compareVersions("8.5.22-beta.1", "8.5.21") > 0);
+  // Build metadata does not count.
+  assert.equal(compareVersions("8.5.32+build.7", "8.5.32"), 0);
+  assert.equal(compareVersions("8.5.32-beta.1+a", "8.5.32-beta.1+b"), 0);
+  // The example order of semver 2.0.0, section 11.
+  const order = [
+    "1.0.0-alpha",
+    "1.0.0-alpha.1",
+    "1.0.0-alpha.beta",
+    "1.0.0-beta",
+    "1.0.0-beta.2",
+    "1.0.0-beta.11",
+    "1.0.0-rc.1",
+    "1.0.0",
+  ];
+  for (let i = 0; i + 1 < order.length; i += 1) {
+    assert.ok(compareVersions(order[i], order[i + 1]) < 0, `${order[i]} < ${order[i + 1]}`);
+    assert.ok(compareVersions(order[i + 1], order[i]) > 0, `${order[i + 1]} > ${order[i]}`);
+  }
+});
+
+test("compareVersions: refuses what is not a version instead of comparing NaN", () => {
+  for (const bad of ["", "8.5", "8.5.x", "latest", "8.5.32.1", undefined]) {
+    assert.throws(() => compareVersions(bad, "8.5.22"), /not a semver version/);
+  }
 });
 
 // GHSA-587h-7wmj-h5pm (high) and others: vite <=6.4.3. Medusa 2.22.6 bundles its admin with

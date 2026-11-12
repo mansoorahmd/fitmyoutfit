@@ -130,6 +130,71 @@ export function databaseUrlReadings(databaseUrl: string | undefined): (string | 
 }
 
 /**
+ * Why a DATABASE_URL does not name the database server itself (checked outside development and
+ * test, in build-config.ts). pg chooses the server, in this order (pg-connection-string and
+ * ConnectionParameters, as installed):
+ *
+ * - a `host` query parameter wins over the host after the `@` (pg-connection-string copies every
+ *   query parameter over what it parsed);
+ * - a URL with an empty host (`postgres://user:pw@/db`) is read with a dummy host that is then
+ *   dropped, so pg takes `PGHOST`, or else `localhost`;
+ * - a string that is not a URL (a socket path, libpq's `host=... user=...` form, or anything else)
+ *   gives no host either, so again `PGHOST` or `localhost`.
+ *
+ * In each case the login is checked, but the server is chosen by something the checks do not
+ * read. `hostaddr` is refused with `host`: libpq uses it to choose the server, and nothing is
+ * lost by refusing it.
+ *
+ * - `not_a_url`: not a `postgres://` or `postgresql://` URL;
+ * - `no_host`: no host after the `@`, or one that is not a plain host name, IPv4 or bracketed
+ *   IPv6 address (a percent-encoded host such as `%2Ftmp` is a socket path to pg);
+ * - `host_parameter`: a `host` or `hostaddr` query parameter, in any case.
+ */
+export type DatabaseHostProblem = "not_a_url" | "no_host" | "host_parameter"
+
+const HOST_NAME_RE = /^(?:[A-Za-z0-9_](?:[A-Za-z0-9_.-]*[A-Za-z0-9_])?|\[[0-9A-Fa-f:.]+\])$/
+const HOST_PARAMETERS = ["host", "hostaddr"]
+
+function hostProblemOf(reading: string): DatabaseHostProblem | undefined {
+  let url: URL
+  try {
+    url = new URL(reading)
+  } catch {
+    // A user and password with nothing after the @ (`postgres://u:p@/db`) is no URL to the
+    // WHATWG parser; pg reads it again with a dummy host, and so does this check.
+    try {
+      new URL(reading.replace("@/", "@___DUMMY___/"))
+      return "no_host"
+    } catch {
+      return "not_a_url"
+    }
+  }
+  if (url.protocol !== "postgres:" && url.protocol !== "postgresql:") {
+    return "not_a_url"
+  }
+  if (!HOST_NAME_RE.test(url.hostname)) {
+    return "no_host"
+  }
+  if ([...url.searchParams.keys()].some((key) => HOST_PARAMETERS.includes(key.trim().toLowerCase()))) {
+    return "host_parameter"
+  }
+  return undefined
+}
+
+/**
+ * The first reason why `databaseUrl` does not name its database server, in any of the ways it may
+ * be read (databaseUrlReadings), or undefined when every reading names it. A `#` is read as `%23`,
+ * as the check on `#` tells the user to write it, so that problem is reported once, on its own.
+ */
+export function databaseHostProblem(databaseUrl: string): DatabaseHostProblem | undefined {
+  const order: DatabaseHostProblem[] = ["not_a_url", "no_host", "host_parameter"]
+  const found = databaseUrlReadings(databaseUrl.replace(/#/g, "%23"))
+    .map((reading) => hostProblemOf(reading ?? ""))
+    .filter((problem): problem is DatabaseHostProblem => problem !== undefined)
+  return order.find((problem) => found.includes(problem))
+}
+
+/**
  * The login pg would use for `databaseUrl` with the environment `env` (in the backend this is
  * process.env). Null only when pg could not read the connection string. `platform` decides which
  * variable holds the operating-system user, as in pg's defaults.

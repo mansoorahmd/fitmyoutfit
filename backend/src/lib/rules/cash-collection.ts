@@ -1,28 +1,31 @@
 /**
  * Cash on delivery collected: when staff may record that the courier collected the cash, what a
- * valid slip reference is, and what is kept on the order. Plain TypeScript, no Medusa imports.
+ * valid slip reference is, and what staff are told. Plain TypeScript, no Medusa imports.
  *
  * The founders' process: the courier hands over a slip against the order number once the cash is
- * collected; staff then record it in the admin. Recording it captures the cash-on-delivery payment
- * (through Medusa's own payment flow, in workflows/cash-collection/) and then keeps the slip
- * reference and the time in the order's metadata. Who captured is Medusa's own capture record;
- * it is not copied into the metadata, which a signed-in customer can read.
+ * collected; staff then record it in the admin. Recording it captures what is still open of the
+ * cash-on-delivery payment (through Medusa's own payment flow, in workflows/cash-collection/) and
+ * then keeps the slip reference and the time as the order's cash-collection record, a row of its
+ * own (modules/cash-collection), never in the order's metadata, which a signed-in customer can
+ * read and Medusa's admin saves as a whole. Who captured is Medusa's own capture record.
  *
- * Capture first, then write: Medusa refuses a second capture of the same payment, so of several
- * presses at once exactly one captures, and only that one writes the reference. A payment that is
- * fully captured without a reference (Medusa's own "Capture payment" button, or a write that
- * failed after the capture) can get its reference recorded once, without a second capture.
+ * Capture first, then record: the capture runs to its end on its own; the record is then one
+ * insert, and the database allows one record per order, so of several presses at once exactly one
+ * records, on any number of server instances. A payment that is fully captured without a record
+ * (Medusa's own "Capture payment" button, or a record that failed after the capture) can get its
+ * record once, without a second capture.
  */
 import { COD_PAYMENT_PROVIDER_ID } from "../../modules/cod/constants"
-
-/** Order metadata keys. `cod_slip_reference` is named by docs/contracts/m1-checkout.md, section 8. */
-export const COD_SLIP_REFERENCE_KEY = "cod_slip_reference"
-export const COD_COLLECTED_AT_KEY = "cod_collected_at"
 
 /** Longest slip reference kept. Courier slip and consignment numbers are far shorter. */
 export const SLIP_REFERENCE_MAX_LENGTH = 64
 
-type Metadata = Readonly<Record<string, unknown>> | null | undefined
+/** The order's cash-collection record, as kept (modules/cash-collection). */
+export type CashCollectionRecord = {
+  slip_reference: string
+  /** When it was recorded, as an ISO time (UTC). */
+  collected_at: string | null
+}
 
 /** One capture of a payment, from Medusa's own capture record. */
 export type CollectionCapture = {
@@ -51,15 +54,15 @@ export type CashCollectionInput = {
   orderStatus?: string | null
   /** Every payment of the order. */
   payments: readonly CollectionPayment[]
-  /** The order's metadata. */
-  metadata: Metadata
+  /** The order's cash-collection record, or null when none is kept. */
+  record: CashCollectionRecord | null
 }
 
 /**
  * Where the order is:
- * - `not_collected`: the payment is open; recording the slip captures it.
- * - `partly_captured`: part of the amount was captured (Medusa's own button); the rest must be
- *   captured there before a slip can be recorded.
+ * - `not_collected`: nothing is captured; recording the slip captures the whole amount.
+ * - `partly_captured`: part of the amount was captured (Medusa's own payment section); recording
+ *   the slip captures the rest, because the courier's slip is for the whole order.
  * - `captured_without_slip`: the whole amount is captured but no slip is recorded; recording the
  *   slip does not capture again.
  * - `recorded`: the slip reference is recorded.
@@ -75,10 +78,15 @@ export type CashCollectionStage =
 export type CashCollectionRefusal =
   | "not_cash_on_delivery"
   | "already_recorded"
-  | "partly_captured"
   | "order_canceled"
   | "payment_canceled"
   | "several_payments"
+
+/**
+ * What recording the slip captures first: nothing, the whole amount (Medusa's capture with no
+ * amount), or what is still open (the amount less the captures, worked out exactly by the caller).
+ */
+export type CaptureNeeded = "none" | "full" | "remainder"
 
 /** What the admin panel shows, and whether it may be submitted. */
 export type CashCollectionState = {
@@ -89,7 +97,7 @@ export type CashCollectionState = {
   collected: boolean
   /** True when staff may record the slip reference now. */
   can_record: boolean
-  /** True when recording the slip also captures the payment. */
+  /** True when recording the slip also captures (all or the rest of) the payment. */
   capture_needed: boolean
   /** Why the slip may not be recorded now, or null. */
   reason: CashCollectionRefusal | null
@@ -108,11 +116,6 @@ function stringOrNull(value: unknown): string | null {
   return typeof value === "string" && value.trim() !== "" ? value : null
 }
 
-/** The slip reference recorded on an order, or null. */
-export function recordedSlipReference(metadata: Metadata): string | null {
-  return stringOrNull(metadata?.[COD_SLIP_REFERENCE_KEY])
-}
-
 export function cashCollectionState(input: CashCollectionInput): CashCollectionState {
   const cod = input.payments.filter((p) => p.provider_id === COD_PAYMENT_PROVIDER_ID)
   const live = cod.filter((p) => !p.canceled)
@@ -120,9 +123,10 @@ export function cashCollectionState(input: CashCollectionInput): CashCollectionS
   const latestCapture = payment
     ? [...payment.captures].sort((a, b) => (a.created_at ?? "").localeCompare(b.created_at ?? "")).at(-1)
     : undefined
+  const slipReference = stringOrNull(input.record?.slip_reference)
   const base = {
-    slip_reference: recordedSlipReference(input.metadata),
-    collected_at: stringOrNull(input.metadata?.[COD_COLLECTED_AT_KEY]),
+    slip_reference: slipReference,
+    collected_at: slipReference === null ? null : stringOrNull(input.record?.collected_at),
     payment_id: payment?.id ?? null,
     amount: payment?.amount ?? null,
     captured_amount: payment?.captured_amount ?? null,
@@ -138,11 +142,19 @@ export function cashCollectionState(input: CashCollectionInput): CashCollectionS
     capture_needed: false,
     reason,
   })
+  const open = (stage: CashCollectionStage, captureNeeded: boolean) => ({
+    ...base,
+    applies: true,
+    stage,
+    can_record: true,
+    capture_needed: captureNeeded,
+    reason: null,
+  })
 
   if (cod.length === 0) {
     return refuse("unavailable", "not_cash_on_delivery", false)
   }
-  if (base.slip_reference !== null) {
+  if (slipReference !== null) {
     return refuse("recorded", "already_recorded")
   }
   if (input.orderStatus === "canceled") {
@@ -157,12 +169,12 @@ export function cashCollectionState(input: CashCollectionInput): CashCollectionS
     return refuse("unavailable", "several_payments")
   }
   if (payment.fully_captured) {
-    return { ...base, applies: true, stage: "captured_without_slip", can_record: true, capture_needed: false, reason: null }
+    return open("captured_without_slip", false)
   }
   if (payment.captured_amount > 0) {
-    return refuse("partly_captured", "partly_captured")
+    return open("partly_captured", true)
   }
-  return { ...base, applies: true, stage: "not_collected", can_record: true, capture_needed: true, reason: null }
+  return open("not_collected", true)
 }
 
 export type SlipReferenceResult =
@@ -170,12 +182,24 @@ export type SlipReferenceResult =
   | { ok: false; error: string }
 
 /**
- * Characters a slip reference may not contain: control characters (C0 and C1, which include the
- * tab and line breaks), invisible format characters (Unicode category Cf, such as the
- * right-to-left override U+202E and the zero-width space U+200B), lone surrogates (they cannot be
- * stored), and the line and paragraph separators. They are refused, never removed or replaced.
+ * Characters a slip reference may not contain. They are refused, never removed or replaced:
+ * - control characters (Cc: C0 and C1, which include the tab and line breaks), the line and
+ *   paragraph separators (Zl, Zp), and lone surrogates (Cs, which cannot be stored);
+ * - invisible format characters (Cf), such as the right-to-left override U+202E, the zero-width
+ *   space U+200B, the zero-width joiners and the byte order mark;
+ * - every Unicode default-ignorable code point (Default_Ignorable_Code_Point), the characters
+ *   Unicode says render as nothing: besides the Cf ones above, the Hangul fillers (U+115F, U+1160,
+ *   U+3164, U+FFA0, letters that show as blank), the variation selectors (U+FE00 to U+FE0F and
+ *   U+E0100 to U+E01EF) and the Mongolian free variation selectors, the combining grapheme joiner
+ *   U+034F and the Khmer inherent vowels U+17B4 and U+17B5;
+ * - the Braille pattern blank U+2800, a symbol that shows as a blank space;
+ * - private-use (Co) and unassigned (Cn) code points, which have no agreed glyph.
+ * Visible spaces (Zs) are allowed and tidied; combining marks are allowed after a letter, a digit
+ * or another mark (Arabic and Urdu text uses them), and refused anywhere else.
  */
-const FORBIDDEN_RE = /[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}]/u
+const FORBIDDEN_RE = /[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}\p{Default_Ignorable_Code_Point}\u2800\p{Co}\p{Cn}]/u
+/** A combining mark that does not follow a letter, a digit or another mark. */
+const LOOSE_MARK_RE = /(?:^|[^\p{L}\p{N}\p{M}])\p{M}/u
 const LETTER_OR_DIGIT_RE = /[\p{L}\p{N}]/u
 /** Visible spaces (Unicode category Zs, such as the ordinary and the no-break space). */
 const SPACES_RE = /\p{Zs}+/gu
@@ -194,11 +218,19 @@ export function readSlipReference(raw: unknown): SlipReferenceResult {
     return {
       ok: false,
       error:
-        "The slip reference contains a line break, a tab, or an invisible or control character. " +
-        "Type it again by hand, without pasting.",
+        "The slip reference contains a line break, a tab, or a character that is invisible or " +
+        "shows as blank. Type it again by hand, without pasting.",
     }
   }
   const value = raw.replace(SPACES_RE, " ").trim()
+  if (LOOSE_MARK_RE.test(value)) {
+    return {
+      ok: false,
+      error:
+        "The slip reference has an accent or vowel mark that is not on a letter. Type it again " +
+        "by hand, without pasting.",
+    }
+  }
   if (!LETTER_OR_DIGIT_RE.test(value)) {
     return { ok: false, error: "The slip reference must contain a letter or a digit." }
   }
@@ -214,9 +246,6 @@ export function readSlipReference(raw: unknown): SlipReferenceResult {
 const REFUSAL_MESSAGES: Record<CashCollectionRefusal, string> = {
   not_cash_on_delivery: "This order is not paid by cash on delivery.",
   already_recorded: "The cash for this order is already recorded as collected.",
-  partly_captured:
-    "Only part of this payment is captured. Capture the rest in the order's Payments section " +
-    "(Capture payment), then record the slip reference here.",
   order_canceled: "This order is canceled.",
   payment_canceled: "The cash-on-delivery payment of this order is canceled.",
   several_payments:
@@ -232,13 +261,13 @@ export type CashCollectionDecision =
       ok: true
       /** The cleaned slip reference. */
       slipReference: string
-      /** The payment, captured first when `captureNeeded`. */
+      /** The payment, captured first unless `capture` is "none". */
       paymentId: string
-      captureNeeded: boolean
+      capture: CaptureNeeded
     }
   | { ok: false; reason: CashCollectionRefusal | "invalid_reference"; message: string }
 
-/** Whether staff may record the slip now, with this reference, and whether to capture first. */
+/** Whether staff may record the slip now, with this reference, and what to capture first. */
 export function decideCashCollection(
   state: CashCollectionState,
   rawReference: unknown
@@ -255,36 +284,48 @@ export function decideCashCollection(
     ok: true,
     slipReference: reference.value,
     paymentId: state.payment_id,
-    captureNeeded: state.capture_needed,
+    capture: !state.capture_needed ? "none" : state.stage === "partly_captured" ? "remainder" : "full",
   }
 }
 
 /**
  * What staff are told when the capture failed. `after` is the order's state read again after the
- * failure: when another press captured the payment at the same moment, that is what happened;
- * otherwise the payment could not be captured, and nothing was recorded.
+ * failure: when the whole amount is captured now (another press, or Medusa's own button, at the
+ * same moment), that is what happened; otherwise the payment could not be captured, and nothing
+ * was recorded. Never the underlying error: it can hold SQL or internal ids, and is logged instead.
  */
-export function captureFailureMessage(after: CashCollectionState, cause: string): string {
+export function captureFailureMessage(after: CashCollectionState): string {
   if (after.stage === "recorded" || after.stage === "captured_without_slip") {
     return (
       "The payment was captured by another request at the same moment, so this slip reference " +
       "was not recorded. Reload the order to see what is recorded."
     )
   }
-  const detail = cause.trim() === "" ? "" : ` (${cause.trim().replace(/\.$/, "")})`
   return (
-    `The payment could not be captured${detail}. Nothing was recorded. Reload the order and ` +
-    "try again; if it fails again, check the Payments section of the order."
+    "The payment could not be captured. Nothing was recorded. Reload the order and try again; " +
+    "if it fails again, check the Payments section of the order."
   )
 }
 
-/** The keys written into the order's metadata when the slip reference is recorded. */
-export function cashCollectedMetadata(record: {
-  slipReference: string
-  collectedAt: Date
-}): Record<string, string> {
-  return {
-    [COD_SLIP_REFERENCE_KEY]: record.slipReference,
-    [COD_COLLECTED_AT_KEY]: record.collectedAt.toISOString(),
-  }
-}
+/** What staff are told when the payment is captured but the record could not be saved. */
+export const RECORD_FAILURE_MESSAGE =
+  "The payment is captured, but the slip reference could not be saved. Reload the order and " +
+  "enter the slip reference again; the payment will not be captured a second time."
+
+/** What staff are told when something unexpected failed (the error itself is logged). */
+export const UNEXPECTED_FAILURE_MESSAGE =
+  "The cash could not be recorded because of an unexpected error. Reload the order to see " +
+  "what is captured and recorded, and try again."
+
+/** What staff are told when the state could not be read (the panel then hides itself). */
+export const STATE_READ_FAILURE_MESSAGE =
+  "The cash-on-delivery state of this order could not be loaded because of an unexpected " +
+  "error. Reload the order."
+
+/** What staff are told when the cash was recorded but the new state could not be read. */
+export const RECORDED_BUT_NOT_SHOWN_MESSAGE =
+  "The cash is recorded as collected, but the panel could not be refreshed. Reload the order " +
+  "to see it."
+
+/** What staff are told for an order that does not exist (or was deleted). */
+export const ORDER_NOT_FOUND_MESSAGE = "This order was not found. It may have been deleted."
