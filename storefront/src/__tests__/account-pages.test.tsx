@@ -279,6 +279,16 @@ describe("profile (05, 9.6)", () => {
     expect(screen.queryByLabelText("First name")).toBeNull()
   })
 
+  it("the inputs have the checkout's limits (QA S1-4c, S2)", () => {
+    render(<ProfileRows email={customer.email} initial={{ firstName: "Ali", lastName: "", phone: "" }} />)
+    fireEvent.click(screen.getByRole("button", { name: "Edit Name" }))
+    expect(screen.getByLabelText("First name")).toHaveAttribute("maxlength", "100")
+    expect(screen.getByLabelText("Last name (optional)")).toHaveAttribute("maxlength", "100")
+    fireEvent.click(screen.getByTestId("profile-cancel"))
+    fireEvent.click(screen.getByRole("button", { name: "Edit Phone" }))
+    expect(screen.getByLabelText("Phone")).toHaveAttribute("maxlength", "25")
+  })
+
   describe("after Saved the row shows what was saved, and the next edit starts from it (QA S1-4c, B2)", () => {
     const edit = async (row: "Name" | "Phone", fields: Record<string, string>) => {
       fireEvent.click(screen.getByRole("button", { name: `Edit ${row}` }))

@@ -15,6 +15,7 @@ import {
   validateCreate,
   validateSignIn,
 } from "@lib/util/account-auth"
+import { FIELD_MAX } from "@lib/util/checkout-address"
 
 const ok = <T>(body: T): Call<T> => ({ ok: true, body })
 const fail = (status?: number): Call<never> => ({ ok: false, status })
@@ -71,6 +72,24 @@ describe("field checks (05, 2.3 and 8.3)", () => {
     expect(validateCreate({ ...base, phone: "call me" }, "gb")).toEqual({
       phone: "Enter a phone number, like 07700 900123",
     })
+  })
+
+  it("names 100, email 254, phone 25: the checkout's limits, with a message that says the limit (QA S1-4c, S2)", () => {
+    const base = { firstName: "Ali", lastName: "", email: "a@b.co", phone: "", password: "12345678" }
+    expect(validateCreate({ ...base, firstName: "ع".repeat(100), lastName: "R".repeat(100) }, "pk")).toEqual({})
+    expect(validateCreate({ ...base, firstName: "ع".repeat(101) }, "pk")).toEqual({
+      firstName: "Use 100 characters or fewer",
+    })
+    expect(validateCreate({ ...base, firstName: "A".repeat(300_000) }, "pk")).toEqual({
+      firstName: "Use 100 characters or fewer",
+    })
+    expect(validateCreate({ ...base, lastName: "R".repeat(101) }, "pk")).toEqual({ lastName: "Use 100 characters or fewer" })
+    const longEmail = `${"a".repeat(64)}@${"b".repeat(186)}.com` // 255
+    expect(validateCreate({ ...base, email: longEmail }, "pk")).toEqual({ email: "Use 254 characters or fewer" })
+    expect(validateSignIn({ email: longEmail, password: "x" })).toEqual({ email: "Use 254 characters or fewer" })
+    expect(validateCreate({ ...base, phone: `0300 ${"1".repeat(21)}` }, "pk")).toEqual({ phone: "Use 25 characters or fewer" })
+    // one definition: the checkout's own table
+    expect(FIELD_MAX).toMatchObject({ first_name: 100, last_name: 100, email: 254, phone: 25 })
   })
 
   it("keeps the email as the account does: trimmed, lower case", () => {

@@ -188,8 +188,12 @@ export const isPhone = (value: string): boolean => {
 
 const blank = (value: string | null | undefined) => !value || !value.trim()
 
-/** "Use 100 characters or fewer" when the value is longer than the field keeps. */
-const tooLong = (field: LimitedField, value: string | null | undefined): string | null =>
+/**
+ * "Use 100 characters or fewer" when the value is longer than the field
+ * keeps. The one definition of the limits for the checkout, create account
+ * and the profile (QA S1-4c, S2), on the server and on the inputs.
+ */
+export const tooLong = (field: LimitedField, value: string | null | undefined): string | null =>
   (value ?? "").trim().length > FIELD_MAX[field]
     ? fill(words.errors.tooLong, { max: FIELD_MAX[field] })
     : null

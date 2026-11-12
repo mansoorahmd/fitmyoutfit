@@ -4,7 +4,7 @@
 
 import { checkoutContent } from "@content/checkout"
 
-import { isPhone } from "./checkout-address"
+import { isPhone, tooLong } from "./checkout-address"
 import { fill } from "./wording"
 
 export type NameValues = { firstName: string; lastName: string }
@@ -44,17 +44,33 @@ export const afterProfileSave = (
     : { ...shown, phone: draft.phone.trim() }
 }
 
-/** The name row: a first name is needed; the last name is optional. */
-export const validateName = (values: NameValues): Partial<Record<keyof NameValues, string>> =>
-  values.firstName.trim() ? {} : { firstName: checkoutContent.address.errors.firstName }
+/**
+ * The name row: a first name is needed; the last name is optional. Both
+ * have the checkout's limit (QA S1-4c, S2).
+ */
+export const validateName = (values: NameValues): Partial<Record<keyof NameValues, string>> => {
+  const errors: Partial<Record<keyof NameValues, string>> = {}
+  if (!values.firstName.trim()) errors.firstName = checkoutContent.address.errors.firstName
+  else {
+    const long = tooLong("first_name", values.firstName)
+    if (long) errors.firstName = long
+  }
+  const lastLong = tooLong("last_name", values.lastName)
+  if (lastLong) errors.lastName = lastLong
+  return errors
+}
 
 /**
  * The phone row: optional, as on create account (the phone the courier
  * calls is the one on each address); when given, a real phone number,
- * with the example in the visitor's country's format.
+ * with the example in the visitor's country's format, within the
+ * checkout's limit.
  */
 export const validatePhone = (values: PhoneValues): Partial<Record<"phone", string>> => {
-  if (!values.phone.trim() || isPhone(values.phone)) return {}
+  if (!values.phone.trim()) return {}
+  const long = tooLong("phone", values.phone)
+  if (long) return { phone: long }
+  if (isPhone(values.phone)) return {}
   const examples = checkoutContent.address.phoneExamples
   const example = examples[values.countryCode.toLowerCase()] ?? examples.pk
   return { phone: fill(checkoutContent.address.errors.phoneInvalid, { example }) }

@@ -119,6 +119,21 @@ describe("sign-in view (05, 8.3)", () => {
 })
 
 describe("create view (05, 8.3)", () => {
+  it("the inputs have the checkout's limits, and a longer name is refused with the limit (QA S1-4c, S2)", async () => {
+    render(<AuthTemplate view="create" next={null} email="" />)
+    expect(screen.getByLabelText("First name")).toHaveAttribute("maxlength", "100")
+    expect(screen.getByLabelText("Last name (optional)")).toHaveAttribute("maxlength", "100")
+    expect(screen.getByLabelText("Email")).toHaveAttribute("maxlength", "254")
+    expect(screen.getByLabelText("Phone (optional)")).toHaveAttribute("maxlength", "25")
+    // a value set past the input's limit (a script, an old browser) is still checked
+    type("First name", "A".repeat(101))
+    type("Email", "ali@example.com")
+    type("Password", "team-kit-2026")
+    await submit()
+    expect(screen.getByText("Use 100 characters or fewer")).toBeInTheDocument()
+    expect(calls.signUp).toHaveLength(0)
+  })
+
   it("has the create fields, the password hint and the email from ?email=", () => {
     render(<AuthTemplate view="create" next={null} email="ali@example.com" />)
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Create an account")

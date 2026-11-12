@@ -72,4 +72,13 @@ describe("profile checks", () => {
       phone: "Enter a phone number, like 0300 1234567",
     })
   })
+
+  it("names 100 and phone 25, the checkout's limits, with the limit in the message (QA S1-4c, S2)", () => {
+    expect(validateName({ firstName: "ع".repeat(100), lastName: "R".repeat(100) })).toEqual({})
+    expect(validateName({ firstName: "A".repeat(20_000), lastName: "R".repeat(101) })).toEqual({
+      firstName: "Use 100 characters or fewer",
+      lastName: "Use 100 characters or fewer",
+    })
+    expect(validatePhone({ phone: "1".repeat(26), countryCode: "pk" })).toEqual({ phone: "Use 25 characters or fewer" })
+  })
 })

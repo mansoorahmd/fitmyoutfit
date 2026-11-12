@@ -10,7 +10,7 @@
 import { accountContent } from "@content/account"
 import { checkoutContent } from "@content/checkout"
 
-import { isEmail, isPhone } from "./checkout-address"
+import { isEmail, isPhone, tooLong } from "./checkout-address"
 import { fill } from "./wording"
 
 const words = accountContent.auth
@@ -72,10 +72,15 @@ export const CREATE_FIELDS: (keyof CreateValues)[] = [
   "password",
 ]
 
+/** An email that looks real and fits the store's limit (FIELD_MAX, shared with the checkout). */
+const emailError = (email: string): string | undefined =>
+  !isEmail(email) ? checkoutContent.address.errors.email : tooLong("email", email) ?? undefined
+
 /** Sign-in: a real-looking email and any password. Nothing is said about the account. */
 export const validateSignIn = (values: SignInValues): SignInErrors => {
   const errors: SignInErrors = {}
-  if (!isEmail(values.email)) errors.email = checkoutContent.address.errors.email
+  const email = emailError(values.email)
+  if (email) errors.email = email
   if (!values.password) errors.password = words.errors.password
   return errors
 }
@@ -83,15 +88,26 @@ export const validateSignIn = (values: SignInValues): SignInErrors => {
 /**
  * Create account: a first name, an email, a phone only if one is given
  * (and then a real one, as at checkout), and a password of at least
- * MIN_PASSWORD_LENGTH characters.
+ * MIN_PASSWORD_LENGTH characters. Names, email and phone have the
+ * checkout's limits (QA S1-4c, S2: a 20,000-character name was stored, and
+ * the checkout then refused its own prefilled name).
  */
 export const validateCreate = (values: CreateValues, countryCode: string): CreateErrors => {
   const errors: CreateErrors = {}
   const e = checkoutContent.address.errors
   if (blank(values.firstName)) errors.firstName = e.firstName
-  if (!isEmail(values.email)) errors.email = e.email
-  if (!blank(values.phone) && !isPhone(values.phone)) {
-    errors.phone = fill(e.phoneInvalid, { example: phoneExample(countryCode) })
+  else {
+    const long = tooLong("first_name", values.firstName)
+    if (long) errors.firstName = long
+  }
+  const lastLong = tooLong("last_name", values.lastName)
+  if (lastLong) errors.lastName = lastLong
+  const email = emailError(values.email)
+  if (email) errors.email = email
+  if (!blank(values.phone)) {
+    const long = tooLong("phone", values.phone)
+    if (long) errors.phone = long
+    else if (!isPhone(values.phone)) errors.phone = fill(e.phoneInvalid, { example: phoneExample(countryCode) })
   }
   if (values.password.length < MIN_PASSWORD_LENGTH) {
     errors.password = fill(words.errors.passwordShort, { min: MIN_PASSWORD_LENGTH })

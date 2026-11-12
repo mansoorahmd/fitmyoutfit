@@ -19,6 +19,7 @@ import {
   validateCreate,
   validateSignIn,
 } from "@lib/util/account-auth"
+import { FIELD_MAX } from "@lib/util/checkout-address"
 import { fill } from "@lib/util/wording"
 import Alert from "@modules/common/components/alert"
 import { Button } from "@modules/common/components/button"
@@ -185,8 +186,16 @@ const AuthForm = ({
       <div className="flex flex-col gap-4">
         {creating && (
           <>
-            {text("firstName", words.fields.firstName, { autoComplete: "given-name", dir: "auto" })}
-            {text("lastName", words.fields.lastName, { autoComplete: "family-name", dir: "auto" })}
+            {text("firstName", words.fields.firstName, {
+              autoComplete: "given-name",
+              dir: "auto",
+              maxLength: FIELD_MAX.first_name,
+            })}
+            {text("lastName", words.fields.lastName, {
+              autoComplete: "family-name",
+              dir: "auto",
+              maxLength: FIELD_MAX.last_name,
+            })}
           </>
         )}
         {text("email", words.fields.email, {
@@ -196,6 +205,7 @@ const AuthForm = ({
           inputMode: "email",
           autoCapitalize: "none",
           spellCheck: false,
+          maxLength: FIELD_MAX.email,
         })}
         {creating &&
           text("phone", words.fields.phone, {
@@ -203,6 +213,7 @@ const AuthForm = ({
             autoComplete: "tel",
             dir: "ltr",
             inputMode: "tel",
+            maxLength: FIELD_MAX.phone,
           })}
         <PasswordField
           id={fieldId("password")}

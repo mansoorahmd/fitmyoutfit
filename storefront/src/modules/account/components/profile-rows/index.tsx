@@ -8,6 +8,7 @@ import { SaveResult, updateCustomerName, updateCustomerPhone } from "@lib/data/c
 import { authHref } from "@lib/util/account-auth"
 import { ProfileValues, afterProfileSave, validateName, validatePhone } from "@lib/util/account-profile"
 import { ProfileRow, ProfileRowKey, profileRows } from "@lib/util/account-rows"
+import { FIELD_MAX } from "@lib/util/checkout-address"
 import { fill } from "@lib/util/wording"
 import { Button } from "@modules/common/components/button"
 import FieldError from "@modules/common/components/field-error"
@@ -191,8 +192,17 @@ const ProfileRows = ({
                   <form noValidate onSubmit={(e) => save(row.key, e)} className="flex flex-col gap-4">
                     {row.key === "name" ? (
                       <>
-                        {field("firstName", words.fields.firstName, { autoComplete: "given-name", dir: "auto", first: true })}
-                        {field("lastName", words.fields.lastName, { autoComplete: "family-name", dir: "auto" })}
+                        {field("firstName", words.fields.firstName, {
+                          autoComplete: "given-name",
+                          dir: "auto",
+                          maxLength: FIELD_MAX.first_name,
+                          first: true,
+                        })}
+                        {field("lastName", words.fields.lastName, {
+                          autoComplete: "family-name",
+                          dir: "auto",
+                          maxLength: FIELD_MAX.last_name,
+                        })}
                       </>
                     ) : (
                       field("phone", words.fields.phone, {
@@ -200,6 +210,7 @@ const ProfileRows = ({
                         autoComplete: "tel",
                         dir: "ltr",
                         inputMode: "tel",
+                        maxLength: FIELD_MAX.phone,
                         first: true,
                       })
                     )}
