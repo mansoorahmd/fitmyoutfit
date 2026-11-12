@@ -5,11 +5,14 @@ import { describe, expect, it, vi } from "vitest"
 
 vi.mock("next/navigation", () => ({ useParams: () => ({ countryCode: "pk" }) }))
 
+import { accountContent } from "@content/account"
 import { cartContent } from "@content/cart"
 import { checkoutContent } from "@content/checkout"
 import { orderContent } from "@content/order"
 import { productContent } from "@content/product"
 import CartLink, { cartLinkLabel } from "@modules/layout/components/cart-link"
+
+import { ACCOUNT_FILES } from "./account-files"
 
 const src = path.resolve(__dirname, "..")
 const read = (file: string) => fs.readFileSync(path.join(src, file), "utf8")
@@ -67,11 +70,13 @@ const COMPONENTS = [
   "modules/common/components/radio-card/index.tsx",
   "modules/common/components/text-field/index.tsx",
   "modules/order/templates/order-completed-template.tsx",
+  // S1-5: sign-in, create account and the account area
+  ...ACCOUNT_FILES,
 ]
 
 describe("M1 wording", () => {
   it("is marked as draft wording", () => {
-    for (const file of ["content/cart.ts", "content/checkout.ts", "content/errors.ts", "content/order.ts"]) {
+    for (const file of ["content/cart.ts", "content/checkout.ts", "content/errors.ts", "content/order.ts", "content/account.ts"]) {
       expect(read(file).startsWith("// DRAFT WORDING."), file).toBe(true)
     }
   })
@@ -116,6 +121,7 @@ describe("M1 wording", () => {
       ...strings(cartContent),
       ...strings(checkoutContent),
       ...strings(orderContent),
+      ...strings(accountContent),
       ...strings(productContent.sizeChart),
     ].filter((s) => s.length > 6 && !s.startsWith("/"))
     for (const file of COMPONENTS) {
