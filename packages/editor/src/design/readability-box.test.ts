@@ -79,6 +79,16 @@ describe("a name across a sash (fault 2)", () => {
     expect(r.passes).toBe(false);
   });
 
+  it("an outline that stands out everywhere does not save letters that vanish on part (hollow over the sash)", () => {
+    const d = acrossTheSash();
+    const id = findLayers(d, { role: "team-name" })[0]!.id;
+    // A black outline shows on the red body and on the white sash; the white letters still vanish on the sash.
+    const outlined = setOutline(d, id, { step: "medium", color: { id: "placeholder-black", hex: "#111111" } }, { product: jersey });
+    const r = itemReadability(jersey, outlined, id)!;
+    expect(r.outlineRatio).toBeGreaterThanOrEqual(3);
+    expect(r).toMatchObject({ mixed: true, passes: false });
+  });
+
   it("the one-tap fix is a letter colour that stands out from the body and the sash", () => {
     const d = acrossTheSash();
     const id = findLayers(d, { role: "team-name" })[0]!.id;

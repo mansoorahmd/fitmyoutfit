@@ -8,6 +8,8 @@ import { colourCodeState, normaliseCodeInput } from "./colour-code";
 import { bodyColour, describeStage, nextStageTone } from "./stage-logic";
 import { formatMegabytes, uploadRefusal, uploadRefusalText, uploadWarningTexts } from "./upload-wording";
 import { EDIT_LABELS } from "../state/history";
+import { teamColoursFromPicks } from "./StartCard";
+import { LOGO_ORDER, TEXT_ORDER, nextFreePreset } from "./LogosTool";
 import { createDesign } from "../design/create";
 import { setZoneColor } from "../design/edit";
 import { applyTemplate, type Template } from "../design/template";
@@ -232,6 +234,29 @@ describe("upload findings in the coach's words (10.4)", () => {
     for (const kind of ["damaged", "too-small", "too-large", "animated", "network"] as const) expect(uploadRefusalText(W, kind, "a.png", 1)).not.toContain("ENGINE");
     expect(uploadWarningTexts(W, [{ code: "transparency", severity: "warning", message: "ENGINE" }])).toEqual([W.logos.noTransparency]);
     expect(formatMegabytes(1024 * 1024 * 2.5)).toBe("2.5 MB");
+  });
+});
+
+describe("the start card's picks and where new items go", () => {
+  const red = palette.colors.find((c) => c.id === "placeholder-red")!;
+  const gold = palette.colors.find((c) => c.id === "placeholder-gold")!;
+  const navy = palette.colors.find((c) => c.id === "placeholder-navy")!;
+
+  it("fills Main, then Second, then Accent; fewer picks leave the rest as they were and remove the accent", () => {
+    const d = createDesign(jersey);
+    expect(teamColoursFromPicks(d, [red]).teamColors).toEqual({ main: { id: red.id, hex: red.hex }, second: d.teamColors.second });
+    const three = teamColoursFromPicks(d, [red, gold, navy]);
+    expect([three.teamColors.main.id, three.teamColors.second.id, three.teamColors.accent?.id]).toEqual([red.id, gold.id, navy.id]);
+    expect(teamColoursFromPicks(three, [red, gold]).teamColors.accent).toBeUndefined();
+  });
+
+  it("puts the first logo on the left chest, the next where nothing is yet, in the usual order", () => {
+    const presets = jersey.placements.filter((p) => p.roles.includes("crest"));
+    expect(nextFreePreset({ layers: [] }, presets, LOGO_ORDER)!.id).toBe("left-chest");
+    const withCrest = { layers: [{ preset: "left-chest" }, { preset: "chest-centre" }] } as never;
+    expect(nextFreePreset(withCrest, presets, LOGO_ORDER)!.id).toBe("right-chest");
+    expect(nextFreePreset({ layers: [] }, jersey.placements.filter((p) => p.roles.includes("text")), TEXT_ORDER)!.id).toBe("lower-back");
+    expect(nextFreePreset({ layers: [] }, [], LOGO_ORDER)).toBeNull();
   });
 });
 

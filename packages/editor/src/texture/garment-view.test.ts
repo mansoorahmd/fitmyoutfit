@@ -115,6 +115,10 @@ describe("template cards look like the garment (fault 1)", () => {
       expect(shape.greenRight).toBeGreaterThan(40);
       // The garment fills most of the card's height.
       expect(shape.height).toBeGreaterThan(110);
+      // Smooth edges: pixels half on the garment are half transparent (four samples per pixel).
+      let partial = 0;
+      for (let k = 3; k < out.length; k += 4) if (out[k]! > 0 && out[k]! < 255) partial++;
+      expect(partial).toBeGreaterThan(100);
     });
   }
 
