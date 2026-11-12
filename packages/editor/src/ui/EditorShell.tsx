@@ -17,13 +17,15 @@ import type { DesignDocument, ProductDefinition } from "../design/schema.js";
 import type { Template } from "../design/template.js";
 import { updateLayer } from "../design/edit.js";
 import { scaleLayer } from "../design/placement.js";
+import { clampToPrintArea, maxScaleInArea, printAreaOf } from "../design/print-area.js";
+import { printAreaLines, snapPosition, snapReachMm } from "../design/snapping.js";
 import type { Layer } from "../design/schema.js";
 import { snapAngle } from "./handles.js";
 import type { GesturePhase } from "./SelectionOverlay.js";
 import { layerSide } from "../design/roles.js";
 import type { EditLabel } from "../state/history.js";
 import { useDesignHistory } from "../react/useDesignHistory.js";
-import type { CameraInfo, DesignCanvasHandle, LayerDragEvent, TextureDrawInfo, ZoneTap } from "../react/DesignCanvas.js";
+import type { CameraInfo, DesignCanvasHandle, LayerDragEvent, PieceGuide, TextureDrawInfo, ZoneTap } from "../react/DesignCanvas.js";
 import { mayMoveCamera } from "../react/camera.js";
 import { extractGarmentMeshes } from "../react/garment-geometry.js";
 import { loadModel, type LoadedModel, type ModelLoadProgress } from "../react/model-loader.js";
@@ -210,6 +212,12 @@ export function EditorShell(props: EditorShellProps) {
   });
   const [hover, setHover] = useState<DesignDocument | null>(null);
   const [selectedId, setSelectedIdState] = useState<string | null>(null);
+  // While placing (a drag, a handle): the print area's edges and the lines snapped to, drawn over the model (5.2).
+  const [guides, setGuidesState] = useState<PieceGuide[]>([]);
+  const setGuides = useCallback((next: PieceGuide[]) => setGuidesState((now) => (JSON.stringify(now) === JSON.stringify(next) ? now : next)), []);
+  // Snapping can be held off: Alt with a mouse, or this setting (fine-tune) on touch and for everyone (5.2).
+  const [snapOn, setSnapOn] = useState(true);
+  const lastSnap = useRef("");
   const setSelectedId = useCallback((id: string | null) => setSelectedIdState(id), []);
   const [saveInfo, setSaveInfo] = useState(false);
   const [leaving, setLeaving] = useState(false);
@@ -587,6 +595,8 @@ export function EditorShell(props: EditorShellProps) {
     setTyping,
     openTool,
     reducedMotion,
+    snapping: snapOn,
+    setSnapping: setSnapOn,
     markTiming: (name) => {
       timing.current = { name, start: performance.now() };
     },
@@ -622,10 +632,16 @@ export function EditorShell(props: EditorShellProps) {
       if (phase === "cancel") {
         history.cancel();
         gestureStart.current = null;
+        setGuides([]);
         return;
       }
+      const piece = product.pieces.find((p) => p.id === start.pieceId);
+      const limited = piece ? Math.min(factor, maxScaleInArea(printAreaOf(piece), start)) : factor;
+      const scaled = scaleLayer(start, limited);
+      const position = clampToPrintArea(product, { ...start, size: scaled.size });
+      setGuides(phase === "end" ? [] : printAreaLines(product, start.pieceId).map((l) => ({ ...l, kind: "area" as const })));
       try {
-        history.preview((d) => updateLayer(d, id, scaleLayer(start, factor), { product }));
+        history.preview((d) => updateLayer(d, id, { ...scaled, position }, { product }));
       } catch (error) {
         console.error("[editor] resize refused:", error);
       }
@@ -634,7 +650,7 @@ export function EditorShell(props: EditorShellProps) {
         gestureStart.current = null;
       }
     },
-    [selectedId, history, product],
+    [selectedId, history, product, setGuides],
   );
   const onRotate = useCallback(
     (phase: GesturePhase, degrees: number, free: boolean) => {
@@ -652,8 +668,11 @@ export function EditorShell(props: EditorShellProps) {
         gestureStart.current = null;
         return;
       }
+      const rotation = snapAngle(start.rotation + degrees, free).angle;
+      const position = clampToPrintArea(product, { ...start, rotation });
+      setGuides(phase === "end" ? [] : printAreaLines(product, start.pieceId).map((l) => ({ ...l, kind: "area" as const })));
       try {
-        history.preview((d) => updateLayer(d, id, { rotation: snapAngle(start.rotation + degrees, free).angle }, { product }));
+        history.preview((d) => updateLayer(d, id, { rotation, position }, { product }));
       } catch (error) {
         console.error("[editor] turn refused:", error);
       }
@@ -662,17 +681,39 @@ export function EditorShell(props: EditorShellProps) {
         gestureStart.current = null;
       }
     },
-    [selectedId, history, product],
+    [selectedId, history, product, setGuides],
   );
 
   const onLayerDrag = useCallback(
     (event: LayerDragEvent) => {
-      if (event.phase === "start") history.begin("move");
-      else if (event.phase === "move") history.preview((d) => updateLayer(d, event.layerId, { position: event.position }, { product }));
-      else if (event.phase === "end") history.end();
-      else history.cancel();
+      const areaLines = printAreaLines(product, event.pieceId).map((l) => ({ ...l, kind: "area" as const }));
+      if (event.phase === "start") {
+        history.begin("move");
+        lastSnap.current = "";
+        setGuides(areaLines);
+        return;
+      }
+      if (event.phase === "cancel") {
+        history.cancel();
+        setGuides([]);
+        return;
+      }
+      const current = designRef.current;
+      const layer = current.layers.find((l) => l.id === event.layerId);
+      if (!layer) return;
+      const snapped = snapPosition(product, current, layer, event.position, { reachMm: snapReachMm(event.pxPerMm), free: Boolean(event.free) || !snapOn });
+      const position = clampToPrintArea(product, layer, snapped.position);
+      history.preview((d) => updateLayer(d, event.layerId, { position }, { product }));
+      // A short buzz on Android when a new line catches the item (7.5), never with reduced motion.
+      const snapKey = snapped.guides.map((g) => `${g.axis}${g.from.x},${g.from.y}`).join("|");
+      if (snapKey && snapKey !== lastSnap.current && !reducedMotion && typeof navigator !== "undefined" && typeof navigator.vibrate === "function") navigator.vibrate(10);
+      lastSnap.current = snapKey;
+      if (event.phase === "end") {
+        history.end();
+        setGuides([]);
+      } else setGuides([...areaLines, ...snapped.guides.map((g) => ({ pieceId: g.pieceId, from: g.from, to: g.to, kind: "guide" as const }))]);
     },
-    [history, product],
+    [history, product, snapOn, reducedMotion, setGuides],
   );
 
   const onStageKey = (event: ReactKeyboardEvent<HTMLDivElement>) => {
@@ -809,6 +850,7 @@ export function EditorShell(props: EditorShellProps) {
               onSelectLayer: selectOnModel,
               dragOnlySelected: "touch",
               outlineSelected: false,
+              guides,
               onLayerDrag,
               pickZones: activeTool === "colours" && !startCard,
               onZoneTap,

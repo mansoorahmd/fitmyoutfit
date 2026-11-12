@@ -72,6 +72,9 @@ export interface EditorApi {
   /** Opens a tool (the start card's "See designs", for example); `turn: false` keeps the camera where it is. */
   openTool(tool: ToolId, detent?: PanelDetent, options?: { turn?: boolean }): void;
   reducedMotion: boolean;
+  /** Snapping to guides while placing (on by default; Alt holds it off with a mouse). */
+  snapping: boolean;
+  setSnapping(on: boolean): void;
   /** Logs a timing for the performance log (06-editor.md 11.3; E3 logs, E5 measures). */
   markTiming(name: string): void;
 }
