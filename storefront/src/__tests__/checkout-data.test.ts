@@ -24,6 +24,7 @@ const { state } = vi.hoisted(() => ({
     cartId: "cart_1" as string | null,
     removedCookie: false,
     cart: null as any,
+    addresses: [] as unknown[],
     answers: {} as Record<string, (args: unknown[]) => unknown>,
   },
 }))
@@ -32,7 +33,11 @@ const fail = (status: number, body: unknown = {}) => {
   throw Object.assign(new Error((body as { message?: string }).message ?? "failed"), { status })
 }
 
-const answer = (name: string, args: unknown[]) => {
+const answer = (called: string, args: unknown[]) => {
+  // The checkout completes through sdk.client.fetch (to give the call a
+  // time limit); it is recorded as "complete" like the SDK's own method.
+  const path = called === "fetch" ? String(args[0]) : ""
+  const name = path.endsWith("/complete") ? "complete" : called
   state.calls.push({ name, args })
   const custom = state.answers[name]
   if (custom) return custom(args)
@@ -41,6 +46,7 @@ const answer = (name: string, args: unknown[]) => {
       const [path] = args as [string]
       if (path.startsWith("/store/carts/")) return { cart: state.cart }
       if (path === "/store/shipping-options") return { shipping_options: [optionPk] }
+      if (path === "/store/customers/me") return { customer: { id: "cus_1", addresses: state.addresses } }
       throw new Error(`unexpected ${path}`)
     }
     case "complete":
@@ -63,6 +69,7 @@ vi.mock("@lib/config", () => {
           update: rec("update"),
           addShippingMethod: rec("addShippingMethod"),
           complete: rec("complete"),
+          createLineItem: rec("createLineItem"),
         },
         payment: { initiatePaymentSession: rec("initiatePaymentSession") },
         customer: { createAddress: rec("createAddress") },
@@ -103,9 +110,8 @@ vi.mock("@lib/data/regions", () => ({
 }))
 vi.mock("@lib/data/locale-actions", () => ({ getLocale: async () => null }))
 
-import { moveCartToRegion } from "@lib/data/cart"
+import { addToCartAndConfirm, moveCartToRegion } from "@lib/data/cart"
 import {
-  checkOrder,
   choosePayment,
   explainRefusedOrder,
   placeOrder,
@@ -113,6 +119,9 @@ import {
   saveAddressStep,
 } from "@lib/data/checkout"
 import { getCheckoutRules } from "@lib/data/checkout-rules"
+import { findOrderForCart } from "@lib/data/order-status"
+
+import { POST } from "../app/[countryCode]/(checkout)/checkout/order-status/route"
 import { AddressFormValues } from "@lib/util/checkout-address"
 import { parseCheckoutRules } from "@lib/util/checkout-rules"
 
@@ -168,6 +177,7 @@ beforeEach(() => {
   state.removedCookie = false
   state.cart = checkoutCartPk({ id: "cart_1", payment_collection: { id: "pay_col_1", payment_sessions: [] } })
   state.answers = {}
+  state.addresses = []
   vi.mocked(getCheckoutRules).mockResolvedValue(null)
 })
 
@@ -178,7 +188,8 @@ describe("saveAddressStep (05, 6.4, 'What happens on save')", () => {
     expect(update.args[0]).toBe("cart_1")
     expect(update.args[1]).toMatchObject({
       email: "ali@example.com",
-      shipping_address: { first_name: "محمد علی", province: "pk-pb", phone: "0300 1234567" },
+      // the phone in its one stored form (QA S1-4, D15)
+      shipping_address: { first_name: "محمد علی", province: "pk-pb", phone: "+923001234567" },
       billing_address: { first_name: "محمد علی" },
     })
     const added = state.calls.find((c) => c.name === "addShippingMethod")!
@@ -217,6 +228,19 @@ describe("saveAddressStep (05, 6.4, 'What happens on save')", () => {
     expect(names()).not.toContain("createAddress")
     await saveAddressStep(values({ saveToAccount: true }))
     expect(names()).toContain("createAddress")
+  })
+
+  it("the account's first address becomes its default; a later one doesn't", async () => {
+    await saveAddressStep(values({ saveToAccount: true }))
+    expect(state.calls.find((c) => c.name === "createAddress")!.args[0]).toMatchObject({
+      is_default_shipping: true,
+      is_default_billing: true,
+    })
+    state.calls = []
+    state.addresses = [{ id: "caddr_1" }]
+    await saveAddressStep(values({ saveToAccount: true }))
+    const second = state.calls.find((c) => c.name === "createAddress")!.args[0] as Record<string, unknown>
+    expect(second.is_default_shipping).toBeUndefined()
   })
 
   it("retryDelivery adds the option again", async () => {
@@ -300,18 +324,134 @@ describe("explainRefusedOrder", () => {
   })
 })
 
-describe("checkOrder ('Check my order', 05, 6.8 c)", () => {
-  it("a completed cart: completing again returns the same order, and the visitor goes to it", async () => {
+describe("placeOrder with an unknown outcome (QA S1-4, D1 and D6)", () => {
+  it("the answer is lost after the order was made: 'unknown', and nothing re-renders the page", async () => {
+    state.answers.complete = () => {
+      throw new TypeError("fetch failed") // no status: the connection was cut
+    }
+    expect(await run(placeOrder("pp_cod_cod", "pk"))).toEqual({ kind: "unknown" })
+    // A revalidation would re-render the checkout in the action's answer,
+    // which sent the customer to the cart page (D1) or the server-error
+    // block (D6) instead of "We lost the connection".
+    expect(state.revalidated).toEqual([])
+    expect(state.removedCookie).toBe(false)
+  })
+
+  it("the backend down: 'unknown', nothing revalidated", async () => {
+    state.answers.fetch = () => {
+      throw new TypeError("fetch failed")
+    }
+    expect(await run(placeOrder("pp_cod_cod", "pk"))).toEqual({ kind: "unknown" })
+    expect(state.revalidated).toEqual([])
+  })
+
+  it("an HTTP 5xx at completion: 'server', nothing revalidated", async () => {
+    state.answers.complete = () => fail(500)
+    expect(await run(placeOrder("pp_cod_cod", "pk"))).toEqual({ kind: "server" })
+    expect(state.revalidated).toEqual([])
+  })
+
+  it("a hung completion ends as 'unknown' after 25 s on the server, under the browser's 30 s (D5)", async () => {
+    vi.useFakeTimers()
+    try {
+      state.answers.complete = () => new Promise(() => {})
+      let result: unknown = "waiting"
+      void run(placeOrder("pp_cod_cod", "pk")).then((r) => (result = r))
+      await vi.advanceTimersByTimeAsync(24_000)
+      expect(result).toBe("waiting")
+      await vi.advanceTimersByTimeAsync(1_100)
+      expect(result).toEqual({ kind: "unknown" })
+      const complete = state.calls.find((c) => c.name === "complete")!
+      expect((complete.args[1] as { signal?: AbortSignal }).signal?.aborted).toBe(true)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})
+
+describe("findOrderForCart (the order-status route, QA S1-4, D1 and D5)", () => {
+  it("a completed cart: completes again, clears the cookie that points to it, and answers its confirmation", async () => {
     state.cart = { ...state.cart, completed_at: "2026-11-11T19:03:36.360Z" }
-    state.cartId = null // the cookie went with the order
-    expect(await run(checkOrder("cart_1", "pk"))).toEqual({
-      redirectedTo: "/pk/order/order_01M75ZX01HAMSFCPZ3CD6HF5TA/confirmed",
+    expect(await findOrderForCart("cart_1", "pk")).toEqual({
+      kind: "order",
+      url: "/pk/order/order_01M75ZX01HAMSFCPZ3CD6HF5TA/confirmed",
     })
+    expect(state.removedCookie).toBe(true)
+    expect(allCartTagsRevalidated()).toBe(true)
+    expect(state.revalidated).toContain("orders-visitor")
+  })
+
+  it("leaves a cookie that points to another cart", async () => {
+    state.cart = { ...state.cart, completed_at: "2026-11-11T19:03:36.360Z" }
+    state.cartId = "cart_2"
+    await findOrderForCart("cart_1", "pk")
+    expect(state.removedCookie).toBe(false)
   })
 
   it("an open cart: not placed; nothing is completed", async () => {
-    expect(await run(checkOrder("cart_1", "pk"))).toEqual({ kind: "open" })
+    expect(await findOrderForCart("cart_1", "pk")).toEqual({ kind: "open" })
     expect(names()).not.toContain("complete")
+    expect(state.removedCookie).toBe(false)
+  })
+
+  it("a completed cart whose order can't be read now: placed; the cookie stays for the next try", async () => {
+    state.cart = { ...state.cart, completed_at: "2026-11-11T19:03:36.360Z" }
+    state.answers.complete = () => fail(503)
+    expect(await findOrderForCart("cart_1", "pk")).toEqual({ kind: "placed" })
+    expect(state.removedCookie).toBe(false)
+  })
+
+  it("no answer within its limit: 'no_answer'", async () => {
+    vi.useFakeTimers()
+    try {
+      state.answers.fetch = () => new Promise(() => {})
+      let result: unknown = "waiting"
+      void findOrderForCart("cart_1", "pk").then((r) => (result = r))
+      await vi.advanceTimersByTimeAsync(12_000)
+      expect(result).toEqual({ kind: "no_answer" })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})
+
+describe("the order-status route", () => {
+  const post = async (body: unknown) => {
+    const response = await POST(
+      new Request("http://localhost/pk/checkout/order-status", {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+      { params: Promise.resolve({ countryCode: "pk" }) }
+    )
+    return response.json()
+  }
+
+  it("checks the cart named in the body, else the cart cookie's", async () => {
+    state.cart = { ...state.cart, completed_at: "2026-11-11T19:03:36.360Z" }
+    state.cartId = null
+    expect(await post({ cartId: "cart_1" })).toMatchObject({ kind: "order" })
+    expect(state.calls.find((c) => c.name === "fetch")!.args[0]).toBe("/store/carts/cart_1")
+    state.calls = []
+    state.cartId = "cart_9"
+    await post({})
+    expect(state.calls.find((c) => c.name === "fetch")!.args[0]).toBe("/store/carts/cart_9")
+  })
+
+  it("never passes anything but a cart id to the backend", async () => {
+    state.cartId = null
+    expect(await post({ cartId: "../orders" })).toEqual({ kind: "cart_lost" })
+    expect(state.calls).toEqual([])
+  })
+})
+
+describe("adding to a cart that is already an order (QA S1-4, D1)", () => {
+  it("never adds a line; answers the order's confirmation and clears the cookie", async () => {
+    state.cart = { ...state.cart, completed_at: "2026-11-11T19:03:36.360Z" }
+    const result = await addToCartAndConfirm({ variantId: "var_M", quantity: 1, countryCode: "pk" })
+    expect(result).toEqual({ ok: false, orderUrl: "/pk/order/order_01M75ZX01HAMSFCPZ3CD6HF5TA/confirmed" })
+    expect(names()).not.toContain("createLineItem")
+    expect(state.removedCookie).toBe(true)
   })
 })
 

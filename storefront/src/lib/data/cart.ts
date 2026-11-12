@@ -18,6 +18,8 @@ import { getLocale } from "@lib/data/locale-actions"
 import { AddedToCartView, addedToCartView } from "@lib/util/added-to-cart"
 import { getCheckoutRules } from "./checkout-rules"
 import { revalidateCartCaches } from "./cart-cache"
+import { findOrderForCart } from "./order-status"
+import { CompletedCartError } from "@lib/util/order-status"
 
 /**
  * Retrieves a cart by its ID. If no ID is provided, it will use the cart ID from the cookies.
@@ -27,7 +29,7 @@ import { revalidateCartCaches } from "./cart-cache"
 export async function retrieveCart(cartId?: string, fields?: string) {
   const id = cartId || (await getCartId())
   fields ??=
-    "*items, *region, *items.product, *items.variant, *items.thumbnail, *items.metadata, +items.total, *promotions, +shipping_methods.name, +shipping_methods.shipping_option_id"
+    "*items, *region, *items.product, *items.variant, *items.thumbnail, *items.metadata, +items.total, *promotions, +shipping_methods.name, +shipping_methods.shipping_option_id, +completed_at"
 
   if (!id) {
     return null
@@ -61,13 +63,18 @@ export async function retrieveCart(cartId?: string, fields?: string) {
  * came from, the only way to know it is the duty-paid one (contract section 3).
  */
 const CART_PAGE_FIELDS =
-  "*items, *region, *items.product, *items.variant, *items.thumbnail, *items.metadata, +items.total, *promotions, +shipping_methods.name, +shipping_methods.shipping_option_id"
+  "*items, *region, *items.product, *items.variant, *items.thumbnail, *items.metadata, +items.total, *promotions, +shipping_methods.name, +shipping_methods.shipping_option_id, +completed_at"
 
 /**
  * The cart for the cart page, telling "no cart" from "couldn't load". No
- * cookie, or a cart the backend doesn't know (4xx, for example a completed
- * one), is no cart: the page shows the empty cart. No answer or a 5xx is a
- * failure: the page shows the server-error block (05, 4.6).
+ * cookie, or a cart the backend doesn't know (4xx), is no cart: the page
+ * shows the empty cart. No answer or a 5xx is a failure: the page shows the
+ * server-error block (05, 4.6).
+ *
+ * Read fresh, never from the cache: Medusa answers a completed cart with
+ * HTTP 200 and its items, and only `completed_at` tells it is an order. A
+ * cached copy from before "Place order" would show the ordered cart as a
+ * live one (QA S1-4, D1).
  */
 export async function retrieveCartForPage(): Promise<{
   cart: HttpTypes.StoreCart | null
@@ -86,8 +93,7 @@ export async function retrieveCartForPage(): Promise<{
         method: "GET",
         query: { fields: CART_PAGE_FIELDS },
         headers: { ...(await getAuthHeaders()) },
-        next: { ...(await getCacheOptions("carts")) },
-        cache: "force-cache",
+        cache: "no-store",
       }
     )
     return { cart, failed: false }
@@ -98,6 +104,26 @@ export async function retrieveCartForPage(): Promise<{
   }
 }
 
+/** A cart from the cookie, read fresh, for adding to it: an ordered cart must never get new lines. */
+const retrieveCartToAddTo = async () => {
+  const id = await getCartId()
+  if (!id) return null
+  return sdk.client
+    .fetch<HttpTypes.StoreCartResponse>(`/store/carts/${encodeURIComponent(id)}`, {
+      method: "GET",
+      query: { fields: "id,region_id,completed_at" },
+      headers: { ...(await getAuthHeaders()) },
+      cache: "no-store",
+    })
+    .then(({ cart }) => cart)
+    .catch(() => null)
+}
+
+/**
+ * The cart to add to: the visitor's, moved to the URL's region, or a new
+ * one. Throws CompletedCartError when the visitor's cart is already an
+ * order: the caller opens that order instead.
+ */
 export async function getOrSetCart(countryCode: string) {
   const region = await getRegion(countryCode)
 
@@ -105,7 +131,11 @@ export async function getOrSetCart(countryCode: string) {
     throw new Error(`Region not found for country code: ${countryCode}`)
   }
 
-  let cart = await retrieveCart(undefined, "id,region_id")
+  let cart = await retrieveCartToAddTo()
+
+  if (cart?.completed_at) {
+    throw new CompletedCartError(cart.id)
+  }
 
   const headers = {
     ...(await getAuthHeaders()),
@@ -194,7 +224,8 @@ export async function addToCart({
 
 export type AddToCartResult =
   | { ok: true; added: AddedToCartView | null }
-  | { ok: false }
+  /** `orderUrl`: the cart was already an order; the page opens it (QA S1-4, D1). */
+  | { ok: false; orderUrl?: string }
 
 /**
  * Adds to the cart and returns what the "Added to your cart" confirmation
@@ -248,7 +279,14 @@ export async function addToCartAndConfirm({
         key: `${updated.id}:${Date.now()}`,
       }),
     }
-  } catch {
+  } catch (error) {
+    if (error instanceof CompletedCartError) {
+      // The answer to "Place order" was lost after the order was made. The
+      // order opens; it is never added to. When it can't be read now, the
+      // add fails as any other (W-A5) and the cart page opens it later.
+      const status = await findOrderForCart(error.cartId, countryCode)
+      return status.kind === "order" ? { ok: false, orderUrl: status.url } : { ok: false }
+    }
     return { ok: false }
   }
 }

@@ -11,11 +11,17 @@ import { fill } from "./wording"
 export type PlaceOrderAlertState =
   | { kind: "refusal"; refusal: RefusalView }
   | { kind: "payment_failed" }
-  | { kind: "unknown" }
+  /** No answer: the order may exist. `rechecked`: "Check my order" got no answer either. */
+  | { kind: "unknown"; rechecked?: boolean }
+  /** "Check my order" found the order, but couldn't open it just now. */
+  | { kind: "placed" }
   | { kind: "cart_lost" }
+  /** HTTP 5xx: the order may or may not exist (QA S1-4, D13). */
   | { kind: "server" }
 
 export type PlaceOrderAlert = {
+  /** "success" only when the order is known to exist. */
+  variant: "error" | "success"
   title: string
   text?: string
   /** One action in the alert. */
@@ -37,6 +43,7 @@ const { errors, minimum } = checkoutContent
 
 export const placeOrderAlert = (state: PlaceOrderAlertState): PlaceOrderAlert => {
   const base = {
+    variant: "error" as const,
     retryLabel: false,
     hidePlaceOrder: false,
     focus: "alert" as const,
@@ -91,7 +98,17 @@ export const placeOrderAlert = (state: PlaceOrderAlertState): PlaceOrderAlert =>
       return {
         ...base,
         title: errors.lostTitle,
-        text: errors.lostText,
+        text: state.rechecked ? errors.lostRecheckText : errors.lostText,
+        action: "check_order",
+        hidePlaceOrder: true,
+      }
+    case "placed":
+      // never "Place order" again: the order exists
+      return {
+        ...base,
+        variant: "success",
+        title: errors.placedTitle,
+        text: errors.placedText,
         action: "check_order",
         hidePlaceOrder: true,
       }
@@ -104,6 +121,13 @@ export const placeOrderAlert = (state: PlaceOrderAlertState): PlaceOrderAlert =>
         hidePlaceOrder: true,
       }
     case "server":
-      return { ...base, title: errorContent.server.title }
+      // A 5xx may come after the order was made: check before trying again.
+      return {
+        ...base,
+        title: errorContent.server.title,
+        text: errors.serverText,
+        action: "check_order",
+        hidePlaceOrder: true,
+      }
   }
 }

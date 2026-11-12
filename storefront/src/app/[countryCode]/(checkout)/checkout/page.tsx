@@ -9,6 +9,7 @@ import { listCartShippingMethods } from "@lib/data/fulfillment"
 import { getRegion } from "@lib/data/regions"
 import { cartInOtherRegion, checkoutView } from "@lib/util/checkout-view"
 import MoveCartToRegion from "@modules/cart/components/move-cart-to-region"
+import CompletedCartRecovery from "@modules/checkout/components/completed-cart"
 import CheckoutPage from "@modules/checkout/templates/checkout-page"
 import CheckoutSkeleton from "@modules/checkout/templates/checkout-skeleton"
 import ServerError from "@modules/common/components/server-error"
@@ -19,9 +20,10 @@ export const metadata: Metadata = {
 
 /**
  * The checkout (docs/design/05-m1-pages.md, section 6). The cart is read
- * fresh on every render; with no cart, an empty one or one already placed,
- * the visitor goes to the cart page, which says what there is to say. A
- * cart from another region is moved to the URL's region first.
+ * fresh on every render; with no cart or an empty one, the visitor goes to
+ * the cart page, which says what there is to say. A cart that is already
+ * an order opens that order's confirmation (QA S1-4, D1). A cart from
+ * another region is moved to the URL's region first.
  */
 export default async function Checkout(props: { params: Promise<{ countryCode: string }> }) {
   const { countryCode } = await props.params
@@ -30,13 +32,22 @@ export default async function Checkout(props: { params: Promise<{ countryCode: s
   if (failed) {
     return <ServerError />
   }
-  if (!cart?.items?.length || cart.completed_at) {
+  if (cart?.completed_at) {
+    return <CompletedCartRecovery countryCode={countryCode} />
+  }
+  if (!cart?.items?.length) {
     redirect(`/${countryCode}/cart`)
   }
 
   const region = await getRegion(countryCode)
   if (cartInOtherRegion(cart, region?.id)) {
-    return <MoveCartToRegion countryCode={countryCode} fallback={<CheckoutSkeleton />} />
+    return (
+      <MoveCartToRegion
+        countryCode={countryCode}
+        fallback={<CheckoutSkeleton />}
+        then={`/${countryCode}/checkout?step=address`}
+      />
+    )
   }
 
   const [customer, rules, shippingOptions, providerIds] = await Promise.all([

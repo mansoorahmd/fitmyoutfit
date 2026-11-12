@@ -7,6 +7,7 @@ import { checkoutContent } from "@content/checkout"
 import { useOnline } from "@lib/hooks/use-online"
 import { CheckoutView, openStep } from "@lib/util/checkout-view"
 import { fill } from "@lib/util/wording"
+import RegionMovedNotice from "@modules/cart/components/region-moved-notice"
 import Alert from "@modules/common/components/alert"
 import { ButtonLink } from "@modules/common/components/button"
 
@@ -28,8 +29,13 @@ const CheckoutPage = ({ view }: { view: CheckoutView }) => {
   const router = useRouter()
   const searchParams = useSearchParams()
   const online = useOnline()
-  const step = openStep(searchParams.get("step"), view.address.done)
+  const asked = searchParams.get("step")
+  const step = openStep(asked, view.address.done)
   const stepWords = checkoutContent.steps[step]
+  const countryName =
+    view.address.countries.find((c) => c.code === view.countryCode)?.name ??
+    view.address.countries[0]?.name ??
+    view.countryCode.toUpperCase()
   const go = (to: "address" | "payment") => {
     focusStepOnOpen(to)
     router.push(`/${view.countryCode}/checkout?step=${to}`)
@@ -43,6 +49,14 @@ const CheckoutPage = ({ view }: { view: CheckoutView }) => {
     return () => window.removeEventListener("popstate", onPop)
   }, [router])
 
+  // The URL names the step that is open: a link to step 2 with step 1 not
+  // done (or no longer done: the cart moved region) shows step 1 (QA D10).
+  useEffect(() => {
+    if (asked === "payment" && step === "address") {
+      router.replace(`/${view.countryCode}/checkout?step=address`)
+    }
+  }, [asked, step, router, view.countryCode])
+
   const minimum = view.minimumBlocks ? view.minimum : null
 
   return (
@@ -50,6 +64,14 @@ const CheckoutPage = ({ view }: { view: CheckoutView }) => {
       <p className="type-small text-brand-ink-muted" data-testid="step-label" aria-live="polite">
         {fill(checkoutContent.stepLabel, { n: stepWords.number, name: stepWords.name })}
       </p>
+
+      <div className="mt-4 empty:hidden">
+        <RegionMovedNotice
+          countryCode={view.countryCode}
+          countryName={countryName}
+          currencyCode={view.currencyCode}
+        />
+      </div>
 
       {!online && (
         <div role="status" className="mt-4" data-testid="offline-banner">

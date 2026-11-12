@@ -125,7 +125,7 @@ export const placeOrderFlow = async ({
   return { kind: "unknown" }
 }
 
-/** "Check my order": the cart as it is now. */
+/** The cart as it is now ("Check my order", lib/util/order-status.ts). */
 export type CartStatus =
   | { kind: "completed" }
   | { kind: "open" }
@@ -197,3 +197,10 @@ export const explainRefusal = ({
 
 /** The client gives up waiting for "Place order" after this long (05, 6.8 c). */
 export const PLACE_ORDER_TIMEOUT_MS = 30_000
+
+/**
+ * The server action's own limit for its calls to the backend, under the
+ * client's 30 s: a hung backend ends the action as "unknown", so the
+ * browser's queue of server actions moves on (QA S1-4, D5).
+ */
+export const PLACE_ORDER_SERVER_MS = 25_000

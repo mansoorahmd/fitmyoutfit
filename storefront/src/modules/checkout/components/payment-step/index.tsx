@@ -7,9 +7,7 @@ import { Fragment, useEffect, useRef, useState } from "react"
 
 import { checkoutContent } from "@content/checkout"
 import {
-  CheckOrderResult,
   PlaceOrderResult,
-  checkOrder,
   choosePayment,
   explainRefusedOrder,
   placeOrder,
@@ -19,7 +17,8 @@ import { PlaceOrderAlertState, placeOrderAlert } from "@lib/util/checkout-alerts
 import { PLACE_ORDER_TIMEOUT_MS, RefusalView, placeOrderBlock } from "@lib/util/checkout-order"
 import { COD_PROVIDER_ID, initialPaymentId, selectableOption } from "@lib/util/checkout-payment"
 import { CheckoutView } from "@lib/util/checkout-view"
-import { fill, fillParts } from "@lib/util/wording"
+import { OrderStatus, requestOrderStatus } from "@lib/util/order-status"
+import { countWords, fillParts } from "@lib/util/wording"
 import Alert from "@modules/common/components/alert"
 import Amount from "@modules/common/components/amount"
 import { Button, ButtonLink } from "@modules/common/components/button"
@@ -182,6 +181,24 @@ const PaymentStep = ({
     }
   }
 
+  /** The order exists: to its confirmation. */
+  const toOrder = (url: string) => {
+    leaving()
+    router.replace(url)
+  }
+
+  /**
+   * After an unknown outcome or a 5xx: one quiet look at the cart. If it
+   * became an order, the customer goes to it (rule 6.8 c: never an order
+   * the customer cannot see); otherwise the alert stays as it is, since the
+   * first request may still be running. It also refreshes every cached read
+   * of the cart, so no other page shows the ordered cart as a live one.
+   */
+  const lookQuietly = async () => {
+    const status = await requestOrderStatus({ countryCode: view.countryCode, cartId: view.cartId })
+    if (status.kind === "order" && !placing.current) toOrder(status.url)
+  }
+
   const place = async () => {
     if (placing.current || !chosen) return
     placing.current = true
@@ -199,7 +216,7 @@ const PaymentStep = ({
       result = "timeout"
     }
 
-    if (result === "timeout") {
+    if (result === "timeout" || result.kind === "unknown") {
       show({ kind: "unknown" })
     } else if (result.kind === "refused") {
       setPhase("checking")
@@ -210,26 +227,33 @@ const PaymentStep = ({
     }
     placing.current = false
     setPhase("idle")
+    if (result === "timeout" || result.kind === "unknown" || result.kind === "server") {
+      void lookQuietly()
+    }
   }
 
+  /**
+   * "Check my order" (05, 6.8 c). Asks the order-status route with fetch,
+   * not a server action, so it never waits behind a "Place order" that is
+   * still hanging (QA D5), and always ends within CHECK_ORDER_TIMEOUT_MS.
+   */
   const checkMyOrder = async () => {
     if (placing.current) return
     placing.current = true
     setPhase("checking")
-    let result: CheckOrderResult
-    try {
-      result = await checkOrder(view.cartId, view.countryCode)
-    } catch (error) {
-      if (isRedirectError(error)) {
-        leaving()
-        return
-      }
-      result = { kind: "no_answer" }
-    }
-    if (result.kind === "open") show({ kind: "refusal", refusal: { kind: "generic" } })
-    else if (result.kind === "cart_lost") show({ kind: "cart_lost" })
-    else show({ kind: "unknown" })
+    const status: OrderStatus = await requestOrderStatus({
+      countryCode: view.countryCode,
+      cartId: view.cartId,
+    })
     placing.current = false
+    if (status.kind === "order") {
+      toOrder(status.url)
+      return
+    }
+    if (status.kind === "open") show({ kind: "refusal", refusal: { kind: "generic" } })
+    else if (status.kind === "cart_lost") show({ kind: "cart_lost" })
+    else if (status.kind === "placed") show({ kind: "placed" })
+    else show({ kind: "unknown", rechecked: true })
     setPhase("idle")
   }
 
@@ -252,7 +276,7 @@ const PaymentStep = ({
     block?.kind === "offline"
       ? words.errors.offlineReason
       : block?.kind === "minimum"
-        ? fill(words.placeOrder.minimum, { missing: block.missing })
+        ? countWords(block.missing, words.placeOrder.minimum)
         : block?.kind === "payment"
           ? words.placeOrder.choosePayment
           : null
@@ -308,7 +332,7 @@ const PaymentStep = ({
             {shown && alert && (
               <Alert
                 key={alert.key}
-                variant="error"
+                variant={shown.variant}
                 announce
                 focusOnMount={shown.focus === "alert"}
                 title={shown.title}

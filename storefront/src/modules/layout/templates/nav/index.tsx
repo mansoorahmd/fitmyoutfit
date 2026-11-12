@@ -89,7 +89,7 @@ export default async function Nav({ countryCode }: { countryCode: string }) {
               {navigationContent.accountLink.label}
             </LocalizedClientLink>
             <Suspense fallback={<CartLink count={0} />}>
-              <CartButton />
+              <CartButton countryCode={countryCode} />
             </Suspense>
           </div>
         </nav>

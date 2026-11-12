@@ -14,13 +14,18 @@ import {
   rulesPkOverLimit,
 } from "./fixtures/m1-checkout"
 
-// Stand-ins for the server actions and the router, recording their calls.
+// Stand-ins for the server actions, the order-status route and the router,
+// recording their calls.
+const status = {
+  answers: [] as unknown[],
+  requests: [] as { url: string; body: unknown; signal?: AbortSignal }[],
+}
 const { actions, nav } = vi.hoisted(() => ({
   actions: {
     calls: [] as { name: string; args: unknown[] }[],
     answers: {} as Record<string, (...args: unknown[]) => unknown>,
   },
-  nav: { step: "address" as string | null, pushed: [] as string[], refreshed: 0 },
+  nav: { step: "address" as string | null, pushed: [] as string[], replaced: [] as string[], refreshed: 0 },
 }))
 
 vi.mock("@lib/data/checkout", () => {
@@ -37,13 +42,15 @@ vi.mock("@lib/data/checkout", () => {
     choosePayment: rec("choosePayment", { ok: true }),
     placeOrder: rec("placeOrder", { kind: "refused" }),
     explainRefusedOrder: rec("explainRefusedOrder", { kind: "generic" }),
-    checkOrder: rec("checkOrder", { kind: "open" }),
   }
 })
 vi.mock("next/navigation", () => ({
   useRouter: () => ({
     push: (href: string) => nav.pushed.push(href),
-    replace: (href: string) => nav.pushed.push(href),
+    replace: (href: string) => {
+      nav.pushed.push(href)
+      nav.replaced.push(href)
+    },
     refresh: () => {
       nav.refreshed += 1
     },
@@ -100,10 +107,24 @@ const emptyPk = () =>
   })
 
 beforeEach(() => {
+  // "Check my order" asks the order-status route with fetch: by default
+  // the cart is not an order.
+  status.answers = []
+  status.requests = []
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string, init: RequestInit) => {
+      status.requests.push({ url, body: JSON.parse(String(init.body)), signal: init.signal ?? undefined })
+      const next = status.answers.shift()
+      if (next === "hang") return new Promise(() => {})
+      return new Response(JSON.stringify(next ?? { kind: "open" }), { status: 200 })
+    })
+  )
   actions.calls = []
   actions.answers = {}
   nav.step = "address"
   nav.pushed = []
+  nav.replaced = []
   nav.refreshed = 0
   sessionStorage.clear()
 })
@@ -177,7 +198,7 @@ describe("step 1, contact and address (05, 6.4 and 2.3)", () => {
     expect(screen.getByText("Enter your email address, like name@example.com", { selector: "#checkout-email-error *" })).toBeInTheDocument()
     expect(document.getElementById("checkout-phone-error")).toHaveTextContent("Enter a phone number")
     expect(document.getElementById("checkout-shipping-first_name-error")).toHaveTextContent("Enter your first name")
-    expect(document.getElementById("checkout-shipping-province-error")).toHaveTextContent("Choose a province / state / emirate")
+    expect(document.getElementById("checkout-shipping-province-error")).toHaveTextContent("Choose a province")
     // 3 or more: the list at the top, with a link to each field
     const list = screen.getByTestId("address-error-list")
     expect(within(list).getAllByRole("link").length).toBeGreaterThanOrEqual(3)
@@ -197,7 +218,10 @@ describe("step 1, contact and address (05, 6.4 and 2.3)", () => {
     const phone = screen.getByLabelText("Phone")
     fireEvent.change(phone, { target: { value: "abc" } })
     fireEvent.blur(phone)
-    expect(document.getElementById("checkout-phone-error")).toHaveTextContent("Enter a phone number, like 0300 1234567")
+    // a delivery in Pakistan needs a Pakistan mobile number (QA S1-4, D15)
+    expect(document.getElementById("checkout-phone-error")).toHaveTextContent(
+      "Enter a Pakistan mobile number, like 0300 1234567 or +92 300 1234567"
+    )
   })
 
   it("saves an Urdu name and moves to step 2", async () => {
@@ -358,7 +382,7 @@ describe("the minimum at checkout (05, 5.4)", () => {
     })
     const button = screen.getByTestId("place-order")
     expect(button).toHaveAttribute("aria-disabled", "true")
-    expect(screen.getByTestId("place-order-reason")).toHaveTextContent("Add 1 more garment pieces to place the order.")
+    expect(screen.getByTestId("place-order-reason")).toHaveTextContent("Add one more garment piece to place the order.")
     expect(button).toHaveAttribute("aria-describedby", "place-order-reason")
     await act(async () => {
       fireEvent.click(button)
@@ -468,9 +492,99 @@ describe("Place order (05, 6.6 to 6.8)", () => {
     await act(async () => {
       fireEvent.click(screen.getByTestId("check-my-order"))
     })
-    expect(callsOf("checkOrder")[0].args).toEqual([pkView().cartId, "pk"])
+    // the order-status route, with fetch, never a server action (QA S1-4, D5)
+    const check = status.requests.at(-1)!
+    expect(check.url).toBe("/pk/checkout/order-status")
+    expect(check.body).toEqual({ cartId: pkView().cartId })
     expect(screen.getByTestId("place-order-alert")).toHaveTextContent("We couldn't place your order")
     expect(screen.getByTestId("place-order")).toBeInTheDocument()
+  })
+
+  it("the client gives up on 'Place order' at 30 s exactly, with the lost-connection alert (6.8 c)", async () => {
+    vi.useFakeTimers()
+    try {
+      actions.answers.placeOrder = () => new Promise(() => {})
+      ready()
+      await act(async () => {
+        fireEvent.click(screen.getByTestId("place-order"))
+      })
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(29_999)
+      })
+      expect(screen.queryByTestId("place-order-alert")).toBeNull()
+      expect(screen.getByTestId("place-order")).toHaveAttribute("aria-busy", "true")
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1)
+      })
+      expect(screen.getByTestId("place-order-alert")).toHaveTextContent("We lost the connection")
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("after an unknown outcome, one quiet look: an order that exists opens at once (QA S1-4, D1)", async () => {
+    actions.answers.placeOrder = () => ({ kind: "unknown" })
+    status.answers = [{ kind: "order", url: "/pk/order/order_1/confirmed" }]
+    ready()
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("place-order"))
+    })
+    await waitFor(() => expect(nav.replaced).toEqual(["/pk/order/order_1/confirmed"]))
+  })
+
+  it("the quiet look that finds no order leaves the alert as it is (the first request may still run)", async () => {
+    actions.answers.placeOrder = () => ({ kind: "unknown" })
+    ready()
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("place-order"))
+    })
+    await waitFor(() => expect(status.requests).toHaveLength(1))
+    expect(screen.getByTestId("place-order-alert")).toHaveTextContent("We lost the connection")
+    expect(nav.replaced).toEqual([])
+  })
+
+  it("'Check my order' never waits behind a hung 'Place order', and ends at 15 s in a true state (QA S1-4, D5)", async () => {
+    vi.useFakeTimers()
+    try {
+      actions.answers.placeOrder = () => ({ kind: "unknown" })
+      status.answers = [{ kind: "open" }, "hang"]
+      ready()
+      await act(async () => {
+        fireEvent.click(screen.getByTestId("place-order"))
+      })
+      await act(async () => {
+        fireEvent.click(screen.getByTestId("check-my-order"))
+      })
+      expect(screen.getByTestId("check-my-order")).toHaveAttribute("aria-busy", "true")
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(15_000)
+      })
+      const alert = screen.getByTestId("place-order-alert")
+      expect(alert).toHaveTextContent("We lost the connection")
+      expect(alert).toHaveTextContent("We still couldn't reach the store")
+      expect(screen.getByTestId("check-my-order")).not.toHaveAttribute("aria-busy", "true")
+      expect(status.requests.at(-1)!.signal?.aborted).toBe(true)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("'Check my order' finds the order: to its confirmation; found but not readable: 'Your order is placed', never Place order", async () => {
+    actions.answers.placeOrder = () => ({ kind: "unknown" })
+    status.answers = [{ kind: "open" }, { kind: "placed" }, { kind: "order", url: "/pk/order/order_2/confirmed" }]
+    ready()
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("place-order"))
+    })
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("check-my-order"))
+    })
+    expect(screen.getByTestId("place-order-alert")).toHaveTextContent("Your order is placed")
+    expect(screen.queryByTestId("place-order")).toBeNull()
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("check-my-order"))
+    })
+    expect(nav.replaced).toEqual(["/pk/order/order_2/confirmed"])
   })
 
   it("a lost connection (the call throws) is the same unknown state", async () => {
@@ -499,7 +613,14 @@ describe("Place order (05, 6.6 to 6.8)", () => {
     await act(async () => {
       fireEvent.click(screen.getByTestId("place-order"))
     })
-    expect(screen.getByTestId("place-order-alert")).toHaveTextContent("Something went wrong on our side")
+    // an HTTP 5xx (QA S1-4, D13): a text and an action, never a title alone
+    const alert = screen.getByTestId("place-order-alert")
+    expect(alert).toHaveTextContent("Something went wrong on our side")
+    expect(alert).toHaveTextContent(
+      "We don't know yet if your order went through. Check before you try again, so you don't order twice."
+    )
+    expect(screen.getByTestId("check-my-order")).toBeInTheDocument()
+    expect(screen.queryByTestId("place-order")).toBeNull()
   })
 
   it("offline: the banner, and Place order inactive with the reason", async () => {

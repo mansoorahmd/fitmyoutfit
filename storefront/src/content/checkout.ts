@@ -108,8 +108,14 @@ export const checkoutContent = {
         // DRAFT WORDING. W-K9
         pk: "Postal code (optional)",
       } as Record<string, string>,
-      // DRAFT WORDING. No id: the empty first choice of a province list.
-      chooseProvince: "Choose",
+      chooseProvince: {
+        // DRAFT WORDING. No id: the empty first choice of the list, named for the country (QA S1-4, D9).
+        pk: "Choose a province",
+        // DRAFT WORDING. No id: the same, US.
+        us: "Choose a state",
+        // DRAFT WORDING. No id: the same, UAE.
+        ae: "Choose an emirate",
+      } as Record<string, string>,
     },
     // DRAFT WORDING. W-K10
     billingSame: "Billing address is the same",
@@ -136,10 +142,34 @@ export const checkoutContent = {
       address1: "Enter the house and street",
       // DRAFT WORDING. W-K15 to W-K19
       city: "Enter the city",
-      // DRAFT WORDING. W-K15 to W-K19
-      province: "Choose a province / state / emirate",
-      // DRAFT WORDING. W-K15 to W-K19
-      postalCode: "Enter a postcode / ZIP code",
+      province: {
+        // DRAFT WORDING. W-K15 to W-K19, named for the country (QA S1-4, D9).
+        pk: "Choose a province",
+        // DRAFT WORDING. W-K15 to W-K19, US.
+        us: "Choose a state",
+        // DRAFT WORDING. W-K15 to W-K19, UAE.
+        ae: "Choose an emirate",
+      } as Record<string, string>,
+      postalCode: {
+        // DRAFT WORDING. W-K15 to W-K19, UK (QA S1-4, D9).
+        gb: "Enter a postcode",
+        // DRAFT WORDING. W-K15 to W-K19, US.
+        us: "Enter a ZIP code",
+        // DRAFT WORDING. W-K15 to W-K19, Pakistan (when the optional field is checked).
+        pk: "Enter a postal code",
+      } as Record<string, string>,
+      postalCodeFormat: {
+        // DRAFT WORDING. No id: a UK postcode that isn't one (QA S1-4, D7). {example} below.
+        gb: "Enter a UK postcode, like {example}",
+        // DRAFT WORDING. No id: a US ZIP code that isn't one.
+        us: "Enter a ZIP code of five digits, like {example}, or ZIP+4, like {example}-1234",
+        // DRAFT WORDING. No id: a Pakistan postal code that isn't one; the field is optional.
+        pk: "Enter a postal code of five digits, like {example}, or leave it empty",
+      } as Record<string, string>,
+      // DRAFT WORDING. No id (P): a delivery in Pakistan needs a Pakistan mobile number; the courier calls before a cash delivery (QA S1-4, D15).
+      phonePk: "Enter a Pakistan mobile number, like {example} or +92 300 1234567",
+      // DRAFT WORDING. No id: a field longer than the store keeps (QA S1-4, D11).
+      tooLong: "Use {max} characters or fewer",
       // DRAFT WORDING. No id: a country outside the region (only reachable by tampering).
       country: "Choose a country",
     },
@@ -149,6 +179,12 @@ export const checkoutContent = {
       gb: "07700 900123",
       ae: "050 123 4567",
       us: "(201) 555-0123",
+    } as Record<string, string>,
+    /** Example postal codes for the messages above (data, not wording). */
+    postalExamples: {
+      gb: "SW1A 1AA",
+      us: "10001",
+      pk: "54000",
     } as Record<string, string>,
     // DRAFT WORDING. No id: the "Change" text button (05, 6.1).
     change: "Change",
@@ -222,10 +258,62 @@ export const checkoutContent = {
     placing: "Placing your order…",
     // DRAFT WORDING. W-K27
     choosePayment: "Choose how to pay.",
-    // DRAFT WORDING. W-M4b: {missing} from the rules.
-    minimum: "Add {missing} more garment pieces to place the order.",
+    minimum: {
+      // DRAFT WORDING. W-M4b, the singular (QA S1-4, D9).
+      one: "Add one more garment piece to place the order.",
+      // DRAFT WORDING. W-M4b: {n} is how many more, from the rules.
+      other: "Add {n} more garment pieces to place the order.",
+    },
     // DRAFT WORDING. W-K28
     checking: "Checking your order…",
+  },
+
+  /**
+   * A cart that is already an order (QA S1-4, D1): the answer to "Place
+   * order" was lost after the order was made. Shown on the cart page or
+   * the checkout while the order's confirmation opens.
+   */
+  completedCart: {
+    // DRAFT WORDING. No id: true whenever this shows, since the cart is completed.
+    title: "Your order is placed",
+    // DRAFT WORDING. No id: while the confirmation opens.
+    opening: "Opening your order…",
+    // DRAFT WORDING. No id: the confirmation couldn't be opened (the store didn't answer).
+    failed: "We couldn't open it just now. Check your connection and try again.",
+    // DRAFT WORDING. No id: its action.
+    retry: "Try again",
+  },
+
+  /**
+   * The error boundary of the checkout and order pages (QA S1-4, D12): the
+   * page's code failed, usually because the connection went while the
+   * order was being placed.
+   */
+  pageError: {
+    // DRAFT WORDING. No id: online.
+    title: "This page stopped working",
+    // DRAFT WORDING. No id: offline.
+    offlineTitle: "You're offline",
+    // DRAFT WORDING. No id (P): neither "placed" nor "not placed" is known here.
+    orderMayExist: "If you pressed Place order, your order may have gone through.",
+    // DRAFT WORDING. No id: offline; the page loads again by itself.
+    whenOnline: "When you're back online, this page loads again and shows your order if there is one.",
+    // DRAFT WORDING. No id: online.
+    tryAgain: "Load the page again to see where your order is.",
+    // DRAFT WORDING. No id: the action.
+    reload: "Load the page again",
+  },
+
+  /**
+   * The cart was moved to another region (QA S1-4, D10): the URL's country,
+   * or a region changed in another tab. Shown once on the page the customer
+   * lands on.
+   */
+  regionMoved: {
+    // DRAFT WORDING. No id: {country} is the region's country, {currency} its currency code.
+    title: "Your cart is now for {country}",
+    // DRAFT WORDING. No id (P): prices follow the region.
+    text: "Prices are in {currency}. Choose the delivery address and delivery again at checkout.",
   },
 
   /** The minimum at checkout (05, 5.4). */
@@ -261,8 +349,16 @@ export const checkoutContent = {
     lostTitle: "We lost the connection",
     // DRAFT WORDING. W-E12
     lostText: "We don't know yet if your order went through. Check before you try again, so you don't order twice.",
+    // DRAFT WORDING. No id: W-E12 after "Check my order" got no answer in time (QA S1-4, D5).
+    lostRecheckText: "We still couldn't reach the store, so we don't know yet if your order went through. Check your connection, then check again.",
     // DRAFT WORDING. W-E13
     checkOrder: "Check my order",
+    // DRAFT WORDING. No id: "Check my order" found the order, but it couldn't be opened just now.
+    placedTitle: "Your order is placed",
+    // DRAFT WORDING. No id: its text.
+    placedText: "We couldn't open it just now. Check again in a moment.",
+    // DRAFT WORDING. No id (P): an HTTP 5xx at "Place order" (QA S1-4, D13). The order may or may not exist.
+    serverText: "We don't know yet if your order went through. Check before you try again, so you don't order twice.",
     // DRAFT WORDING. W-E14
     expiredTitle: "Your cart has expired",
     // DRAFT WORDING. W-E15

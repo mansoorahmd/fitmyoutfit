@@ -41,8 +41,9 @@ export default async function ProductActionsWrapper({
 
   let counted: number | null = null
   if (minimumShows) {
-    const cart = await retrieveCart(undefined, "id").catch(() => null)
-    const rules = cart ? await getCheckoutRules(cart.id) : null
+    const cart = await retrieveCart(undefined, "id,completed_at").catch(() => null)
+    // an ordered cart holds nothing towards the next order
+    const rules = cart && !cart.completed_at ? await getCheckoutRules(cart.id) : null
     counted = rules?.minimum_quantity?.counted ?? null
   }
 

@@ -20,7 +20,10 @@ export default async function PageLayout(props: {
 }) {
   const { countryCode } = await props.params
   const customer = await retrieveCustomer()
-  const cart = await retrieveCart()
+  // A cart that is already an order is no cart here (QA S1-4, D1); the
+  // header's cart opens its order.
+  const read = await retrieveCart()
+  const cart = read?.completed_at ? null : read
   let shippingOptions: StoreCartShippingOption[] = []
 
   if (cart) {
@@ -46,7 +49,7 @@ export default async function PageLayout(props: {
         />
       )}
       {props.children}
-      <Footer countryCode={countryCode} />
+      <Footer countryCode={countryCode} signedIn={!!customer} />
     </AddedToCartProvider>
   )
 }

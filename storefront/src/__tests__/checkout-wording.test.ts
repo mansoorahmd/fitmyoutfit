@@ -45,7 +45,11 @@ describe("checkout and order wording (AC 8)", () => {
     )
     expect(k.payment.cod.overLimit).toBe("Not available for orders over {limit}.")
     expect(k.payment.codWillPay).toBe("You'll pay {total} in cash when your order arrives.")
-    expect(k.placeOrder.minimum).toBe("Add {missing} more garment pieces to place the order.")
+    // W-M4b with a singular form (QA S1-4, D9)
+    expect(k.placeOrder.minimum).toEqual({
+      one: "Add one more garment piece to place the order.",
+      other: "Add {n} more garment pieces to place the order.",
+    })
     expect(k.minimum.title).toBe("Your order needs {required} garment pieces")
     expect(k.errors.codOverLimit).toBe(
       "It's for orders up to {limit}. Your total is {total}. Choose another way to pay."
@@ -61,7 +65,8 @@ describe("checkout and order wording (AC 8)", () => {
     const promises = [
       checkoutContent.payment.cod.overLimit,
       checkoutContent.payment.codWillPay,
-      checkoutContent.placeOrder.minimum,
+      checkoutContent.placeOrder.minimum.one,
+      checkoutContent.placeOrder.minimum.other,
       checkoutContent.minimum.title,
       checkoutContent.minimum.text,
       checkoutContent.errors.codOverLimit,
