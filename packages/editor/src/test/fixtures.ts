@@ -4,7 +4,7 @@ import standInJersey from "../../samples/products/stand-in-jersey.json";
 import placeholderFonts from "../../samples/fonts/placeholder-fonts.json";
 import { validateProductDefinition } from "../design/validate";
 import { validateFontCatalog, type FontCatalog } from "../design/font-catalog";
-import type { ColorRef, DesignDocument, Layer, ProductDefinition } from "../design/schema";
+import type { ColorValue, DesignDocument, Layer, ProductDefinition } from "../design/schema";
 
 /** The placeholder product definition, validated, as shipped in samples/. */
 export function loadPlaceholderProduct(): ProductDefinition {
@@ -34,13 +34,14 @@ export function loadPlaceholderFonts(): FontCatalog {
   return result.value;
 }
 
-export const RED: ColorRef = { id: "placeholder-red", hex: "#C8102E" };
-export const GREEN: ColorRef = { id: "placeholder-green", hex: "#0B6B3A" };
+export const RED: ColorValue = { id: "placeholder-red", hex: "#C8102E" };
+export const GREEN: ColorValue = { id: "placeholder-green", hex: "#0B6B3A" };
 
 export function textLayer(overrides: Partial<Extract<Layer, { kind: "text" }>> = {}): Layer {
   return {
     id: "text-1",
     kind: "text",
+    role: "text",
     pieceId: "front",
     position: { x: 280, y: 250 },
     size: { width: 400, height: 80 },
@@ -59,6 +60,7 @@ export function numberLayer(): Layer {
   return {
     id: "number-1",
     kind: "number",
+    role: "text",
     pieceId: "back",
     position: { x: 280, y: 300 },
     size: { width: 300, height: 400 },
@@ -75,6 +77,7 @@ export function logoLayer(): Layer {
   return {
     id: "logo-1",
     kind: "logo",
+    role: "crest",
     pieceId: "front",
     position: { x: 120, y: 100 },
     size: { width: 90, height: 90 },
@@ -87,6 +90,7 @@ export function clipartLayer(): Layer {
   return {
     id: "clipart-1",
     kind: "clipart",
+    role: "graphic",
     pieceId: "sleeve_left",
     position: { x: 220, y: 110 },
     size: { width: 60, height: 60 },

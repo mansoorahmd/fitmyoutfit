@@ -295,6 +295,39 @@ export function polylineBounds(
   return minX === Infinity ? null : { minX, minY, maxX, maxY };
 }
 
+function segmentsCross(a: PathPoint, b: PathPoint, c: PathPoint, d: PathPoint): boolean {
+  const d1 = cross(c, d, a);
+  const d2 = cross(c, d, b);
+  const d3 = cross(a, b, c);
+  const d4 = cross(a, b, d);
+  return ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0));
+}
+
+/**
+ * True when two filled shapes share some area: a point of one lies inside the
+ * other, or their edges cross. Shapes that only touch along an edge do not count.
+ */
+export function shapesOverlap(a: readonly Polyline[], b: readonly Polyline[]): boolean {
+  const boxA = polylineBounds(a);
+  const boxB = polylineBounds(b);
+  if (!boxA || !boxB) return false;
+  if (boxA.maxX <= boxB.minX || boxB.maxX <= boxA.minX || boxA.maxY <= boxB.minY || boxB.maxY <= boxA.minY) return false;
+  if (a.some((line) => line.points.some((p) => pointInPolylines(b, p)))) return true;
+  if (b.some((line) => line.points.some((p) => pointInPolylines(a, p)))) return true;
+  for (const la of a) {
+    for (let i = 0; i < la.points.length; i++) {
+      const p = la.points[i]!;
+      const q = la.points[(i + 1) % la.points.length]!;
+      for (const lb of b) {
+        for (let k = 0; k < lb.points.length; k++) {
+          if (segmentsCross(p, q, lb.points[k]!, lb.points[(k + 1) % lb.points.length]!)) return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
 /** The drawing calls a path needs. A CanvasRenderingContext2D or a Path2D has them all. */
 export interface PathSink {
   moveTo(x: number, y: number): void;

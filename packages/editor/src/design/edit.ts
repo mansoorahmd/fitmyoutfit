@@ -20,24 +20,89 @@
  * edit returns a new document, so the history only keeps documents.
  */
 import {
-  colorRefSchema,
+  colorValueSchema,
   fontRefSchema,
   layerSchema,
-  type ColorRef,
+  type ColorValue,
   type DesignDocument,
   type FontRef,
+  type ItemRole,
   type Layer,
   type ProductDefinition,
 } from "./schema.js";
 import { DEFAULT_JERSEY_NUMBER_RULES, type JerseyNumberRules } from "./jersey-number-rules.js";
+import { checkJerseyNumber } from "./jersey-number.js";
 import {
   DesignError,
   fontFallbackErrors,
-  jerseyNumberLayerErrors,
   jerseyNumberRulesError,
+  layerRuleErrors,
+  teamColourValueErrors,
   zodIssuesToErrors,
+  type ValidationError,
 } from "./validate.js";
 import { normalizeText } from "./text.js";
+
+/** The team-name, player-name and player-number roles, and where the design keeps their value. */
+export type ValueRole = "team-name" | "player-name" | "player-number";
+
+export function isValueRole(role: ItemRole): role is ValueRole {
+  return role === "team-name" || role === "player-name" || role === "player-number";
+}
+
+/** The value every layer of a value role shows: the team name, or the sample player's name or number. */
+export function roleValue(design: Pick<DesignDocument, "teamName" | "samplePlayer">, role: ValueRole): string {
+  if (role === "team-name") return design.teamName;
+  if (role === "player-name") return design.samplePlayer.name;
+  return design.samplePlayer.number;
+}
+
+/**
+ * Sets the value of a value role everywhere at once: the design's team name
+ * or sample player, and every layer with the role. Text is normalised to NFC;
+ * a number must follow the jersey number rule, and may be empty only when no
+ * layer shows the number. One edit, so one undo step.
+ */
+export function setRoleValue(design: DesignDocument, role: ValueRole, value: string, options?: EditOptions): DesignDocument {
+  requireDesign(design, "set value");
+  requireString(value, `set the ${role}`, "the value");
+  const rules = requireRules(options, `set the ${role}`);
+  const next = role === "player-number" ? value : normalizeText(value);
+  if (role === "player-number") {
+    if (next === "") {
+      if (design.layers.some((l) => l.role === "player-number")) {
+        throw new DesignError("Cannot clear the sample player's number while a layer shows it; turn the number off first, or keep a number");
+      }
+    } else {
+      const check = checkJerseyNumber(next, rules);
+      if (!check.ok) throw new DesignError(`Cannot set the sample player's number: ${check.error}`);
+    }
+  } else {
+    if (/\p{Cc}/u.test(next)) throw new DesignError(`Cannot set the ${role}: it must be one line, without line breaks, tabs or other control characters`);
+    if (next.length > 200) throw new DesignError(`Cannot set the ${role}: it is longer than 200 characters`);
+    if (next !== "" && next.trim() === "") throw new DesignError(`Cannot set the ${role}: it must be empty or contain a visible character, not only spaces`);
+  }
+  const layers = design.layers.map((l) => (l.role === role && (l.kind === "text" || l.kind === "number") ? { ...l, value: next } : l));
+  if (role === "team-name") return { ...design, teamName: next, layers };
+  if (role === "player-name") return { ...design, samplePlayer: { ...design.samplePlayer, name: next }, layers };
+  return { ...design, samplePlayer: { ...design.samplePlayer, number: next }, layers };
+}
+
+/** A new layer of a value role must show the role's current value. */
+function roleValueMismatch(design: DesignDocument, layer: Layer): string | null {
+  if (!isValueRole(layer.role) || (layer.kind !== "text" && layer.kind !== "number")) return null;
+  const want = roleValue(design, layer.role);
+  if (layer.value === want) return null;
+  return `a ${layer.role} layer shows ${layer.role === "team-name" ? "the team name" : "the sample player's " + (layer.role === "player-name" ? "name" : "number")} (${JSON.stringify(want)}), not ${JSON.stringify(layer.value)}; set it first with setTeamName or setSamplePlayer`;
+}
+
+/** Team-colour references in a layer's colours must hold the team colour (see validate.ts). */
+function layerColourErrors(design: DesignDocument, layer: Layer): ValidationError[] {
+  if (layer.kind !== "text" && layer.kind !== "number") return [];
+  const errors = teamColourValueErrors(design, layer.fill, "layer.fill");
+  if (layer.outline) errors.push(...teamColourValueErrors(design, layer.outline.color, "layer.outline.color"));
+  return errors;
+}
 
 /** A text layer's value in NFC; any other input is passed on unchanged for the schema to judge. */
 function normalizeLayerInput(input: unknown): unknown {
@@ -139,14 +204,31 @@ function checkLayerReferences(
         `Cannot ${action}: product "${product.id}" has no pattern piece "${layer.pieceId}" (pieces: ${available})`,
       );
     }
+    if (layer.preset !== undefined) {
+      const preset = product.placements.find((p) => p.id === layer.preset);
+      if (!preset) {
+        throw new DesignError(`Cannot ${action}: product "${product.id}" has no placement preset "${layer.preset}"`);
+      }
+      if (preset.pieceId !== layer.pieceId || !preset.roles.includes(layer.role)) {
+        throw new DesignError(
+          `Cannot ${action}: placement preset "${preset.id}" is on piece "${preset.pieceId}" and takes ${preset.roles.join(", ")}; the layer is a ${layer.role} on "${layer.pieceId}"`,
+        );
+      }
+    }
   }
+  const colourErrors = layerColourErrors(design, layer);
+  if (colourErrors.length > 0) throw new DesignError(`Cannot ${action}`, colourErrors);
 }
 
-/** Sets the colour of one zone. The zone must already exist in the document (and in the product, if given). */
+/**
+ * Sets the colour of one zone. The zone must already exist in the document
+ * (and in the product, if given). A colour with `teamColor` must hold that
+ * team colour (use `setZoneTeamColor` to make a zone follow a team colour).
+ */
 export function setZoneColor(
   design: DesignDocument,
   zoneId: string,
-  color: ColorRef,
+  color: ColorValue,
   options?: EditOptions,
 ): DesignDocument {
   requireDesign(design, "set colour");
@@ -162,10 +244,12 @@ export function setZoneColor(
       `Cannot set colour: the design has no colour zone "${zoneId}" (zones: ${Object.keys(design.zones).join(", ") || "none"})`,
     );
   }
-  const parsed = colorRefSchema.safeParse(color);
+  const parsed = colorValueSchema.safeParse(color);
   if (!parsed.success) {
     throw new DesignError(`Invalid colour for zone "${zoneId}"`, zodIssuesToErrors(parsed.error.issues, "color"));
   }
+  const teamErrors = teamColourValueErrors(design, parsed.data, "color");
+  if (teamErrors.length > 0) throw new DesignError(`Invalid colour for zone "${zoneId}"`, teamErrors);
   return { ...design, zones: { ...design.zones, [zoneId]: parsed.data } };
 }
 
@@ -181,12 +265,14 @@ export function addLayer(design: DesignDocument, layer: Layer, options?: EditOpt
   if (!parsed.success) {
     throw new DesignError("Invalid layer", zodIssuesToErrors(parsed.error.issues, "layer"));
   }
-  const numberErrors = jerseyNumberLayerErrors(parsed.data, "layer", rules);
-  if (numberErrors.length > 0) throw new DesignError("Invalid layer", numberErrors);
-  if (design.layers.some((l) => l.id === parsed.data.id)) {
-    throw new DesignError(`Cannot add layer: a layer with id "${parsed.data.id}" already exists`);
+  const ruleErrors = layerRuleErrors(parsed.data, "layer", rules);
+  if (ruleErrors.length > 0) throw new DesignError("Invalid layer", ruleErrors);
+  if (design.layers.some((l) => l.id === parsed.data.id) || design.shapes.some((s) => s.id === parsed.data.id)) {
+    throw new DesignError(`Cannot add layer: an item with id "${parsed.data.id}" already exists`);
   }
   checkLayerReferences(design, parsed.data, product, `add layer "${parsed.data.id}"`);
+  const mismatch = roleValueMismatch(design, parsed.data);
+  if (mismatch) throw new DesignError(`Cannot add layer "${parsed.data.id}": ${mismatch}`);
   return { ...design, layers: [...design.layers, parsed.data] };
 }
 
@@ -217,12 +303,23 @@ export function updateLayer(
   if (!parsed.success) {
     throw new DesignError(`Invalid update for layer "${layerId}"`, zodIssuesToErrors(parsed.error.issues, "layer"));
   }
-  const numberErrors = jerseyNumberLayerErrors(parsed.data, "layer", rules);
-  if (numberErrors.length > 0) throw new DesignError(`Invalid update for layer "${layerId}"`, numberErrors);
+  const ruleErrors = layerRuleErrors(parsed.data, "layer", rules);
+  if (ruleErrors.length > 0) throw new DesignError(`Invalid update for layer "${layerId}"`, ruleErrors);
   checkLayerReferences(design, parsed.data, product, `update layer "${layerId}"`);
   const layers = design.layers.slice();
   layers[index] = parsed.data;
-  return { ...design, layers };
+  let next: DesignDocument = { ...design, layers };
+  // The value of a team-name, player-name or player-number layer is the team's or the
+  // sample player's: changing it on one layer changes it on every layer of the role.
+  const updated = parsed.data;
+  if ((updated.kind === "text" || updated.kind === "number") && isValueRole(updated.role)) {
+    if ("value" in patch || updated.role !== current.role) {
+      if ("value" in patch) next = setRoleValue(next, updated.role, updated.value, options);
+      const mismatch = roleValueMismatch(next, updated.kind === "text" || updated.kind === "number" ? (next.layers[index] as Layer) : updated);
+      if (mismatch) throw new DesignError(`Invalid update for layer "${layerId}": ${mismatch}`);
+    }
+  }
+  return next;
 }
 
 /** Removes a layer. Fonts stay in the document even if no layer uses them any more. */

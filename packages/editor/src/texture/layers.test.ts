@@ -23,6 +23,7 @@ function text(overrides: Partial<Extract<Layer, { kind: "text" }>> = {}): Layer 
   return {
     id: "name",
     kind: "text",
+    role: "text",
     pieceId: "front",
     position: { x: 280, y: 300 },
     size: { width: 400, height: 80 },
@@ -146,6 +147,7 @@ describe("number layers in the texture", () => {
   const number = (value: string): Layer => ({
     id: "number",
     kind: "number",
+    role: "text",
     pieceId: "back",
     position: { x: 280, y: 350 },
     size: { width: 300, height: 300 },
@@ -173,6 +175,7 @@ describe("logo layers in the texture", () => {
   const logo = (overrides: Partial<Extract<Layer, { kind: "logo" }>> = {}): Layer => ({
     id: "logo",
     kind: "logo",
+    role: "crest",
     pieceId: "front",
     position: { x: 150, y: 200 },
     size: { width: 100, height: 100 },

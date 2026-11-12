@@ -21,14 +21,15 @@ import { TEXT_ALIGNS, TEXT_DIRECTIONS, isNormalizedText } from "./text.js";
 
 /**
  * Version of the design document format. Not the version of a saved design.
- * Version 2 (step E2): text alignment by reading direction (start, center,
- * end), a text direction, NFC text, font fallbacks, and asset references that
- * carry the image's pixel size. Version 1 documents are refused (none were
- * ever saved in production).
+ * Version 3 (step E3a): team colours, colours that follow a team colour,
+ * the colour code a coach asked for, a role on every layer, placement
+ * presets, text outlines, shapes, the team name and a sample player, and the
+ * template last applied. A version 2 document is upgraded by `upgradeDesign`
+ * (upgrade.ts); version 1 documents are refused (none were ever saved).
  */
-export const DESIGN_SCHEMA_VERSION = 2 as const;
-/** Version of the product definition format. It did not change in E2. */
-export const PRODUCT_SCHEMA_VERSION = 1 as const;
+export const DESIGN_SCHEMA_VERSION = 3 as const;
+/** Version of the product definition format. Version 2 (E3a): placement presets, default team colours, front and back views. */
+export const PRODUCT_SCHEMA_VERSION = 2 as const;
 
 /** Stable identifier: letters, digits, dash, underscore, dot. */
 export const ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/;
@@ -64,6 +65,8 @@ function choice<const T extends readonly [string, ...string[]]>(values: T) {
   });
 }
 
+const hex = z.string().regex(HEX_PATTERN, "must be an upper-case hex colour like #1B2A5C");
+
 export const paletteRefSchema = z.strictObject({
   /** Palette identifier, for example "fmo-print-2026". */
   id,
@@ -71,11 +74,49 @@ export const paletteRefSchema = z.strictObject({
   version: z.number().int().min(0),
 });
 
+/** A palette colour: its id in the palette and its code. */
 export const colorRefSchema = z.strictObject({
   /** Colour id inside the palette. */
   id,
   /** The colour as upper-case #RRGGBB, copied from the palette when picked. */
-  hex: z.string().regex(HEX_PATTERN, "must be an upper-case hex colour like #1B2A5C"),
+  hex,
+});
+
+/** The team colours, in order: 1 Main, 2 Second, 3 Accent (optional). */
+export const TEAM_COLOUR_ROLES = ["main", "second", "accent"] as const;
+export type TeamColourRole = (typeof TEAM_COLOUR_ROLES)[number];
+
+const requested = hex.describe(
+  "The colour code the customer asked for (a code typed in the colour-code match), kept beside the palette colour it was matched to. " +
+    "Never printed: `id` and `hex` are the printed colour.",
+);
+
+/** A team colour: a palette colour, and the code the coach asked for when it came from one. */
+export const teamColorSchema = z.strictObject({
+  id,
+  hex,
+  requested: requested.optional(),
+});
+
+/**
+ * A colour as a design uses it (zones, text fills, outlines, shapes): always a
+ * palette colour (`id`, `hex`: what is printed), optionally following a team
+ * colour (`teamColor`: changing that team colour changes this one), or
+ * carrying the code the customer asked for (`requested`). A colour that
+ * follows a team colour holds that team colour's `id` and `hex` and no code of
+ * its own (validateDesign checks both).
+ */
+export const colorValueSchema = z.strictObject({
+  id,
+  hex,
+  teamColor: choice(TEAM_COLOUR_ROLES).optional(),
+  requested: requested.optional(),
+});
+
+export const teamColorsSchema = z.strictObject({
+  main: teamColorSchema,
+  second: teamColorSchema,
+  accent: teamColorSchema.optional(),
 });
 
 export const pointSchema = z.strictObject({ x: finite, y: finite });
@@ -143,6 +184,29 @@ export const logoAssetRefSchema = z.strictObject({
   mediaType: z.enum(LOGO_MEDIA_TYPES),
 });
 
+/**
+ * What a layer is FOR, which the layer's kind does not say: the team name,
+ * the player's name and number (swapped per player by the roster preview),
+ * the crest, a sponsor, other text, or a graphic.
+ */
+export const ITEM_ROLES = ["team-name", "player-name", "player-number", "crest", "sponsor", "text", "graphic"] as const;
+export type ItemRole = (typeof ITEM_ROLES)[number];
+
+/** The roles each layer kind may have. A fixed number on every shirt is a `number` with the role `text`. */
+export const ROLES_BY_KIND = {
+  text: ["team-name", "player-name", "text", "sponsor"],
+  number: ["player-number", "text"],
+  logo: ["crest", "sponsor", "graphic"],
+  clipart: ["crest", "sponsor", "graphic"],
+} as const satisfies Record<string, readonly ItemRole[]>;
+
+/** Roles whose value comes from the team or the player: the same text on every layer with the role. */
+export const VALUE_ROLES = ["team-name", "player-name", "player-number"] as const;
+
+/** Sides of the garment the camera can show. "left" is the wearer's left. */
+export const VIEW_SIDES = ["front", "back", "left", "right"] as const;
+export type ViewSide = (typeof VIEW_SIDES)[number];
+
 /** Where a layer sits on a pattern piece, in pattern-piece coordinates (mm). */
 const placement = {
   /** Id of the pattern piece (from the product definition) the layer sits on. */
@@ -153,19 +217,40 @@ const placement = {
   size: sizeSchema,
   /** Degrees, clockwise, about the layer centre. */
   rotation: finite,
+  /**
+   * The product's placement preset the layer was put at ("back-number",
+   * "left-chest"), when it was. The position may have been moved from the
+   * preset's centre since; the preset says where the layer belongs.
+   */
+  preset: id.optional(),
 };
+
+/** Text outline widths are in mm; this is the widest allowed. */
+export const MAX_OUTLINE_MM = 20;
+
+/**
+ * An outline round text or a number: drawn outside the letters, `width` mm
+ * wide, under the fill. Part of the data so proofs and production files
+ * draw the same outline.
+ */
+export const outlineSchema = z.strictObject({
+  color: colorValueSchema,
+  /** Width in mm, measured outwards from the letter's edge. */
+  width: finite.positive().max(MAX_OUTLINE_MM),
+});
 
 const textStyle = {
   fontId: id,
   /** Em size in mm. Resizing a text or number layer scales this and `size` together. */
   fontSize: finite.positive(),
-  fill: colorRefSchema,
+  fill: colorValueSchema,
   /**
    * Where the line sits across the layer box, by reading direction: "start" is
    * the left edge for left-to-right text and the right edge for right-to-left
    * text. Vertically the line is centred on the box.
    */
   align: choice(TEXT_ALIGNS),
+  outline: outlineSchema.optional(),
 };
 
 /** One line: no line breaks, tabs or other control characters. */
@@ -174,25 +259,28 @@ const ONE_LINE = /^[^\p{Cc}]*$/u;
 /** The longest text value, in UTF-16 code units. */
 export const MAX_TEXT_LENGTH = 200;
 
+/** One line of text in NFC, possibly empty (the team name and the sample player's name may be empty). */
+const oneLine = z
+  .string()
+  .max(MAX_TEXT_LENGTH)
+  .regex(ONE_LINE, "must be one line of text: no line breaks, tabs or other control characters")
+  .refine(isNormalizedText, "must be in Unicode normal form NFC (the edit functions normalise text; or use normalizeText())");
+
 export const textLayerSchema = z.strictObject({
   id,
   kind: z.literal("text"),
+  role: choice(ROLES_BY_KIND.text),
   ...placement,
   /**
    * One line of text in any script (Latin, Arabic, Urdu, mixed), in Unicode
    * NFC. Stored as text plus a font reference, never as a picture or outlines.
+   * Empty only for the team name and the player's name (a slot waiting for
+   * its text; nothing is drawn).
    */
-  value: z
-    .string()
-    .min(1)
-    .max(MAX_TEXT_LENGTH)
-    .regex(ONE_LINE, "must be one line of text: no line breaks, tabs or other control characters")
-    .refine((value) => value.trim().length > 0, "must contain a visible character, not only spaces")
-    .refine(isNormalizedText, "must be in Unicode normal form NFC (the edit functions normalise text; or use normalizeText())")
-    .describe(
-      `One line of text in any script, 1 to ${MAX_TEXT_LENGTH} UTF-16 code units. It must also be in Unicode NFC and hold a visible character, ` +
-        "which this schema cannot check: validateDesign() from @fitmyoutfit/editor/design does.",
-    ),
+  value: oneLine.describe(
+    `One line of text in any script, at most ${MAX_TEXT_LENGTH} UTF-16 code units. It must also be in Unicode NFC, and hold a visible character ` +
+      "unless the role is team-name or player-name (those may be empty), which this schema cannot check: validateDesign() from @fitmyoutfit/editor/design does.",
+  ),
   /** Reading direction. "auto" follows the first strong letter of the text (Unicode bidi rules P2 and P3). */
   direction: choice(TEXT_DIRECTIONS),
   ...textStyle,
@@ -207,9 +295,9 @@ export const textLayerSchema = z.strictObject({
  */
 export const JERSEY_NUMBER_VALUE_PATTERN = `^(?:${DEFAULT_JERSEY_NUMBER_RULES.digitSystems
   .map((s) => {
-    const hex = (code: number) => code.toString(16).toUpperCase().padStart(4, "0");
+    const hexDigits = (code: number) => code.toString(16).toUpperCase().padStart(4, "0");
     // A backslash-u escape in the pattern text, so the JSON Schema stays plain ASCII.
-    return String.raw`[\u${hex(s.zero)}-\u${hex(s.zero + 9)}]+`;
+    return String.raw`[\u${hexDigits(s.zero)}-\u${hexDigits(s.zero + 9)}]+`;
   })
   .join("|")})$`;
 
@@ -219,20 +307,23 @@ const NUMBER_VALUE_DESCRIPTION =
   `and is enforced by validateDesign() from @fitmyoutfit/editor/design, as are the allowed digit systems when the rules are changed. ` +
   `Do not rely on this schema alone to accept a number layer.`;
 
+const jerseyNumberValue = z
+  .string()
+  .regex(new RegExp(JERSEY_NUMBER_VALUE_PATTERN), {
+    // The readable reason comes from the one rule function, so it is the same everywhere.
+    error: (issue) => {
+      const result = checkJerseyNumber(issue.input);
+      return result.ok ? "is not a valid jersey number" : result.error;
+    },
+  })
+  .describe(NUMBER_VALUE_DESCRIPTION);
+
 export const numberLayerSchema = z.strictObject({
   id,
   kind: z.literal("number"),
+  role: choice(ROLES_BY_KIND.number),
   ...placement,
-  value: z
-    .string()
-    .regex(new RegExp(JERSEY_NUMBER_VALUE_PATTERN), {
-      // The readable reason comes from the one rule function, so it is the same everywhere.
-      error: (issue) => {
-        const result = checkJerseyNumber(issue.input);
-        return result.ok ? "is not a valid jersey number" : result.error;
-      },
-    })
-    .describe(NUMBER_VALUE_DESCRIPTION),
+  value: jerseyNumberValue,
   ...textStyle,
 });
 
@@ -244,6 +335,7 @@ export const numberLayerSchema = z.strictObject({
 export const logoLayerSchema = z.strictObject({
   id,
   kind: z.literal("logo"),
+  role: choice(ROLES_BY_KIND.logo),
   ...placement,
   asset: logoAssetRefSchema,
 });
@@ -251,6 +343,7 @@ export const logoLayerSchema = z.strictObject({
 export const clipartLayerSchema = z.strictObject({
   id,
   kind: z.literal("clipart"),
+  role: choice(ROLES_BY_KIND.clipart),
   ...placement,
   asset: assetRefSchema,
 });
@@ -274,25 +367,10 @@ export const layerSchema = z.discriminatedUnion(
   },
 );
 
-export const designSchema = z.strictObject({
-  schemaVersion: z.literal(DESIGN_SCHEMA_VERSION, { error: `must be ${DESIGN_SCHEMA_VERSION}, the format version this code understands` }),
-  /** Which product definition this design is for. */
-  product: z.strictObject({ id }),
-  palette: paletteRefSchema,
-  /** Zone id to colour. Holds one entry per colour zone of the product. */
-  zones: z.record(zoneId, colorRefSchema),
-  /** Fonts used by text and number layers. */
-  fonts: z.array(fontRefSchema),
-  /** Bottom to top: later layers are drawn over earlier ones. */
-  layers: z.array(layerSchema),
-});
-
-// Product definition: the garment model and its pattern pieces, as data.
-
 /**
  * SVG path data in a piece's own coordinates (mm, origin top-left, Y down).
- * The JSON Schema checks the characters; `validateProductDefinition` parses
- * the path, which is the rule (see svg-path.ts for the supported commands).
+ * The JSON Schema checks the characters; the validators parse the path, which
+ * is the rule (see svg-path.ts for the supported commands).
  */
 const svgPathData = z
   .string()
@@ -313,8 +391,65 @@ const svgPathData = z
   });
 
 const SVG_PATH_RULE_NOTE =
-  "This pattern checks the characters only; validateProductDefinition() from @fitmyoutfit/editor/design parses the path " +
-  "and checks the outline is closed, inside the piece and that zones exist. Do not rely on this schema alone.";
+  "This pattern checks the characters only; validateProductDefinition() and validateDesign() from @fitmyoutfit/editor/design parse the path " +
+  "and check where it lies. Do not rely on this schema alone.";
+
+/**
+ * A shape: a filled vector area on one pattern piece (a stripe, a hoop, a
+ * sash, a chevron), drawn over the zones and under every layer, clipped to the
+ * piece's outline. Templates bring them. `group` gathers the shapes that are
+ * coloured together ("hoops" on the front, back and sleeves).
+ */
+export const shapeSchema = z.strictObject({
+  id,
+  kind: z.literal("shape"),
+  /** Shapes coloured together share a group; the Colours tool shows one chip per group. */
+  group: id,
+  pieceId: id,
+  /** The area, as SVG path data in the piece's millimetres. It may reach past the outline; only the part inside is drawn. */
+  path: svgPathData.describe(
+    "SVG path data (M, L, H, V, C, Q, Z) in the piece's millimetres. May reach past the outline; only the part inside it is drawn. " +
+      SVG_PATH_RULE_NOTE,
+  ),
+  fill: colorValueSchema,
+  /** A locked shape is part of the design: the interface offers its colour only, not moving or deleting it. */
+  locked: z.boolean(),
+});
+
+/** The template a design was last given, by id and version. */
+export const templateRefSchema = z.strictObject({ id, version: z.number().int().min(0) });
+
+/** The player shown on the kit while designing (the roster preview swaps in each real player). Not part of the order. */
+export const samplePlayerSchema = z.strictObject({
+  /** May be empty. */
+  name: oneLine,
+  /** A jersey number, or empty when no layer shows the number. */
+  number: z.union([z.literal(""), jerseyNumberValue]),
+});
+
+export const designSchema = z.strictObject({
+  schemaVersion: z.literal(DESIGN_SCHEMA_VERSION, { error: `must be ${DESIGN_SCHEMA_VERSION}, the format version this code understands` }),
+  /** Which product definition this design is for. */
+  product: z.strictObject({ id }),
+  palette: paletteRefSchema,
+  /** The team's colours: Main, Second and an optional Accent, each a palette colour. */
+  teamColors: teamColorsSchema,
+  /** The team name, as typed. Every `team-name` layer shows it; kept here when no layer shows it. May be empty. */
+  teamName: oneLine,
+  samplePlayer: samplePlayerSchema,
+  /** The template last applied, or null. */
+  template: templateRefSchema.nullable(),
+  /** Zone id to colour. Holds one entry per colour zone of the product. */
+  zones: z.record(zoneId, colorValueSchema),
+  /** Fonts used by text and number layers. */
+  fonts: z.array(fontRefSchema),
+  /** Shapes, drawn over the zones and under the layers, in this order. */
+  shapes: z.array(shapeSchema).max(200),
+  /** Bottom to top: later layers are drawn over earlier ones. */
+  layers: z.array(layerSchema),
+});
+
+// Product definition: the garment model and its pattern pieces, as data.
 
 export const pieceRegionSchema = z.strictObject({
   /** The colour zone this area belongs to. */
@@ -372,6 +507,29 @@ export const zoneSchema = z.strictObject({
   defaultColor: colorRefSchema,
 });
 
+/**
+ * A named position on the garment ("left-chest", "back-number"): where a
+ * layer of one of `roles` is put, on which piece, centred where, at most how
+ * big, and which side the camera shows for it. Print areas (keeping a layer
+ * inside them) are a later step.
+ */
+export const placementPresetSchema = z.strictObject({
+  id,
+  /** A name for people reading the data ("Left chest"); the interface has its own wording. */
+  name: z.string().min(1).max(100),
+  pieceId: id,
+  /** The centre, in the piece's millimetres. */
+  centre: pointSchema,
+  /** The largest box a layer gets here, in mm (text is shrunk to its width). */
+  maxSize: sizeSchema,
+  /** The roles of layers that may go here. */
+  roles: z.array(choice(ITEM_ROLES)).min(1),
+  /** The side the camera turns to for a layer here. */
+  side: choice(VIEW_SIDES),
+  /** The em size (mm) of text and numbers at the "medium" size; others are steps of it. */
+  fontSize: finite.positive().optional(),
+});
+
 export const productDefinitionSchema = z.strictObject({
   schemaVersion: z.literal(PRODUCT_SCHEMA_VERSION, { error: `must be ${PRODUCT_SCHEMA_VERSION}, the format version this code understands` }),
   id,
@@ -383,25 +541,40 @@ export const productDefinitionSchema = z.strictObject({
   }),
   /** Palette new designs for this product start from. */
   palette: paletteRefSchema,
+  /** Team colours a new design starts with. */
+  teamColors: teamColorsSchema,
+  /** The pieces that show the front and the back (thumbnails, the flat view). */
+  views: z.strictObject({ front: id, back: id }),
   pieces: z.array(pieceSchema).min(1),
   zones: z.array(zoneSchema).min(1),
+  /** Named positions for layers, in the order the interface offers them. */
+  placements: z.array(placementPresetSchema).max(100),
 });
 
 export type PaletteRef = z.infer<typeof paletteRefSchema>;
 export type ColorRef = z.infer<typeof colorRefSchema>;
+export type ColorValue = z.infer<typeof colorValueSchema>;
+export type TeamColor = z.infer<typeof teamColorSchema>;
+export type TeamColors = z.infer<typeof teamColorsSchema>;
 export type Point = z.infer<typeof pointSchema>;
 export type Size = z.infer<typeof sizeSchema>;
 export type FontRef = z.infer<typeof fontRefSchema>;
 export type AssetRef = z.infer<typeof assetRefSchema>;
 export type LogoAssetRef = z.infer<typeof logoAssetRefSchema>;
+export type Outline = z.infer<typeof outlineSchema>;
 export type TextLayer = z.infer<typeof textLayerSchema>;
 export type NumberLayer = z.infer<typeof numberLayerSchema>;
 export type LogoLayer = z.infer<typeof logoLayerSchema>;
 export type ClipartLayer = z.infer<typeof clipartLayerSchema>;
 export type Layer = z.infer<typeof layerSchema>;
 export type LayerKind = Layer["kind"];
+export type TextLikeLayer = TextLayer | NumberLayer;
+export type Shape = z.infer<typeof shapeSchema>;
+export type SamplePlayer = z.infer<typeof samplePlayerSchema>;
+export type TemplateRef = z.infer<typeof templateRefSchema>;
 export type DesignDocument = z.infer<typeof designSchema>;
 export type PatternPiece = z.infer<typeof pieceSchema>;
 export type PieceRegion = z.infer<typeof pieceRegionSchema>;
 export type ColorZone = z.infer<typeof zoneSchema>;
+export type PlacementPreset = z.infer<typeof placementPresetSchema>;
 export type ProductDefinition = z.infer<typeof productDefinitionSchema>;

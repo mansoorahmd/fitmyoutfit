@@ -325,7 +325,19 @@ function ModelView({
   // The inside texture: the zones without layers, redrawn only when a zone colour changes.
   const { zones } = design;
   const zonesOnly = useMemo<DesignDocument>(
-    () => ({ schemaVersion: 2, product: { id: product.id }, palette: product.palette, zones, fonts: [], layers: [] }),
+    () => ({
+      schemaVersion: 3,
+      product: { id: product.id },
+      palette: product.palette,
+      teamColors: product.teamColors,
+      teamName: "",
+      samplePlayer: { name: "", number: "" },
+      template: null,
+      zones,
+      fonts: [],
+      shapes: [],
+      layers: [],
+    }),
     [zones, product],
   );
   useEffect(() => {
