@@ -25,6 +25,8 @@ import { AssetImageCache, type AssetUrlResolver } from "../react/asset-images.js
 
 /** The pattern texture the views look up: enough for a phone-sized view. */
 const FLAT_TEXTURE = 1024;
+/** The inside's texture (zones only): small, it is only seen in shade through the neck. */
+const INSIDE_TEXTURE = 256;
 /** Room for the captions over the views (CSS px). */
 const CAPTION = 20;
 /** How far outside an item's box a tap still selects it (mm): fingers are wide. */
@@ -44,12 +46,55 @@ export interface FlatViewProps {
   onSelectLayer?: (layerId: string | null) => void;
 }
 
-/** Where the two views sit in the box (CSS px): side by side under their captions. */
-export function flatViewPlaces(width: number, height: number): { front: { x: number; y: number; w: number; h: number }; back: { x: number; y: number; w: number; h: number } } {
+export interface FlatPlace {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/**
+ * Where the two views sit in the box (CSS px), each under its caption: side
+ * by side, or one above the other, whichever shows the garment larger (on a
+ * phone in portrait the box is tall and narrow, so stacked wins; on a desktop,
+ * side by side). Each place is the garment's own box (`aspect` is its width
+ * over its height), so the caption sits just above the garment.
+ */
+export function flatViewPlaces(width: number, height: number, aspect = 1): { front: FlatPlace; back: FlatPlace; stacked: boolean } {
   const gap = Math.round(Math.min(width, height) * 0.03);
-  const w = Math.max(1, Math.floor((width - gap) / 2));
-  const h = Math.max(1, Math.floor(height - CAPTION));
-  return { front: { x: 0, y: CAPTION, w, h }, back: { x: w + gap, y: CAPTION, w, h } };
+  const fit = (w: number, h: number) => {
+    const gh = Math.max(1, Math.min(h, w / aspect));
+    return { w: Math.max(1, Math.floor(gh * aspect)), h: Math.max(1, Math.floor(gh)) };
+  };
+  const side = fit((width - gap) / 2, height - CAPTION);
+  const stack = fit(width, (height - gap) / 2 - CAPTION);
+  const stacked = stack.h > side.h;
+  if (stacked) {
+    const top = Math.max(0, Math.round((height - 2 * (stack.h + CAPTION) - gap) / 2));
+    const x = Math.round((width - stack.w) / 2);
+    return { stacked, front: { x, y: top + CAPTION, ...stack }, back: { x, y: top + 2 * CAPTION + stack.h + gap, ...stack } };
+  }
+  const left = Math.max(0, Math.round((width - 2 * side.w - gap) / 2));
+  const y = Math.max(CAPTION, Math.round((height - side.h - CAPTION) / 2) + CAPTION);
+  return { stacked, front: { x: left, y, ...side }, back: { x: left + side.w + gap, y, ...side } };
+}
+
+/** The garment's width over its height, seen from the front (for laying out the views). */
+export function garmentAspect(meshes: readonly GarmentMesh[]): number {
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  for (const mesh of meshes) {
+    const p = mesh.positions;
+    for (let k = 0; k + 2 < p.length; k += 3) {
+      minX = Math.min(minX, p[k]!);
+      maxX = Math.max(maxX, p[k]!);
+      minY = Math.min(minY, p[k + 1]!);
+      maxY = Math.max(maxY, p[k + 1]!);
+    }
+  }
+  return maxX > minX && maxY > minY ? (maxX - minX) / (maxY - minY) : 1;
 }
 
 /** The design's item under a point of a view (CSS px inside the view), or null. */
@@ -98,7 +143,7 @@ export function FlatView({ product, design, assetUrl, captionFront, captionBack,
   // edges from four samples per pixel on a 1x screen, one on a 2x screen (the same number of samples).
   const views = useMemo(() => {
     if (!garment || garment.length === 0 || size.width < 40 || size.height < 60) return null;
-    const places = flatViewPlaces(size.width, size.height);
+    const places = flatViewPlaces(size.width, size.height, garmentAspect(garment));
     const ss = dpr >= 2 ? 1 : 2;
     const make = (side: "front" | "back") => renderGarmentView(garment, { width: Math.round(places[side].w * dpr), height: Math.round(places[side].h * dpr), side, supersample: ss });
     try {
@@ -137,13 +182,16 @@ export function FlatView({ product, design, assetUrl, captionFront, captionBack,
     if (views && scratch) {
       drawPatternTexture(scratch.ctx, product, design, { size: FLAT_TEXTURE, images: images.lookup, selectedLayerId });
       const sampler = samplerFromRgba(scratch.ctx.getImageData(0, 0, FLAT_TEXTURE, FLAT_TEXTURE).data, FLAT_TEXTURE, FLAT_TEXTURE);
+      // The inside (seen through the neck) without the prints, as the 3D view draws it.
+      drawPatternTexture(scratch.ctx, product, { ...design, layers: [] }, { size: INSIDE_TEXTURE });
+      const inside = samplerFromRgba(scratch.ctx.getImageData(0, 0, INSIDE_TEXTURE, INSIDE_TEXTURE).data, INSIDE_TEXTURE, INSIDE_TEXTURE);
       for (const side of ["front", "back"] as const) {
         const view = views[side];
         const place = views.places[side];
         const image = ctx.createImageData(view.width, view.height);
-        composeGarmentView(view, sampler, image.data);
+        composeGarmentView(view, sampler, image.data, inside);
         ctx.putImageData(image, Math.round(place.x * dpr), Math.round(place.y * dpr));
-        ctx.fillText(side === "front" ? captionFront : captionBack, (place.x + place.w / 2) * dpr, 2 * dpr);
+        ctx.fillText(side === "front" ? captionFront : captionBack, (place.x + place.w / 2) * dpr, (place.y - CAPTION + 2) * dpr);
       }
       return;
     }
@@ -174,7 +222,7 @@ export function FlatView({ product, design, assetUrl, captionFront, captionBack,
   };
 
   return (
-    <div ref={box} className="fmo-flat-box" role="img" aria-label={label} data-testid="flat-view" data-garment={views ? "true" : "false"} onPointerUp={onPointerUp}>
+    <div ref={box} className="fmo-flat-box" role="img" aria-label={label} data-testid="flat-view" data-garment={views ? "true" : "false"} data-places={views ? JSON.stringify({ front: views.places.front, back: views.places.back }) : undefined} onPointerUp={onPointerUp}>
       <canvas ref={canvas} style={{ width: "100%", height: "100%" }} />
     </div>
   );

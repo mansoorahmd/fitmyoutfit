@@ -8,12 +8,12 @@ import { createDesign } from "../design/create";
 import { addCatalogFont } from "../design/font-catalog";
 import { setRoleSlot } from "../design/roles";
 import type { DesignDocument } from "../design/schema";
-import { renderGarmentView } from "../texture/garment-view";
+import { composeGarmentView, renderGarmentView } from "../texture/garment-view";
 import { loadPlaceholderFonts, loadPlaceholderPalette, loadStandInJerseyProduct } from "../test/fixtures";
 import { loadGarmentMeshes } from "../test/garment-meshes";
 import { readabilityWarnings } from "./checks";
 import { EDITOR_WORDING as W } from "./content";
-import { flatViewPlaces, itemAtViewPoint } from "./FlatView";
+import { flatViewPlaces, garmentAspect, itemAtViewPoint } from "./FlatView";
 import { itemWords } from "./items";
 import { creditForm } from "./stage-logic";
 
@@ -88,12 +88,26 @@ describe("readability warnings name their item (part 1, point 4)", () => {
 describe("the flat view is the garment, front and back (part 1, point 5)", () => {
   const meshes = loadGarmentMeshes("stand-in-jersey.glb");
 
-  it("lays the two views side by side under their captions", () => {
-    const p = flatViewPlaces(360, 400);
-    expect(p.front.x).toBe(0);
-    expect(p.back.x).toBeGreaterThan(p.front.w);
-    expect(p.back.x + p.back.w).toBeLessThanOrEqual(360);
-    expect(p.front.y).toBeGreaterThan(0);
+  it("lays the two views out where the garment shows largest: side by side on a wide stage, stacked on a tall phone", () => {
+    const aspect = garmentAspect(meshes);
+    expect(aspect).toBeGreaterThan(0.6);
+    expect(aspect).toBeLessThan(1.4);
+    const wide = flatViewPlaces(900, 700, aspect);
+    expect(wide.stacked).toBe(false);
+    expect(wide.back.x).toBeGreaterThanOrEqual(wide.front.x + wide.front.w);
+    expect(wide.back.x + wide.back.w).toBeLessThanOrEqual(900);
+    const tall = flatViewPlaces(366, 640, aspect);
+    expect(tall.stacked).toBe(true);
+    expect(tall.back.y).toBeGreaterThanOrEqual(tall.front.y + tall.front.h);
+    expect(tall.back.y + tall.back.h).toBeLessThanOrEqual(640);
+    // Stacked shows each garment larger than side by side would on that phone.
+    const sideBySideWidth = (366 - Math.round(366 * 0.03)) / 2;
+    expect(tall.front.w).toBeGreaterThan(sideBySideWidth);
+    // Every place keeps the garment's proportions and leaves room for its caption above.
+    for (const p of [wide.front, wide.back, tall.front, tall.back]) {
+      expect(p.y).toBeGreaterThanOrEqual(20);
+      expect(Math.abs(p.w / p.h - aspect)).toBeLessThan(0.05);
+    }
   });
 
   it("a tap on an item in the front or the back view selects it; a tap on bare fabric or beside the garment selects nothing", () => {
@@ -118,5 +132,20 @@ describe("the flat view is the garment, front and back (part 1, point 5)", () =>
     const hem = itemAtViewPoint(product, d, front, front.width / 2, front.height * 0.9, 0);
     expect(hem).not.toBeNull();
     expect(hem!.layerId).toBeNull();
+  });
+});
+
+describe("the flat view's inside of the neck (part 1, point 5)", () => {
+  it("is coloured by its own sampler, so a print on the back does not show, mirrored, through the neck", () => {
+    const meshes = loadGarmentMeshes("stand-in-jersey.glb");
+    const view = renderGarmentView(meshes, { width: 120, height: 150, side: "front", supersample: 1 });
+    const insideAt = view.kind.findIndex((k) => k === 2);
+    expect(insideAt).toBeGreaterThanOrEqual(0);
+    const out = new Uint8ClampedArray(view.width * view.height * 4);
+    composeGarmentView(view, () => 0xff0000, out, () => 0x0000ff);
+    // The inside pixel is blue (the inside sampler), an outside one red.
+    expect(out[insideAt * 4 + 2]).toBeGreaterThan(out[insideAt * 4]!);
+    const outsideAt = view.kind.findIndex((k) => k === 1);
+    expect(out[outsideAt * 4]).toBeGreaterThan(out[outsideAt * 4 + 2]!);
   });
 });
