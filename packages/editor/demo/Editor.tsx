@@ -266,7 +266,8 @@ export function Editor({ product, swatches, fonts, demoProduct }: EditorProps) {
     const ok = commitEdit((d) => {
       const withFont = addCatalogFont(d, fonts, numberFont);
       const start = startPlacement(product.id, pieceId, "number");
-      return addLayer(withFont, newNumberLayer(product, { id, pieceId, value, fontId: numberFont, fill, ...start }), { product });
+      // A number typed here is a fixed number (the same on every shirt); the player's number is a role slot.
+      return addLayer(withFont, newNumberLayer(product, { id, pieceId, role: "text", value, fontId: numberFont, fill, ...start }), { product });
     });
     if (ok) setSelectedId(id);
   };

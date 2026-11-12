@@ -49,7 +49,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { validateProductDefinition } from "../src/design/validate.js";
 import { pieceToUv } from "../src/design/pattern.js";
-import type { ColorRef, ProductDefinition } from "../src/design/schema.js";
+import { PRODUCT_SCHEMA_VERSION, type ColorRef, type PlacementPreset, type ProductDefinition, type TeamColors } from "../src/design/schema.js";
 import type { PathPoint } from "../src/design/svg-path.js";
 import { centroid, mergeParts, orientationProblems, type MeshPart } from "./model-prep/assemble.js";
 import { applyFrame, pieceFrame } from "./model-prep/frame.js";
@@ -106,6 +106,15 @@ interface Config {
     generator: string;
   };
   product: { id: string; name: string; palette: { id: string; version: number } };
+  /** Team colours a new design starts with (copied into the product definition). */
+  teamColors: TeamColors;
+  /** The pieces that show the front and the back (thumbnails, the flat view). */
+  views: { front: string; back: string };
+  /**
+   * Placement presets, in the generated pieces' millimetres (copied into the
+   * product definition, whose validation checks that each centre lies on its piece).
+   */
+  placements: PlacementPreset[];
   outlineToleranceMm: number;
   /** How the pieces are packed into the texture (model-prep/packing.ts; default "shelf"). */
   packing?: "shelf" | "skyline" | "best";
@@ -377,11 +386,13 @@ const packed = packPieces(
 );
 const meshNameOf = (p: Piece3D) => config.output.mesh ?? p.config.id;
 const productJson = {
-  schemaVersion: 1,
+  schemaVersion: PRODUCT_SCHEMA_VERSION,
   id: config.product.id,
   name: config.product.name,
   model: { url: config.output.modelUrl, format: "glb" },
   palette: config.product.palette,
+  teamColors: config.teamColors,
+  views: config.views,
   pieces: pieces3d.map((p) => {
     const rect = packed.rects.get(p.config.id)!;
     return {
@@ -402,6 +413,7 @@ const productJson = {
     };
   }),
   zones: config.zones,
+  placements: config.placements,
 };
 const checked = validateProductDefinition(productJson);
 if (!checked.ok) throw new Error(`The generated product definition is invalid:\n${checked.errors.map((e) => `${e.path}: ${e.message}`).join("\n")}`);

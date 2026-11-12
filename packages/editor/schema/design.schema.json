@@ -6,7 +6,7 @@
   "properties": {
     "schemaVersion": {
       "type": "number",
-      "const": 2
+      "const": 3
     },
     "product": {
       "type": "object",
@@ -40,6 +40,144 @@
       ],
       "additionalProperties": false
     },
+    "teamColors": {
+      "type": "object",
+      "properties": {
+        "main": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+            },
+            "hex": {
+              "type": "string",
+              "pattern": "^#[0-9A-F]{6}$"
+            },
+            "requested": {
+              "type": "string",
+              "pattern": "^#[0-9A-F]{6}$",
+              "description": "The colour code the customer asked for (a code typed in the colour-code match), kept beside the palette colour it was matched to. Never printed: `id` and `hex` are the printed colour."
+            }
+          },
+          "required": [
+            "id",
+            "hex"
+          ],
+          "additionalProperties": false
+        },
+        "second": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+            },
+            "hex": {
+              "type": "string",
+              "pattern": "^#[0-9A-F]{6}$"
+            },
+            "requested": {
+              "type": "string",
+              "pattern": "^#[0-9A-F]{6}$",
+              "description": "The colour code the customer asked for (a code typed in the colour-code match), kept beside the palette colour it was matched to. Never printed: `id` and `hex` are the printed colour."
+            }
+          },
+          "required": [
+            "id",
+            "hex"
+          ],
+          "additionalProperties": false
+        },
+        "accent": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+            },
+            "hex": {
+              "type": "string",
+              "pattern": "^#[0-9A-F]{6}$"
+            },
+            "requested": {
+              "type": "string",
+              "pattern": "^#[0-9A-F]{6}$",
+              "description": "The colour code the customer asked for (a code typed in the colour-code match), kept beside the palette colour it was matched to. Never printed: `id` and `hex` are the printed colour."
+            }
+          },
+          "required": [
+            "id",
+            "hex"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "main",
+        "second"
+      ],
+      "additionalProperties": false
+    },
+    "teamName": {
+      "type": "string",
+      "maxLength": 200,
+      "pattern": "^[^\\p{Cc}]*$"
+    },
+    "samplePlayer": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "maxLength": 200,
+          "pattern": "^[^\\p{Cc}]*$"
+        },
+        "number": {
+          "anyOf": [
+            {
+              "type": "string",
+              "const": ""
+            },
+            {
+              "type": "string",
+              "pattern": "^(?:[\\u0030-\\u0039]+|[\\u0660-\\u0669]+|[\\u06F0-\\u06F9]+)$",
+              "description": "A jersey number: one or more digits from one digit system (Western 0-9, Arabic-Indic ٠-٩ or Extended Arabic-Indic ۰-۹), kept as typed so \"07\" survives. This pattern checks the structure only. The largest number (99, so at most 2 digits) is data, not part of the pattern, and is enforced by validateDesign() from @fitmyoutfit/editor/design, as are the allowed digit systems when the rules are changed. Do not rely on this schema alone to accept a number layer."
+            }
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "number"
+      ],
+      "additionalProperties": false
+    },
+    "template": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "id",
+            "version"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "zones": {
       "type": "object",
       "propertyNames": {
@@ -56,6 +194,19 @@
           "hex": {
             "type": "string",
             "pattern": "^#[0-9A-F]{6}$"
+          },
+          "teamColor": {
+            "type": "string",
+            "enum": [
+              "main",
+              "second",
+              "accent"
+            ]
+          },
+          "requested": {
+            "type": "string",
+            "pattern": "^#[0-9A-F]{6}$",
+            "description": "The colour code the customer asked for (a code typed in the colour-code match), kept beside the palette colour it was matched to. Never printed: `id` and `hex` are the printed colour."
           }
         },
         "required": [
@@ -110,6 +261,82 @@
         "additionalProperties": false
       }
     },
+    "shapes": {
+      "maxItems": 200,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+          },
+          "kind": {
+            "type": "string",
+            "const": "shape"
+          },
+          "group": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+          },
+          "pieceId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+          },
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20000,
+            "pattern": "^[MmLlHhVvCcQqZz0-9eE.,+\\-\\s]+$",
+            "description": "SVG path data (M, L, H, V, C, Q, Z) in the piece's millimetres. May reach past the outline; only the part inside it is drawn. This pattern checks the characters only; validateProductDefinition() and validateDesign() from @fitmyoutfit/editor/design parse the path and check where it lies. Do not rely on this schema alone."
+          },
+          "fill": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+              },
+              "hex": {
+                "type": "string",
+                "pattern": "^#[0-9A-F]{6}$"
+              },
+              "teamColor": {
+                "type": "string",
+                "enum": [
+                  "main",
+                  "second",
+                  "accent"
+                ]
+              },
+              "requested": {
+                "type": "string",
+                "pattern": "^#[0-9A-F]{6}$",
+                "description": "The colour code the customer asked for (a code typed in the colour-code match), kept beside the palette colour it was matched to. Never printed: `id` and `hex` are the printed colour."
+              }
+            },
+            "required": [
+              "id",
+              "hex"
+            ],
+            "additionalProperties": false
+          },
+          "locked": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "group",
+          "pieceId",
+          "path",
+          "fill",
+          "locked"
+        ],
+        "additionalProperties": false
+      }
+    },
     "layers": {
       "type": "array",
       "items": {
@@ -124,6 +351,15 @@
               "kind": {
                 "type": "string",
                 "const": "text"
+              },
+              "role": {
+                "type": "string",
+                "enum": [
+                  "team-name",
+                  "player-name",
+                  "text",
+                  "sponsor"
+                ]
               },
               "pieceId": {
                 "type": "string",
@@ -166,12 +402,15 @@
               "rotation": {
                 "type": "number"
               },
+              "preset": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+              },
               "value": {
                 "type": "string",
-                "minLength": 1,
                 "maxLength": 200,
                 "pattern": "^[^\\p{Cc}]*$",
-                "description": "One line of text in any script, 1 to 200 UTF-16 code units. It must also be in Unicode NFC and hold a visible character, which this schema cannot check: validateDesign() from @fitmyoutfit/editor/design does."
+                "description": "One line of text in any script, at most 200 UTF-16 code units. It must also be in Unicode NFC, and hold a visible character unless the role is team-name or player-name (those may be empty), which this schema cannot check: validateDesign() from @fitmyoutfit/editor/design does."
               },
               "direction": {
                 "type": "string",
@@ -199,6 +438,19 @@
                   "hex": {
                     "type": "string",
                     "pattern": "^#[0-9A-F]{6}$"
+                  },
+                  "teamColor": {
+                    "type": "string",
+                    "enum": [
+                      "main",
+                      "second",
+                      "accent"
+                    ]
+                  },
+                  "requested": {
+                    "type": "string",
+                    "pattern": "^#[0-9A-F]{6}$",
+                    "description": "The colour code the customer asked for (a code typed in the colour-code match), kept beside the palette colour it was matched to. Never printed: `id` and `hex` are the printed colour."
                   }
                 },
                 "required": [
@@ -214,11 +466,58 @@
                   "center",
                   "end"
                 ]
+              },
+              "outline": {
+                "type": "object",
+                "properties": {
+                  "color": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+                      },
+                      "hex": {
+                        "type": "string",
+                        "pattern": "^#[0-9A-F]{6}$"
+                      },
+                      "teamColor": {
+                        "type": "string",
+                        "enum": [
+                          "main",
+                          "second",
+                          "accent"
+                        ]
+                      },
+                      "requested": {
+                        "type": "string",
+                        "pattern": "^#[0-9A-F]{6}$",
+                        "description": "The colour code the customer asked for (a code typed in the colour-code match), kept beside the palette colour it was matched to. Never printed: `id` and `hex` are the printed colour."
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "hex"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "width": {
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "maximum": 20
+                  }
+                },
+                "required": [
+                  "color",
+                  "width"
+                ],
+                "additionalProperties": false
               }
             },
             "required": [
               "id",
               "kind",
+              "role",
               "pieceId",
               "position",
               "size",
@@ -243,6 +542,13 @@
                 "type": "string",
                 "const": "number"
               },
+              "role": {
+                "type": "string",
+                "enum": [
+                  "player-number",
+                  "text"
+                ]
+              },
               "pieceId": {
                 "type": "string",
                 "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
@@ -283,6 +589,10 @@
               },
               "rotation": {
                 "type": "number"
+              },
+              "preset": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
               },
               "value": {
                 "type": "string",
@@ -307,6 +617,19 @@
                   "hex": {
                     "type": "string",
                     "pattern": "^#[0-9A-F]{6}$"
+                  },
+                  "teamColor": {
+                    "type": "string",
+                    "enum": [
+                      "main",
+                      "second",
+                      "accent"
+                    ]
+                  },
+                  "requested": {
+                    "type": "string",
+                    "pattern": "^#[0-9A-F]{6}$",
+                    "description": "The colour code the customer asked for (a code typed in the colour-code match), kept beside the palette colour it was matched to. Never printed: `id` and `hex` are the printed colour."
                   }
                 },
                 "required": [
@@ -322,11 +645,58 @@
                   "center",
                   "end"
                 ]
+              },
+              "outline": {
+                "type": "object",
+                "properties": {
+                  "color": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+                      },
+                      "hex": {
+                        "type": "string",
+                        "pattern": "^#[0-9A-F]{6}$"
+                      },
+                      "teamColor": {
+                        "type": "string",
+                        "enum": [
+                          "main",
+                          "second",
+                          "accent"
+                        ]
+                      },
+                      "requested": {
+                        "type": "string",
+                        "pattern": "^#[0-9A-F]{6}$",
+                        "description": "The colour code the customer asked for (a code typed in the colour-code match), kept beside the palette colour it was matched to. Never printed: `id` and `hex` are the printed colour."
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "hex"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "width": {
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "maximum": 20
+                  }
+                },
+                "required": [
+                  "color",
+                  "width"
+                ],
+                "additionalProperties": false
               }
             },
             "required": [
               "id",
               "kind",
+              "role",
               "pieceId",
               "position",
               "size",
@@ -349,6 +719,14 @@
               "kind": {
                 "type": "string",
                 "const": "logo"
+              },
+              "role": {
+                "type": "string",
+                "enum": [
+                  "crest",
+                  "sponsor",
+                  "graphic"
+                ]
               },
               "pieceId": {
                 "type": "string",
@@ -390,6 +768,10 @@
               },
               "rotation": {
                 "type": "number"
+              },
+              "preset": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
               },
               "asset": {
                 "type": "object",
@@ -429,6 +811,7 @@
             "required": [
               "id",
               "kind",
+              "role",
               "pieceId",
               "position",
               "size",
@@ -447,6 +830,14 @@
               "kind": {
                 "type": "string",
                 "const": "clipart"
+              },
+              "role": {
+                "type": "string",
+                "enum": [
+                  "crest",
+                  "sponsor",
+                  "graphic"
+                ]
               },
               "pieceId": {
                 "type": "string",
@@ -488,6 +879,10 @@
               },
               "rotation": {
                 "type": "number"
+              },
+              "preset": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
               },
               "asset": {
                 "type": "object",
@@ -528,6 +923,7 @@
             "required": [
               "id",
               "kind",
+              "role",
               "pieceId",
               "position",
               "size",
@@ -544,8 +940,13 @@
     "schemaVersion",
     "product",
     "palette",
+    "teamColors",
+    "teamName",
+    "samplePlayer",
+    "template",
     "zones",
     "fonts",
+    "shapes",
     "layers"
   ],
   "additionalProperties": false

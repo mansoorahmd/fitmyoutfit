@@ -5,7 +5,15 @@ import { createRoot } from "react-dom/client";
 import "@fontsource/oswald/700.css";
 import "@fontsource/graduate/400.css";
 import "@fontsource/noto-sans-arabic/700.css";
-import { colorRefSchema, validateFontCatalog, validateProductDefinition, type FontCatalog, type ProductDefinition } from "../src";
+import {
+  coloursCommonFirst,
+  paletteColourRef,
+  validateFontCatalog,
+  validatePalette,
+  validateProductDefinition,
+  type FontCatalog,
+  type ProductDefinition,
+} from "../src";
 import { Editor, type Swatch } from "./Editor";
 import { chooseProduct } from "./products";
 
@@ -30,19 +38,14 @@ async function fetchJson(url: string): Promise<unknown> {
   return response.json() as Promise<unknown>;
 }
 
-/** Reads the placeholder palette file: each colour must be a valid colour reference. */
+/** Reads the placeholder palette file (validated as a palette), common colours first. */
 function readPalette(json: unknown, product: ProductDefinition): Swatch[] {
-  const data = json as { id?: unknown; colors?: unknown };
-  if (data.id !== product.palette.id) {
-    throw new Error(`the palette file is "${String(data.id)}" but the product uses "${product.palette.id}"`);
+  const palette = validatePalette(json);
+  if (!palette.ok) throw new Error(palette.errors.map((e) => e.message).join("; "));
+  if (palette.value.id !== product.palette.id) {
+    throw new Error(`the palette file is "${palette.value.id}" but the product uses "${product.palette.id}"`);
   }
-  if (!Array.isArray(data.colors)) throw new Error("the palette file has no colours");
-  return data.colors.map((entry: unknown, i) => {
-    const { name, ...ref } = entry as { name?: unknown };
-    const parsed = colorRefSchema.safeParse(ref);
-    if (!parsed.success) throw new Error(`palette colour ${i} is not a valid colour reference`);
-    return { color: parsed.data, name: typeof name === "string" ? name : parsed.data.id };
-  });
+  return coloursCommonFirst(palette.value).map((c) => ({ color: paletteColourRef(c), name: c.name }));
 }
 
 function App() {
