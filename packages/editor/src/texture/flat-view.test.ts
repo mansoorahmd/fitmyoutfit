@@ -56,6 +56,8 @@ describe("the zone highlight (N8)", () => {
     // (The flat view strokes each piece's cut line in grey first.)
     const strokes = ctx.calls.filter((c) => c.op === "stroke").map((c) => (c as { style: string }).style).filter((s) => s !== "#333333");
     expect(strokes).toEqual(["rgba(255, 255, 255, 1)", ink, "rgba(255, 255, 255, 1)", ink]);
+    // A light veil over each sleeve, so the part lights up even where its edge is small on screen.
+    expect(ctx.calls.filter((c) => c.op === "fill" && (c as { style: string }).style === "rgba(255, 255, 255, 0.35)")).toHaveLength(2);
     const half = new RasterContext(layout.size, layout.size);
     drawPatternTexture(half, layout.product, design, { size: layout.size, mode: "flat", highlight: { zoneId: "sleeves", alpha: 0.5 } });
     expect(half.calls.some((c) => c.op === "stroke" && (c as { style: string }).style === `rgba(${HIGHLIGHT_INK}, 0.5)`)).toBe(true);
