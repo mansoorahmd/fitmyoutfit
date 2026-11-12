@@ -14,6 +14,11 @@
  * - When the line is wider than the box it is shrunk evenly to fit the box's
  *   width. It is never stretched, and never wraps.
  * - Number layers always read left to right (digits do, in Arabic too).
+ * - An outline (`outline`, `width` mm) is a stroke round the glyphs, twice
+ *   the width wide with round joins, drawn under the fill, so `width` mm show
+ *   outside the letters. The line then fits the box less twice the width, so
+ *   the outline stays inside the box too. Its width stays in mm when a long
+ *   line is shrunk.
  *
  * Logos and clipart are drawn as large as fits inside the box, keeping the
  * image's proportions, centred.
@@ -32,6 +37,8 @@ export interface LayerCanvasContext {
   fillStyle: string | CanvasGradient | CanvasPattern;
   strokeStyle: string | CanvasGradient | CanvasPattern;
   lineWidth: number;
+  lineJoin: CanvasLineJoin;
+  miterLimit: number;
   font: string;
   textAlign: CanvasTextAlign;
   textBaseline: CanvasTextBaseline;
@@ -49,6 +56,7 @@ export interface LayerCanvasContext {
   clip(): void;
   fillRect(x: number, y: number, width: number, height: number): void;
   fillText(text: string, x: number, y: number): void;
+  strokeText(text: string, x: number, y: number): void;
   measureText(text: string): { width: number };
   drawImage(image: CanvasImageSource, dx: number, dy: number, dw: number, dh: number): void;
   moveTo(x: number, y: number): void;
@@ -76,15 +84,41 @@ export function layerDirection(layer: TextLike): ResolvedDirection {
   return layer.kind === "number" ? "ltr" : resolveTextDirection(layer.value, layer.direction);
 }
 
+/** The width a line may take in its box: the box less the outline on both ends. */
+export function textRoom(layer: Pick<TextLike, "size" | "outline">): number {
+  const outline = layer.outline ? 2 * layer.outline.width : 0;
+  return Math.max(layer.size.width * 0.05, layer.size.width - outline);
+}
+
 /** Where and how big a line is drawn in its box, given its measured width at `fontSize`. */
 export function textLayout(layer: TextLike, measuredWidth: number): TextLayout {
   const direction = layerDirection(layer);
   const textAlign = physicalAlign(layer.align, direction);
-  const width = layer.size.width;
+  const width = textRoom(layer);
   const scale = measuredWidth > width && measuredWidth > 0 ? width / measuredWidth : 1;
   const edge = width / 2 / scale;
   const x = textAlign === "left" ? -edge : textAlign === "right" ? edge : 0;
   return { direction, textAlign, scale, x };
+}
+
+/**
+ * Whether a text or number layer was shrunk to fit its box (N12): the even
+ * shrink applied (1 when the line fits), for the interface to say "Long names
+ * get smaller to fit" only while it happens.
+ */
+export interface TextFit {
+  layerId: string;
+  role: TextLike["role"];
+  /** The even shrink, 0 to 1 (1: drawn at its font size). */
+  scale: number;
+  /** True when the line was shrunk (scale below 1). */
+  shrunk: boolean;
+}
+
+/** The fit of a line measured at its font size. */
+export function textFit(layer: TextLike, measuredWidth: number): TextFit {
+  const scale = textLayout(layer, measuredWidth).scale;
+  return { layerId: layer.id, role: layer.role, scale, shrunk: scale < 1 };
 }
 
 export interface DrawLayersOptions {
@@ -101,6 +135,8 @@ export interface DrawLayersResult {
   missingImages: string[];
   /** Ids of layers not drawn because their piece is not in the product. */
   skipped: string[];
+  /** For every text and number layer drawn, whether it was shrunk to fit (N12). */
+  textFits: TextFit[];
 }
 
 const PLACEHOLDER_FILL = "rgba(127, 127, 127, 0.35)";
@@ -117,7 +153,7 @@ export function drawLayers(
   pieceTransform: (piece: PatternPiece) => [number, number, number, number, number, number],
   options: DrawLayersOptions = {},
 ): DrawLayersResult {
-  const result: DrawLayersResult = { layers: 0, missingImages: [], skipped: [] };
+  const result: DrawLayersResult = { layers: 0, missingImages: [], skipped: [], textFits: [] };
   for (const layer of design.layers) {
     const piece = pieces.get(layer.pieceId);
     if (!piece) {
@@ -132,7 +168,7 @@ export function drawLayers(
     ctx.translate(layer.position.x, layer.position.y);
     ctx.rotate((layer.rotation * Math.PI) / 180);
     if (layer.kind === "text" || layer.kind === "number") {
-      drawTextLine(ctx, design, layer);
+      result.textFits.push(drawTextLine(ctx, design, layer));
     } else {
       const image = options.images?.(layer.asset) ?? null;
       const size = logoPrintSize(layer.size, layer.asset.width, layer.asset.height);
@@ -169,13 +205,24 @@ export function drawLayers(
   return result;
 }
 
-function drawTextLine(ctx: LayerCanvasContext, design: DesignDocument, layer: TextLike): void {
+function drawTextLine(ctx: LayerCanvasContext, design: DesignDocument, layer: TextLike): TextFit {
   ctx.font = layerFont(design, layer);
   ctx.direction = layerDirection(layer);
   ctx.textBaseline = "middle";
-  const layout = textLayout(layer, ctx.measureText(layer.value).width);
+  const measured = ctx.measureText(layer.value).width;
+  const layout = textLayout(layer, measured);
   ctx.textAlign = layout.textAlign;
   ctx.scale(layout.scale, layout.scale);
+  if (layer.outline && layer.value.length > 0) {
+    // A stroke is centred on the glyph edge: twice the width, so `width` mm show outside the
+    // letters once the fill covers the inner half. Kept in mm when the line is shrunk.
+    ctx.lineJoin = "round";
+    ctx.miterLimit = 2;
+    ctx.strokeStyle = layer.outline.color.hex;
+    ctx.lineWidth = (2 * layer.outline.width) / layout.scale;
+    ctx.strokeText(layer.value, layout.x, 0);
+  }
   ctx.fillStyle = layer.fill.hex;
   ctx.fillText(layer.value, layout.x, 0);
+  return { layerId: layer.id, role: layer.role, scale: layout.scale, shrunk: layout.scale < 1 };
 }
