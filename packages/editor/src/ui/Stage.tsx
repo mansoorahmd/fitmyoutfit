@@ -5,8 +5,10 @@
  * reset), and the model's credit line. The garment is framed in the free
  * area above (or beside) the panel by the canvas itself (`viewInsets`).
  */
-import { useEffect, useState, type ReactNode, type Ref } from "react";
-import { DesignCanvas, type CameraInfo, type DesignCanvasHandle, type DesignCanvasProps } from "../react/DesignCanvas.js";
+import { useEffect, useMemo, useState, type ReactNode, type Ref } from "react";
+import { DesignCanvas, type CameraInfo, type DesignCanvasHandle, type DesignCanvasProps, type SelectionGeometry } from "../react/DesignCanvas.js";
+import { createBus } from "./handles.js";
+import { SelectionOverlay, type GesturePhase } from "./SelectionOverlay.js";
 import type { ViewInsets } from "../react/camera.js";
 import type { DesignDocument, ProductDefinition } from "../design/schema.js";
 import type { AssetUrlResolver } from "../react/asset-images.js";
@@ -73,6 +75,12 @@ export interface StageProps {
    * short); or none (a phone while typing: the keyboard leaves room only for the item being typed).
    */
   viewControls: "full" | "reset-only" | "none";
+  /** The selected item's handles (3D only): resize and turn gestures, and "Turn to edit". */
+  onResize?: (phase: GesturePhase, factor: number) => void;
+  onRotate?: (phase: GesturePhase, degrees: number, free: boolean) => void;
+  onTurnTo?: () => void;
+  /** Handles hidden (a phone while typing). */
+  handlesHidden?: boolean;
 }
 
 export function Stage({ canvasRef, ...props }: StageProps) {
@@ -85,6 +93,8 @@ export function Stage({ canvasRef, ...props }: StageProps) {
   const hintShown = Boolean(props.hint) && props.viewControls !== "none";
   const canvasInsets = { top: (props.credit && mode === "3d" ? CREDIT_ROOM : 0) + (hintShown && mode === "3d" ? HINT_ROOM : 0), right: insets.right, bottom: insets.bottom + (mode === "3d" && props.viewControls === "full" ? VIEW_ROW : 0), left: insets.left };
   const sides = ["front", "back", "left", "right"] as const;
+  // The selected item's box on the screen, from the canvas to the overlay (only the overlay re-renders per frame).
+  const bus = useMemo(() => createBus<SelectionGeometry | null>(null), []);
   return (
     <div className="fmo-stage" data-tone={props.tone} data-testid="stage" style={props.credit && mode === "3d" ? ({ "--fmo-credit-room": `${CREDIT_ROOM}px` } as React.CSSProperties) : undefined} onPointerDownCapture={props.onStagePointerDown}>
       <div className="fmo-stage-deep" />
@@ -92,7 +102,17 @@ export function Stage({ canvasRef, ...props }: StageProps) {
       <div className="fmo-stage-shadow" hidden={mode !== "3d"} style={{ bottom: `calc(${canvasInsets.bottom}px + (100% - ${canvasInsets.bottom + canvasInsets.top}px) * 0.13)`, left: `calc((100% - ${insets.right}px) / 2)` }} aria-hidden="true" />
       {mode === "3d" ? (
         <div className="fmo-canvas" tabIndex={0} role="img" aria-label={props.description} onKeyDown={props.onStageKey} data-testid="stage-canvas">
-          <DesignCanvas {...props.canvasProps} ref={canvasRef} design={props.design} product={props.product} viewInsets={canvasInsets} assetUrl={props.assetUrl} style={{ background: "transparent", minHeight: 0 }} errorFallback={null} />
+          <DesignCanvas {...props.canvasProps} ref={canvasRef} design={props.design} product={props.product} viewInsets={canvasInsets} assetUrl={props.assetUrl} style={{ background: "transparent", minHeight: 0 }} errorFallback={null} onSelectionGeometry={bus.emit} />
+          <SelectionOverlay
+            bus={bus}
+            wording={wording}
+            insets={insets}
+            top={canvasInsets.top}
+            onResize={props.onResize ?? (() => undefined)}
+            onRotate={props.onRotate ?? (() => undefined)}
+            onTurnTo={props.onTurnTo ?? (() => undefined)}
+            hidden={props.handlesHidden}
+          />
         </div>
       ) : (
         <div className="fmo-canvas fmo-flat-host" style={{ bottom: insets.bottom, right: insets.right }}>

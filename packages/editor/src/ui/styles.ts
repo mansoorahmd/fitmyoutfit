@@ -117,6 +117,20 @@ export const EDITOR_CSS = /* css */ `
 .fmo-canvas { position: absolute; inset: 0; outline: none; }
 .fmo-canvas:focus-visible { outline: 2px solid var(--fmo-focus); outline-offset: -4px; }
 .fmo-canvas > div { background: transparent !important; }
+.fmo-overlay { position: absolute; inset: 0; pointer-events: none; z-index: 1; touch-action: none; }
+.fmo-overlay > svg { position: absolute; inset: 0; overflow: visible; touch-action: none; }
+.fmo-box-halo, .fmo-stem-halo { fill: none; stroke: #fff; stroke-width: 3.5; stroke-linejoin: round; }
+.fmo-box-line, .fmo-stem { fill: none; stroke: var(--fmo-ink); stroke-width: 1.5; stroke-linejoin: round; }
+.fmo-handle { fill: #fff; stroke: var(--fmo-ink); stroke-width: 2; }
+.fmo-hit { fill: transparent; stroke: none; pointer-events: all; touch-action: none; }
+.fmo-hit[data-cursor="nwse"] { cursor: nwse-resize; }
+.fmo-hit[data-cursor="nesw"] { cursor: nesw-resize; }
+.fmo-hit-turn { cursor: grab; }
+.fmo-guide-halo { fill: none; stroke: #fff; stroke-width: 3; stroke-linecap: round; }
+.fmo-guide-line { fill: none; stroke: var(--fmo-focus); stroke-width: 1.5; stroke-dasharray: 5 4; stroke-linecap: round; }
+.fmo-area .fmo-guide-line { stroke: var(--fmo-ink-muted); stroke-dasharray: 3 4; }
+.fmo-area .fmo-guide-halo { stroke-width: 2.5; opacity: 0.8; }
+.fmo-turn-to { position: absolute; transform: translateX(-50%); pointer-events: auto; box-shadow: 0 2px 8px rgb(11 21 48 / 0.16); font-weight: 600; }
 .fmo-stage-top { position: absolute; inset-inline: 0; top: var(--fmo-credit-room, 0px); display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px 12px 0; pointer-events: none; z-index: 2; }
 .fmo-stage-top > * { pointer-events: auto; }
 .fmo-status { max-width: min(92%, 520px); display: flex; align-items: center; gap: 8px; min-height: 36px; padding: 6px 6px 6px 14px; border-radius: 18px; background: var(--fmo-inverse); color: var(--fmo-on-inverse); font-size: 14px; box-shadow: 0 2px 10px rgb(11 21 48 / 0.18); }

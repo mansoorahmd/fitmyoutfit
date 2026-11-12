@@ -16,6 +16,10 @@ import type { Palette } from "../design/palette.js";
 import type { DesignDocument, ProductDefinition } from "../design/schema.js";
 import type { Template } from "../design/template.js";
 import { updateLayer } from "../design/edit.js";
+import { scaleLayer } from "../design/placement.js";
+import type { Layer } from "../design/schema.js";
+import { snapAngle } from "./handles.js";
+import type { GesturePhase } from "./SelectionOverlay.js";
 import { layerSide } from "../design/roles.js";
 import type { EditLabel } from "../state/history.js";
 import { useDesignHistory } from "../react/useDesignHistory.js";
@@ -590,13 +594,75 @@ export function EditorShell(props: EditorShellProps) {
 
   const selectOnModel = useCallback(
     (layerId: string | null) => {
+      // Pressing the item that is already selected (to drag it) changes nothing: no tool opens, the camera keeps still.
+      if (layerId === selectedId) return;
       setSelectedId(layerId);
       const layer = layerId ? designRef.current.layers.find((l) => l.id === layerId) : undefined;
       if (!layer || startCard) return;
       const next = toolForLayer(layer);
       if (next !== activeTool && tools.includes(next)) openTool(next, detent === "expanded" ? "normal" : detent, { turn: false });
     },
-    [setSelectedId, startCard, activeTool, tools, openTool, detent],
+    [selectedId, setSelectedId, startCard, activeTool, tools, openTool, detent],
+  );
+
+  // The handles (5.2): a corner scales the item evenly about its centre, the turn handle turns it (snapping at
+  // 0, 15, 45 and 90 degrees unless Alt is held). Each gesture is one undo step.
+  const gestureStart = useRef<Layer | null>(null);
+  const onResize = useCallback(
+    (phase: GesturePhase, factor: number) => {
+      const id = selectedId;
+      if (!id) return;
+      if (phase === "start") {
+        gestureStart.current = designRef.current.layers.find((l) => l.id === id) ?? null;
+        history.begin("resize");
+        return;
+      }
+      const start = gestureStart.current;
+      if (!start) return;
+      if (phase === "cancel") {
+        history.cancel();
+        gestureStart.current = null;
+        return;
+      }
+      try {
+        history.preview((d) => updateLayer(d, id, scaleLayer(start, factor), { product }));
+      } catch (error) {
+        console.error("[editor] resize refused:", error);
+      }
+      if (phase === "end") {
+        history.end();
+        gestureStart.current = null;
+      }
+    },
+    [selectedId, history, product],
+  );
+  const onRotate = useCallback(
+    (phase: GesturePhase, degrees: number, free: boolean) => {
+      const id = selectedId;
+      if (!id) return;
+      if (phase === "start") {
+        gestureStart.current = designRef.current.layers.find((l) => l.id === id) ?? null;
+        history.begin("rotate");
+        return;
+      }
+      const start = gestureStart.current;
+      if (!start) return;
+      if (phase === "cancel") {
+        history.cancel();
+        gestureStart.current = null;
+        return;
+      }
+      try {
+        history.preview((d) => updateLayer(d, id, { rotation: snapAngle(start.rotation + degrees, free).angle }, { product }));
+      } catch (error) {
+        console.error("[editor] turn refused:", error);
+      }
+      if (phase === "end") {
+        history.end();
+        gestureStart.current = null;
+      }
+    },
+    [selectedId, history, product],
   );
 
   const onLayerDrag = useCallback(
@@ -742,6 +808,7 @@ export function EditorShell(props: EditorShellProps) {
               selectedLayerId: selectedId,
               onSelectLayer: selectOnModel,
               dragOnlySelected: "touch",
+              outlineSelected: false,
               onLayerDrag,
               pickZones: activeTool === "colours" && !startCard,
               onZoneTap,
@@ -790,6 +857,10 @@ export function EditorShell(props: EditorShellProps) {
             garment={garmentMeshes}
             stageWidth={stageWidth}
             onStagePointerDown={dismissHint}
+            onResize={onResize}
+            onRotate={onRotate}
+            onTurnTo={() => selectedId && canvas.current?.focusOn(selectedId)}
+            handlesHidden={typing}
             viewControls={layout === "compact" && typing ? "none" : layout === "compact" && panelOpen && detent === "expanded" ? "reset-only" : "full"}
           />
           {layout !== "wide" && (start ?? panel)}

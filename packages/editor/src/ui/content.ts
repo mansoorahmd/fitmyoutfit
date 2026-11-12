@@ -183,6 +183,7 @@ export const EDITOR_WORDING = {
   /** Selection and the list (`selection`). Mostly E3b. */
   selection: {
     delete: "Delete", // W-ED110
+    turnToEdit: "Turn to edit", // W-ED112
     hint: "Drag to turn. Tap something to change it.", // W-ED116
     hintPointer: "Drag to turn. Click something to change it.", // W-ED116
     onThisKit: "On this kit", // W-ED130
