@@ -631,9 +631,15 @@ describe("buildMedusaConfig", () => {
 })
 
 describe("buildModules", () => {
-  it("combines redis, file and payment modules", () => {
+  it("combines redis, file and payment modules, and our own", () => {
     const modules = buildModules({ ...s3Env, REDIS_URL: "redis://x:6379" })
-    expect(modules).toHaveLength(5)
+    expect(modules).toHaveLength(6)
+  })
+
+  it("always registers the cash-collection record's module", () => {
+    for (const env of [{}, { ...s3Env, REDIS_URL: "redis://x:6379" }]) {
+      expect(buildModules(env)).toContainEqual({ resolve: "./src/modules/cash-collection" })
+    }
   })
 
   it("always registers cash on delivery so that Medusa names it pp_cod_cod", () => {

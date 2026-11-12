@@ -419,8 +419,21 @@ export function buildPaymentModules(): ModuleEntry[] {
   ]
 }
 
+/**
+ * Our own modules, each with its own tables: the cash-collection record of an order
+ * (src/modules/cash-collection). The path is relative to the directory Medusa runs in, as above.
+ */
+export function buildOwnModules(): ModuleEntry[] {
+  return [{ resolve: "./src/modules/cash-collection" }]
+}
+
 export function buildModules(env: Env): ModuleEntry[] {
-  return [...buildRedisModules(env), ...buildFileModules(env), ...buildPaymentModules()]
+  return [
+    ...buildRedisModules(env),
+    ...buildFileModules(env),
+    ...buildPaymentModules(),
+    ...buildOwnModules(),
+  ]
 }
 
 /**

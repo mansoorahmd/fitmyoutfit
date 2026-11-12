@@ -7,12 +7,14 @@
  *   { "delivery_promise": { "date": "2026-11-26", "days": 15, "based_on": "2026-11-11", "applies": "standard" } }
  *
  * Before answering it makes sure the order keeps its promise
- * (workflows/delivery-promise/keep-order-delivery-promise.ts): a valid kept promise is returned as
- * it is; an order without one (the order-placed subscriber has not run yet, a converted draft
- * order, an order placed before the promise was kept) gets it now, worked out from the order's
- * creation date in Asia/Karachi. When none is kept and the delivery-days settings are missing or
- * invalid, it answers HTTP 500 naming the key, like the other checkout routes: it never invents
- * a date. An unknown order (or a draft order): 404.
+ * (workflows/delivery-promise/keep-order-delivery-promise.ts): a kept promise that is the order's
+ * own (based on the order's creation date in Asia/Karachi, for the date that applies, and not a
+ * copy of what its cart carried) is returned as it is, also when the days setting changed since;
+ * any other order (no promise yet because the order-placed subscriber has not run, a converted
+ * draft order, an order placed before the promise was kept, or a promise copied from a cart) gets
+ * the server's answer now, worked out from the order's creation date. When that is needed and the
+ * delivery-days settings are missing or invalid, it answers HTTP 500 naming the key, like the other
+ * checkout routes: it never invents a date. An unknown order (or a draft order): 404.
  *
  * Needs the publishable key, like every store route. As in Medusa's own GET /store/orders/:id,
  * the order id is what gives access.
@@ -25,6 +27,6 @@ import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { keepOrderDeliveryPromise } from "../../../../../workflows/delivery-promise/keep-order-delivery-promise"
 
 export async function GET(req: MedusaRequest, res: MedusaResponse): Promise<void> {
-  const promise = await keepOrderDeliveryPromise(req.scope, req.params.id, "any_valid")
+  const promise = await keepOrderDeliveryPromise(req.scope, req.params.id, "order_own")
   res.json({ delivery_promise: promise })
 }

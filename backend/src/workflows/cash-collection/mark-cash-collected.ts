@@ -1,52 +1,43 @@
 /**
- * Records that the courier collected the cash for a cash-on-delivery order: captures the payment
- * through Medusa's own capturePaymentWorkflow (the one the admin's "Capture payment" button runs,
- * so the capture, the order transaction and the `payment.captured` event are Medusa's), then keeps
- * the courier's slip reference and the time in the order's metadata.
+ * Records that the courier collected the cash for a cash-on-delivery order, in two separate
+ * steps, each finished before the next starts:
  *
- * Capture first, then write:
- * 1. the check (lib/rules/cash-collection.ts): cash on delivery, no slip recorded yet, the whole
- *    amount open (capture it) or already captured (record the slip only), a valid reference;
- * 2. the capture, only when the payment is still open. Medusa locks the payment's row while it
- *    captures and refuses a capture beyond the amount, so of several presses at once exactly one
- *    capture is made, on any number of server instances. A press whose capture fails stops here:
- *    it writes nothing and undoes nothing. (Medusa answers a capture of a payment that is already
- *    fully captured with success and makes no new capture, so a press that checked just before
- *    another press's capture went through can reach step 3 without having captured; step 3
- *    still lets only one press write);
- * 3. the reference, written only while the order has none (an atomic compare-and-set,
- *    ../order-metadata/write-order-metadata.ts). Of several presses exactly one writes; the
- *    others are told it is already recorded. Nothing is ever emptied again.
+ * 1. The check (lib/rules/cash-collection.ts): cash on delivery, no record yet, a valid
+ *    reference, and what to capture: the whole amount, what is still open after a part was
+ *    captured in Medusa's own payment section, or nothing when it is fully captured already.
+ * 2. The capture, when needed, as its own run of Medusa's capturePaymentWorkflow (the one the
+ *    admin's "Capture payment" button runs, so the capture, the order's payment transaction and
+ *    the `payment.captured` event are Medusa's). Medusa locks the payment's row while it captures
+ *    and refuses a capture beyond the amount, so of several presses at once exactly one capture is
+ *    made, on any number of server instances. (A capture asked for on a payment that is already
+ *    fully captured succeeds without a new capture, so a press that checked just before another
+ *    press's capture went through still reaches step 3.) A press whose capture fails stops here.
+ * 3. The record: one insert into our own table (modules/cash-collection), which allows one record
+ *    per order. Of several presses exactly one inserts; the others are told it is already
+ *    recorded. If the insert fails, the capture of step 2 is a finished run and stays exactly as
+ *    Medusa left it (payment, capture and the order's payment transaction): the order is then
+ *    "captured without slip", and staff record the reference again without a second capture.
  *
- * If the write fails after the capture, the order is "captured without slip", and staff record
- * the reference again; it is not captured a second time.
+ * Not a Medusa workflow on purpose: a workflow would undo the capture's order transaction when
+ * the record fails, while the capture itself stays (QA's eighth review, N1).
  *
- * The lock around it (Medusa's locking module, in memory unless a provider is configured) only
- * makes a second press in the same process wait for the first; nothing depends on it.
- *
- * Thin: the rule is in lib/rules/cash-collection.ts, the loading in ./load-cash-collection.ts.
+ * Errors carry a sentence for staff (lib/rules/cash-collection.ts), never SQL, a stack trace or
+ * an internal id; the underlying error is logged. The admin route passes on only errors made here
+ * (isStaffMessage) and replaces any other with a general sentence.
  */
-import { MedusaError } from "@medusajs/framework/utils"
+import type { MedusaContainer } from "@medusajs/framework/types"
+import { ContainerRegistrationKeys, MedusaError } from "@medusajs/framework/utils"
+import { capturePaymentWorkflow } from "@medusajs/medusa/core-flows"
 import {
-  createStep,
-  createWorkflow,
-  StepResponse,
-  transform,
-  when,
-  WorkflowResponse,
-} from "@medusajs/framework/workflows-sdk"
-import {
-  acquireLockStep,
-  capturePaymentWorkflow,
-  releaseLockStep,
-} from "@medusajs/medusa/core-flows"
-import {
-  cashCollectedMetadata,
-  COD_SLIP_REFERENCE_KEY,
+  captureFailureMessage,
   decideCashCollection,
+  RECORD_FAILURE_MESSAGE,
+  refusalMessage,
 } from "../../lib/rules/cash-collection"
-import { addOrderMetadataUnlessSet } from "../order-metadata/write-order-metadata"
-import { loadCashCollection } from "./load-cash-collection"
+import { CASH_COLLECTION_MODULE } from "../../modules/cash-collection/constants"
+import type CashCollectionModuleService from "../../modules/cash-collection/service"
+import { loadCashCollection, readCashCollectionRecord } from "./load-cash-collection"
+import { staffError } from "./staff-error"
 
 export type MarkCashCollectedInput = {
   order_id: string
@@ -56,82 +47,68 @@ export type MarkCashCollectedInput = {
   recorded_by: string
 }
 
-export type MarkCashCollectedResult = {
-  order_id: string
-  /** False when another press recorded a slip reference first. */
-  recorded: boolean
+function logFailure(container: MedusaContainer, what: string, orderId: string, error: unknown) {
+  container
+    .resolve(ContainerRegistrationKeys.LOGGER)
+    .error(`Cash collection, order ${orderId}: ${what}: ${(error as Error)?.message ?? error}`)
 }
 
-/** Step ids, so the route can tell which step failed. */
-export const DECIDE_CASH_COLLECTION_STEP = "decide-cash-collection"
-export const RECORD_CASH_COLLECTED_STEP = "record-cash-collected"
+/** Captures, records, and returns nothing: the caller reads the new state. Throws staffError. */
+export async function markCashCollected(
+  container: MedusaContainer,
+  input: MarkCashCollectedInput
+): Promise<void> {
+  const orderId = input.order_id
 
-/** Seconds a second press in the same process waits for the first one, and the lock's lifetime. */
-const LOCK_WAIT_SECONDS = 15
-const LOCK_TTL_SECONDS = 120
+  // 1. The check.
+  const loaded = await loadCashCollection(container, orderId)
+  const decision = decideCashCollection(loaded.state, input.slip_reference)
+  if (!decision.ok) {
+    throw staffError(
+      decision.reason === "invalid_reference"
+        ? MedusaError.Types.INVALID_DATA
+        : MedusaError.Types.NOT_ALLOWED,
+      decision.message
+    )
+  }
 
-const decideCashCollectionStep = createStep(
-  DECIDE_CASH_COLLECTION_STEP,
-  async (input: { order_id: string; slip_reference: unknown }, { container }) => {
-    const { state } = await loadCashCollection(container, input.order_id)
-    const decision = decideCashCollection(state, input.slip_reference)
-    if (!decision.ok) {
-      throw new MedusaError(
-        decision.reason === "invalid_reference"
-          ? MedusaError.Types.INVALID_DATA
-          : MedusaError.Types.NOT_ALLOWED,
-        decision.message
+  // 2. The capture, as its own finished run.
+  if (decision.capture !== "none") {
+    const amount = decision.capture === "remainder" ? loaded.remainingOf(decision.paymentId) : undefined
+    const { errors } = await capturePaymentWorkflow(container).run({
+      input: {
+        payment_id: decision.paymentId,
+        captured_by: input.recorded_by,
+        ...(amount === undefined ? {} : { amount }),
+      },
+      throwOnError: false,
+    })
+    if (errors?.length) {
+      logFailure(container, "the capture failed", orderId, errors[0]?.error)
+      const after = await loadCashCollection(container, orderId)
+      const lostToAnotherPress =
+        after.state.stage === "recorded" || after.state.stage === "captured_without_slip"
+      throw staffError(
+        lostToAnotherPress ? MedusaError.Types.NOT_ALLOWED : MedusaError.Types.UNEXPECTED_STATE,
+        captureFailureMessage(after.state)
       )
     }
-    return new StepResponse({
-      payment_id: decision.paymentId,
+  }
+
+  // 3. The record: one row per order, guaranteed by the database.
+  const service = container.resolve<CashCollectionModuleService>(CASH_COLLECTION_MODULE)
+  try {
+    await service.createCashCollections({
+      order_id: orderId,
       slip_reference: decision.slipReference,
-      capture_needed: decision.captureNeeded,
+      collected_at: new Date(),
     })
+  } catch (error) {
+    if (await readCashCollectionRecord(container, orderId).catch(() => null)) {
+      // Another press recorded it first (the unique index refused this one).
+      throw staffError(MedusaError.Types.NOT_ALLOWED, refusalMessage("already_recorded"))
+    }
+    logFailure(container, "the payment is captured but the record could not be saved", orderId, error)
+    throw staffError(MedusaError.Types.UNEXPECTED_STATE, RECORD_FAILURE_MESSAGE)
   }
-)
-
-/** Writes the reference and the time while the order has no reference. No compensation. */
-const recordCashCollectedStep = createStep(
-  RECORD_CASH_COLLECTED_STEP,
-  async (input: { order_id: string; slip_reference: string }, { container }) => {
-    const recorded = await addOrderMetadataUnlessSet(
-      container,
-      input.order_id,
-      COD_SLIP_REFERENCE_KEY,
-      cashCollectedMetadata({ slipReference: input.slip_reference, collectedAt: new Date() })
-    )
-    return new StepResponse({ recorded })
-  }
-)
-
-export const markCashCollectedWorkflow = createWorkflow(
-  "mark-cash-collected",
-  (input: MarkCashCollectedInput) => {
-    const lockKey = transform({ input }, ({ input }) => `cash-collection:${input.order_id}`)
-    acquireLockStep({ key: lockKey, timeout: LOCK_WAIT_SECONDS, ttl: LOCK_TTL_SECONDS })
-
-    const decision = decideCashCollectionStep({
-      order_id: input.order_id,
-      slip_reference: input.slip_reference,
-    })
-    when({ decision }, ({ decision }) => decision.capture_needed).then(() => {
-      const captureInput = transform({ decision, input }, ({ decision, input }) => ({
-        payment_id: decision.payment_id,
-        captured_by: input.recorded_by,
-      }))
-      capturePaymentWorkflow.runAsStep({ input: captureInput })
-    })
-    const record = recordCashCollectedStep({
-      order_id: input.order_id,
-      slip_reference: decision.slip_reference,
-    })
-
-    releaseLockStep({ key: lockKey })
-    const result = transform({ input, record }, ({ input, record }): MarkCashCollectedResult => ({
-      order_id: input.order_id,
-      recorded: record.recorded,
-    }))
-    return new WorkflowResponse(result)
-  }
-)
+}

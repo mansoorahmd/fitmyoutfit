@@ -2,12 +2,14 @@
  * Order page panel: "Cash on delivery". Shown only on an order paid by cash on delivery.
  *
  * - Not collected: a field for the courier's slip reference and a button "Mark cash as
- *   collected", which captures the payment (Medusa's own payment flow) and then keeps the
- *   reference on the order (POST /admin/orders/:id/cash-collection).
+ *   collected", which captures the payment (Medusa's own payment flow) and then records the
+ *   reference (POST /admin/orders/:id/cash-collection).
+ * - Partly captured (part of the amount was captured in Medusa's Payments section): the same
+ *   field and button, which capture the rest and record the reference, because the courier's
+ *   slip is for the whole order.
  * - Captured without slip (captured with Medusa's own "Capture payment" button, or the reference
  *   could not be saved after the capture): the same field, with "Record slip reference"; the
  *   payment is not captured again.
- * - Partly captured: no field; the rest must be captured in the Payments section first.
  * - Collected: the reference, when it was recorded, and who captured the payment and when (from
  *   Medusa's own capture record).
  *
@@ -47,7 +49,7 @@ const REASONS: Record<string, string> = {
 
 const BADGES: Record<Stage, { label: string; color: "green" | "orange" | "red" | "grey" }> = {
   not_collected: { label: "Not collected", color: "orange" },
-  partly_captured: { label: "Partly captured", color: "red" },
+  partly_captured: { label: "Partly captured", color: "orange" },
   captured_without_slip: { label: "Captured, no slip", color: "orange" },
   recorded: { label: "Collected", color: "green" },
   unavailable: { label: "Not collected", color: "grey" },
@@ -81,6 +83,14 @@ function formatAmount(amount: number | null, currencyCode: string): string {
     return "-"
   }
   return `${currencyCode.toUpperCase()} ${amount.toLocaleString("en-GB")}`
+}
+
+/** What is still open of the payment, for the text only (the backend captures the exact rest). */
+function remaining(state: CashCollection): number | null {
+  if (state.amount === null || state.captured_amount === null) {
+    return null
+  }
+  return Math.max(0, Math.round((state.amount - state.captured_amount) * 100) / 100)
 }
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
@@ -156,24 +166,24 @@ const CashOnDeliveryCollectedWidget = ({ data: order }: DetailWidgetProps<AdminO
           {capturedBy ? <Row label="Captured by">{capturedBy}</Row> : null}
           {state.captured_at ? <Row label="Captured">{formatDate(state.captured_at)}</Row> : null}
         </div>
-      ) : state.stage === "partly_captured" ? (
-        <div className="flex flex-col gap-y-2 px-6 py-4">
-          <Text size="small" className="text-ui-fg-subtle">
-            Only part of this payment is captured. Capture the rest in the Payments section
-            (Capture payment), then record the courier slip reference here.
-          </Text>
-          <Row label="Captured">
-            {formatAmount(state.captured_amount, order.currency_code)} of{" "}
-            {formatAmount(state.amount, order.currency_code)}
-          </Row>
-        </div>
       ) : state.can_record ? (
         <form className="flex flex-col gap-y-3 px-6 py-4" onSubmit={submit}>
           <Text size="small" className="text-ui-fg-subtle">
-            {state.capture_needed
-              ? "When the courier hands over the slip for this order, enter its reference. This captures the payment."
-              : "The payment is already captured, but no courier slip reference is recorded. Enter it here; the payment is not captured again."}
+            {state.stage === "partly_captured"
+              ? `Part of this payment is already captured. When the courier hands over the slip for this order, enter its reference. This captures the remaining ${formatAmount(
+                  remaining(state),
+                  order.currency_code
+                )}.`
+              : state.capture_needed
+                ? "When the courier hands over the slip for this order, enter its reference. This captures the payment."
+                : "The payment is already captured, but no courier slip reference is recorded. Enter it here; the payment is not captured again."}
           </Text>
+          {state.stage === "partly_captured" ? (
+            <Row label="Captured">
+              {formatAmount(state.captured_amount, order.currency_code)} of{" "}
+              {formatAmount(state.amount, order.currency_code)}
+            </Row>
+          ) : null}
           {!state.capture_needed && capturedBy ? (
             <Row label="Captured by">
               {capturedBy}, {formatDate(state.captured_at)}
