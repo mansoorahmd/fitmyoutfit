@@ -16,6 +16,7 @@ export * from "./palette.js";
 export * from "./team-colours.js";
 export * from "./roles.js";
 export * from "./readability.js";
+export * from "./template.js";
 export * from "./json-schema.js";
 export * from "./svg-path.js";
 export * from "./pattern.js";
