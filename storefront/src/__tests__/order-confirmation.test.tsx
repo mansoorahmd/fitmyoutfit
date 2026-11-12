@@ -32,11 +32,11 @@ import OrderCompletedTemplate from "@modules/order/templates/order-completed-tem
 
 const plain = (s: string | null | undefined) => s?.replace(/\s/g, " ")
 
-const renderPk = (signedIn = false) =>
+const renderPk = (ownOrder = false) =>
   render(
     <OrderCompletedTemplate
       view={orderConfirmationView({ order: orderPk, promise: parseOrderPromise(orderPromisePk), countryName: "Pakistan" })}
-      signedIn={signedIn}
+      ownOrder={ownOrder}
     />
   )
 
@@ -100,14 +100,14 @@ describe("order confirmation (05, 7)", () => {
     expect(screen.getByTestId("back-to-store")).toHaveAttribute("href", "/pk")
   })
 
-  it("signed in: See all your orders instead", () => {
+  it("the signed-in customer's own order: See all your orders instead", () => {
     renderPk(true)
     expect(screen.queryByRole("link", { name: "Create an account" })).toBeNull()
     expect(screen.getByRole("link", { name: "See all your orders" })).toHaveAttribute("href", "/pk/account/orders")
   })
 
   it("United Kingdom: GBP, 'Included' for the duty-paid line, and the test payment line", () => {
-    render(<OrderCompletedTemplate view={orderConfirmationView({ order: orderGb, promise: null })} signedIn={false} />)
+    render(<OrderCompletedTemplate view={orderConfirmationView({ order: orderGb, promise: null })} ownOrder={false} />)
     expect(plain(screen.getByTestId("order-delivery").textContent)).toBe("Shipping & duties includedIncluded")
     expect(plain(screen.getByTestId("order-total").textContent)).toBe("TotalGBP 220.00")
     expect(document.body.textContent).not.toContain("GBP 0.00")
@@ -115,7 +115,7 @@ describe("order confirmation (05, 7)", () => {
   })
 
   it("leaves the date out when the order kept none, and says how it is delivered instead", () => {
-    render(<OrderCompletedTemplate view={orderConfirmationView({ order: orderGb, promise: null })} signedIn={false} />)
+    render(<OrderCompletedTemplate view={orderConfirmationView({ order: orderGb, promise: null })} ownOrder={false} />)
     expect(screen.queryByTestId("order-delivery-date")).toBeNull()
     expect(screen.getByTestId("order-next-steps")).toHaveTextContent("We deliver it to the address below.")
     expect(document.body.textContent).not.toMatch(/Delivered by/)

@@ -23,10 +23,11 @@ const words = orderContent
  */
 const OrderCompletedTemplate = ({
   view,
-  signedIn,
+  ownOrder,
 }: {
   view: OrderConfirmationView
-  signedIn: boolean
+  /** The order is the signed-in customer's: "See all your orders" (QA S1-4, D14). */
+  ownOrder: boolean
 }) => {
   const deliveredBy = view.deliveryDate ? formatDeliveryDate(view.deliveryDate) : null
   const steps: { icon: LineIconName; text: string }[] = [
@@ -44,7 +45,7 @@ const OrderCompletedTemplate = ({
         {/* 1. The confirmation band */}
         <section className="flex flex-col gap-2 rounded-card bg-brand-surface-alt p-6" data-testid="order-band">
           <LineIcon name="check" className="h-8 w-8 text-brand-success" />
-          <h1 className="type-h1 text-brand-ink" data-testid="order-thank-you">
+          <h1 className="type-h1 text-brand-ink wrap-anywhere" data-testid="order-thank-you">
             {view.firstName
               ? fillParts(words.band.thankYouName, { name: <bdi>{view.firstName}</bdi> }).map(
                   (part, i) => <Fragment key={i}>{part}</Fragment>
@@ -73,7 +74,7 @@ const OrderCompletedTemplate = ({
             {/* 2. The promised date, only when the order kept one */}
             {view.deliveryDate && (
               <div className="rounded-card border border-brand-border p-4" data-testid="order-delivery-date">
-                <DeliveryDateLine date={view.deliveryDate} />
+                <DeliveryDateLine date={view.deliveryDate} note={false} />
               </div>
             )}
 
@@ -163,14 +164,14 @@ const OrderCompletedTemplate = ({
                 <h2 id="order-address-title" className="type-h3 text-brand-ink">
                   {words.address.title}
                 </h2>
-                <div className="type-body text-brand-ink">
+                <div className="type-body text-brand-ink wrap-anywhere">
                   {view.addressLines.map((line, i) => (
                     <p key={i} data-testid="address-line">
             <bdi>{line}</bdi>
           </p>
                   ))}
                   {view.phone && (
-                    <p dir="ltr" className="text-start">
+                    <p dir="ltr" className="text-start wrap-anywhere">
                       {view.phone}
                     </p>
                   )}
@@ -192,7 +193,7 @@ const OrderCompletedTemplate = ({
 
             {/* 9. What to do next */}
             <div className="flex flex-col gap-4 print:hidden" data-testid="order-next-action">
-              {signedIn ? (
+              {ownOrder ? (
                 <LocalizedClientLink
                   href={words.account.allOrdersHref}
                   className="inline-flex min-h-[44px] items-center self-start px-1 type-body font-semibold text-brand-ink underline underline-offset-4 hover:decoration-2"

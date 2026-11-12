@@ -43,7 +43,7 @@ const AccountOrderTemplate = ({ view }: { view: AccountOrderView }) => (
       <div className="flex flex-col gap-8 xl:col-span-7 xl:row-start-1">
         {view.deliveryDate && (
           <div className="rounded-card border border-brand-border p-4" data-testid="order-delivery-date">
-            <DeliveryDateLine date={view.deliveryDate} />
+            <DeliveryDateLine date={view.deliveryDate} note={false} />
           </div>
         )}
 
@@ -119,7 +119,7 @@ const AccountOrderTemplate = ({ view }: { view: AccountOrderView }) => (
                 </p>
               ))}
               {view.phone && (
-                <p dir="ltr" className="text-start">
+                <p dir="ltr" className="text-start wrap-anywhere">
                   {view.phone}
                 </p>
               )}

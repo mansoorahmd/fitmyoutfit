@@ -22,6 +22,57 @@ export type OrderPromise = {
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
 
+/** The confirmation waits this long at most for the promised date; then it shows W-O11b (QA S1-4, D4). */
+export const PROMISE_TIMEOUT_MS = 4_000
+
+/** The order as the confirmation read it. */
+export type OrderRead =
+  | { kind: "found"; order: HttpTypes.StoreOrder }
+  /** The backend doesn't know it (a 4xx): "We can't find that order" (W-O16). */
+  | { kind: "not_found" }
+  /** No answer or a 5xx: the server-error block with "Try again", never "not found" (QA S1-4, D3). */
+  | { kind: "failed" }
+
+/** A failed read of the order, by its HTTP status (none: no answer). */
+export const orderReadFailure = (status: unknown): Exclude<OrderRead, { kind: "found" }> =>
+  typeof status === "number" && status >= 400 && status < 500
+    ? { kind: "not_found" }
+    : { kind: "failed" }
+
+/**
+ * Where the confirmation belongs when the URL's country isn't the order's
+ * (QA S1-4, D15: a US order opened under /pk showed the Pakistan header):
+ * the same order under its own country, when the store has that country.
+ * Null: the URL is right, or there is nowhere better.
+ */
+export const confirmationElsewhere = ({
+  orderId,
+  orderCountry,
+  urlCountry,
+  storeCountries,
+}: {
+  orderId: string
+  orderCountry: string | null | undefined
+  urlCountry: string
+  storeCountries: string[]
+}): string | null => {
+  const country = orderCountry?.toLowerCase()
+  if (!country || country === urlCountry.toLowerCase() || !storeCountries.includes(country)) {
+    return null
+  }
+  return `/${country}/order/${encodeURIComponent(orderId)}/confirmed`
+}
+
+/**
+ * "See all your orders" (W-O14) is only for an order of the signed-in
+ * customer; a guest's order viewed while signed in gets the guest's box
+ * (QA S1-4, D14).
+ */
+export const orderBelongsTo = (
+  order: { customer_id?: string | null },
+  customer: { id?: string | null } | null | undefined
+): boolean => !!customer?.id && !!order.customer_id && order.customer_id === customer.id
+
 /** The route's answer, or null when there is no promise or it can't be read. */
 export const parseOrderPromise = (json: unknown): OrderPromise | null => {
   const promise = (json as { delivery_promise?: unknown } | null)?.delivery_promise as
@@ -91,6 +142,11 @@ export type OrderDeliveryRow =
  * API can't list shipping options without a cart. So on the order, a
  * delivery line of 0 outside Pakistan is the duty-paid line: "Included"
  * (contract section 3: the export regions' one option is duty-paid at 0).
+ *
+ * Known gap, left as it is on purpose (QA S1-4 brief): this guesses from
+ * the amount. The right answer needs a duty-paid marker kept on the
+ * order's delivery method by the backend; that is a later backend task.
+ * Until then, don't change how this decides.
  */
 export const orderDeliveryRow = ({
   methods,
