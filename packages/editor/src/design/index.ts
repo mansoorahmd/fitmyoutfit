@@ -23,6 +23,7 @@ export * from "./pattern.js";
 export * from "./placement.js";
 export * from "./print-area.js";
 export * from "./snapping.js";
+export * from "./item-edits.js";
 export * from "./new-layers.js";
 export * from "./font-catalog.js";
 export * from "./image-file.js";

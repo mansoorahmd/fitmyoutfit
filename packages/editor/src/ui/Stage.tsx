@@ -9,6 +9,8 @@ import { useEffect, useMemo, useState, type ReactNode, type Ref } from "react";
 import { DesignCanvas, type CameraInfo, type DesignCanvasHandle, type DesignCanvasProps, type SelectionGeometry } from "../react/DesignCanvas.js";
 import { createBus } from "./handles.js";
 import { SelectionOverlay, type GesturePhase } from "./SelectionOverlay.js";
+import { StageContextBar } from "./SelectedItem.js";
+import { CONTEXT_BAR_HEIGHT } from "./selection.js";
 import type { ViewInsets } from "../react/camera.js";
 import type { DesignDocument, ProductDefinition } from "../design/schema.js";
 import type { AssetUrlResolver } from "../react/asset-images.js";
@@ -81,6 +83,8 @@ export interface StageProps {
   onTurnTo?: () => void;
   /** Handles hidden (a phone while typing). */
   handlesHidden?: boolean;
+  /** The contextual bar on the stage (phones, with an item selected): the garment is framed below it. */
+  contextBar?: boolean;
 }
 
 export function Stage({ canvasRef, ...props }: StageProps) {
@@ -91,7 +95,8 @@ export function Stage({ canvasRef, ...props }: StageProps) {
   const controlsBottom = insets.bottom + 12;
   // The garment is framed between the credit line and the view buttons, above (or beside) the panel.
   const hintShown = Boolean(props.hint) && props.viewControls !== "none";
-  const canvasInsets = { top: (props.credit && mode === "3d" ? CREDIT_ROOM : 0) + (hintShown && mode === "3d" ? HINT_ROOM : 0), right: insets.right, bottom: insets.bottom + (mode === "3d" && props.viewControls === "full" ? VIEW_ROW : 0), left: insets.left };
+  const barTop = (props.credit && mode === "3d" ? CREDIT_ROOM : 0) + (hintShown && mode === "3d" ? HINT_ROOM : 0);
+  const canvasInsets = { top: barTop + (props.contextBar ? CONTEXT_BAR_HEIGHT : 0), right: insets.right, bottom: insets.bottom + (mode === "3d" && props.viewControls === "full" ? VIEW_ROW : 0), left: insets.left };
   const sides = ["front", "back", "left", "right"] as const;
   // The selected item's box on the screen, from the canvas to the overlay (only the overlay re-renders per frame).
   const bus = useMemo(() => createBus<SelectionGeometry | null>(null), []);
@@ -113,6 +118,7 @@ export function Stage({ canvasRef, ...props }: StageProps) {
             onTurnTo={props.onTurnTo ?? (() => undefined)}
             hidden={props.handlesHidden}
           />
+          {props.contextBar && <StageContextBar bus={bus} top={barTop} bottomInset={canvasInsets.bottom} />}
         </div>
       ) : (
         <div className="fmo-canvas fmo-flat-host" style={{ bottom: insets.bottom, right: insets.right }}>

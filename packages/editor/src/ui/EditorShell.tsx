@@ -50,6 +50,9 @@ import { TOOL_ORDER, ToolPanel, ToolTabs } from "./ToolPanel.js";
 import { TopBar } from "./TopBar.js";
 import { hasWebGL2, readLocal, writeLocal } from "./webgl.js";
 import { toolForLayer } from "./selection.js";
+import { ClippedNote, ContextBar, FineTune, keyEdit } from "./SelectedItem.js";
+import { nudgeLayer, rotateLayerBy, scaleLayerBy } from "../design/item-edits.js";
+import { removeLayer } from "../design/edit.js";
 
 /** Places the host fills with its own components (06-editor.md 13.1, 9.1). */
 export interface EditorSlots {
@@ -386,11 +389,20 @@ export function EditorShell(props: EditorShellProps) {
       } else if (event.key === "Escape" && !typingInField) {
         if (selectedId) setSelectedId(null);
         else if (panelOpen && layout !== "wide") closePanel();
+      } else if (selectedId && !typingInField && !mod && (target === document.body || target?.closest?.(".fmo-stage, .fmo-context"))) {
+        const step = keyEdit(event.key, event.shiftKey);
+        if (!step) return;
+        event.preventDefault();
+        if (step.kind === "delete") {
+          if (commit((d) => removeLayer(d, selectedId), "remove-item")) setSelectedId(null);
+        } else if (step.kind === "nudge") commit((d) => nudgeLayer(d, selectedId, step.dx, step.dy, { product }), "move");
+        else if (step.kind === "scale") commit((d) => scaleLayerBy(d, selectedId, step.factor, { product }), "resize");
+        else commit((d) => rotateLayerBy(d, selectedId, step.degrees, { product }), "rotate");
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [undo, redo, selectedId, setSelectedId, panelOpen, layout, closePanel]);
+  }, [undo, redo, selectedId, setSelectedId, panelOpen, layout, closePanel, commit, product]);
 
   // ---- The zone flash (4.3): white then ink, 600 ms, fading; a still outline for 1.5 s with reduced motion.
   const chooseColourTarget = useCallback(
@@ -595,6 +607,21 @@ export function EditorShell(props: EditorShellProps) {
     setTyping,
     openTool,
     reducedMotion,
+    selectedId,
+    select: (layerId, options = {}) => {
+      setSelectedId(layerId);
+      const layer = layerId ? designRef.current.layers.find((l) => l.id === layerId) : undefined;
+      if (!layer) return;
+      if (options.openTool) {
+        const next = toolForLayer(layer);
+        if (tools.includes(next)) openTool(next, detent === "expanded" ? "normal" : detent, { turn: false });
+      }
+      if (options.turn) {
+        const side = layerSide(product, layer);
+        // Only when the item faces away: the camera never moves for what the coach already sees (6.3).
+        if (side && side !== canvas.current?.getSide()) canvas.current?.focusOn(layer.id);
+      }
+    },
     snapping: snapOn,
     setSnapping: setSnapOn,
     markTiming: (name) => {
@@ -743,6 +770,7 @@ export function EditorShell(props: EditorShellProps) {
   };
 
   const fontsNote = fontsLoading ? wording.lettering.fontsLoading : null;
+  const selectedLayer = selectedId ? (design.layers.find((l) => l.id === selectedId) ?? null) : null;
   const panel =
     panelOpen && activeTool ? (
       <ToolPanel
@@ -757,6 +785,13 @@ export function EditorShell(props: EditorShellProps) {
         onClose={closePanel}
         onSize={setPanelSize}
       >
+        {selectedLayer && layout === "wide" && <ContextBar variant="panel" />}
+        {selectedLayer && toolForLayer(selectedLayer) === activeTool && (
+          <div className="fmo-stack" data-testid="selected-item-section">
+            <ClippedNote />
+            <FineTune />
+          </div>
+        )}
         {toolBody(activeTool)}
         {fontsNote && (activeTool === "team" || activeTool === "players") && <p className="fmo-muted">{fontsNote}</p>}
       </ToolPanel>
@@ -903,6 +938,7 @@ export function EditorShell(props: EditorShellProps) {
             onRotate={onRotate}
             onTurnTo={() => selectedId && canvas.current?.focusOn(selectedId)}
             handlesHidden={typing}
+            contextBar={Boolean(selectedLayer) && layout !== "wide" && !typing && mode === "3d"}
             viewControls={layout === "compact" && typing ? "none" : layout === "compact" && panelOpen && detent === "expanded" ? "reset-only" : "full"}
           />
           {layout !== "wide" && (start ?? panel)}

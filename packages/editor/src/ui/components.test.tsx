@@ -19,6 +19,7 @@ import { LogosTool, TextTool } from "./LogosTool";
 import { StartCard } from "./StartCard";
 import { ToolTabs, TOOL_ORDER } from "./ToolPanel";
 import { TopBar } from "./TopBar";
+import { ContextBar, FineTune } from "./SelectedItem";
 import { loadPlaceholderFonts, loadPlaceholderPalette, loadStandInJerseyProduct } from "../test/fixtures";
 
 const product = loadStandInJerseyProduct();
@@ -37,7 +38,7 @@ function api(overrides: Partial<EditorApi> = {}): EditorApi {
     product, palette, fonts, templates, wording: W, assets, layout: "compact", detent: "normal", setDetent: noop, design,
     commit: () => true, begin: noop, preview: noop, end: noop, hoverPreview: noop, textFits: [], fontsLoading: false, fontsFailed: false,
     garmentView: null, showSide: noop, focusOn: noop, announce: noop, colourTarget: { kind: "zone", id: "body_front" }, chooseColourTarget: noop,
-    recentColours: [], useColour: noop, setTyping: noop, openTool: noop, reducedMotion: false, markTiming: noop, snapping: true, setSnapping: noop,
+    recentColours: [], useColour: noop, setTyping: noop, openTool: noop, reducedMotion: false, markTiming: noop, snapping: true, setSnapping: noop, selectedId: null, select: noop,
     ...overrides,
   };
 }
@@ -158,5 +159,27 @@ describe("the tools", () => {
   it("no engine key or developer word reaches the screen", () => {
     const all = [<StartCard key="s" onClose={() => undefined} />, <DesignTool key="d" />, <ColoursTool key="c" />, <TeamTool key="t" />, <PlayersTool key="p" />, <LogosTool key="l" />, <TextTool key="x" />].map((n) => text(inTool(n))).join(" ");
     expect(all).not.toMatch(/body_front|placeholder-|zone-colour|team-colour|undefined|NaN|\bmm\b|\blayers?\b/i);
+  });
+});
+
+describe("the selected item's controls (06-editor.md 5.2)", () => {
+  const team = design.layers.find((l) => l.role === "team-name")!;
+
+  it("the contextual bar names the item and offers Delete, More and Done; Duplicate only for logos and text", () => {
+    const html = inTool(<ContextBar variant="stage" />, { selectedId: team.id });
+    expect(text(html)).toContain("Team name: LAHORE LIONS");
+    expect(html).toContain('data-testid="context-delete"');
+    expect(html).toContain('data-testid="context-more"');
+    expect(html).toContain('data-testid="context-done"');
+    expect(html).not.toContain('data-testid="context-duplicate"');
+    expect(html).toContain('role="toolbar"');
+    expect(inTool(<ContextBar variant="stage" />)).toBe("");
+  });
+
+  it("fine-tune is one closed disclosure", () => {
+    const html = inTool(<FineTune />, { selectedId: team.id });
+    expect(html).toContain('aria-expanded="false"');
+    expect(text(html)).toContain("Fine-tune");
+    expect(html).not.toContain('data-testid="ft-bigger"');
   });
 });

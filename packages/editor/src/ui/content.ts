@@ -183,7 +183,35 @@ export const EDITOR_WORDING = {
   /** Selection and the list (`selection`). Mostly E3b. */
   selection: {
     delete: "Delete", // W-ED110
+    duplicate: "Duplicate", // W-ED110
+    more: "More", // W-ED110
+    done: "Done", // W-ED110
+    bringForward: "Bring forward", // W-ED110b
+    sendBack: "Send back", // W-ED110b
+    edit: "Edit", // W-ED110b
+    actionsFor: "Actions for {item}", // NEW: the contextual bar's accessible name
+    clipped: "Part of this is cut off at the seam.", // W-ED111
+    moveIn: "Move it in", // W-ED111b
+    tooBigToFit: "Make it smaller so it fits on the shirt.", // NEW: when no place fits ("Move it in" cannot help)
     turnToEdit: "Turn to edit", // W-ED112
+    fineTune: "Fine-tune", // W-ED113
+    bigger: "Bigger", // W-ED114
+    smaller: "Smaller", // W-ED114
+    turnLeft: "Turn left", // W-ED114
+    turnRight: "Turn right", // W-ED114
+    straighten: "Straighten", // W-ED114
+    centre: "Centre on the shirt", // W-ED114
+    moveLeft: "Move left", // NEW (fine-tune's arrows)
+    moveRight: "Move right", // NEW
+    moveUp: "Move up", // NEW
+    moveDown: "Move down", // NEW
+    size: "Size", // NEW (fine-tune rows)
+    turn: "Turn", // NEW
+    move: "Move", // NEW
+    sizeMm: "{width} × {height} mm", // NEW: desktop only, secondary text
+    degrees: "{degrees}°", // NEW: desktop only, secondary text
+    snap: "Snap to guides", // NEW: snapping on or off (touch has no Alt key)
+    keys: "Arrows move it, Shift for bigger steps. [ and ] resize, with Shift they turn. Delete removes it. Esc lets go.", // NEW: keyboard help in fine-tune (desktop)
     hint: "Drag to turn. Tap something to change it.", // W-ED116
     hintPointer: "Drag to turn. Click something to change it.", // W-ED116
     onThisKit: "On this kit", // W-ED130

@@ -72,6 +72,13 @@ export interface EditorApi {
   /** Opens a tool (the start card's "See designs", for example); `turn: false` keeps the camera where it is. */
   openTool(tool: ToolId, detent?: PanelDetent, options?: { turn?: boolean }): void;
   reducedMotion: boolean;
+  /** The selected item (06-editor.md 4.8, 5), or null. Not part of undo. */
+  selectedId: string | null;
+  /**
+   * Selects an item (null: nothing). With `turn`, the camera turns to it (a row of "On this kit", a tool's
+   * slot); with `openTool`, its tool opens. A tap on the model does neither turn nor move the camera.
+   */
+  select(layerId: string | null, options?: { turn?: boolean; openTool?: boolean }): void;
   /** Snapping to guides while placing (on by default; Alt holds it off with a mouse). */
   snapping: boolean;
   setSnapping(on: boolean): void;

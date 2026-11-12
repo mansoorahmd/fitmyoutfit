@@ -130,6 +130,26 @@ export const EDITOR_CSS = /* css */ `
 .fmo-guide-line { fill: none; stroke: var(--fmo-focus); stroke-width: 1.5; stroke-dasharray: 5 4; stroke-linecap: round; }
 .fmo-area .fmo-guide-line { stroke: var(--fmo-ink-muted); stroke-dasharray: 3 4; }
 .fmo-area .fmo-guide-halo { stroke-width: 2.5; opacity: 0.8; }
+.fmo-context-place { position: absolute; inset-inline: 8px; z-index: 3; display: flex; justify-content: center; pointer-events: none; }
+.fmo-context { display: flex; align-items: center; gap: 2px; min-height: 48px; pointer-events: auto; }
+.fmo-context-stage { max-width: 100%; padding: 2px 4px 2px 12px; border: 1px solid var(--fmo-border); border-radius: 24px; background: var(--fmo-surface); box-shadow: 0 2px 10px rgb(11 21 48 / 0.12); }
+.fmo-context-panel { padding: 0 0 10px; margin-bottom: 4px; border-bottom: 1px solid var(--fmo-border); flex-wrap: wrap; }
+.fmo-context-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 650; font-size: 14px; margin-inline-end: 4px; }
+.fmo-context-panel .fmo-context-name { flex-basis: 100%; font-size: 15px; margin-bottom: 4px; }
+.fmo-context-btn { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; min-width: 44px; min-height: 44px; padding: 2px 6px; border: 0; border-radius: var(--fmo-radius-control); background: transparent; color: var(--fmo-ink); cursor: pointer; font-size: 11px; line-height: 13px; }
+.fmo-context-panel .fmo-context-btn { flex-direction: row; gap: 6px; font-size: 14px; padding: 0 10px; border: 1px solid var(--fmo-border-strong); margin-inline-end: 6px; }
+.fmo-context-btn:hover { background: var(--fmo-surface-alt); }
+.fmo-context-more { position: relative; }
+.fmo-menu { position: absolute; top: calc(100% + 4px); inset-inline-end: 0; z-index: 5; min-width: 200px; display: flex; flex-direction: column; padding: 4px; border: 1px solid var(--fmo-border); border-radius: var(--fmo-radius-card); background: var(--fmo-surface); box-shadow: 0 6px 20px rgb(11 21 48 / 0.18); }
+.fmo-context-place[data-place="bottom"] .fmo-menu { top: auto; bottom: calc(100% + 4px); }
+.fmo-menu button { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 12px; border: 0; border-radius: var(--fmo-radius-control); background: transparent; color: var(--fmo-ink); cursor: pointer; font-size: 15px; text-align: start; }
+.fmo-menu button:hover { background: var(--fmo-surface-alt); }
+.fmo-menu button[aria-disabled="true"] { color: var(--fmo-ink-muted); cursor: default; }
+.fmo-finetune { border: 1px solid var(--fmo-border); border-radius: var(--fmo-radius-card); padding: 0 12px; }
+.fmo-disclosure { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 44px; padding: 0; border: 0; background: none; color: var(--fmo-ink); cursor: pointer; font-weight: 650; font-size: 15px; }
+.fmo-finetune > .fmo-stack { padding-bottom: 12px; }
+.fmo-ft-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.fmo-ft-row > .fmo-label { min-width: 48px; margin: 0; }
 .fmo-turn-to { position: absolute; transform: translateX(-50%); pointer-events: auto; box-shadow: 0 2px 8px rgb(11 21 48 / 0.16); font-weight: 600; }
 .fmo-stage-top { position: absolute; inset-inline: 0; top: var(--fmo-credit-room, 0px); display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px 12px 0; pointer-events: none; z-index: 2; }
 .fmo-stage-top > * { pointer-events: auto; }
