@@ -3,7 +3,7 @@ import { createDesign } from "./create";
 import { addLayer, setZoneColor, updateLayer } from "./edit";
 import { addCatalogFont } from "./font-catalog";
 import { newTextLayer } from "./new-layers";
-import { READABILITY_MIN_CONTRAST, backgroundAt, designReadability, itemReadability, readabilityFix } from "./readability";
+import { READABILITY_MIN_CONTRAST, backgroundAt, designReadability, itemReadability, outlineColourFor, readabilityFix } from "./readability";
 import { setOutline } from "./roles";
 import type { DesignDocument, Shape } from "./schema";
 import { teamColourValue } from "./team-colours";
@@ -67,5 +67,17 @@ describe("readability (3:1)", () => {
   it("covers every text and number item with a value, and nothing else", () => {
     expect(designReadability(product, kit()).map((r) => r.layerId)).toEqual(["name"]);
     expect(itemReadability(product, kit(), "nope")).toBeNull();
+  });
+});
+
+describe("outlineColourFor", () => {
+  it("picks the team colour that stands out from both the letters and the garment", () => {
+    // White letters on a red body: red would vanish into the body, white into the letters; gold shows against both.
+    const d = createDesign(product, { teamColors: { main: RED, second: WHITE, accent: GOLD } });
+    const background = { kind: "zone" as const, zoneId: "body", colour: RED };
+    expect(outlineColourFor(d, WHITE, background).role).toBe("accent");
+    // Navy letters on white, with red and white and navy: red.
+    const d2 = createDesign(product, { teamColors: { main: WHITE, second: NAVY, accent: RED } });
+    expect(outlineColourFor(d2, NAVY, { kind: "zone", zoneId: "body", colour: WHITE }).role).toBe("accent");
   });
 });

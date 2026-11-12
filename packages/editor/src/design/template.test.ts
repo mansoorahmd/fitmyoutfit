@@ -205,3 +205,20 @@ describe("applyTemplate: what is kept and what changes (06-editor.md 4.1)", () =
     expect(bad((t) => (t.sampleNumber = "100"))).toThrow(/more than 2 digits/);
   });
 });
+
+describe("applyTemplate: what the previous template set is not the coach's choice", () => {
+  const hoops = byId(jerseyTemplates, "hoops");
+  const classic = byId(jerseyTemplates, "classic");
+
+  it("drops the previous template's number outline when the new template leaves outlines open; keeps one the coach changed", () => {
+    const onHoops = applyTemplate(start(jersey), hoops, { product: jersey, fonts });
+    const number = () => findLayers(onHoops, { role: "player-number" })[0] as Extract<DesignDocument["layers"][number], { kind: "number" }>;
+    expect(number().outline).toBeDefined(); // hoops sets a medium Main outline on the number
+    const back = applyTemplate(onHoops, classic, { product: jersey, fonts, previous: hoops });
+    expect((findLayers(back, { role: "player-number" })[0] as typeof number extends () => infer L ? L : never).outline).toBeUndefined();
+    // The coach made it thick and gold: that is a choice, and it stays.
+    const coached = setOutline(onHoops, number().id, { step: "thick", color: teamColourValue(onHoops, "accent") }, { product: jersey });
+    const kept = applyTemplate(coached, classic, { product: jersey, fonts, previous: hoops });
+    expect((findLayers(kept, { role: "player-number" })[0] as { outline?: unknown }).outline).toEqual({ color: { ...GOLD, teamColor: "accent" }, width: expect.any(Number) });
+  });
+});

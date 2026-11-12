@@ -66,6 +66,21 @@
       summary { cursor: pointer; font-weight: 600; }
       .flat-pattern { width: 100%; max-width: 360px; aspect-ratio: 1; display: block; margin-top: 8px; background: repeating-conic-gradient(#f2f4f7 0 25%, #fff 0 50%) 0 0 / 16px 16px; border: 1px solid #dde2ea; }
       .close-up { width: 100%; height: auto; display: block; margin-top: 8px; background: repeating-conic-gradient(#f2f4f7 0 25%, #fff 0 50%) 0 0 / 16px 16px; border: 1px solid #dde2ea; }
+      .team-panel { border: 1px solid #dde2ea; border-radius: 8px; padding: 6px 10px; }
+      .team-slot { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+      .team-slot[aria-pressed="true"], .segmented button[aria-pressed="true"], .preset[aria-pressed="true"] { background: #dbe8ff; border-color: #0a66ff; }
+      .templates { display: grid; grid-template-columns: repeat(auto-fill, minmax(124px, 1fr)); gap: 8px; }
+      .template-card { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 4px; font-size: 12px; background: #f2f4f7; }
+      .template-card canvas { width: 120px; height: 150px; }
+      .template-card.current { outline: 2px solid #0b1f3a; }
+      .switches { gap: 10px 16px; }
+      .switch { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+      .plain-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 4px; font-size: 13px; }
+      .code-match { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 13px; }
+      .code-match p, .code-match .row { grid-column: 1 / -1; margin: 0; }
+      .code-chip { display: flex; flex-direction: column; gap: 4px; }
+      .code-chip span { width: 64px; height: 64px; border-radius: 8px; border: 1px solid #8a93a3; }
+      .status-line { font-size: 13px; color: #1d3b72; }
       .note { color: #5b6475; font-size: 12px; margin: 6px 0 0; }
       .licences { font-size: 12px; color: #3b4352; padding-left: 18px; }
       pre.json { margin: 8px 0 0; padding: 8px; max-height: 260px; overflow: auto; background: #f6f8fa; font-size: 11px; }

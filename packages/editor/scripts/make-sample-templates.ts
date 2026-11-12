@@ -262,10 +262,18 @@ async function jerseyTemplates(): Promise<Template[]> {
     }),
   );
 
-  // Hoops: five bands of 60 mm with 60 mm between them, from just above the hem, at equal body heights on the
-  // front, the back and both side panels, so they meet at every seam. The chest's team name sits between two hoops.
+  // Hoops: bands of 60 mm with 60 mm between them, at equal body heights on the front, the back and both side
+  // panels, so they meet at every seam. The gap between two hoops is centred on the body height of the chest
+  // name's preset (measured on the model), so the team name sits on the main colour; one hoop runs above it,
+  // then the shoulders are plain.
+  const chest = product.placements.find((p) => p.id === "chest-centre")!;
+  const nameHeight = heights.at(chest.pieceId, chest.centre.x, chest.centre.y);
+  if (nameHeight === null) throw new Error("the chest preset is not on the model");
   const hoopBands: Array<[number, number]> = [];
-  for (let k = 0; k < 5; k++) hoopBands.push([-28 + 120 * k, 32 + 120 * k]);
+  for (let k = -5; k <= 0; k++) {
+    const low = nameHeight + 30 + 120 * k;
+    if (low + 60 > -20) hoopBands.push([low, low + 60]);
+  }
   const hoopPieces = ["front", "back", "side_panel_left", "side_panel_right"];
   out.push(
     template(product, {
@@ -314,7 +322,7 @@ async function jerseyTemplates(): Promise<Template[]> {
       about: `${PLACEHOLDER_NOTE} A 120 mm sash on the front from the wearer's right shoulder to the left hip.`,
       zones: { body_front: MAIN, body_back: MAIN, sleeves: MAIN, side_panels: SECOND, side_stripes: MAIN, ...trims },
       shapes: [{ group: "sash", pieceId: "front", path: strip([120, -40], [700, 700], 120), fill: SECOND }],
-      slots: slots({ nameFill: SECOND, numberFill: SECOND, outline: { step: "thin", color: MAIN } }),
+      slots: slots({ nameFill: SECOND, numberFill: SECOND, outline: { step: "medium", color: MAIN } }),
     }),
   );
 

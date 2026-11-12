@@ -54,7 +54,7 @@
           "team": "second"
         },
         "outline": {
-          "step": "thin",
+          "step": "medium",
           "color": {
             "team": "main"
           }
@@ -70,7 +70,7 @@
           "team": "second"
         },
         "outline": {
-          "step": "thin",
+          "step": "medium",
           "color": {
             "team": "main"
           }

@@ -207,8 +207,41 @@ export interface ApplyTemplateOptions {
 
 type RoleLayer = TextLayer | NumberLayer;
 
-function styleFor(design: DesignDocument, template: Template, slotStyle: TemplateStyle, current: RoleLayer | undefined, product: ProductDefinition): LetteringStyle {
+/**
+ * The style of a role slot under a new template: what the template sets, and
+ * for what it leaves open the coach's choice on the current layer. An outline
+ * or size that is exactly what the previous template set was the template's,
+ * not the coach's, so it does not carry over.
+ */
+function styleFor(
+  design: DesignDocument,
+  template: Template,
+  slotStyle: TemplateStyle,
+  current: RoleLayer | undefined,
+  product: ProductDefinition,
+  previousStyle: TemplateStyle | undefined,
+): LetteringStyle {
   const fallback = template.accentFallback ?? "second";
+  if (current && previousStyle) {
+    const prevOutline = previousStyle.outline;
+    const currentStep = current.outline ? outlineStepOf(current) : null;
+    const fromTemplate =
+      prevOutline === undefined
+        ? false
+        : prevOutline === null
+          ? !current.outline
+          : currentStep === prevOutline.step && ("team" in prevOutline.color ? current.outline?.color.teamColor === prevOutline.color.team : current.outline?.color.id === prevOutline.color.palette.id);
+    const sizeFromTemplate = previousStyle.size !== undefined && sizeStepOf(product, current) === previousStyle.size;
+    if (fromTemplate || sizeFromTemplate) {
+      const plain = { ...current };
+      if (fromTemplate) delete plain.outline;
+      if (sizeFromTemplate) {
+        const preset = product.placements.find((p) => p.id === plain.preset);
+        if (preset?.fontSize) plain.fontSize = preset.fontSize;
+      }
+      current = plain;
+    }
+  }
   const style: LetteringStyle = { fontId: slotStyle.fontId, fill: resolveTemplateColour(design, slotStyle.fill, fallback) };
   if (slotStyle.outline === null) style.outline = null;
   else if (slotStyle.outline) style.outline = { step: slotStyle.outline.step, color: resolveTemplateColour(design, slotStyle.outline.color, fallback) };
@@ -277,7 +310,9 @@ export function applyTemplate(design: DesignDocument, template: Template, option
     for (const preset of presets) {
       const old = take(preset);
       const slot = slots.find((s) => s.preset === preset) ?? slots[0];
-      const style = slot ? styleFor(next, template, slot.style, old ?? current[0], product) : old ? currentStyle(old, product) : null;
+      const model = old ?? current[0];
+      const previousStyle = options.previous?.slots.find((s) => s.role === role && s.preset === model?.preset)?.style ?? options.previous?.slots.find((s) => s.role === role)?.style;
+      const style = slot ? styleFor(next, template, slot.style, model, product, previousStyle) : old ? currentStyle(old, product) : null;
       if (!style) continue;
       const id = old?.id ?? freshId(takenIds, role);
       takenIds.add(id);

@@ -5,6 +5,7 @@ import {
   DesignCanvas,
   addCatalogFont,
   addLayer,
+  applyTemplate,
   checkJerseyNumber,
   createDesign,
   createMemoryAssetStore,
@@ -22,7 +23,11 @@ import {
   pieceTextureRect,
   removeLayer,
   scaleLayer,
+  setShapeGroupColor,
   setZoneColor,
+  setZoneTeamColor,
+  teamColourValue,
+  TEAM_COLOUR_ROLES,
   updateLayer,
   uploadLogo,
   useDesignHistory,
@@ -30,19 +35,24 @@ import {
   type ColorRef,
   type DesignCanvasHandle,
   type DesignDocument,
+  type EditLabel,
   type FontCatalog,
   type FontStatus,
   type Layer,
   type LayerDragEvent,
   type LayerPatch,
+  type Palette,
+  type PlacementPreset,
   type ProductDefinition,
+  type Template,
+  type TextFit,
   type TextAlign,
   type TextDirection,
   type TextureDrawInfo,
   type UploadIssue,
 } from "../src";
 import { SAMPLE_FILES } from "./sample-files";
-import { startPlacement } from "./placements";
+import { TeamPanel } from "./TeamPanel";
 import { DEMO_PRODUCTS, type DemoProduct } from "./products";
 
 /** A demo swatch: a palette colour reference plus a display name. */
@@ -54,7 +64,11 @@ export interface Swatch {
 export interface EditorProps {
   product: ProductDefinition;
   swatches: Swatch[];
+  /** The palette the swatches come from (families, common colours, the colour-code match). */
+  palette: Palette;
   fonts: FontCatalog;
+  /** The product's sample templates (none for the placeholder). */
+  templates: Template[];
   /** Which demo product this is: for the product switch and the model's credit line. */
   demoProduct: DemoProduct;
 }
@@ -74,10 +88,38 @@ const SAMPLE_NUMBERS = [
   { label: "Arabic digits", value: "٧" },
 ];
 
+/**
+ * Where a new item goes on a piece: the first placement preset of the product on that piece that
+ * takes the item's role (its centre, box and font size come from the product data). A fixed number
+ * (role "text") on a piece whose only number preset is for the player's number takes that preset's
+ * centre and size without the preset itself. Nothing found: the library's default (the piece's centre).
+ */
+function startAt(product: ProductDefinition, pieceId: string, role: Layer["role"]): { preset?: string; position?: { x: number; y: number }; fontSize?: number } {
+  const onPiece = product.placements.filter((p) => p.pieceId === pieceId);
+  // A preset made for the role first (the left chest for a crest), then any that takes it.
+  const preset: PlacementPreset | undefined = onPiece.find((p) => p.roles[0] === role) ?? onPiece.find((p) => p.roles.includes(role));
+  if (preset) return { preset: preset.id };
+  const numberPreset = onPiece.find((p) => p.roles.includes("player-number"));
+  return numberPreset ? { position: { ...numberPreset.centre }, fontSize: numberPreset.fontSize } : {};
+}
+
+function withoutPreset(layer: Layer): Layer {
+  const copy = { ...layer };
+  delete copy.preset;
+  return copy;
+}
+
+/** The design the demo opens with: a team name, a sample player, and the product's first template if it has one. */
+function startDesign(product: ProductDefinition, fonts: FontCatalog, templates: Template[]): DesignDocument {
+  const design = createDesign(product, { teamName: "LAHORE LIONS", samplePlayer: { name: "HAMZA", number: "10" } });
+  return templates[0] ? applyTemplate(design, templates[0], { product, fonts }) : design;
+}
+
 function describeLayer(layer: Layer): string {
-  if (layer.kind === "text") return `Text "${layer.value}"`;
-  if (layer.kind === "number") return `Number ${layer.value}`;
-  return `${layer.kind === "logo" ? "Logo" : "Clipart"} ${layer.asset.width} x ${layer.asset.height} px`;
+  const role = `[${layer.role}${layer.preset ? ` @ ${layer.preset}` : ""}] `;
+  if (layer.kind === "text") return `${role}Text "${layer.value}"`;
+  if (layer.kind === "number") return `${role}Number ${layer.value}`;
+  return `${role}${layer.kind === "logo" ? "Logo" : "Clipart"} ${layer.asset.width} x ${layer.asset.height} px`;
 }
 
 function errorText(error: unknown): string {
@@ -171,8 +213,10 @@ function ProductSwitch({ demoProduct }: { demoProduct: DemoProduct }) {
   );
 }
 
-export function Editor({ product, swatches, fonts, demoProduct }: EditorProps) {
-  const history = useDesignHistory(() => createDesign(product));
+export function Editor({ product, swatches, palette, fonts, templates, demoProduct }: EditorProps) {
+  const history = useDesignHistory(() => startDesign(product, fonts, templates));
+  const [status, setStatus] = useState<string | null>(null);
+  const [textFits, setTextFits] = useState<TextFit[]>([]);
   const { design } = history;
   const designRef = useRef(design);
   useEffect(() => {
@@ -204,9 +248,9 @@ export function Editor({ product, swatches, fonts, demoProduct }: EditorProps) {
   const pieceName = (id: string) => product.pieces.find((p) => p.id === id)?.name ?? id;
 
   const commitEdit = useCallback(
-    (edit: (current: DesignDocument) => DesignDocument): boolean => {
+    (edit: (current: DesignDocument) => DesignDocument, label: EditLabel): boolean => {
       try {
-        history.commit(edit(designRef.current));
+        history.commit(edit(designRef.current), label);
         setEditError(null);
         return true;
       } catch (error) {
@@ -234,11 +278,23 @@ export function Editor({ product, swatches, fonts, demoProduct }: EditorProps) {
     setFontStatus(status);
     setFontVersion((v) => v + 1);
   }, []);
-  const onTextureDrawn = useCallback((info: TextureDrawInfo) => setDrawInfo(info), []);
+  const onTextureDrawn = useCallback((info: TextureDrawInfo) => {
+    setDrawInfo(info);
+    setTextFits(info.textFits);
+  }, []);
+  // Undo and redo say what they changed, from the step's label (the interface will word it).
+  const undoStep = useCallback(() => {
+    if (history.canUndo) setStatus(`Undone: ${history.undoLabel ?? "change"}`);
+    history.undo();
+  }, [history]);
+  const redoStep = useCallback(() => {
+    if (history.canRedo) setStatus(`Redone: ${history.redoLabel ?? "change"}`);
+    history.redo();
+  }, [history]);
 
   const onLayerDrag = useCallback(
     (event: LayerDragEvent) => {
-      if (event.phase === "start") history.begin();
+      if (event.phase === "start") history.begin("move");
       else if (event.phase === "move") history.preview((d) => updateLayer(d, event.layerId, { position: event.position }, { product }));
       else if (event.phase === "end") history.end();
       else history.cancel();
@@ -250,9 +306,9 @@ export function Editor({ product, swatches, fonts, demoProduct }: EditorProps) {
     const id = nextLayerId(designRef.current, "text");
     const ok = commitEdit((d) => {
       const withFont = addCatalogFont(d, fonts, textFont);
-      const start = startPlacement(product.id, pieceId, "text");
+      const start = startAt(product, pieceId, "text");
       return addLayer(withFont, newTextLayer(product, { id, pieceId, value, fontId: textFont, fill, ...start }), { product });
-    });
+    }, "add-item");
     if (ok) setSelectedId(id);
   };
 
@@ -265,10 +321,10 @@ export function Editor({ product, swatches, fonts, demoProduct }: EditorProps) {
     const id = nextLayerId(designRef.current, "number");
     const ok = commitEdit((d) => {
       const withFont = addCatalogFont(d, fonts, numberFont);
-      const start = startPlacement(product.id, pieceId, "number");
+      const start = startAt(product, pieceId, "text");
       // A number typed here is a fixed number (the same on every shirt); the player's number is a role slot.
       return addLayer(withFont, newNumberLayer(product, { id, pieceId, role: "text", value, fontId: numberFont, fill, ...start }), { product });
-    });
+    }, "add-item");
     if (ok) setSelectedId(id);
   };
 
@@ -279,8 +335,8 @@ export function Editor({ product, swatches, fonts, demoProduct }: EditorProps) {
       const messages: Message[] = result.issues.map((i: UploadIssue) => ({ severity: i.severity, text: `${file.name}: ${i.message}` }));
       if (result.ok) {
         const id = nextLayerId(designRef.current, "logo");
-        const { position } = startPlacement(product.id, pieceId, "logo");
-        const ok = commitEdit((d) => addLayer(d, newLogoLayer(product, { id, pieceId, asset: result.asset, position }), { product }));
+        const { preset, position } = startAt(product, pieceId, "crest");
+        const ok = commitEdit((d) => addLayer(d, newLogoLayer(product, { id, pieceId, preset, asset: result.asset, position }), { product }), "add-item");
         if (ok) setSelectedId(id);
         messages.unshift({ severity: "info", text: `${file.name}: uploaded as ${result.asset.assetId} (${result.asset.width} x ${result.asset.height} px, ${result.asset.mediaType}). Only this reference is in the design.` });
       } else {
@@ -300,7 +356,7 @@ export function Editor({ product, swatches, fonts, demoProduct }: EditorProps) {
 
   const deleteLayer = useCallback(
     (id: string) => {
-      if (commitEdit((d) => removeLayer(d, id))) setSelectedId((s) => (s === id ? null : s));
+      if (commitEdit((d) => removeLayer(d, id), "remove-item")) setSelectedId((s) => (s === id ? null : s));
     },
     [commitEdit],
   );
@@ -313,11 +369,11 @@ export function Editor({ product, swatches, fonts, demoProduct }: EditorProps) {
       const mod = event.ctrlKey || event.metaKey;
       if (mod && !typing && event.key.toLowerCase() === "z") {
         event.preventDefault();
-        if (event.shiftKey) history.redo();
-        else history.undo();
+        if (event.shiftKey) redoStep();
+        else undoStep();
       } else if (mod && !typing && event.key.toLowerCase() === "y") {
         event.preventDefault();
-        history.redo();
+        redoStep();
       } else if (!typing && (event.key === "Delete" || event.key === "Backspace") && selectedId) {
         event.preventDefault();
         deleteLayer(selectedId);
@@ -332,12 +388,12 @@ export function Editor({ product, swatches, fonts, demoProduct }: EditorProps) {
           const layer = d.layers.find((l) => l.id === selectedId);
           if (!layer) return d;
           return updateLayer(d, selectedId, { position: { x: layer.position.x + dx, y: layer.position.y + dy } }, { product });
-        });
+        }, "move");
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [history, selectedId, deleteLayer, commitEdit, product]);
+  }, [history, selectedId, deleteLayer, commitEdit, product, undoStep, redoStep]);
 
   const logoWarnings = useMemo(
     () => design.layers.flatMap((l) => logoLayerWarnings(l).map((w) => ({ layerId: l.id, ...w }))),
@@ -368,13 +424,18 @@ export function Editor({ product, swatches, fonts, demoProduct }: EditorProps) {
         <h1>{product.name}</h1>
         <ProductSwitch demoProduct={demoProduct} />
         <div className="history" role="group" aria-label="Undo and redo">
-          <button type="button" onClick={history.undo} disabled={!history.canUndo} data-testid="undo" title="Undo (Ctrl+Z)">
+          <button type="button" onClick={undoStep} disabled={!history.canUndo} data-testid="undo" title={`Undo ${history.undoLabel ?? ""} (Ctrl+Z)`}>
             Undo ({past})
           </button>
-          <button type="button" onClick={history.redo} disabled={!history.canRedo} data-testid="redo" title="Redo (Ctrl+Shift+Z or Ctrl+Y)">
+          <button type="button" onClick={redoStep} disabled={!history.canRedo} data-testid="redo" title={`Redo ${history.redoLabel ?? ""} (Ctrl+Shift+Z or Ctrl+Y)`}>
             Redo ({future})
           </button>
         </div>
+        {status && (
+          <span className="status-line" role="status" data-testid="history-status">
+            {status}
+          </span>
+        )}
         <span className={check.ok ? "status-ok" : "status-bad"} data-testid="design-status">
           {check.ok ? "Design is valid" : `Design is invalid: ${check.errors[0]?.message}`}
         </span>
@@ -417,6 +478,21 @@ export function Editor({ product, swatches, fonts, demoProduct }: EditorProps) {
               </ul>
             )}
           </section>
+
+          <TeamPanel
+            product={product}
+            design={design}
+            palette={palette}
+            fonts={fonts}
+            templates={templates}
+            textFits={textFits}
+            images={flatImages.lookup}
+            version={fontVersion}
+            commitEdit={commitEdit}
+            previewEdit={previewEdit}
+            begin={(label) => history.begin(label)}
+            end={() => history.end()}
+          />
 
           <section>
             <h2>Add to the jersey</h2>
@@ -516,10 +592,10 @@ export function Editor({ product, swatches, fonts, demoProduct }: EditorProps) {
                         <span className="layer-piece">{pieceName(layer.pieceId)}</span>
                         {warn && <span className="badge-warn">Low DPI</span>}
                       </button>
-                      <button type="button" onClick={() => commitEdit((d) => moveLayer(d, layer.id, index + 1))} disabled={index === design.layers.length - 1} aria-label={`Move ${layer.id} up`}>
+                      <button type="button" onClick={() => commitEdit((d) => moveLayer(d, layer.id, index + 1), "order")} disabled={index === design.layers.length - 1} aria-label={`Move ${layer.id} up`}>
                         Up
                       </button>
-                      <button type="button" onClick={() => commitEdit((d) => moveLayer(d, layer.id, index - 1))} disabled={index === 0} aria-label={`Move ${layer.id} down`}>
+                      <button type="button" onClick={() => commitEdit((d) => moveLayer(d, layer.id, index - 1), "order")} disabled={index === 0} aria-label={`Move ${layer.id} down`}>
                         Down
                       </button>
                       <button type="button" onClick={() => deleteLayer(layer.id)} aria-label={`Delete ${layer.id}`}>
@@ -541,7 +617,7 @@ export function Editor({ product, swatches, fonts, demoProduct }: EditorProps) {
               swatches={swatches}
               commitEdit={commitEdit}
               previewEdit={previewEdit}
-              begin={() => history.begin()}
+              begin={(label) => history.begin(label)}
               end={history.end}
             />
           )}
@@ -558,7 +634,16 @@ export function Editor({ product, swatches, fonts, demoProduct }: EditorProps) {
                       <span className="zone-name">{zone.name}</span>
                       <span className="zone-hex">
                         {swatches.find((s) => s.color.id === current?.id)?.name ?? current?.id} {current?.hex}
+                        {current?.teamColor && ` (follows ${current.teamColor})`}
+                        {current?.requested && ` (matched from ${current.requested})`}
                       </span>
+                    </div>
+                    <div className="row">
+                      {TEAM_COLOUR_ROLES.filter((r) => design.teamColors[r]).map((r) => (
+                        <button key={r} type="button" className="preset" aria-pressed={current?.teamColor === r} onClick={() => commitEdit((d) => setZoneTeamColor(d, zone.id, r), "zone-colour")} data-testid={`zone-${zone.id}-team-${r}`}>
+                          Team {r}
+                        </button>
+                      ))}
                     </div>
                     <div className="swatches" role="group" aria-label={`Colour for ${zone.name}`}>
                       {swatches.map((swatch) => (
@@ -570,7 +655,7 @@ export function Editor({ product, swatches, fonts, demoProduct }: EditorProps) {
                           title={`${swatch.name} ${swatch.color.hex}`}
                           aria-label={`${zone.name}: ${swatch.name}`}
                           aria-pressed={current?.id === swatch.color.id}
-                          onClick={() => commitEdit((d) => setZoneColor(d, zone.id, swatch.color, { product }))}
+                          onClick={() => commitEdit((d) => setZoneColor(d, zone.id, swatch.color, { product }), "zone-colour")}
                           style={{ background: swatch.color.hex }}
                         />
                       ))}
@@ -579,6 +664,21 @@ export function Editor({ product, swatches, fonts, demoProduct }: EditorProps) {
                 );
               })}
             </ul>
+            {[...new Set(design.shapes.map((sh) => sh.group))].map((group) => {
+              const fill = design.shapes.find((sh) => sh.group === group)!.fill;
+              return (
+                <div key={group} className="zone-head" data-testid={`shape-group-${group}`}>
+                  <span className="zone-chip" style={{ background: fill.hex }} />
+                  <span className="zone-name">Shapes: {group}</span>
+                  <span className="zone-hex">{fill.teamColor ? `follows ${fill.teamColor}` : fill.id}</span>
+                  {TEAM_COLOUR_ROLES.filter((r) => design.teamColors[r]).map((r) => (
+                    <button key={r} type="button" className="preset" aria-pressed={fill.teamColor === r} onClick={() => commitEdit((d) => setShapeGroupColor(d, group, teamColourValue(d, r)), "shape-colour")}>
+                      Team {r}
+                    </button>
+                  ))}
+                </div>
+              );
+            })}
             <p className="note">
               Placeholder colours, not print-tested.
               {drawInfo && ` Texture ${drawInfo.size} x ${drawInfo.size} px, ${drawInfo.layers} layers, redrawn in ${drawInfo.drawMs.toFixed(1)} ms.`}
@@ -625,9 +725,9 @@ interface LayerControlsProps {
   product: ProductDefinition;
   fonts: FontCatalog;
   swatches: Swatch[];
-  commitEdit: (edit: (current: DesignDocument) => DesignDocument) => boolean;
+  commitEdit: (edit: (current: DesignDocument) => DesignDocument, label: EditLabel) => boolean;
   previewEdit: (edit: (current: DesignDocument) => DesignDocument) => void;
-  begin: () => void;
+  begin: (label: EditLabel) => void;
   end: () => void;
 }
 
@@ -662,13 +762,13 @@ function LayerControls({ layer, product, fonts, swatches, commitEdit, previewEdi
     if (!Number.isFinite(factor) || factor <= 0) return null;
     return scaleLayer(layer, factor);
   };
-  const gestureProps = {
-    onPointerDown: begin,
-    onFocus: begin,
+  const gestureProps = (label: EditLabel) => ({
+    onPointerDown: () => begin(label),
+    onFocus: () => begin(label),
     onPointerUp: end,
     onKeyUp: end,
     onBlur: end,
-  };
+  });
 
   return (
     <section className="controls" data-testid="layer-controls">
@@ -681,7 +781,7 @@ function LayerControls({ layer, product, fonts, swatches, commitEdit, previewEdi
           <input
             value={draft}
             dir="auto"
-            onFocus={begin}
+            onFocus={() => begin(layer.role === "team-name" ? "team-name" : layer.role === "player-name" ? "player-name" : layer.role === "player-number" ? "player-number" : "text")}
             onBlur={() => {
               end();
               setDraft(layer.value);
@@ -697,7 +797,7 @@ function LayerControls({ layer, product, fonts, swatches, commitEdit, previewEdi
       {isText && (
         <label className="row">
           <span>Font</span>
-          <select value={layer.fontId} onChange={(e) => commitEdit((d) => updateLayer(addCatalogFont(d, fonts, e.target.value), layer.id, { fontId: e.target.value }, { product }))}>
+          <select value={layer.fontId} onChange={(e) => commitEdit((d) => updateLayer(addCatalogFont(d, fonts, e.target.value), layer.id, { fontId: e.target.value }, { product }), "font")}>
             {fonts.fonts
               .filter((f) => f.uses.includes(layer.kind === "number" ? "number" : "text"))
               .map((f) => (
@@ -713,7 +813,7 @@ function LayerControls({ layer, product, fonts, swatches, commitEdit, previewEdi
           <span>Align</span>
           <div className="segmented" role="group" aria-label="Alignment">
             {(["start", "center", "end"] as TextAlign[]).map((a) => (
-              <button key={a} type="button" aria-pressed={layer.align === a} onClick={() => commitEdit(update({ align: a }))}>
+              <button key={a} type="button" aria-pressed={layer.align === a} onClick={() => commitEdit(update({ align: a }), "align")}>
                 {a === "start" ? "Start" : a === "center" ? "Centre" : "End"}
               </button>
             ))}
@@ -723,7 +823,7 @@ function LayerControls({ layer, product, fonts, swatches, commitEdit, previewEdi
       {layer.kind === "text" && (
         <label className="row">
           <span>Direction</span>
-          <select value={layer.direction} onChange={(e) => commitEdit(update({ direction: e.target.value as TextDirection }))}>
+          <select value={layer.direction} onChange={(e) => commitEdit(update({ direction: e.target.value as TextDirection }), "direction")}>
             <option value="auto">Auto (from the text)</option>
             <option value="ltr">Left to right</option>
             <option value="rtl">Right to left</option>
@@ -733,7 +833,7 @@ function LayerControls({ layer, product, fonts, swatches, commitEdit, previewEdi
       {isText && (
         <div className="swatches" role="group" aria-label="Colour of this layer">
           {swatches.map((s) => (
-            <button key={s.color.id} type="button" className="swatch small" title={s.name} aria-pressed={layer.fill.id === s.color.id} onClick={() => commitEdit(update({ fill: s.color }))} style={{ background: s.color.hex }} />
+            <button key={s.color.id} type="button" className="swatch small" title={s.name} aria-pressed={layer.fill.id === s.color.id} onClick={() => commitEdit(update({ fill: s.color }), "colour")} style={{ background: s.color.hex }} />
           ))}
         </div>
       )}
@@ -750,14 +850,14 @@ function LayerControls({ layer, product, fonts, swatches, commitEdit, previewEdi
             if (patch) previewEdit(update(patch));
           }}
           data-testid="size"
-          {...gestureProps}
+          {...gestureProps("resize")}
         />
       </label>
       <div className="row buttons">
-        <button type="button" onClick={() => commitEdit(update(scaleLayer(layer, 1 / 1.25)))} data-testid="smaller">
+        <button type="button" onClick={() => commitEdit(update(scaleLayer(layer, 1 / 1.25)), "resize")} data-testid="smaller">
           Smaller
         </button>
-        <button type="button" onClick={() => commitEdit(update(scaleLayer(layer, 1.25)))} data-testid="bigger">
+        <button type="button" onClick={() => commitEdit(update(scaleLayer(layer, 1.25)), "resize")} data-testid="bigger">
           Bigger
         </button>
       </div>
@@ -771,17 +871,17 @@ function LayerControls({ layer, product, fonts, swatches, commitEdit, previewEdi
           value={Math.round(normalizeRotation(layer.rotation))}
           onChange={(e) => previewEdit(update({ rotation: Number(e.target.value) }))}
           data-testid="rotation"
-          {...gestureProps}
+          {...gestureProps("rotate")}
         />
       </label>
       <div className="row buttons">
-        <button type="button" onClick={() => commitEdit(update({ rotation: normalizeRotation(layer.rotation - 15) }))} data-testid="rotate-left">
+        <button type="button" onClick={() => commitEdit(update({ rotation: normalizeRotation(layer.rotation - 15) }), "rotate")} data-testid="rotate-left">
           Turn -15
         </button>
-        <button type="button" onClick={() => commitEdit(update({ rotation: normalizeRotation(layer.rotation + 15) }))} data-testid="rotate-right">
+        <button type="button" onClick={() => commitEdit(update({ rotation: normalizeRotation(layer.rotation + 15) }), "rotate")} data-testid="rotate-right">
           Turn +15
         </button>
-        <button type="button" onClick={() => commitEdit(update({ rotation: 0 }))}>
+        <button type="button" onClick={() => commitEdit(update({ rotation: 0 }), "rotate")}>
           Straight
         </button>
       </div>
@@ -789,7 +889,8 @@ function LayerControls({ layer, product, fonts, swatches, commitEdit, previewEdi
         <span>Piece</span>
         <select value={layer.pieceId} onChange={(e) => {
           const target = product.pieces.find((p) => p.id === e.target.value)!;
-          commitEdit(update({ pieceId: target.id, position: pieceCentre(target) }));
+          // Another piece: no preset any more (a preset belongs to one piece).
+          commitEdit((d) => updateLayer({ ...d, layers: d.layers.map((l) => (l.id === layer.id ? withoutPreset(l) : l)) }, layer.id, { pieceId: target.id, position: pieceCentre(target) }, { product }), "placement");
         }}>
           {product.pieces.map((p) => (
             <option key={p.id} value={p.id}>
@@ -802,7 +903,7 @@ function LayerControls({ layer, product, fonts, swatches, commitEdit, previewEdi
         Centre {Math.round(layer.position.x)}, {Math.round(layer.position.y)} mm on the {piece.name.toLowerCase()} ({piece.width} x {piece.height} mm). Box {Math.round(layer.size.width)} x {Math.round(layer.size.height)} mm.
         {layer.kind === "logo" && ` Prints at ${Math.round(logoLayerDpi(layer))} DPI (minimum ${DEFAULT_UPLOAD_LIMITS.minDpi}).`}
       </p>
-      <button type="button" onClick={() => commitEdit(update({ position: pieceCentre(piece) }))}>
+      <button type="button" onClick={() => commitEdit(update({ position: pieceCentre(piece) }), "move")}>
         Centre on the piece
       </button>
     </section>

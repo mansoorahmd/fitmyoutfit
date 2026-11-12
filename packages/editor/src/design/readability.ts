@@ -101,3 +101,21 @@ export function readabilityFix(design: Pick<DesignDocument, "teamColors">, backg
   }
   return best!;
 }
+
+/**
+ * The team colour that makes the best outline for letters of `fill` on a
+ * background: the one whose weaker contrast (against the letters, and against
+ * the background) is the strongest, so the outline shows round the letters
+ * and against the garment. A default for an outline the coach has not
+ * coloured yet; ties go to the earlier role.
+ */
+export function outlineColourFor(design: Pick<DesignDocument, "teamColors">, fill: ColorValue, background: Background): { role: TeamColourRole; ratio: number } {
+  let best: { role: TeamColourRole; ratio: number } | null = null;
+  for (const role of TEAM_COLOUR_ROLES) {
+    const team = design.teamColors[role];
+    if (!team) continue;
+    const ratio = Math.min(contrastRatio(team.hex, fill.hex), contrastRatio(team.hex, background.colour.hex));
+    if (!best || ratio > best.ratio) best = { role, ratio };
+  }
+  return best!;
+}
