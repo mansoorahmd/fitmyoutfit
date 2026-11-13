@@ -366,7 +366,7 @@ export const checkoutContent = {
     // DRAFT WORDING. No id (P): the page has looked for about a minute and a half and still sees no order (QA S1-4c, B1).
     notSeenTitle: "We still can't see an order",
     // DRAFT WORDING. No id (P): its text. Completing the same cart again returns the same order, never a second one (contract 8.1).
-    notSeenText: "We've checked for about a minute and a half and there's no order for this cart yet. Try again: if your first try went through, you get that same order, not a second one.",
+    notSeenText: "We've checked for about a minute and a half and can't see an order for this cart. Try again: if your first try went through, you get that same order, not a second one.",
     // DRAFT WORDING. No id (P): an HTTP 5xx at "Place order" (QA S1-4, D13). The order may or may not exist.
     serverText: "We don't know yet if your order went through. Check before you try again, so you don't order twice.",
     // DRAFT WORDING. W-E14
