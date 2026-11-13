@@ -4,6 +4,7 @@ import {
   AddressFormValues,
   addressLines,
   addressStepDone,
+  asciiDigits,
   FIELD_MAX,
   countryFieldRules,
   initialAddressValues,
@@ -269,6 +270,70 @@ describe("what the cart receives", () => {
     expect(normalizePkMobile("+923001234567")).toBe("+923001234567")
     expect(normalizePkMobile("+44 7700 900123")).toBeNull()
     expect(normalizePkMobile("0423 5761234")).toBeNull()
+  })
+
+  describe("values that were wrongly refused (QA S1-4c, m3)", () => {
+    const URDU = "۰۳۰۰ ۱۲۳۴۵۶۷" // Extended Arabic-Indic, as an Urdu keyboard types it
+    const ARABIC = "٠٣٠٠ ١٢٣٤٥٦٧" // Arabic-Indic
+    const FULL = "０３００ １２３４５６７" // full-width
+
+    it("Urdu, Arabic and full-width digits become ASCII before the check, and are stored in ASCII", () => {
+      expect(asciiDigits(URDU)).toBe("0300 1234567")
+      expect(asciiDigits(ARABIC)).toBe("0300 1234567")
+      expect(asciiDigits(FULL)).toBe("0300 1234567")
+      for (const typed of [URDU, ARABIC, FULL, "+۹۲ ۳۰۰ ۱۲۳۴۵۶۷"]) {
+        expect(normalizePkMobile(typed), typed).toBe("+923001234567")
+        const values = form("pk", { phone: typed })
+        expect(validateAddressForm(values, ["pk"]).phone, typed).toBeUndefined()
+        expect(toCartUpdate(values).shipping_address.phone, typed).toBe("+923001234567")
+      }
+      // other countries: any valid number, stored with ASCII digits
+      expect(isPhone("٠٧٧٠٠ ٩٠٠١٢٣")).toBe(true)
+      expect(toCartUpdate(form("gb", { phone: "０７７００ ９００１２３" })).shipping_address.phone).toBe("07700 900123")
+      // postcodes
+      expect(normalizePostalCode("pk", "۵۴۰۰۰")).toBe("54000")
+      expect(normalizePostalCode("us", "１０００１")).toBe("10001")
+      expect(normalizePostalCode("gb", "ＳＷ１Ａ １ＡＡ")).toBe("SW1A 1AA")
+      const pk = form("pk")
+      pk.shipping.postal_code = "٥٤٠٠٠"
+      expect(validateAddressForm(pk, ["pk"])["shipping.postal_code"]).toBeUndefined()
+      expect(toCartUpdate(pk).shipping_address.postal_code).toBe("54000")
+    })
+
+    it("a Pakistan number with the trunk 0 after +92 is accepted and stored as +923001234567", () => {
+      for (const typed of ["+92 0300 1234567", "+92 (0) 300 1234567", "+92(0)3001234567", "0092 0300 1234567", "92 0300 1234567"]) {
+        expect(normalizePkMobile(typed), typed).toBe("+923001234567")
+      }
+      // still refused: landlines, too short, too long
+      for (const typed of ["+92 042 35761234", "+92 0300 123456", "+92 0300 12345678"]) {
+        expect(normalizePkMobile(typed), typed).toBeNull()
+      }
+    })
+
+    it("BFPO and overseas-territory postcodes are refused in words, not with the format's message", () => {
+      const OUTSIDE = "We deliver to addresses in the United Kingdom only, not to BFPO or overseas territory addresses."
+      for (const typed of ["BFPO 1234", "bfpo 57", "FIQQ 1ZZ", "STHL 1ZZ", "ASCN 1ZZ", "TDCU 1ZZ", "BIQQ 1ZZ", "SIQQ 1ZZ", "BBND 1ZZ", "PCRN 1ZZ", "TKCA 1ZZ", "GX11 1AA", "KY1-1001", "VG1110", "MSR 1110", "AI-2640"]) {
+        const values = form("gb", { phone: "07700 900123" })
+        values.shipping.postal_code = typed
+        expect(validateAddressForm(values, ["gb"])["shipping.postal_code"], typed).toBe(OUTSIDE)
+      }
+      // Jersey, Guernsey and the Isle of Man keep the UK format, and are accepted as before
+      for (const typed of ["JE2 3AB", "GY1 1AA", "IM1 1AA"]) {
+        expect(normalizePostalCode("gb", typed), typed).toBe(typed)
+      }
+      const wrong = form("gb", { phone: "07700 900123" })
+      wrong.shipping.postal_code = "ABC"
+      expect(validateAddressForm(wrong, ["gb"])["shipping.postal_code"]).toBe("Enter a UK postcode, like SW1A 1AA")
+    })
+
+    it("an email with two dots in a row or an invisible character is refused", () => {
+      for (const typed of ["ali@x..com", "ali..raza@example.com", "ali@example.com​", "a​li@example.com", "ali@exa‍mple.com", "‎ali@example.com", ".ali@example.com", "ali.@example.com", "ali@.example.com", "ali@example.com."]) {
+        expect(isEmail(typed), JSON.stringify(typed)).toBe(false)
+      }
+      for (const typed of ["ali@example.com", "ali.raza@example.co.uk", "a+b@x.pk", "  ali@example.com  "]) {
+        expect(isEmail(typed), typed).toBe(true)
+      }
+    })
   })
 
   it("the UK's one special postcode, GIR 0AA, is accepted and stored with its space (QA S1-4c, S3)", () => {

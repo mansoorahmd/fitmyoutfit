@@ -166,6 +166,8 @@ export const checkoutContent = {
         // DRAFT WORDING. No id: a Pakistan postal code that isn't one; the field is optional.
         pk: "Enter a postal code of five digits, like {example}, or leave it empty",
       } as Record<string, string>,
+      // DRAFT WORDING. No id (P): a BFPO or UK overseas-territory postcode; the store delivers in the United Kingdom only (QA S1-4c, m3).
+      postalCodeOutsideUk: "We deliver to addresses in the United Kingdom only, not to BFPO or overseas territory addresses.",
       // DRAFT WORDING. No id (P): a delivery in Pakistan needs a Pakistan mobile number; the courier calls before a cash delivery (QA S1-4, D15).
       phonePk: "Enter a Pakistan mobile number, like {example} or +92 300 1234567",
       // DRAFT WORDING. No id: a field longer than the store keeps (QA S1-4, D11).

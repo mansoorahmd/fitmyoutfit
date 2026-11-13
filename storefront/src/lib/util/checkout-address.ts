@@ -113,6 +113,40 @@ export const FIELD_MAX = {
 export type LimitedField = keyof typeof FIELD_MAX
 
 /**
+ * Digits as a phone number or a postcode is checked and stored (QA S1-4c,
+ * m3): digits typed by an Urdu or Arabic keyboard (Arabic-Indic U+0660 to
+ * U+0669, Extended Arabic-Indic U+06F0 to U+06F9) and full-width
+ * characters (NFKC: "０３００", "ＳＷ１Ａ") become ASCII.
+ */
+export const asciiDigits = (value: string): string =>
+  value
+    .normalize("NFKC")
+    .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660))
+    .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0))
+
+/**
+ * Postcodes the UK format would take, or that belong to a British address
+ * outside the UK, where the store doesn't deliver: British Forces (BFPO)
+ * and the overseas territories (QA S1-4c, m3). They get their own message
+ * instead of the format's.
+ */
+const UK_OUTSIDE_DELIVERY = [
+  /^BFPO\d{1,4}$/, // British Forces Post Office
+  /^(ASCN|BBND|BIQQ|FIQQ|PCRN|SIQQ|STHL|TDCU|TKCA)1ZZ$/, // Ascension, BIOT, Antarctic, Falklands, Pitcairn, South Georgia, St Helena, Tristan da Cunha, Turks and Caicos
+  /^GX111AA$/, // Gibraltar
+  /^AI-?\d{4}$/, // Anguilla
+  /^KY\d-?\d{4}$/, // Cayman Islands
+  /^MSR\d{4}$/, // Montserrat
+  /^VG\d{4}$/, // British Virgin Islands
+]
+
+/** A BFPO or overseas-territory postcode: a British address the store doesn't deliver to. */
+export const isUkOutsideDelivery = (value: string): boolean => {
+  const compact = asciiDigits(value).toUpperCase().replace(/\s+/g, "")
+  return UK_OUTSIDE_DELIVERY.some((pattern) => pattern.test(compact))
+}
+
+/**
  * A postal code in the country's one stored form, or null when it isn't one
  * (QA S1-4, D7):
  * - UK: the postcode format (outward code, inward code), stored upper case
@@ -120,16 +154,19 @@ export type LimitedField = keyof typeof FIELD_MAX
  * - US: five digits, or ZIP+4 stored as "12345-6789";
  * - Pakistan: five digits;
  * - other countries: as typed, trimmed.
+ * Urdu, Arabic and full-width digits are read as ASCII (asciiDigits). A
+ * BFPO or overseas-territory postcode is not a UK one here.
  */
 export const normalizePostalCode = (
   countryCode: string | null | undefined,
   value: string
 ): string | null => {
   const code = (countryCode ?? "").toLowerCase()
-  const trimmed = value.trim()
+  const trimmed = asciiDigits(value).trim()
   if (code === "gb") {
     const compact = trimmed.toUpperCase().replace(/\s+/g, "")
     if (compact === "GIR0AA") return "GIR 0AA"
+    if (isUkOutsideDelivery(compact)) return null
     const match = /^([A-Z]{1,2}\d[A-Z\d]?)(\d[A-Z]{2})$/.exec(compact)
     return match ? `${match[1]} ${match[2]}` : null
   }
@@ -147,29 +184,56 @@ export const normalizePostalCode = (
  * A Pakistan mobile number in its one stored form, "+923001234567", or
  * null when it isn't one (QA S1-4, D15). Accepted as people write it:
  * "0300 1234567", "0300-1234567", "+92 300 1234567", "92 300 1234567",
- * "0092 300 1234567". A delivery in Pakistan needs one: the courier calls
- * before a cash delivery.
+ * "0092 300 1234567", and with the trunk 0 kept after the country code,
+ * "+92 0300 1234567" or "+92 (0) 300 1234567" (QA S1-4c, m3). Urdu,
+ * Arabic and full-width digits are read as ASCII. A delivery in Pakistan
+ * needs one: the courier calls before a cash delivery.
  */
 export const normalizePkMobile = (value: string): string | null => {
-  const trimmed = value.trim()
+  const trimmed = asciiDigits(value).trim()
   if (!/^\+?[\d\s().-]+$/.test(trimmed)) return null
   const digits = trimmed.replace(/\D/g, "")
   let national: string | null = null
   if (trimmed.startsWith("+")) national = digits.startsWith("92") ? digits.slice(2) : null
   else if (digits.startsWith("0092")) national = digits.slice(4)
-  else if (digits.startsWith("92") && digits.length === 12) national = digits.slice(2)
+  else if (digits.startsWith("92") && (digits.length === 12 || digits.length === 13)) national = digits.slice(2)
   else if (digits.startsWith("0")) national = digits.slice(1)
+  // the trunk 0 written after the country code: "+92 0300 …", "+92 (0) 300 …"
+  if (national && /^03\d{9}$/.test(national)) national = national.slice(1)
   return national && /^3\d{9}$/.test(national) ? `+92${national}` : null
 }
 
-/** The phone as it is stored: Pakistan's one form for a delivery there; elsewhere trimmed. */
+/**
+ * The phone as it is stored: Pakistan's one form for a delivery there;
+ * elsewhere trimmed, with ASCII digits (asciiDigits).
+ */
 export const normalizePhone = (value: string, countryCode: string | null | undefined): string =>
-  (countryCode ?? "").toLowerCase() === "pk" ? normalizePkMobile(value) ?? value.trim() : value.trim()
+  (countryCode ?? "").toLowerCase() === "pk"
+    ? normalizePkMobile(value) ?? asciiDigits(value).trim()
+    : asciiDigits(value).trim()
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
-/** An email address with one @ and a dot in the domain; no spaces. */
-export const isEmail = (value: string): boolean => EMAIL.test(value.trim())
+/**
+ * Control and format characters (Unicode Cc and Cf): zero-width spaces and
+ * joiners, direction marks and embeddings, the soft hyphen, the byte order
+ * mark. Written as ranges: the project's compile target has no `u` flag.
+ */
+const INVISIBLE = /[\u0000-\u001f\u007f-\u009f­؀-؅؜۝܏᠎​-‏‪-‮⁠-⁤⁦-⁯﻿￹-￻]/
+
+/**
+ * An email address with one @ and a dot in the domain; no spaces, no two
+ * dots in a row, no dot at either end of the name or the domain, and no
+ * invisible character (a zero-width space, a direction mark, a control
+ * character; QA S1-4c, m3), which would make an address no one can type.
+ */
+export const isEmail = (value: string): boolean => {
+  const trimmed = value.trim()
+  if (!EMAIL.test(trimmed)) return false
+  if (INVISIBLE.test(trimmed) || trimmed.includes("..")) return false
+  const [local, domain] = trimmed.split("@")
+  return !local.startsWith(".") && !local.endsWith(".") && !domain.startsWith(".") && !domain.endsWith(".")
+}
 
 /**
  * A phone number as people type it: digits with spaces, dashes, dots and
@@ -178,7 +242,7 @@ export const isEmail = (value: string): boolean => EMAIL.test(value.trim())
  * it isn't a phone number.
  */
 export const isPhone = (value: string): boolean => {
-  const trimmed = value.trim()
+  const trimmed = asciiDigits(value).trim()
   if (!/^\+?[\d\s().-]+$/.test(trimmed)) {
     return false
   }
@@ -230,6 +294,9 @@ const checkAddress = (
   if (rules.postalCode.shown) {
     if (blank(address.postal_code)) {
       if (rules.postalCode.required) errors[`${prefix}.postal_code`] = forCountry(e.postalCode, code)
+    } else if (code === "gb" && isUkOutsideDelivery(address.postal_code)) {
+      // in words, not the format's message: the format isn't what is wrong
+      errors[`${prefix}.postal_code`] = e.postalCodeOutsideUk
     } else if (normalizePostalCode(code, address.postal_code) === null) {
       errors[`${prefix}.postal_code`] = fill(forCountry(e.postalCodeFormat, code), {
         example: forCountry(words.postalExamples, code),

@@ -4,7 +4,7 @@
 
 import { checkoutContent } from "@content/checkout"
 
-import { isPhone, tooLong } from "./checkout-address"
+import { asciiDigits, isPhone, tooLong } from "./checkout-address"
 import { fill } from "./wording"
 
 export type NameValues = { firstName: string; lastName: string }
@@ -41,7 +41,7 @@ export const afterProfileSave = (
   }
   return row === "name"
     ? { ...shown, firstName: draft.firstName.trim(), lastName: draft.lastName.trim() }
-    : { ...shown, phone: draft.phone.trim() }
+    : { ...shown, phone: asciiDigits(draft.phone).trim() }
 }
 
 /**

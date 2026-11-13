@@ -103,6 +103,8 @@ export const accountContent = {
       password: "Enter your password",
       // DRAFT WORDING. No id: a new password shorter than W-L6 asks. {min} is the rule's number.
       passwordShort: "Use at least {min} characters",
+      // DRAFT WORDING. No id: a new password made only of spaces (QA S1-4c, m4).
+      passwordSpaces: "Use letters, numbers or symbols, not only spaces",
     },
   },
 

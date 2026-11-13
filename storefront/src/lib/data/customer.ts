@@ -27,6 +27,7 @@ import {
   validateSignIn,
 } from "@lib/util/account-auth"
 import { NameValues, PhoneValues, savedProfile, validateName, validatePhone } from "@lib/util/account-profile"
+import { asciiDigits } from "@lib/util/checkout-address"
 import { afterSignInPath } from "@lib/util/safe-next"
 
 import { revalidateCartCaches } from "./cart-cache"
@@ -364,6 +365,9 @@ export async function updateCustomerPhone(values: PhoneValues): Promise<SaveResu
 
   const headers = await getAuthHeaders()
   return profileOutcome(
-    await call(async () => sdk.store.customer.update({ phone: values.phone.trim() }, {}, headers))
+    await call(async () =>
+      // stored with ASCII digits, however it was typed (QA S1-4c, m3)
+      sdk.store.customer.update({ phone: asciiDigits(values.phone).trim() }, {}, headers)
+    )
   )
 }

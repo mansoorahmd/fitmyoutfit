@@ -10,7 +10,7 @@
 import { accountContent } from "@content/account"
 import { checkoutContent } from "@content/checkout"
 
-import { isEmail, isPhone, tooLong } from "./checkout-address"
+import { asciiDigits, isEmail, isPhone, tooLong } from "./checkout-address"
 import { fill } from "./wording"
 
 const words = accountContent.auth
@@ -111,6 +111,9 @@ export const validateCreate = (values: CreateValues, countryCode: string): Creat
   }
   if (values.password.length < MIN_PASSWORD_LENGTH) {
     errors.password = fill(words.errors.passwordShort, { min: MIN_PASSWORD_LENGTH })
+  } else if (!values.password.trim()) {
+    // eight spaces met the length rule (QA S1-4c, m4)
+    errors.password = words.errors.passwordSpaces
   }
   return errors
 }
@@ -129,7 +132,8 @@ export const toCustomerCreate = (values: CreateValues) => {
     first_name: values.firstName.trim(),
   }
   if (!blank(values.lastName)) out.last_name = values.lastName.trim()
-  if (!blank(values.phone)) out.phone = values.phone.trim()
+  // stored with ASCII digits, however it was typed (QA S1-4c, m3)
+  if (!blank(values.phone)) out.phone = asciiDigits(values.phone).trim()
   return out
 }
 

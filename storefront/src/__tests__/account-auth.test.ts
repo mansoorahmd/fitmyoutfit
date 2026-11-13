@@ -92,6 +92,24 @@ describe("field checks (05, 2.3 and 8.3)", () => {
     expect(FIELD_MAX).toMatchObject({ first_name: 100, last_name: 100, email: 254, phone: 25 })
   })
 
+  it("a password made only of spaces is refused, with its own message (QA S1-4c, m4)", () => {
+    const base = { firstName: "Ali", lastName: "", email: "a@b.co", phone: "", password: "12345678" }
+    expect(validateCreate({ ...base, password: " ".repeat(8) }, "pk")).toEqual({
+      password: "Use letters, numbers or symbols, not only spaces",
+    })
+    expect(validateCreate({ ...base, password: " ".repeat(4) + "　".repeat(6) }, "pk")).toEqual({
+      password: "Use letters, numbers or symbols, not only spaces",
+    })
+    // spaces inside a password are kept and allowed
+    expect(validateCreate({ ...base, password: "  team kit  " }, "pk")).toEqual({})
+  })
+
+  it("a phone typed with Urdu digits is stored with ASCII digits (QA S1-4c, m3)", () => {
+    const base = { firstName: "Ali", lastName: "", email: "a@b.co", phone: "۰۳۰۰ ۱۲۳۴۵۶۷", password: "12345678" }
+    expect(validateCreate(base, "pk")).toEqual({})
+    expect(toCustomerCreate(base).phone).toBe("0300 1234567")
+  })
+
   it("keeps the email as the account does: trimmed, lower case", () => {
     expect(normalEmail("  Ali@Example.COM ")).toBe("ali@example.com")
     expect(
