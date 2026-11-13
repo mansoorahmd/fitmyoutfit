@@ -21,6 +21,8 @@ export interface DemoProduct {
   id: string;
   /** Short name for the product switch. */
   label: string;
+  /** The garment's name in the editor ("Jersey"): the top bar and the stage's description. */
+  shortName: string;
   /** Null for a model we made ourselves. */
   credit: ModelCredit | null;
 }
@@ -29,6 +31,7 @@ export const DEMO_PRODUCTS: readonly DemoProduct[] = [
   {
     id: "stand-in-jersey",
     label: "Football jersey (stand-in)",
+    shortName: "Jersey",
     credit: {
       title: "Jersey Patterns 3D Free",
       author: "Wearable3D",
@@ -41,6 +44,7 @@ export const DEMO_PRODUCTS: readonly DemoProduct[] = [
   {
     id: "stand-in-tshirt",
     label: "T-shirt (stand-in)",
+    shortName: "T-shirt",
     credit: {
       title: "Garment 3D",
       author: "Prashant Verma",
@@ -50,7 +54,7 @@ export const DEMO_PRODUCTS: readonly DemoProduct[] = [
       changed: true,
     },
   },
-  { id: "placeholder-jersey", label: "Placeholder (generated)", credit: null },
+  { id: "placeholder-jersey", label: "Placeholder (generated)", shortName: "Jersey", credit: null },
 ];
 
 /** The product a page address asks for (`?product=<id>`), else the first one. */

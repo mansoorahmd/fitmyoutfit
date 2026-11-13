@@ -480,6 +480,10 @@ function checkPlacements(product: ProductDefinition): ValidationError[] {
       return;
     }
     const outline = parseSvgPath(piece.outline);
+    const area = piece.printArea;
+    if (area && (preset.centre.x < area.x || preset.centre.x > area.x + area.width || preset.centre.y < area.y || preset.centre.y > area.y + area.height)) {
+      errors.push(makeError(`${at}.centre`, `(${preset.centre.x}, ${preset.centre.y}) is outside the print area of piece "${piece.id}"`));
+    }
     if (outline.ok && !pointInPolylines(flattenPath(outline.commands), preset.centre)) {
       errors.push(makeError(`${at}.centre`, `(${preset.centre.x}, ${preset.centre.y}) is outside the outline of piece "${piece.id}"`));
     }
@@ -536,6 +540,12 @@ function checkPieceGeometry(product: ProductDefinition): ValidationError[] {
           makeError(`${at}.outline`, `must lie inside the piece's box, 0 to ${piece.width} by 0 to ${piece.height} mm`),
         );
       }
+    }
+
+    // The print area lies inside the piece's box.
+    const area = piece.printArea;
+    if (area && (area.x + area.width > piece.width + OUTLINE_BOX_TOLERANCE_MM || area.y + area.height > piece.height + OUTLINE_BOX_TOLERANCE_MM)) {
+      errors.push(makeError(`${at}.printArea`, `must lie inside the piece's box, 0 to ${piece.width} by 0 to ${piece.height} mm`));
     }
 
     const refer = (zone: string, path: string) => {

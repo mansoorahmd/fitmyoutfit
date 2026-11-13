@@ -1,5 +1,10 @@
 /**
- * Flat views of one piece, and template thumbnails (N13, 06-editor.md 4.1):
+ * Flat views of one piece, template thumbnails (N13, 06-editor.md 4.1) and
+ * template cards. The cards the interface shows are `drawTemplateCard`: the
+ * garment as the 3D model shows it (garment-view.ts). `drawTemplateThumbnail`
+ * (the flat front piece) stays for the flat view and for tests.
+ *
+ * Template thumbnails:
  * a template's front, small and flat, in the team's colours with the team
  * name and the crest. Drawn by `drawPatternTexture` itself (flat mode), on a
  * product narrowed to the one piece and fitted into the thumbnail's box, so
@@ -11,6 +16,7 @@ import { applyTemplate, type Template } from "../design/template.js";
 import { DesignError } from "../design/validate.js";
 import { drawPatternTexture, type DrawPatternResult, type PatternCanvasContext } from "./pattern-texture.js";
 import type { AssetImageLookup } from "./layers.js";
+import { composeGarmentView, type GarmentView, type TextureSampler } from "./garment-view.js";
 
 export interface PieceViewOptions {
   /** A piece id, or the product's front or back piece. Default "front". */
@@ -67,4 +73,56 @@ export function drawTemplateThumbnail(
 ): { design: DesignDocument; result: DrawPatternResult } {
   const applied = applyTemplate(design, template, { product, fonts: options.fonts, previous: options.previous });
   return { design: applied, result: drawPieceView(ctx, product, applied, options) };
+}
+
+/** Where a card's pattern texture is drawn (a small square canvas) and how it is read back. */
+export interface CardTexture {
+  ctx: PatternCanvasContext;
+  /** The texture's edge in pixels (the canvas is this size). 512 is plenty for a card. */
+  size: number;
+  /** Reads what was drawn, as a sampler (in the browser: from `getImageData`). */
+  read(): TextureSampler;
+}
+
+export interface DesignViewOptions {
+  /** The garment seen from the front (or the back), from `renderGarmentView`, once per product. */
+  view: GarmentView;
+  texture: CardTexture;
+  images?: AssetImageLookup;
+}
+
+/**
+ * A picture of a design as the 3D model shows it (06-editor.md 4.1, E3a-2):
+ * the design's pattern texture, drawn small, looked up through the garment's
+ * view buffer. Writes RGBA into `out` (`view.width * view.height * 4`).
+ */
+export function drawDesignView(out: Uint8ClampedArray, product: ProductDefinition, design: DesignDocument, options: DesignViewOptions): DrawPatternResult {
+  const result = drawPatternTexture(options.texture.ctx, product, design, { size: options.texture.size, images: options.images });
+  composeGarmentView(options.view, options.texture.read(), out);
+  return result;
+}
+
+export interface TemplateCardOptions extends DesignViewOptions {
+  fonts: FontCatalog;
+  /** The template the design has now, as for `applyTemplate`. */
+  previous?: Template | null;
+}
+
+/**
+ * A template card: the current design with the template applied (in the
+ * team's colours, with its name, crest and sample player), as the garment
+ * shows it from the front: a jersey with its sleeves and collar, not the flat
+ * front piece (which, for a front that wraps round under the side panels,
+ * reads like a dress). Returns the design it drew, which is also what tapping
+ * the card gives.
+ */
+export function drawTemplateCard(
+  out: Uint8ClampedArray,
+  product: ProductDefinition,
+  design: DesignDocument,
+  template: Template,
+  options: TemplateCardOptions,
+): { design: DesignDocument; result: DrawPatternResult } {
+  const applied = applyTemplate(design, template, { product, fonts: options.fonts, previous: options.previous });
+  return { design: applied, result: drawDesignView(out, product, applied, options) };
 }

@@ -4,7 +4,7 @@ The 3D design editor for the store. It is a standalone React + Three.js package:
 
 **A design is data, not an image.** A design is a versioned JSON document. Previews, proof renders and production files are all generated from it, so it never holds flattened pixels.
 
-Status: step E3a-1 done (the engine for the E3a interface; the interface itself is the next step). On top of E1 (vector pattern pieces drawn onto the 3D model, orbit camera, colour per zone) and E2 (text in Latin, Arabic and Urdu, jersey numbers, logo uploads with checks, dragging, resizing, rotating, ordering, undo and redo): team colours, roles on items, placement presets in the product data, shapes, templates with thumbnails, text outlines, the palette with families and the CIEDE2000 colour-code match, readability, long-name reports and undo labels. The document format is `schemaVersion` **3** (see "Format version 3" below); a version 2 design is upgraded by `upgradeDesign`.
+Status: step E3a-2 done: the interface a coach uses (`EditorShell`, see "The interface" below), phone first, on top of step E3a-1 (the engine for it). On top of E1 (vector pattern pieces drawn onto the 3D model, orbit camera, colour per zone) and E2 (text in Latin, Arabic and Urdu, jersey numbers, logo uploads with checks, dragging, resizing, rotating, ordering, undo and redo): team colours, roles on items, placement presets in the product data, shapes, templates with thumbnails, text outlines, the palette with families and the CIEDE2000 colour-code match, readability, long-name reports and undo labels. The document format is `schemaVersion` **3** (see "Format version 3" below); a version 2 design is upgraded by `upgradeDesign`.
 
 ## Scripts
 
@@ -20,7 +20,7 @@ Status: step E3a-1 done (the engine for the E3a interface; the interface itself 
 | `npm run generate:templates` | Rewrites the sample templates (`samples/templates/<product>/`) from `scripts/make-sample-templates.ts`, measuring body heights on the committed models |
 | `npm run process:stand-in -- <source.glb>` | Rewrites a stand-in model and its product definition from its downloaded source file (the jersey or the T-shirt, picked by the file's SHA-256); see "Stand-in models" |
 
-To run the demo on another port: `npm run dev -w packages/editor -- --port 5184 --strictPort` from the repository root. The demo shows the stand-in football jersey; a switch in the header (or `?product=stand-in-tshirt`, `?product=placeholder-jersey`) shows the stand-in T-shirt or the old placeholder instead. A credit line over the 3D view names the model on screen and its licence. It has camera buttons for each side; controls to add a team name (Latin, Urdu and Arabic presets or typed), a number (English or Arabic digits) and a logo on a chosen piece; test files for the upload checks (made in the browser by code); the layer list (select, up, down, delete, low-DPI badge); controls for the selected layer (text, font, alignment, direction, colour, size, rotation, piece); the checks' messages; undo and redo (buttons, Ctrl+Z, Ctrl+Shift+Z or Ctrl+Y; Delete, arrow keys to nudge, Escape to deselect); the colour zones; a flat close-up of the selected piece, the flat pattern, the design JSON and the fonts' licences. Drag a layer on the model to move it. It fits a phone screen: the model stays at the top while the panel scrolls. Step E3a-1 added plain developer controls (not the interface design, which is the next step): team colours, swap, the templates with their thumbnails, the team name (Chest, Upper back, Off), a sample player's name and number, switches for name and number at their presets, outline and size per role, readability with the "add outline" fix, which lines are shrunk, the colour-code match (both colours, the difference, the match level), zones and shape groups that follow a team colour, and "Undone: <label>" after undo. The demo opens on the product's first template with a sample team name and player.
+To run the demo on another port: `npm run dev -w packages/editor -- --port 5184 --strictPort` from the repository root. The demo shows **the interface a coach uses** (`EditorShell`, below) on the stand-in football jersey (`?product=stand-in-tshirt` or `?product=placeholder-jersey` for the others), saving the design on the device (it offers "Continue your last design?" on return). The model's credit line is on the stage (a licence duty). Everything for developers (the engine's plain controls of E2 and E3a-1, the design JSON, the texture, the flat pattern, the font licences, the product switch) is on the developer page: add `?dev=1`.
 
 ## Using it
 
@@ -41,8 +41,16 @@ import designSchema from "@fitmyoutfit/editor/design.schema.json";
 // Optional: textureSize (default 2048), onTextureDrawn({ size, pieces, fills, layers, missingImages, drawMs }), onError,
 // selectedLayerId, onSelectLayer(id), onLayerDrag({ phase, layerId, pieceId, position }),
 // assetUrl(asset) => url, fonts (default document.fonts), onFontStatus({ loading, missing, failed }),
-// touchSlopMm (default 8), ref: { showSide("front" | "back" | "left" | "right") }
+// touchSlopMm (default 8),
+// E3a-2: viewInsets { top, right, bottom, left } (CSS px a panel covers: the garment is framed in the rest),
+// reducedMotion, onCameraChange({ side, canZoomIn, canZoomOut }), onUserTurn(phase, moved),
+// pickZones + onZoneTap({ pieceId, zoneId, shapeGroup }), highlight { zoneId | shapeGroup, alpha },
+// onLoadProgress({ loaded, total, fraction }), onModelReady(model), onContextLost, onContextRestored,
+// errorFallback (shown instead of the developer message when the model fails),
+// ref: { showSide(side, { animate }), focusOn(layerId | null, { zoom }), zoomIn(), zoomOut(), resetView(), turnBy(degrees), getSide() }
 ```
+
+Most hosts do not use `DesignCanvas` directly any more: they mount `EditorShell` (next section).
 
 A full editor (the demo is one) keeps the design in `useDesignHistory`, applies every edit through the design functions, and passes `onLayerDrag` events to `begin`, `preview` and `end`. See "Layers on the model" below.
 
@@ -68,6 +76,82 @@ It runs on the Node version that runs the build. To check Node 20, run the build
 `react` and `react-dom` are peer dependencies at `^19.0.0` (React 18 is not supported). `three` is `>=0.170.0`. `@react-three/fiber`, `@react-three/drei` and `zod` are normal dependencies.
 
 Heads-up: `@react-three/fiber` 9 itself declares `react >=19 <19.4`. Our own range is wider (`^19.0.0`), so when React 19.4 or later is released, npm will print a peer-dependency warning from `@react-three/fiber`, not from this package. That is expected: either wait for a `@react-three/fiber` release that widens the range, or pin React to 19.3.x in the app. Re-check this when upgrading React.
+
+## The interface (steps E3a-2 and E3b)
+
+`EditorShell` (`src/ui/`) is the editor a coach uses, built to `docs/design/06-editor.md`: phone first, team first, one red button ("Done"). It is a React component on the root entry; it imports nothing from the storefront or Medusa. Everything comes in as props, so the store mounts it on its own route and fills its slots.
+
+```tsx
+import { EditorShell, createDesign, applyTemplate } from "@fitmyoutfit/editor";
+
+<div style={{ height: "100dvh" }}>
+  <EditorShell
+    product={product}            // the product definition (data)
+    palette={palette}            // the print-tested palette (data)
+    fonts={fontCatalog}          // the font catalogue (data); the host declares the font faces
+    templates={templates}        // the product's templates (none: no Design tab)
+    initialDesign={design}       // a new design (first template applied) or one brought back
+    showStartCard                // a new design only: team colours and name first (7.2)
+    productName="Jersey"         // the top bar and the stage's description
+    assets={{ upload, url, fileName }}  // the host's asset storage (logo uploads)
+    onDesignChange={(design, { started }) => autosave.schedule(design)}
+    saveState={saveState}        // "saving" | "saved" | "failed" | null: the top bar says so
+    onDone={(design) => ...}     // the Done panel's "Save and go back": save, then back to the product page
+    onClose={() => history.back()}  // asked first only when the last save failed
+    slots={{ brand, price, primaryAction, share, account, credit, creditShort }}  // the host's own components
+    wording={{ frame: { done: "..." } }}  // replace any sentence (translations, confirmed copy)
+    // optional: showHint, fontSet, textureSize, flatView, injectStyles (default true), draftQuality,
+    //           onTiming, onGestureTiming, logTimings, className, style
+  />
+</div>
+```
+
+- **Size and layouts.** The shell fills its container and picks its layout from its own size (06-editor.md 3.1): **compact** (width under 1024 px, height 500 px or more: six tabs in a dock at the bottom, a bottom panel with a normal height of at most 232 px and an expanded height, the stage at least 288 px tall at 360 x 640), **short** (a phone in landscape: a rail on the right, a 320 px side panel), **wide** (1024 px and up: a rail on the left and a 360 px panel that is always open). The garment is always framed in the free area above or beside the panel (`viewInsets`), between the credit line and the view buttons. Give the page `interactive-widget=resizes-content` in its viewport meta, so the layout shrinks when the phone keyboard opens (the demo's `index.html` does).
+- **Host slots.** `brand` (top left, wide), `price` (before Done on wide screens, and in the Done panel: the store's regional price line), `primaryAction` (the Done panel's main button, "Add to team order" once team orders exist; a node, or a function of the design; without it the panel offers "Save and go back", which calls `onDone`), `share` (top bar on wide screens and the Done panel; hidden until given, 9.3), `account` (later), `credit` (the model's credit on one line at the top edge of the stage, never over the garment; required for a CC BY model) and `creditShort` (its short form for a narrow stage, with a button that opens the full credit).
+- **The Done panel** (9.2, 9.3; `DonePanel.tsx`): "Done" opens it (a native modal `<dialog>`: from the bottom on a phone at the panel's expanded height, 400 px on the right on a desktop, the garment framed in the rest). It shows the kit in one line, the things to check (every open warning, naming its item: hard to read, cut off at the seam, may print blurry, prints as a box; each with Show, which closes the panel, selects the item and turns the camera to it), the price slot and the main action. Warnings never block. While it is open the top bar's Done is inactive with a check, so the panel's button is the one red button. The proof pictures are E5.
+- **Tools.** Design (template cards drawn from the model in the team's colours, tap to try, one undo step), Colours (parts and the template's shapes as chips, tap the kit to choose a part with a flash, team colours with swap and edit, recent colours, families, "Match a colour code"), Team (the team name, where, style), Players (the sample player, the switches, style, digits, coach-grade number errors, "Long names get smaller to fit"), Logos (the drop zone and picker, the checks' refusals in the coach's words, the usual places, a card per logo with Replace, Remove, Where and a size stepper, the box warning with Keep it, the blurry warning with Make it sharp) and Text (free lines with font, colour, outline, size and Start, Centre, End alignment whose icons turn round for right-to-left text). Readability warnings name their item ("Number on the back is hard to read on Navy.") with a one-tap fix, in Team and Players.
+- **Selection and handles** (5; `SelectionOverlay.tsx`, `SelectedItem.tsx`, `OnThisKit.tsx`). Tap an item on the model to select it; with a mouse, press and drag in one go; on touch a drag that starts on an unselected item turns the garment (`dragOnlySelected: "touch"`, `react/press-policy.ts`). The selected item's box is drawn over the canvas as SVG, following the cloth, with four corner handles (resize evenly) and a turn handle (snaps at 0, 15, 45 and 90 degrees; Alt: free), 44 px hit areas; when it faces away, "Turn to edit" turns the garment to it. While placing, the print area's edges and the snapping guides are drawn along the cloth; snapping (centre line, presets, other items' centres and edges; 6 mm or 8 px) is held off with Alt or the "Snap to guides" switch. The contextual bar (name, Delete, Duplicate for logos and text, More: Bring forward, Send back, Edit; Done) sits at the top of the stage on a phone, never over the item (`contextBarPlacement` moves it to the bottom of the free area when the item reaches into its band), and heads the panel on a desktop. Fine-tune (closed by default) and the keys (arrows 1 mm, Shift 10; `[` `]` 10%; with Shift 15 degrees; Delete; Esc) do everything without dragging. "On this kit" (the stage's button, top right) lists every item top first with its place, a warning badge and a menu; a row selects the item, turns the camera and opens its tool; the design's shapes are listed as locked. Inside a tool, `useEditor()` gives `selectedId` and `select(id, { turn, openTool })`.
+- **States.** The shell renders at once; tools are inactive until the model and the design's fonts are ready ("Almost ready…"); the model's download shows a silhouette and a percentage, "Still loading…" after 8 s, a failure with "Try again" and "Use the flat view" after 30 s without progress or on an error. Without WebGL 2 (or after the 3D context is lost twice) the flat view shows the front, back and sleeves as cut, and every tool still works. Undo and redo (top bar, Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z, Ctrl+Y) are announced in the status line ("Undone: Colour").
+- **Accessibility.** Tabs are a tablist (arrows move, Enter opens); panels are labelled regions; Back and Esc close a phone panel; the stage is an image with a description of the kit in words, arrows turn it and + and - zoom; focus rings on every control; reduced motion turns every animation into a cut (camera, panel, flash).
+- **Wording.** Every sentence is in `src/ui/content.ts` (`EDITOR_WORDING`), grouped as section 14 of the specification and marked DRAFT WORDING; new sentences are marked NEW. Components hold none (a test checks). `mergeWording` merges a host's replacements.
+- **Tokens and the stylesheet.** The package ships its stylesheet as `EDITOR_CSS`; the shell puts it in the page (React hoists the style tag) unless `injectStyles={false}`. Every colour and font reads the store's CSS variables first, with fallbacks: `--c-surface`, `--c-surface-alt`, `--c-ink`, `--c-ink-muted`, `--c-inverse`, `--c-on-inverse`, `--c-on-inverse-muted`, `--c-primary`, `--c-primary-hover`, `--c-border`, `--c-border-strong`, `--c-success`, `--c-error`, `--c-error-surface`, `--c-success-surface`, `--c-focus`, and the editor's own `--c-stage-top`, `--c-stage-bottom`, `--c-stage-deep-top`, `--c-stage-deep-bottom`, `--c-stage-shadow`, `--c-warning`, `--c-warning-surface`, `--c-overlay-control`; fonts `--font-heading` (Barlow Condensed), `--font-body` (Inter), `--font-arabic` (Noto Sans Arabic). The package does not load the interface fonts; the host does (the demo falls back to system fonts). Everything is scoped under `.fmo-editor`, with logical properties, so a right-to-left interface later is a translation.
+- **Dialogs for the host.** `ResumePrompt` ("Continue your last design?") and `DoneNotice` (a short confirmation a host can show after "Save and go back"; the demo does, standing in for the product page), in the editor's look and wording.
+
+### The canvas's selection API (N9, N10, N11)
+
+`DesignCanvas` (the engine component the shell wraps) takes, besides the E2 props:
+
+- `dragOnlySelected` ("touch" by default; true or false for every pointer) and `onSelectLayer(id | null)` (a tap on empty fabric or the stage gives null).
+- `onSelectionGeometry(geometry | null)`: the selected item on the screen, recomputed only when the camera or the item changed, and only while something is selected: `{ layerId, centre, corners, cornerSources, outline, top, turn, angle, facing, mirrored, pxPerMm, guides, width, height }` in CSS px from the canvas's top left. It comes from the **UV-to-surface lookup** (`src/texture/surface-lookup.ts`, pure): the model's triangles indexed once by UV (a 128 x 128 grid; 13 to 40 ms for the jersey's 103,000 triangles on a desktop), a lookup from a UV point to the 3D point, normal and tangents, and `projectItem` with the camera's view-projection matrix. Corners off the cut shape or across a seam are placed on the tangent plane at the item's centre (`cornerSources: "plane"`): there the handle sits a little off the cloth where the garment curves away. Occlusion (a sleeve in front of a side panel) is not tested, only facing (75 degrees).
+- `guides`: lines on pieces (`{ pieceId, from, to, kind: "guide" | "area" }`) projected along the cloth into the geometry.
+- `outlineSelected` (default true): false leaves the selection outline out of the texture (the shell draws handles instead, so selecting costs no repaint).
+- `gesture`, `draftQuality` ("auto", "always", "never") and `onGestureTiming`: while an item is moved, resized or turned, frames are timed; after two slow frames in three (over 33 ms) the texture is drawn at half size without mipmaps until the gesture ends, then once at full size (`src/react/draft-quality.ts`). Each gesture reports its frame times, whether a draft was drawn, and the time back to full quality. During a drag the ray to the model is cast once per frame.
+- `LayerDragEvent` carries `free` (Alt held) and `pxPerMm` (for the snapping reach).
+
+The design-level helpers are on the `/design` entry: `printAreaOf`, `clampIntoArea`, `clampToPrintArea`, `maxScaleInArea`, `isClipped`, `moveInside` (print-area.ts); `snapPosition`, `snapLines`, `snapReachMm`, `printAreaLines` (snapping.ts); `nudgeLayer`, `scaleLayerBy`, `rotateLayerBy`, `rotateLayerTo`, `centreLayer`, `duplicateLayer`, `canDuplicate`, `bringForward`, `sendBack` (item-edits.ts). The interface's own rules are in `src/ui`: `checks.ts` (`itemChecks`, `designChecks`: the Done panel's summary), `logos.ts` (the usual places, size words, `makeLogoSharp`, `replaceLogoAsset`), `selection.ts` (`toolForLayer`, `contextBarPlacement`), `handles.ts` (the gesture maths).
+
+### Saving on the device (N19)
+
+Optional helpers on the root entry (`src/storage/device-store.ts`); the host decides to use them (the demo does; the store will save to accounts later):
+
+```ts
+const kv = await openIndexedDbStore().catch(() => createMemoryKeyValueStore()); // refused (private browsing): memory, and "Not saved"
+const designs = new DeviceDesignStore(kv);
+const assets = createDeviceAssetStore(designs);             // { upload, url, fileName, restore }: logo files kept as blobs
+const saved = await designs.loadDesign(product);           // the last design for this product, upgraded and validated, or null
+if (saved) await assets.restore(designAssetIds(saved.design)); // object URLs for its logos before showing it
+const autosave = createAutosave({ save: (d) => designs.saveDesign(product.id, d), onState: setSaveState }); // 1 s after the last change
+// "Start again": await designs.clearDesign(product.id) (also removes logo files no saved design uses)
+// Other tabs: watchOtherTabs(product.id, () => showReloadNotice())
+```
+
+### The camera and the cards
+
+- `src/react/camera.ts` (`frameInFreeArea`, `sideFromAzimuth`, `zoomedDistance`, `tweenOrbit`, `mayMoveCamera`, `focusOffsetY`) and `src/react/camera-rig.ts` (`CameraRig`): plain maths and a plain object the canvas owns. Turns take 350 ms (ease in and out), re-framing 200 ms; with reduced motion they cut. The interface moves the camera only in answer to the coach's own action, never while a finger or the mouse is down on the stage, and not within 1.5 s of the coach turning the garment by hand (06-editor.md 6.3).
+- `src/react/model-loader.ts` (`loadModel`): the GLB is downloaded once per URL with byte progress and parsed by three's GLTFLoader (no WebGL needed). A failed load is forgotten, so "Try again" loads afresh.
+- **Template cards** (`src/texture/garment-view.ts`, `drawTemplateCard`): `renderGarmentView` rasterises the loaded model's triangles once per product (about 0.1 s for the stand-in jersey on a desktop, in software, no WebGL) into a small buffer of UV, light and inside-or-outside per sample; `composeGarmentView` then paints any design onto it by looking up the design's texture drawn at 512 px. So a card shows a jersey with its sleeves and collar, shaded as the model is, instead of the flat front piece (which, for the stand-in jersey's front that wraps round under the side panels, read like a dress). A card costs a texture drawing (512 px) and a lookup per pixel: 8 to 50 ms each on a desktop in this repository's measurements, over the specification's 5 ms budget; cards are drawn one per task, lazily as they scroll in, and a card whose picture would not change is not drawn again. `drawTemplateThumbnail` (the flat front) stays for tests.
+- **The zone flash** (`src/texture/zone-highlight.ts`): a light veil over the part and a white band with an ink line along its edge, drawn into the texture (editor only, never for proofs) for 600 ms, or still for 1.5 s with reduced motion.
+- **The flat view** (`FlatView.tsx`): when 3D cannot run, the garment's front and back as the design cards draw them (the same software render of the model's triangles, at the view's size; no WebGL), stacked on a tall phone and side by side on a wide stage, the inside of the neck without prints. Tapping an item selects it (a hit test through the view's UVs); moving is by the presets and fine-tune. Until the model's geometry has been read, the pieces are drawn flat as cut (`flatViewProduct`).
 
 ## The design document
 
@@ -254,7 +338,8 @@ Product definitions are format **version 2** (step E3a), which adds:
 
 - `teamColors`: the team colours a new design starts with;
 - `views`: the pieces that show the front and the back (thumbnails, flat views);
-- `placements`: named **placement presets** (N5), in the order the interface offers them: `{ id, name, pieceId, centre, maxSize, roles, side, fontSize }`: where a layer of one of `roles` goes, centred where on which piece, its largest box, the side the camera turns to, and the font size of text and numbers at the Medium size. Validation checks each centre lies inside its piece's outline. The stand-ins' presets are in their source records and generated into the product definitions; the placeholder's are written by hand. They replace the demo's old `demo/placements.ts`. Print areas and "keep inside the area" (N6) and capabilities by decoration method are later steps.
+- `placements`: named **placement presets** (N5), in the order the interface offers them: `{ id, name, pieceId, centre, maxSize, roles, side, fontSize }`: where a layer of one of `roles` goes, centred where on which piece, its largest box, the side the camera turns to, and the font size of text and numbers at the Medium size. Validation checks each centre lies inside its piece's outline. The stand-ins' presets are in their source records and generated into the product definitions; the placeholder's are written by hand. They replace the demo's old `demo/placements.ts`.
+- `printArea` on a piece (optional, E3b, N6): `{ x, y, width, height }` in the piece's millimetres, where items may be printed. An item's whole turned box stays inside it while it is dragged, resized, turned or nudged; without one, the piece's box is the limit. Validation checks the area is inside the piece's box and every preset's centre is inside its piece's area. The middle of the area is the piece's centre line for snapping. The stand-ins' areas are **placeholders** (until the factories give theirs), kept in their source records (`printAreas`, copied by the generator) and in their product definitions; the `.glb` files are unchanged. An item can still cross the piece's cut shape inside its area (the area is a rectangle): the "clipped" check (`isClipped`) says so, and "Move it in" (`moveInside`) finds the nearest place where it fits. Capabilities by decoration method (4.9) are a later step.
 
 A real model replaces the placeholder by changing this JSON and the GLB file; no code changes. The demo now shows such a model by default: `samples/products/stand-in-jersey.json` (see "Stand-in models").
 
@@ -322,7 +407,7 @@ The text layout rule, which proofs and production files must repeat:
 - at `fontSize` mm per em, vertically centred on the box (CSS "middle" baseline), anchored at the box's start edge, centre or end edge by `align`;
 - a line wider than the box is shrunk evenly to the box's width; it never wraps and is never stretched;
 - the font stack is the layer's font, its `fallbackFontIds` in order, then `sans-serif` (`layerFont`);
-- an **outline** (`outline.width` mm) is a stroke round the glyphs, twice the width wide with round joins, drawn under the fill, so `width` mm show outside the letters; the line then fits the box less twice the width, so the outline stays inside the box; the width stays in mm when a long line is shrunk;
+- an **outline** (`outline.width` mm) is a stroke round the glyphs, twice the width wide with round joins, drawn under the fill, so `width` mm show outside the letters; the letters and their outline fit the box together, so the outline stays inside the box; when a long line is shrunk, the outline shrinks with it (it follows the size the letters are drawn at, E3a-2), but never below `MIN_OUTLINE_MM` (1 mm) or its own width when thinner (`fitLine`);
 - `drawPatternTexture` reports for each text and number layer whether it was shrunk and by how much (`textFits`, also in `onTextureDrawn`): the interface says "long names get smaller" from it (N12).
 
 **Shapes** are drawn with the zones, piece by piece, after the zone regions and before every layer, clipped as the regions are: to the outline in the flat view, to the piece's area plus its margin in the texture (so seams bleed in the shape's colour, and nothing reaches another piece).
@@ -392,24 +477,26 @@ All plain functions on the `/design` entry (no React, no Three.js), except the t
 
 **Templates** (4.1, N2; `template.ts`, `samples/templates/<product>/`): a template gives every zone a team colour role or a fixed palette colour, carries shapes with colour roles and groups, and places the role slots at presets with their style (font and colour always; outline and size only if it sets them). `applyTemplate(design, template, { product, fonts, previous })` keeps the team colours, team name, logos and free text with their presets, the sample player, the coach's own slot switches and the style choices the template leaves open; it changes the zone colours, the shapes, the slots' positions and the fonts and colours the template sets. `previous` (the template the design has) lets it tell the coach's switches and outlines from the old template's. An Accent role falls back to Second (or the template's `accentFallback`) when the team has two colours.
 
-The sample templates are **placeholders we drew** from generic sports shapes, generated by `scripts/make-sample-templates.ts`: the jersey has Classic, Hoops, Vertical stripes, Sash and Chevron; the T-shirt Plain, Contrast sides and Chest band. Hoops and the chest band are lines of **equal body height measured on the committed 3D model** (each piece's vertices give their piece millimetres and their height), so their edges meet at every seam, front to side panel to back; the gap between hoops is centred on the chest name's measured height.
+The sample templates are **placeholders we drew** from generic sports shapes, generated by `scripts/make-sample-templates.ts`: the jersey has Classic, Hoops, Vertical stripes, Sash and Chevron; the T-shirt Plain, Contrast sides and Chest band. Hoops and the chest band are lines of **equal body height measured on the committed 3D model** (each piece's vertices give their piece millimetres and their height), so their edges meet at every seam, front to side panel to back; the gap between hoops is centred on the chest name's measured height. Since E3a-2 every one is readable in both sample colour sets (a test checks): Hoops and Vertical stripes carry a plain back panel (group `panel`) behind the player's name and number, Vertical stripes a plain chest band (group `band`) behind the team name, and the Sash puts the team name on the upper back (across the sash, half of it vanished).
 
-**Thumbnails** (N13): `drawTemplateThumbnail(ctx, product, design, template, { fonts, width, height, images })` applies the template to the current design and draws its front flat with `drawPatternTexture` (on the product narrowed to one piece, fitted into the box: `drawPieceView`, `pieceViewProduct`).
+**Thumbnails** (N13): `drawTemplateThumbnail` draws a template's front piece flat (kept for tests and flat views). The **cards** the interface shows are `drawTemplateCard` / `drawDesignView`: the garment as the 3D model shows it (see "The camera and the cards").
 
 **Palette and the colour-code match** (4.3, N14): a palette (`samples/palettes/placeholder-palette.json`, `validatePalette`) lists colours with families, a `common` order for the start card, and `printTested`. The sample palette is 30 placeholder colours in the specification's seven families and says **not print-tested**. `matchColourCode(palette, input)` reads 3 or 6 hex digits (with or without `#`), finds the nearest palette colour by **CIEDE2000** (`colour.ts`, written by hand: sRGB to CIELAB with D65 as Bruce Lindbloom publishes it, and the formula checked against all 34 test pairs of Sharma, Wu and Dalal 2005), and returns the difference, the match level (`very-close` up to 2, `close` up to 6, `different` above, `DEFAULT_MATCH_THRESHOLDS`) and the value to apply: the palette colour, with `requested` beside it. An invalid code is refused with `code: "invalid-code"`.
 
-**Readability** (N15): `itemReadability(product, design, layerId)` gives the WCAG contrast between an item's fill (and its outline) and what is actually under its centre (a shape there, else the zone), and whether it reaches 3:1 (`READABILITY_MIN_CONTRAST`). `readabilityFix` names the team colour with the most contrast on that background for the "Add outline" fix; `outlineColourFor` picks a default outline colour that shows against both the letters and the garment.
+**Readability** (N15): `itemReadability(product, design, layerId)` judges an item against **every colour under it** (E3a-2; E3a-1 looked only under its centre): its area is the layer box's width and the letters' height (`INK_HEIGHT_EM` of the font size, plus the outline), turned with the item and sampled about every 4 mm (`readabilityArea`, `readabilitySamples`, `backgroundsUnder`). It passes when the fill reaches 3:1 (`READABILITY_MIN_CONTRAST`) on every colour under it, or when the fill reaches it on none and the outline does on all (outlined letters); letters that show on one colour and vanish on another (a name across a sash) fail as `mixed`. `readabilityRemedy` gives the one-tap fix: on one colour an outline in the team colour that stands out most ("Add outline"); over several colours a letter colour that stands out from all of them (a team colour, else the palette's best). `outlineColourFor` picks a default outline colour that shows against both the letters and the garment.
 
 ## Deliberately left for later
 
-- Choosing a zone by tapping the model (the lookup, `zoneAtUv`, exists; the raycast and the UI do not).
+- Dragging items in the flat view (selection by tapping and moving by presets and fine-tune work).
+- Warning badges on the model for items that are not selected (the selected item's badge sits beside its handles; "On this kit" and the Done panel list them all).
+- Occlusion for handles (an item hidden behind a sleeve still shows its handles if it faces the camera).
+- The "no transparent background" finding is kept for this session only (it comes from the upload checks, not the design): after a reload it is not shown again.
 - The print-tested palette and the designer's templates (inputs from the founders and the graphic designer): the placeholders are data and are replaced by files only.
-- Print areas and "keep inside the area" (N6), product capabilities by decoration method (4.9), and the interface (E3a's next step).
+- Product capabilities by decoration method (4.9). The factories' real print areas.
 - Font metrics for a maximum length per field (E4); the text layout above (shrink to the box) is where they plug in. Curved or arched text and multi-line text.
 - Roster preview (E4): the swap exists (`designForPlayer`); the player list, previous and next, and the per-font maximum lengths do not.
 - Proof renders (E5): draw with `drawPatternTexture` after `loadDesignFonts`, refuse when `missingImages` is not empty, and never pass `selectedLayerId`.
 - SVG logo uploads (see "Logo uploads"); a malware scan of uploads (M4).
-- On-model resize and rotate handles (today: sliders and buttons), snapping and guides.
 - Migrations other than version 2 to 3 (version 1 is refused with a clear message).
 - Mirrored or rotated pieces in UV space, per-layer visibility or locking (shapes carry `locked`; layers do not).
 - Saving, design versions ("every save creates a new version") and share links: backend concerns. `schemaVersion` is the format version only.

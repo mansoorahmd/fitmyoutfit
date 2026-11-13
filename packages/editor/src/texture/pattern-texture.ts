@@ -24,6 +24,7 @@ import type { ColorRef, DesignDocument, PatternPiece, ProductDefinition, Shape }
 import { pieceGeometry } from "../design/pattern.js";
 import { parseSvgPath, traceSvgPath, type PathCommand, type PathPoint, type PathSink } from "../design/svg-path.js";
 import { drawLayers, type AssetImageLookup, type LayerCanvasContext, type TextFit } from "./layers.js";
+import { drawZoneHighlight, type ZoneHighlight } from "./zone-highlight.js";
 
 /** Parsed shape paths, by path text (a design repaints often; its shapes rarely change). */
 const shapePaths = new Map<string, PathCommand[] | null>();
@@ -117,6 +118,8 @@ export interface DrawPatternOptions {
   images?: AssetImageLookup;
   /** A layer to outline as selected, in the editor's view. */
   selectedLayerId?: string | null;
+  /** A colour zone or a group of shapes to show (the zone flash, editor only; never for proofs). */
+  highlight?: ZoneHighlight | null;
 }
 
 /** What `drawPatternTexture` did, for a caller that reports cost or must know the drawing is complete. */
@@ -235,6 +238,7 @@ export function drawPatternTexture(
     images: options.images,
     selectedLayerId: options.selectedLayerId,
   });
+  if (options.highlight) drawZoneHighlight(ctx, product, design, options.highlight, (piece) => pieceTransform(piece, size), size / DEFAULT_TEXTURE_SIZE);
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   return {
     size,

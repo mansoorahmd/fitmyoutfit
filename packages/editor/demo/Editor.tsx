@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+// The developer page's own styles, scoped under .demo.
+import "./dev.css";
 import {
   AssetImageCache,
   DEFAULT_UPLOAD_LIMITS,

@@ -28,6 +28,14 @@ function templatesOf(productId: string): Template[] {
 const jerseyTemplates = templatesOf("stand-in-jersey");
 const tshirtTemplates = templatesOf("stand-in-tshirt");
 const byId = (list: Template[], id: string) => list.find((t) => t.id === id)!;
+/**
+ * The sample hoops, with the medium Main outline on the number that it set until E3a-2 (its number now
+ * sits on a plain back panel and needs none): the engine tests below need a template that sets an outline.
+ */
+const outlinedHoops = (t: Template): Template => ({
+  ...t,
+  slots: t.slots.map((slot) => (slot.role === "player-number" ? { ...slot, style: { ...slot.style, outline: { step: "medium", color: { team: "main" } } } } : slot)),
+});
 
 const RED = { id: "placeholder-red", hex: "#C8102E" };
 const WHITE = { id: "placeholder-white", hex: "#FFFFFF" };
@@ -83,7 +91,8 @@ describe("the sample templates", () => {
           }
           expect(d.shapes).toHaveLength(t.shapes.length);
           expect(d.shapes.every((s) => s.locked)).toBe(true);
-          expect(findLayers(d, { role: "team-name" })).toMatchObject([{ preset: "chest-centre", value: "LAHORE LIONS" }]);
+          // The sash crosses the chest, so its template puts the team name on the upper back (E3a-2, readability).
+          expect(findLayers(d, { role: "team-name" })).toMatchObject([{ preset: t.id === "sash" ? "upper-back" : "chest-centre", value: "LAHORE LIONS" }]);
           expect(findLayers(d, { role: "player-name" })).toMatchObject([{ preset: "back-name", value: "محمد علی" }]);
           expect(findLayers(d, { role: "player-number" })).toMatchObject([{ preset: "back-number", value: "٧", pieceId: "back" }]);
         });
@@ -93,7 +102,7 @@ describe("the sample templates", () => {
 });
 
 describe("applyTemplate: what is kept and what changes (06-editor.md 4.1)", () => {
-  const hoops = byId(jerseyTemplates, "hoops");
+  const hoops = outlinedHoops(byId(jerseyTemplates, "hoops"));
   const classic = byId(jerseyTemplates, "classic");
 
   /** Classic, then a crest on the left chest, a sponsor text, and the coach's own outline on the name. */
@@ -136,7 +145,8 @@ describe("applyTemplate: what is kept and what changes (06-editor.md 4.1)", () =
     const after = applyTemplate(moved, byId(jerseyTemplates, "stripes"), { product: jersey, fonts, previous: classic });
     expect(after.zones.sleeves).toEqual({ ...WHITE, teamColor: "second" });
     expect(after.shapes.length).toBeGreaterThan(5);
-    expect(after.shapes.every((s) => s.group === "stripes")).toBe(true);
+    // The stripes, the plain chest band for the team name and the back's panel for the name and number.
+    expect(new Set(after.shapes.map((s) => s.group))).toEqual(new Set(["stripes", "band", "panel"]));
     const shapeIds = new Set(after.shapes.map((s) => s.id));
     expect(after.layers.some((l) => shapeIds.has(l.id))).toBe(false);
   });
@@ -177,7 +187,9 @@ describe("applyTemplate: what is kept and what changes (06-editor.md 4.1)", () =
   it("recolours with the team: changing Main or swapping after a template recolours the shapes and slots that follow", () => {
     const d = applyTemplate(start(jersey), hoops, { product: jersey, fonts });
     const swapped = swapTeamColors(d);
-    expect(swapped.shapes.every((s) => s.fill.hex === RED.hex)).toBe(true);
+    expect(swapped.shapes.filter((s) => s.group === "hoops").every((s) => s.fill.hex === RED.hex)).toBe(true);
+    // The back's number panel follows Main: white after the swap.
+    expect(swapped.shapes.filter((s) => s.group === "panel").map((s) => s.fill.hex)).toEqual([WHITE.hex]);
     expect(swapped.zones.body_front!.hex).toBe(WHITE.hex);
     const maroon = setTeamColor(d, "main", { id: "placeholder-maroon", hex: "#6E1E2C" });
     expect(maroon.zones.body_front!.hex).toBe("#6E1E2C");
@@ -207,7 +219,7 @@ describe("applyTemplate: what is kept and what changes (06-editor.md 4.1)", () =
 });
 
 describe("applyTemplate: what the previous template set is not the coach's choice", () => {
-  const hoops = byId(jerseyTemplates, "hoops");
+  const hoops = outlinedHoops(byId(jerseyTemplates, "hoops"));
   const classic = byId(jerseyTemplates, "classic");
 
   it("drops the previous template's number outline when the new template leaves outlines open; keeps one the coach changed", () => {
