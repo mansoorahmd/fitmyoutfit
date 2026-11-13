@@ -4,6 +4,7 @@ import {
   AccountAddressValues,
   addressCardView,
   initialAccountAddress,
+  nextDefaultAfterRemoval,
   overviewAddress,
   sortAddresses,
   storeCountries,
@@ -119,6 +120,22 @@ describe("initial values, order and the overview's address", () => {
     expect(sortAddresses([a, b, c]).map((x) => x.id)).toEqual(["b", "c", "a"])
     expect(overviewAddress([a, c])?.id).toBe("c")
     expect(overviewAddress([])).toBeNull()
+  })
+
+  it("removing the default: the most recently added of the others becomes the default (QA S1-4c, m5)", () => {
+    const old = { id: "old", created_at: "2026-10-01T10:00:00Z", is_default_shipping: false }
+    const def = { id: "def", created_at: "2026-11-01T10:00:00Z", is_default_shipping: true }
+    const newest = { id: "new", created_at: "2026-11-12T10:00:00Z", is_default_shipping: false }
+    expect(nextDefaultAfterRemoval([old, def, newest], "def")?.id).toBe("new")
+    expect(nextDefaultAfterRemoval([newest, def, old], "def")?.id).toBe("new")
+    // not the default, the last one, or another is already the default: nothing to change
+    expect(nextDefaultAfterRemoval([old, def, newest], "old")).toBeNull()
+    expect(nextDefaultAfterRemoval([def], "def")).toBeNull()
+    expect(nextDefaultAfterRemoval([def, { ...newest, is_default_shipping: true }], "def")).toBeNull()
+    // after the change the overview heads the new default, never an address that isn't one
+    const after = [old, { ...newest, is_default_shipping: true }]
+    expect(overviewAddress(after)?.id).toBe("new")
+    expect(overviewAddress(after)?.is_default_shipping).toBe(true)
   })
 })
 

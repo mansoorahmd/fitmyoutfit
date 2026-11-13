@@ -7,6 +7,7 @@ import { sdk } from "@lib/config"
 import {
   AccountAddressErrors,
   AccountAddressValues,
+  nextDefaultAfterRemoval,
   storeCountryCodes,
   toCustomerAddress,
   validateAccountAddress,
@@ -322,10 +323,31 @@ export async function updateCustomerAddress(
   )
 }
 
-/** "Remove" after "Remove this address?" (05, 9.5). */
+/**
+ * "Remove" after "Remove this address?" (05, 9.5). When the default goes
+ * and others remain, the most recently added becomes the default (QA
+ * S1-4c, m5). That second step failing doesn't undo the removal.
+ */
 export async function deleteCustomerAddress(addressId: string): Promise<SaveResult<never>> {
   const headers = await getAuthHeaders()
-  return outcomeOf(await call(async () => sdk.store.customer.deleteAddress(addressId, headers)))
+  const before = await call(async () =>
+    sdk.client.fetch<{ customer: HttpTypes.StoreCustomer }>(`/store/customers/me`, {
+      method: "GET",
+      query: { fields: "id,*addresses" },
+      headers,
+      cache: "no-store",
+    })
+  )
+  const removed = await call(async () => sdk.store.customer.deleteAddress(addressId, headers))
+  if (removed.ok && before.ok) {
+    const next = nextDefaultAfterRemoval(before.body.customer.addresses, addressId)
+    if (next) {
+      await call(async () =>
+        sdk.store.customer.updateAddress(next.id, { is_default_shipping: true, is_default_billing: true }, {}, headers)
+      )
+    }
+  }
+  return outcomeOf(removed)
 }
 
 /**

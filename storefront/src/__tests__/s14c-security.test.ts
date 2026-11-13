@@ -12,11 +12,26 @@ const { state } = vi.hoisted(() => ({
     cartId: "cart_1" as string | null,
     removed: [] as string[],
     redirected: [] as string[],
+    store: [] as string[],
   },
 }))
 
 vi.mock("@lib/config", () => ({
-  sdk: { client: { fetch: async (path: string) => state.fetch!(path) } },
+  sdk: {
+    client: { fetch: async (path: string) => state.fetch!(path) },
+    store: {
+      customer: {
+        deleteAddress: async (id: string) => {
+          state.store.push(`delete ${id}`)
+          return { id, deleted: true }
+        },
+        updateAddress: async (id: string, body: Record<string, unknown>) => {
+          state.store.push(`update ${id} ${JSON.stringify(body)}`)
+          return { customer: {} }
+        },
+      },
+    },
+  },
 }))
 vi.mock("@lib/data/cookies", () => ({
   getAuthHeaders: async () => (state.token ? { authorization: `Bearer ${state.token}` } : {}),
@@ -41,7 +56,7 @@ vi.mock("next/navigation", () => ({
   },
 }))
 
-import { signout } from "@lib/data/customer"
+import { deleteCustomerAddress, signout } from "@lib/data/customer"
 import { retrieveAccountOrder } from "@lib/data/orders"
 import { requireCustomer } from "@modules/account/require-customer"
 
@@ -51,6 +66,30 @@ beforeEach(() => {
   state.cartId = "cart_1"
   state.removed = []
   state.redirected = []
+  state.store = []
+})
+
+describe("removing the default address (QA S1-4c, m5)", () => {
+  const addresses = [
+    { id: "a_old", created_at: "2026-10-01T10:00:00Z", is_default_shipping: false },
+    { id: "a_def", created_at: "2026-11-01T10:00:00Z", is_default_shipping: true },
+    { id: "a_new", created_at: "2026-11-12T10:00:00Z", is_default_shipping: false },
+  ]
+
+  it("the most recently added of the others becomes the default", async () => {
+    state.fetch = () => ({ customer: { id: "cus_a", addresses } })
+    expect(await deleteCustomerAddress("a_def")).toEqual({ kind: "saved" })
+    expect(state.store).toEqual([
+      "delete a_def",
+      'update a_new {"is_default_shipping":true,"is_default_billing":true}',
+    ])
+  })
+
+  it("removing another address changes no default", async () => {
+    state.fetch = () => ({ customer: { id: "cus_a", addresses } })
+    expect(await deleteCustomerAddress("a_old")).toEqual({ kind: "saved" })
+    expect(state.store).toEqual(["delete a_old"])
+  })
 })
 
 describe("the account's order page: only the customer's own order (05, 7.3)", () => {

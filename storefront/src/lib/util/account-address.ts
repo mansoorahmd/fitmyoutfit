@@ -145,6 +145,26 @@ export const sortAddresses = <T extends SavedAddress>(addresses: T[] | null | un
   })
 
 /**
+ * Removing the default address while others remain (QA S1-4c, m5): the
+ * most recently added of the others becomes the default, so the account
+ * always has one and the overview's "Default address" is true. Null when
+ * the removed address wasn't the default, another one already is, or none
+ * remains.
+ */
+export const nextDefaultAfterRemoval = <T extends SavedAddress>(
+  addresses: T[] | null | undefined,
+  removedId: string
+): T | null => {
+  const list = addresses ?? []
+  const removed = list.find((a) => a.id === removedId)
+  if (!removed?.is_default_shipping) return null
+  const rest = list.filter((a) => a.id !== removedId)
+  if (rest.length === 0 || rest.some((a) => a.is_default_shipping)) return null
+  const time = (a: T) => new Date(a.created_at ?? 0).getTime() || 0
+  return rest.reduce((newest, a) => (time(a) > time(newest) ? a : newest))
+}
+
+/**
  * The address the overview shows under "Default address" (05, 9.2): the
  * default one, else the first saved (the one the checkout offers first),
  * else none.
