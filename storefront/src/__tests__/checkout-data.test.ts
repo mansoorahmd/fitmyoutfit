@@ -460,6 +460,27 @@ describe("the order-status route", () => {
     expect(state.calls.find((c) => c.name === "fetch")!.args[0]).toBe("/store/carts/cart_9")
   })
 
+  it("refuses a body larger than a few kilobytes, unread, and asks the backend nothing (QA S1-4c, m10)", async () => {
+    state.cart = { ...state.cart, completed_at: "2026-11-11T19:03:36.360Z" }
+    const big = async (body: string, headers: Record<string, string> = {}) =>
+      POST(new Request("http://localhost/pk/checkout/order-status", { method: "POST", body, headers }), {
+        params: Promise.resolve({ countryCode: "pk" }),
+      })
+    // a cart id padded to 2 MB, with and without its declared length
+    const padded = JSON.stringify({ cartId: "cart_1", pad: "x".repeat(2_000_000) })
+    const declared = await big(padded, { "content-length": String(padded.length) })
+    expect(declared.status).toBe(413)
+    expect(await declared.json()).toEqual({ kind: "cart_lost" })
+    const streamed = await big(padded)
+    expect(streamed.status).toBe(413)
+    expect(state.calls).toEqual([])
+    // just under the limit is read as usual
+    const fits = JSON.stringify({ cartId: "cart_1", pad: "x".repeat(4000) })
+    const ok = await big(fits)
+    expect(ok.status).toBe(200)
+    expect(await ok.json()).toMatchObject({ kind: "order" })
+  })
+
   it("never passes anything but a cart id to the backend", async () => {
     state.cartId = null
     expect(await post({ cartId: "../orders" })).toEqual({ kind: "cart_lost" })

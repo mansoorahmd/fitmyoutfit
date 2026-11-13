@@ -504,14 +504,28 @@ export const addressLines = (
     return []
   }
   const name = [address.first_name, address.last_name].filter((p) => !blank(p)).join(" ")
-  const cityLine = [address.city, address.postal_code].filter((p) => !blank(p)).join(" ")
+  const isUs = (address.country_code ?? "").toLowerCase() === "us"
+  let cityLine: string
+  let provinceLine: string
+  if (isUs) {
+    // the US form (QA S1-4c, m10): "Newark, NJ 07102", city, state code, ZIP
+    const code = subdivisionCode("us", address.province)
+    const state = code ? code.slice(3).toUpperCase() : address.province?.trim() ?? ""
+    const stateZip = [state, address.postal_code].filter((p) => !blank(p)).join(" ")
+    cityLine = [address.city?.trim() ?? "", stateZip].filter(Boolean).join(", ")
+    provinceLine = ""
+  } else {
+    // Pakistan, the UK and the UAE: the city with its postal code, then the province or emirate
+    cityLine = [address.city, address.postal_code].filter((p) => !blank(p)).join(" ")
+    provinceLine = subdivisionName(address.country_code, address.province) ?? ""
+  }
   return [
     name,
     address.company ?? "",
     address.address_1 ?? "",
     address.address_2 ?? "",
     cityLine,
-    subdivisionName(address.country_code, address.province) ?? "",
+    provinceLine,
     countryName ?? "",
   ]
     .map((line) => line.trim())

@@ -436,6 +436,29 @@ describe("address lines", () => {
     ])
   })
 
+  it("each of the four countries in its own form; the US as 'Newark, NJ 07102' (QA S1-4c, m10)", () => {
+    const base = { first_name: "Ali", last_name: "Raza", company: "", address_2: "" }
+    expect(
+      addressLines({ ...base, country_code: "us", address_1: "1 Broad St", city: "Newark", province: "us-nj", postal_code: "07102" }, "United States")
+    ).toEqual(["Ali Raza", "1 Broad St", "Newark, NJ 07102", "United States"])
+    // ZIP+4, a state typed in the admin as its name, and one with no ZIP
+    expect(
+      addressLines({ ...base, country_code: "us", address_1: "1 Broad St", city: "Newark", province: "New Jersey", postal_code: "07102-1234" }, null)
+    ).toContain("Newark, NJ 07102-1234")
+    expect(addressLines({ ...base, country_code: "us", address_1: "1 Broad St", city: "Newark", province: "us-nj", postal_code: "" }, null)).toContain(
+      "Newark, NJ"
+    )
+    expect(
+      addressLines({ ...base, country_code: "gb", address_1: "1 High Street", city: "London", province: "", postal_code: "SW1A 1AA" }, "United Kingdom")
+    ).toEqual(["Ali Raza", "1 High Street", "London SW1A 1AA", "United Kingdom"])
+    expect(
+      addressLines({ ...base, country_code: "pk", address_1: "12 Mall Road", city: "Lahore", province: "pk-pb", postal_code: "54000" }, "Pakistan")
+    ).toEqual(["Ali Raza", "12 Mall Road", "Lahore 54000", "Punjab", "Pakistan"])
+    expect(
+      addressLines({ ...base, country_code: "ae", address_1: "Villa 3, Street 12", city: "Dubai", province: "ae-du", postal_code: "" }, "United Arab Emirates")
+    ).toEqual(["Ali Raza", "Villa 3, Street 12", "Dubai", "Dubai", "United Arab Emirates"])
+  })
+
   it("shows a province typed in the admin as it was stored", () => {
     expect(subdivisionName("pk", "Punjab")).toBe("Punjab")
     expect(subdivisionName("pk", "Somewhere")).toBe("Somewhere")
