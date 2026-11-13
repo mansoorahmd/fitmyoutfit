@@ -121,8 +121,8 @@ export type LimitedField = keyof typeof FIELD_MAX
 export const asciiDigits = (value: string): string =>
   value
     .normalize("NFKC")
-    .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660))
-    .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0))
+    .replace(/[\u0660-\u0669]/g, (d) => String(d.charCodeAt(0) - 0x0660))
+    .replace(/[\u06f0-\u06f9]/g, (d) => String(d.charCodeAt(0) - 0x06f0))
 
 /**
  * Postcodes the UK format would take, or that belong to a British address
@@ -219,7 +219,7 @@ const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
  * joiners, direction marks and embeddings, the soft hyphen, the byte order
  * mark. Written as ranges: the project's compile target has no `u` flag.
  */
-const INVISIBLE = /[\u0000-\u001f\u007f-\u009f­؀-؅؜۝܏᠎​-‏‪-‮⁠-⁤⁦-⁯﻿￹-￻]/
+const INVISIBLE = /[\u0000-\u001f\u007f-\u009f\u00ad\u0600-\u0605\u061c\u06dd\u070f\u180e\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u206f\ufeff\ufff9-\ufffb]/
 
 /**
  * An email address with one @ and a dot in the domain; no spaces, no two

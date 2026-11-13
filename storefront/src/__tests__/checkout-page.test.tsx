@@ -119,6 +119,12 @@ beforeEach(() => {
       status.requests.push({ url, body: JSON.parse(String(init.body)), signal: init.signal ?? undefined })
       const next = status.answers.shift()
       if (next === "hang") return new Promise(() => {})
+      if (next === "slow") {
+        // "open", after 2 s
+        return new Promise((resolve) =>
+          setTimeout(() => resolve(new Response(JSON.stringify({ kind: "open" }), { status: 200 })), 2000)
+        )
+      }
       return new Response(JSON.stringify(next ?? { kind: "open" }), { status: 200 })
     })
   )
@@ -683,6 +689,28 @@ describe("Place order (05, 6.6 to 6.8)", () => {
         await flush(0)
         expect(status.requests).toHaveLength(2)
         expect(nav.replaced).toEqual(["/pk/order/order_v/confirmed"])
+      } finally {
+        visibility.mockRestore()
+        vi.useRealTimers()
+      }
+    })
+
+    it("a look still running when the tab is hidden schedules no further look while it stays hidden", async () => {
+      vi.useFakeTimers()
+      const visibility = vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible")
+      try {
+        actions.answers.placeOrder = () => ({ kind: "unknown" })
+        status.answers = ["slow"]
+        ready()
+        await act(async () => {
+          fireEvent.click(screen.getByTestId("place-order"))
+        })
+        expect(status.requests).toHaveLength(1)
+        // hidden while the first look is still waiting for its answer
+        visibility.mockReturnValue("hidden")
+        document.dispatchEvent(new Event("visibilitychange"))
+        await flush(2000 + LOOK_EVERY_MS * 6)
+        expect(status.requests).toHaveLength(1)
       } finally {
         visibility.mockRestore()
         vi.useRealTimers()

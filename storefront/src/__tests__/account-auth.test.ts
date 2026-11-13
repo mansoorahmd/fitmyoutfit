@@ -97,7 +97,7 @@ describe("field checks (05, 2.3 and 8.3)", () => {
     expect(validateCreate({ ...base, password: " ".repeat(8) }, "pk")).toEqual({
       password: "Use letters, numbers or symbols, not only spaces",
     })
-    expect(validateCreate({ ...base, password: " ".repeat(4) + "　".repeat(6) }, "pk")).toEqual({
+    expect(validateCreate({ ...base, password: "\u00a0".repeat(4) + "\u3000".repeat(6) }, "pk")).toEqual({
       password: "Use letters, numbers or symbols, not only spaces",
     })
     // spaces inside a password are kept and allowed

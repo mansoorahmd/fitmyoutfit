@@ -327,7 +327,7 @@ describe("what the cart receives", () => {
     })
 
     it("an email with two dots in a row or an invisible character is refused", () => {
-      for (const typed of ["ali@x..com", "ali..raza@example.com", "ali@example.com​", "a​li@example.com", "ali@exa‍mple.com", "‎ali@example.com", ".ali@example.com", "ali.@example.com", "ali@.example.com", "ali@example.com."]) {
+      for (const typed of ["ali@x..com", "ali..raza@example.com", "ali@example.com\u200b", "a\u200bli@example.com", "ali@exa\u200dmple.com", "\u200eali@example.com", ".ali@example.com", "ali.@example.com", "ali@.example.com", "ali@example.com."]) {
         expect(isEmail(typed), JSON.stringify(typed)).toBe(false)
       }
       for (const typed of ["ali@example.com", "ali.raza@example.co.uk", "a+b@x.pk", "  ali@example.com  "]) {
