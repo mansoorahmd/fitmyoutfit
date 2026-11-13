@@ -104,6 +104,20 @@ const AddressStep = ({
     if (open && takeStepFocus("address")) headingRef.current?.focus()
   }, [open])
 
+  // The step can stay mounted while the customer moves between the steps.
+  // When the server's view starts selecting a saved address (the one just
+  // saved to the account is the cart's address), "Change" shows it chosen,
+  // with nothing left to save (QA S1-4c, S1: it showed "Use a new address"
+  // with the box still ticked, and Continue saved the address again).
+  const lastSelected = useRef(address.savedSelected)
+  useEffect(() => {
+    if (address.savedSelected === lastSelected.current) return
+    lastSelected.current = address.savedSelected
+    if (!address.savedSelected) return
+    setSavedChoice(address.savedSelected)
+    setValues((current) => ({ ...current, saveToAccount: false }))
+  }, [address.savedSelected])
+
   const usingSaved = address.saved.length > 0 && savedChoice !== NEW
   const showAddressFields = !usingSaved
 

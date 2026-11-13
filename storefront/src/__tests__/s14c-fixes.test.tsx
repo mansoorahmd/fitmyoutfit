@@ -180,4 +180,46 @@ describe("S1: an address saved to the account from the checkout is saved once", 
     })
     expect(saves.calls).toEqual([{ saveToAccount: false, address_1: "99 Twice Road" }])
   })
+
+  it("the same with the step kept mounted across the steps (as in the browser): Change selects the saved copy", async () => {
+    const base = {
+      rules: parseCheckoutRules(rulesPkAvailable),
+      shippingOptions: [optionPk],
+      providerIds: providersPk,
+      countryCode: "pk",
+    }
+    const signedIn = { ...customer, first_name: "Ali", last_name: "Raza", addresses: [] as typeof customer.addresses }
+    // a new address, nothing saved yet
+    const before = checkoutView({
+      ...base,
+      cart: checkoutCartPk({ id: "cart_s1b", shipping_address: null, billing_address: null, shipping_methods: [] }),
+      customer: signedIn,
+    })
+    const { rerender } = render(<CheckoutPage view={before} />)
+    fireEvent.change(screen.getByLabelText("Phone"), { target: { value: "0300 1234567" } })
+    fireEvent.change(screen.getByLabelText("House and street"), { target: { value: "99 Twice Road" } })
+    fireEvent.change(screen.getByLabelText("City"), { target: { value: "Lahore" } })
+    fireEvent.change(screen.getByLabelText("Province"), { target: { value: "pk-pb" } })
+    fireEvent.click(screen.getByLabelText("Save this address to my account"))
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("submit-address"))
+    })
+    expect(saves.calls).toEqual([{ saveToAccount: true, address_1: "99 Twice Road" }])
+    // the server's next view: the cart holds the address, the account holds its copy; Change opens step 1
+    const after = checkoutView({
+      ...base,
+      cart: checkoutCartPk({ id: "cart_s1b", shipping_address: twice, billing_address: twice }),
+      customer: { ...signedIn, addresses: [{ ...customer.addresses[0], ...twice, id: "cuaddr_twice", is_default_shipping: true }] },
+    })
+    nav.step = "payment"
+    rerender(<CheckoutPage view={after} />)
+    nav.step = "address"
+    rerender(<CheckoutPage view={after} />)
+    expect(screen.getByLabelText(/99 Twice Road/)).toBeChecked()
+    expect(screen.queryByTestId("save-to-account")).toBeNull()
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("submit-address"))
+    })
+    expect(saves.calls.at(-1)).toEqual({ saveToAccount: false, address_1: "99 Twice Road" })
+  })
 })
