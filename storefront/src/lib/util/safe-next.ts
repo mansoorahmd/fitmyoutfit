@@ -52,11 +52,21 @@ export const safeNextPath = (value: unknown): string | null => {
 
 /**
  * The full path to go to after sign-in: the safe `next` in the visitor's
- * country, else the account overview.
+ * country, else the account overview. A safe `next` that already starts
+ * with a country the store serves (`storeCountries`, lower case) is used as
+ * it is: "/gb/cart" stays "/gb/cart", never "/pk/gb/cart" (QA S1-4c, m7).
  */
-export const afterSignInPath = (countryCode: string, next: unknown): string => {
+export const afterSignInPath = (
+  countryCode: string,
+  next: unknown,
+  storeCountries: string[] = []
+): string => {
   const country = /^[a-z]{2}$/.test(countryCode) ? countryCode : ""
   const safe = safeNextPath(next)
+  const first = safe ? /^\/([a-z]{2})(?=[/?#]|$)/.exec(safe)?.[1] : undefined
+  if (safe && first && storeCountries.includes(first)) {
+    return safe
+  }
   const prefix = country ? `/${country}` : ""
   return `${prefix}${safe ?? "/account"}`
 }

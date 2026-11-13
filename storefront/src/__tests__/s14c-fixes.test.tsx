@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen } from "@testing-library/react"
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest"
 
 import { customer } from "./fixtures/account"
 import { checkoutCartPk, optionPk, providersPk, rulesPkAvailable } from "./fixtures/m1-checkout"
@@ -40,6 +40,7 @@ vi.mock("@lib/data/checkout", () => ({
 import { parseCheckoutRules } from "@lib/util/checkout-rules"
 import { checkoutView } from "@lib/util/checkout-view"
 import { keepAddressDraft } from "@modules/checkout/step-memory"
+import PageError from "@modules/checkout/components/page-error"
 import CheckoutPage from "@modules/checkout/templates/checkout-page"
 
 import StoreError from "../app/[countryCode]/error"
@@ -60,6 +61,9 @@ describe("S3: the store's error page keeps its 'your order may exist' sentence o
   const MAY_EXIST = "If you pressed Place order, your order may have gone through."
 
   it("on the checkout and an order's page it says so; elsewhere it doesn't", () => {
+    // offline, so the page waits and doesn't load itself again (m9)
+    const online = vi.spyOn(navigator, "onLine", "get").mockReturnValue(false)
+    onTestFinished(() => online.mockRestore())
     for (const path of ["/pk/checkout", "/gb/order/order_1/confirmed", "/pk/order"]) {
       nav.pathname = path
       const { unmount } = render(<StoreError />)
@@ -72,6 +76,70 @@ describe("S3: the store's error page keeps its 'your order may exist' sentence o
       expect(screen.getByTestId("page-error-alert"), path).not.toHaveTextContent(MAY_EXIST)
       unmount()
     }
+  })
+})
+
+describe("m9: the error page loads itself again when the browser is already back online as it appears", () => {
+  const withLocation = (pathname: string, run: (reload: ReturnType<typeof vi.fn>) => void) => {
+    const reload = vi.fn()
+    const location = window.location
+    Object.defineProperty(window, "location", { configurable: true, value: { ...location, pathname, reload } })
+    try {
+      run(reload)
+    } finally {
+      Object.defineProperty(window, "location", { configurable: true, value: location })
+    }
+  }
+
+  it("online on appearing: loads again once; again within a minute: waits for a press (no loop)", () => {
+    const online = vi.spyOn(navigator, "onLine", "get").mockReturnValue(true)
+    try {
+      withLocation("/pk/order/order_1/confirmed", (reload) => {
+        const first = render(<PageError orderPage />)
+        expect(reload).toHaveBeenCalledTimes(1)
+        first.unmount()
+        render(<PageError orderPage />)
+        expect(reload).toHaveBeenCalledTimes(1)
+        expect(screen.getByTestId("page-error-reload")).toBeInTheDocument()
+      })
+    } finally {
+      online.mockRestore()
+    }
+  })
+
+  it("offline on appearing: no load until the browser is back online", () => {
+    const online = vi.spyOn(navigator, "onLine", "get").mockReturnValue(false)
+    try {
+      withLocation("/pk/checkout", (reload) => {
+        render(<PageError orderPage />)
+        expect(reload).not.toHaveBeenCalled()
+        online.mockReturnValue(true)
+        act(() => {
+          window.dispatchEvent(new Event("online"))
+        })
+        expect(reload).toHaveBeenCalledTimes(1)
+      })
+    } finally {
+      online.mockRestore()
+    }
+  })
+})
+
+describe("m8: the order summary bar's ids are the same on the server and in the browser", () => {
+  it("aria-controls names a fixed id, the panel's own", () => {
+    const view = checkoutView({
+      cart: checkoutCartPk({ email: null, shipping_address: null, shipping_methods: [] }),
+      rules: parseCheckoutRules(rulesPkAvailable),
+      shippingOptions: [optionPk],
+      providerIds: providersPk,
+      customer: null,
+      countryCode: "pk",
+    })
+    render(<CheckoutPage view={view} />)
+    const toggle = screen.getByTestId("order-summary-toggle")
+    expect(toggle).toHaveAttribute("aria-controls", "checkout-summary-panel")
+    expect(document.getElementById("checkout-summary-panel")).not.toBeNull()
+    expect(document.querySelectorAll("#checkout-summary-panel")).toHaveLength(1)
   })
 })
 

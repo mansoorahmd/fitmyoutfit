@@ -1,7 +1,7 @@
 "use client"
 
 import { clx } from "@medusajs/ui"
-import { Fragment, useId, useState } from "react"
+import { Fragment, useState } from "react"
 
 import { checkoutContent } from "@content/checkout"
 import { CheckoutView } from "@lib/util/checkout-view"
@@ -51,9 +51,14 @@ export const OrderSummaryBox = ({ view }: { view: CheckoutView }) => (
  * closed by default: "Show order summary (5 pieces)", a chevron and the
  * total; open, the lines and the summary rows.
  */
+export const SUMMARY_PANEL_ID = "checkout-summary-panel"
+
 export const OrderSummaryDisclosure = ({ view }: { view: CheckoutView }) => {
   const [open, setOpen] = useState(false)
-  const panelId = useId()
+  // A fixed id, not useId: the server's and the browser's ids differed on
+  // /checkout?step=address and React warned of a hydration mismatch (QA
+  // S1-4c, m8). The bar is on the page once.
+  const panelId = SUMMARY_PANEL_ID
   const { summaryBar } = checkoutContent
 
   return (

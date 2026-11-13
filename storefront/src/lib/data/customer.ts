@@ -195,7 +195,7 @@ export async function signIn(
   if (!outcome.ok) return { kind: "problem", problem: outcome.problem }
 
   await afterSignIn(outcome.token)
-  return { kind: "signed_in", href: afterSignInPath(countryCode, next) }
+  return { kind: "signed_in", href: afterSignInPath(countryCode, next, await accountCountryCodes()) }
 }
 
 /**
@@ -230,7 +230,7 @@ export async function signUp(
   if (!outcome.ok) return { kind: "problem", problem: outcome.problem }
 
   await afterSignIn(outcome.token)
-  return { kind: "signed_in", href: afterSignInPath(countryCode, next) }
+  return { kind: "signed_in", href: afterSignInPath(countryCode, next, await accountCountryCodes()) }
 }
 
 /**

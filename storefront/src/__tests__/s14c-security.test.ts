@@ -20,6 +20,7 @@ vi.mock("@lib/config", () => ({
   sdk: {
     client: { fetch: async (path: string) => state.fetch!(path) },
     store: {
+      cart: { transferCart: async () => ({ cart: {} }) },
       customer: {
         deleteAddress: async (id: string) => {
           state.store.push(`delete ${id}`)
@@ -56,7 +57,7 @@ vi.mock("next/navigation", () => ({
   },
 }))
 
-import { deleteCustomerAddress, signout } from "@lib/data/customer"
+import { deleteCustomerAddress, signIn, signout } from "@lib/data/customer"
 import { retrieveAccountOrder } from "@lib/data/orders"
 import { requireCustomer } from "@modules/account/require-customer"
 
@@ -67,6 +68,28 @@ beforeEach(() => {
   state.removed = []
   state.redirected = []
   state.store = []
+})
+
+describe("sign-in returns to a next that already names a served country as it is (QA S1-4c, m7)", () => {
+  it("next=/gb/cart from /pk: /gb/cart, not /pk/gb/cart; an unsafe next: the account", async () => {
+    state.token = null
+    state.fetch = (path) => {
+      if (path === "/auth/customer/emailpass") return { token: "tok_new" }
+      if (path === "/store/customers/me") return { customer: { id: "cus_a" } }
+      if (path === "/store/regions")
+        return {
+          regions: [
+            { id: "reg_pk", countries: [{ iso_2: "pk" }] },
+            { id: "reg_gb", countries: [{ iso_2: "gb" }] },
+          ],
+        }
+      throw new Error(`unexpected ${path}`)
+    }
+    const values = { email: "a@b.co", password: "team-kit-2026" }
+    expect(await signIn(values, "pk", "/gb/cart")).toEqual({ kind: "signed_in", href: "/gb/cart" })
+    expect(await signIn(values, "pk", "/cart")).toEqual({ kind: "signed_in", href: "/pk/cart" })
+    expect(await signIn(values, "pk", "//gb/cart")).toEqual({ kind: "signed_in", href: "/pk/account" })
+  })
 })
 
 describe("removing the default address (QA S1-4c, m5)", () => {

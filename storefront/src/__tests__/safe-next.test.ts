@@ -91,4 +91,19 @@ describe("afterSignInPath", () => {
   it("ignores a country code that isn't two letters", () => {
     expect(afterSignInPath("//evil", "/cart")).toBe("/cart")
   })
+
+  it("a next that already starts with a country the store serves is used as it is (QA S1-4c, m7)", () => {
+    const served = ["pk", "gb", "ae", "us"]
+    expect(afterSignInPath("pk", "/gb/cart", served)).toBe("/gb/cart")
+    expect(afterSignInPath("pk", "/us", served)).toBe("/us")
+    expect(afterSignInPath("gb", "/pk/account/orders?shown=20", served)).toBe("/pk/account/orders?shown=20")
+    // a first segment that isn't a served country is a path in the visitor's country
+    expect(afterSignInPath("pk", "/fr/cart", served)).toBe("/pk/fr/cart")
+    expect(afterSignInPath("pk", "/gbx/cart", served)).toBe("/pk/gbx/cart")
+    expect(afterSignInPath("pk", "/cart", served)).toBe("/pk/cart")
+    // every refusal still holds: the account in the visitor's country
+    for (const unsafe of ["//gb/cart", "/\\gb", "https://evil.example/gb/cart", "/gb%2f%2fevil.example", "/\t/evil.example", null]) {
+      expect(afterSignInPath("pk", unsafe, served), String(unsafe)).toBe("/pk/account")
+    }
+  })
 })
