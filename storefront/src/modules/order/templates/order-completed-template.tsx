@@ -24,10 +24,13 @@ const words = orderContent
 const OrderCompletedTemplate = ({
   view,
   ownOrder,
+  signedIn = false,
 }: {
   view: OrderConfirmationView
   /** The order is the signed-in customer's: "See all your orders" (QA S1-4, D14). */
   ownOrder: boolean
+  /** A customer is signed in: never "Create an account" (QA S1-4c, m6), whoever's order this is. */
+  signedIn?: boolean
 }) => {
   const deliveredBy = view.deliveryDate ? formatDeliveryDate(view.deliveryDate) : null
   const steps: { icon: LineIconName; text: string }[] = [
@@ -200,7 +203,7 @@ const OrderCompletedTemplate = ({
                 >
                   {words.account.allOrders}
                 </LocalizedClientLink>
-              ) : (
+              ) : signedIn ? null : (
                 <div className="flex flex-col gap-3 rounded-card border border-brand-border p-4" data-testid="order-create-account">
                   <p className="type-body font-semibold text-brand-ink">{words.account.saveTitle}</p>
                   <ButtonLink

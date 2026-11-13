@@ -15,10 +15,11 @@ import {
 // D14 (the form and the confirmation's link), D15 (the order's country)
 // and the footer seen signed in.
 
-const { nav, backend, moves } = vi.hoisted(() => ({
+const { nav, backend, moves, who } = vi.hoisted(() => ({
   nav: { step: "address" as string | null, replaced: [] as string[], refreshed: 0, redirected: [] as string[], pathname: "/pk/checkout" },
   backend: { fetch: null as null | ((path: string, init: Record<string, unknown>) => unknown) },
   moves: { result: true },
+  who: { customer: null as null | { id: string } },
 }))
 
 vi.mock("next/navigation", () => ({
@@ -48,7 +49,7 @@ vi.mock("@lib/config", () => ({
   sdk: { client: { fetch: (path: string, init: Record<string, unknown>) => backend.fetch!(path, init) } },
 }))
 vi.mock("@lib/data/cookies", () => ({ getAuthHeaders: async () => ({}) }))
-vi.mock("@lib/data/customer", () => ({ retrieveCustomer: async () => null }))
+vi.mock("@lib/data/customer", () => ({ retrieveCustomer: async () => who.customer }))
 vi.mock("@lib/data/regions", () => ({
   getRegion: async (cc: string) => ({ id: `reg_${cc}`, countries: [{ iso_2: cc, display_name: cc.toUpperCase() }] }),
   listRegions: async () => [
@@ -102,6 +103,7 @@ beforeEach(() => {
   nav.pathname = "/pk/checkout"
   backend.fetch = null
   moves.result = true
+  who.customer = null
   sessionStorage.clear()
 })
 
@@ -218,10 +220,32 @@ describe("D14: 'See all your orders' only on the customer's own order", () => {
     expect(orderBelongsTo({ customer_id: null }, { id: "cus_1" })).toBe(false)
   })
 
-  it("a guest's order viewed while signed in gets the guest's box", () => {
+  it("a guest's order viewed signed out gets the guest's box", () => {
     render(<OrderCompletedTemplate view={orderConfirmationView({ order: orderPk, promise: null })} ownOrder={false} />)
     expect(screen.queryByRole("link", { name: "See all your orders" })).toBeNull()
     expect(screen.getByRole("link", { name: "Create an account" })).toBeInTheDocument()
+  })
+
+  it("signed in, someone else's or a guest's order: neither 'See all your orders' nor 'Create an account' (QA S1-4c, m6)", () => {
+    render(
+      <OrderCompletedTemplate view={orderConfirmationView({ order: orderPk, promise: null })} ownOrder={false} signedIn />
+    )
+    expect(screen.queryByRole("link", { name: "See all your orders" })).toBeNull()
+    expect(screen.queryByRole("link", { name: "Create an account" })).toBeNull()
+    expect(screen.queryByTestId("order-create-account")).toBeNull()
+    expect(screen.getByTestId("back-to-store")).toBeInTheDocument()
+  })
+
+  it("the page tells the template whether a customer is signed in", async () => {
+    backend.fetch = (path) => (path.endsWith("/delivery-promise") ? orderPromisePk : { order: orderPk })
+    const page = await OrderConfirmedPage({ params: Promise.resolve({ id: orderPk.id, countryCode: "pk" }) })
+    expect((page as { props: { signedIn: boolean } }).props.signedIn).toBe(false)
+    who.customer = { id: "cus_someone_else" }
+    const signed = await OrderConfirmedPage({ params: Promise.resolve({ id: orderPk.id, countryCode: "pk" }) })
+    expect((signed as { props: { signedIn: boolean; ownOrder: boolean } }).props).toMatchObject({
+      signedIn: true,
+      ownOrder: false,
+    })
   })
 })
 

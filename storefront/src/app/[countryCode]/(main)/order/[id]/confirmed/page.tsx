@@ -70,6 +70,7 @@ export default async function OrderConfirmedPage(props: Props) {
     <OrderCompletedTemplate
       view={orderConfirmationView({ order, promise, countryName })}
       ownOrder={orderBelongsTo(order as { customer_id?: string | null }, customer)}
+      signedIn={!!customer}
     />
   )
 }
