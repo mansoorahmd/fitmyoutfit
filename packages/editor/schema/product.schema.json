@@ -217,6 +217,34 @@
             "pattern": "^[MmLlHhVvCcQqZz0-9eE.,+\\-\\s]+$",
             "description": "The cut shape of the piece: one closed SVG path (M, L, H, V, C, Q, Z) in the piece's millimetres, inside its width and height. This pattern checks the characters only; validateProductDefinition() and validateDesign() from @fitmyoutfit/editor/design parse the path and check where it lies. Do not rely on this schema alone."
           },
+          "printArea": {
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "number",
+                "minimum": 0
+              },
+              "y": {
+                "type": "number",
+                "minimum": 0
+              },
+              "width": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "height": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              }
+            },
+            "required": [
+              "x",
+              "y",
+              "width",
+              "height"
+            ],
+            "additionalProperties": false
+          },
           "zone": {
             "type": "string",
             "pattern": "^(?!(?:__proto__|constructor|prototype)$)[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"

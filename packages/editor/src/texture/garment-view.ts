@@ -220,8 +220,11 @@ export function samplerFromRgba(data: ArrayLike<number>, width: number, height: 
  * average of its samples (the texture at the sample's UV, times its light),
  * and as alpha the share of samples that hit the garment. Writes RGBA (not
  * premultiplied, as ImageData wants) into `out`, `width * height * 4` long.
+ * `insideSample` colours the inside of the cloth (default: the same texture);
+ * pass one drawn without the layers so a print on the back does not show,
+ * mirrored, inside the neck.
  */
-export function composeGarmentView(view: GarmentView, sample: TextureSampler, out: Uint8ClampedArray): void {
+export function composeGarmentView(view: GarmentView, sample: TextureSampler, out: Uint8ClampedArray, insideSample: TextureSampler = sample): void {
   const { width, height, supersample: ss, kind, u, v, light } = view;
   const W = width * ss;
   const per = ss * ss;
@@ -236,7 +239,8 @@ export function composeGarmentView(view: GarmentView, sample: TextureSampler, ou
         for (let i = 0; i < ss; i++) {
           const at = row + i;
           if (kind[at] === 0) continue;
-          const colour = sample(u[at]!, v[at]!);
+          // The inside of the cloth (seen through the neck) has no prints: a separate sampler can leave them out.
+          const colour = kind[at] === 2 ? insideSample(u[at]!, v[at]!) : sample(u[at]!, v[at]!);
           const l = light[at]!;
           r += ((colour >> 16) & 255) * l;
           g += ((colour >> 8) & 255) * l;

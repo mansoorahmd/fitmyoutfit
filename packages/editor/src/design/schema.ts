@@ -494,6 +494,16 @@ export const pieceSchema = z.strictObject({
     "The cut shape of the piece: one closed SVG path (M, L, H, V, C, Q, Z) in the piece's millimetres, inside its width and height. " +
       SVG_PATH_RULE_NOTE,
   ),
+  /**
+   * Where items may be printed on this piece (06-editor.md 5.2, N6): a
+   * rectangle in the piece's millimetres. An item's whole box stays inside it.
+   * Without one, the piece's box is the limit (an item can still be cut by the
+   * outline; the "clipped" check says so). Business data, placeholders until
+   * the factories give their real print areas.
+   */
+  printArea: z
+    .strictObject({ x: finite.min(0), y: finite.min(0), width: finite.positive(), height: finite.positive() })
+    .optional(),
   /** The colour zone that fills the whole piece. `regions` are drawn over it. */
   zone: zoneId,
   /** Areas of other colour zones on this piece, bottom to top. */
@@ -510,8 +520,8 @@ export const zoneSchema = z.strictObject({
 /**
  * A named position on the garment ("left-chest", "back-number"): where a
  * layer of one of `roles` is put, on which piece, centred where, at most how
- * big, and which side the camera shows for it. Print areas (keeping a layer
- * inside them) are a later step.
+ * big, and which side the camera shows for it. Its centre lies in its piece's
+ * print area, when the piece has one.
  */
 export const placementPresetSchema = z.strictObject({
   id,

@@ -41,6 +41,13 @@
     { "id": "sleeve-left", "name": "Left sleeve", "pieceId": "sleeve_left", "centre": { "x": 209, "y": 85 }, "maxSize": { "width": 80, "height": 80 }, "roles": ["crest", "sponsor", "graphic", "player-number", "text"], "side": "left", "fontSize": 60 },
     { "id": "sleeve-right", "name": "Right sleeve", "pieceId": "sleeve_right", "centre": { "x": 209, "y": 85 }, "maxSize": { "width": 80, "height": 80 }, "roles": ["crest", "sponsor", "graphic", "player-number", "text"], "side": "right", "fontSize": 60 }
   ],
+  "printAreasAbout": "Print areas (N6): where items may be printed on each piece, a rectangle in the piece's millimetres; an item's whole box stays inside. PLACEHOLDERS until the factories give their real print areas.",
+  "printAreas": {
+    "front": { "x": 45, "y": 55, "width": 430, "height": 635 },
+    "back": { "x": 35, "y": 40, "width": 452, "height": 670 },
+    "sleeve_left": { "x": 105, "y": 35, "width": 208, "height": 125 },
+    "sleeve_right": { "x": 105, "y": 35, "width": 208, "height": 125 }
+  },
   "outlineToleranceMm": 0.1,
   "pieces": [
     {

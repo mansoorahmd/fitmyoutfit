@@ -49,6 +49,13 @@
     { "id": "sleeve-left", "name": "Left sleeve", "pieceId": "sleeve_left", "centre": { "x": 186, "y": 100 }, "maxSize": { "width": 80, "height": 80 }, "roles": ["crest", "sponsor", "graphic", "player-number", "text"], "side": "left", "fontSize": 60 },
     { "id": "sleeve-right", "name": "Right sleeve", "pieceId": "sleeve_right", "centre": { "x": 186, "y": 100 }, "maxSize": { "width": 80, "height": 80 }, "roles": ["crest", "sponsor", "graphic", "player-number", "text"], "side": "right", "fontSize": 60 }
   ],
+  "printAreasAbout": "Print areas (N6): where items may be printed on each piece, a rectangle in the piece's millimetres; an item's whole box stays inside. PLACEHOLDERS until the factories give their real print areas. The front's runs from just inside the side seams at chest height (x 160 to 511) and from below the shoulders to above the hem; the back's likewise; each sleeve's round its print position.",
+  "printAreas": {
+    "front": { "x": 160, "y": 65, "width": 351, "height": 625 },
+    "back": { "x": 70, "y": 30, "width": 348, "height": 665 },
+    "sleeve_left": { "x": 90, "y": 40, "width": 192, "height": 140 },
+    "sleeve_right": { "x": 90, "y": 40, "width": 192, "height": 140 }
+  },
   "outlineToleranceMm": 0.1,
   "packing": "best",
   "weldToleranceMm": 0.8,

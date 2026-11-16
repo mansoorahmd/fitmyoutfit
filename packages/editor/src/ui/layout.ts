@@ -58,9 +58,20 @@ export function stageInsets(layout: EditorLayout, panel: { open: boolean; height
   return { top: 0, right: 0, bottom: 0, left: 0 };
 }
 
-/** At 360 px the save state shows its icon only; its words stay the accessible name (06-editor.md 3.6). */
-export function saveStateShowsWords(width: number): boolean {
-  return width >= 375;
+/**
+ * How the top bar says the save state (06-editor.md 3.6; E3b: nothing in the
+ * top bar may be cut at 360 px). "full": the sentence ("Saved on this
+ * device"); "short": one word ("Saved"); "none": the icon only. The sentence
+ * stays the accessible name in every form. On a phone in portrait the bar has
+ * about 100 px between Redo and Done at 360 px: the short form fits (its
+ * longest, "Not saved" with the icon, is about 90 px), the sentence does not.
+ */
+export type SaveStateWords = "full" | "short" | "none";
+
+export function saveStateWords(layout: EditorLayout, width: number): SaveStateWords {
+  if (layout !== "compact") return "full";
+  if (width >= 520) return "full";
+  return width >= 340 ? "short" : "none";
 }
 
 /** The stage's height left above a compact panel of `panelHeight`. */

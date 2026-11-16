@@ -5,20 +5,30 @@
  * reset), and the model's credit line. The garment is framed in the free
  * area above (or beside) the panel by the canvas itself (`viewInsets`).
  */
-import type { ReactNode, Ref } from "react";
-import { DesignCanvas, type CameraInfo, type DesignCanvasHandle, type DesignCanvasProps } from "../react/DesignCanvas.js";
+import { useEffect, useMemo, useState, type ReactNode, type Ref } from "react";
+import { DesignCanvas, type CameraInfo, type DesignCanvasHandle, type DesignCanvasProps, type SelectionGeometry } from "../react/DesignCanvas.js";
+import { createBus } from "./handles.js";
+import { SelectionOverlay, type GesturePhase } from "./SelectionOverlay.js";
+import { StageContextBar } from "./SelectedItem.js";
+import { CONTEXT_BAR_HEIGHT } from "./selection.js";
 import type { ViewInsets } from "../react/camera.js";
 import type { DesignDocument, ProductDefinition } from "../design/schema.js";
 import type { AssetUrlResolver } from "../react/asset-images.js";
+import type { GarmentMesh } from "../texture/garment-view.js";
 import { fill, type EditorWording } from "./content.js";
 import { FlatView } from "./FlatView.js";
 import { EditorIcon, ShirtSilhouette } from "./icons.js";
 import type { EditorLayout } from "./layout.js";
-import type { StageTone } from "./stage-logic.js";
+import { creditForm, type StageTone } from "./stage-logic.js";
 
-/** Room kept at the top for the model's credit line, and at the bottom for the view buttons (CSS px). */
-export const CREDIT_ROOM = 36;
+/**
+ * Room kept at the top for the model's credit line (one quiet line, E3b), at the bottom for the view buttons,
+ * and at the top for the one-time hint while it shows (CSS px). The garment is framed outside all of them, so
+ * none of them ever covers it.
+ */
+export const CREDIT_ROOM = 24;
 export const VIEW_ROW = 60;
+export const HINT_ROOM = 44;
 
 export interface StageLoad {
   /** 0 to 1, or null when unknown. */
@@ -54,11 +64,32 @@ export interface StageProps {
   onReset: () => void;
   onStageKey: (event: React.KeyboardEvent<HTMLDivElement>) => void;
   credit?: ReactNode;
+  /** The garment's meshes, for the flat view's front and back (null until the model is read). */
+  garment?: readonly GarmentMesh[] | null;
+  /** A short form of the credit for a narrow stage (one line); the full credit opens from a button beside it. */
+  creditShort?: ReactNode;
+  /** The stage's width in CSS px (the credit's form depends on it). */
+  stageWidth: number;
+  /** The first press on the stage (the hint goes). */
+  onStagePointerDown?: () => void;
   /**
    * The view buttons over the stage: all of them; only Reset (a phone with an expanded panel: the stage is
    * short); or none (a phone while typing: the keyboard leaves room only for the item being typed).
    */
   viewControls: "full" | "reset-only" | "none";
+  /** The selected item's handles (3D only): resize and turn gestures, and "Turn to edit". */
+  onResize?: (phase: GesturePhase, factor: number) => void;
+  onRotate?: (phase: GesturePhase, degrees: number, free: boolean) => void;
+  onTurnTo?: () => void;
+  /** Handles hidden (a phone while typing). */
+  handlesHidden?: boolean;
+  /** The contextual bar on the stage (phones, with an item selected): the garment is framed below it. */
+  contextBar?: boolean;
+  /** The selected item has a warning: a badge beside its handles. */
+  selectionWarn?: boolean;
+  /** "On this kit" (4.8): its button at the top right of the stage, and (desktop) its popover under it. */
+  kitButton?: ReactNode;
+  kitPopover?: ReactNode;
 }
 
 export function Stage({ canvasRef, ...props }: StageProps) {
@@ -68,16 +99,32 @@ export function Stage({ canvasRef, ...props }: StageProps) {
   const showLoading = mode === "3d" && !load.ready;
   const controlsBottom = insets.bottom + 12;
   // The garment is framed between the credit line and the view buttons, above (or beside) the panel.
-  const canvasInsets = { top: props.credit ? CREDIT_ROOM : 0, right: insets.right, bottom: insets.bottom + (mode === "3d" && props.viewControls === "full" ? VIEW_ROW : 0), left: insets.left };
+  const hintShown = Boolean(props.hint) && props.viewControls !== "none";
+  const barTop = (props.credit && mode === "3d" ? CREDIT_ROOM : 0) + (hintShown && mode === "3d" ? HINT_ROOM : 0);
+  const canvasInsets = { top: barTop + (props.contextBar ? CONTEXT_BAR_HEIGHT : 0), right: insets.right, bottom: insets.bottom + (mode === "3d" && props.viewControls === "full" ? VIEW_ROW : 0), left: insets.left };
   const sides = ["front", "back", "left", "right"] as const;
+  // The selected item's box on the screen, from the canvas to the overlay (only the overlay re-renders per frame).
+  const bus = useMemo(() => createBus<SelectionGeometry | null>(null), []);
   return (
-    <div className="fmo-stage" data-tone={props.tone} data-testid="stage" style={props.credit && mode === "3d" ? ({ "--fmo-credit-room": `${CREDIT_ROOM}px` } as React.CSSProperties) : undefined}>
+    <div className="fmo-stage" data-tone={props.tone} data-testid="stage" style={props.credit && mode === "3d" ? ({ "--fmo-credit-room": `${CREDIT_ROOM}px` } as React.CSSProperties) : undefined} onPointerDownCapture={props.onStagePointerDown}>
       <div className="fmo-stage-deep" />
       {/* The soft contact shadow under the hem: the garment fills about two thirds of the free area's height, centred. */}
-      <div className="fmo-stage-shadow" style={{ bottom: `calc(${canvasInsets.bottom}px + (100% - ${canvasInsets.bottom + canvasInsets.top}px) * 0.13)`, left: `calc((100% - ${insets.right}px) / 2)` }} aria-hidden="true" />
+      <div className="fmo-stage-shadow" hidden={mode !== "3d"} style={{ bottom: `calc(${canvasInsets.bottom}px + (100% - ${canvasInsets.bottom + canvasInsets.top}px) * 0.13)`, left: `calc((100% - ${insets.right}px) / 2)` }} aria-hidden="true" />
       {mode === "3d" ? (
         <div className="fmo-canvas" tabIndex={0} role="img" aria-label={props.description} onKeyDown={props.onStageKey} data-testid="stage-canvas">
-          <DesignCanvas {...props.canvasProps} ref={canvasRef} design={props.design} product={props.product} viewInsets={canvasInsets} assetUrl={props.assetUrl} style={{ background: "transparent", minHeight: 0 }} errorFallback={null} />
+          <DesignCanvas {...props.canvasProps} ref={canvasRef} design={props.design} product={props.product} viewInsets={canvasInsets} assetUrl={props.assetUrl} style={{ background: "transparent", minHeight: 0 }} errorFallback={null} onSelectionGeometry={bus.emit} />
+          <SelectionOverlay
+            bus={bus}
+            wording={wording}
+            insets={insets}
+            top={canvasInsets.top}
+            onResize={props.onResize ?? (() => undefined)}
+            onRotate={props.onRotate ?? (() => undefined)}
+            onTurnTo={props.onTurnTo ?? (() => undefined)}
+            hidden={props.handlesHidden}
+            warn={props.selectionWarn}
+          />
+          {props.contextBar && <StageContextBar bus={bus} top={barTop} bottomInset={canvasInsets.bottom} />}
         </div>
       ) : (
         <div className="fmo-canvas fmo-flat-host" style={{ bottom: insets.bottom, right: insets.right }}>
@@ -87,7 +134,17 @@ export function Stage({ canvasRef, ...props }: StageProps) {
               <span>{props.banner}</span>
             </div>
           )}
-          <FlatView product={props.product} design={props.design} assetUrl={props.assetUrl} captionFront={wording.states.flatFront} captionBack={wording.states.flatBack} label={props.description} />
+          <FlatView
+            product={props.product}
+            design={props.design}
+            assetUrl={props.assetUrl}
+            captionFront={wording.states.flatFront}
+            captionBack={wording.states.flatBack}
+            label={props.description}
+            garment={props.garment}
+            selectedLayerId={props.canvasProps.selectedLayerId}
+            onSelectLayer={props.canvasProps.onSelectLayer}
+          />
         </div>
       )}
       {showLoading && (
@@ -117,6 +174,11 @@ export function Stage({ canvasRef, ...props }: StageProps) {
         </div>
       )}
       <div className="fmo-stage-top" style={{ right: insets.right }}>
+        {hintShown && (
+          <div className="fmo-hint" data-testid="stage-hint">
+            {props.hint}
+          </div>
+        )}
         {props.banner && mode === "3d" && (
           <div className="fmo-banner" role="status" data-testid="stage-banner">
             <EditorIcon name="info" size={20} />
@@ -135,17 +197,14 @@ export function Stage({ canvasRef, ...props }: StageProps) {
             </>
           )}
         </div>
-        {props.hint && props.viewControls !== "none" && (
-          <div className="fmo-hint" data-testid="stage-hint">
-            {props.hint}
-          </div>
-        )}
       </div>
-      {props.credit && mode === "3d" && (
-        <div className="fmo-credit" style={{ top: 6, maxWidth: `calc(100% - ${insets.right + 20}px)` }} data-testid="model-credit">
-          {props.credit}
+      {props.kitButton && (
+        <div className="fmo-kit-place" style={{ insetInlineEnd: (layout === "short" ? insets.right : 0) + 8 }}>
+          {props.kitButton}
+          {props.kitPopover}
         </div>
       )}
+      {props.credit && mode === "3d" && <Credit full={props.credit} short={props.creditShort} form={creditForm(props.stageWidth)} right={insets.right} label={v.creditMore} />}
       {mode === "3d" && props.viewControls !== "none" && (
         <div className="fmo-view" data-controls={props.viewControls} style={{ bottom: controlsBottom, right: layout === "short" ? insets.right : 0 }} data-testid="view-controls">
           <div className="fmo-sides" role="group" aria-label={v.sidesName}>
@@ -166,6 +225,38 @@ export function Stage({ canvasRef, ...props }: StageProps) {
               <EditorIcon name="reset" />
             </button>
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The model's credit (a licence duty: title, author, licence and that we changed it, wherever the model is
+ * shown): one quiet line at the top edge of the stage, in the band the garment is never framed into. On a
+ * narrow stage the host's short form shows, with a button that opens the full credit (title and links)
+ * under the line; Esc or the button closes it.
+ */
+function Credit({ full, short, form, right, label }: { full: ReactNode; short?: ReactNode; form: "full" | "short"; right: number; label: string }) {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
+  const showShort = form === "short";
+  return (
+    <div className="fmo-credit" style={{ maxWidth: `calc(100% - ${right + 12}px)` }} data-testid="model-credit" data-form={form}>
+      <span className="fmo-credit-line">{showShort ? (short ?? full) : full}</span>
+      {showShort && (
+        <button type="button" className="fmo-credit-more" aria-expanded={open} aria-label={label} title={label} onClick={() => setOpen((o) => !o)} data-testid="model-credit-more">
+          <EditorIcon name="info" size={16} />
+        </button>
+      )}
+      {showShort && open && (
+        <div className="fmo-credit-full" role="note" data-testid="model-credit-full">
+          {full}
         </div>
       )}
     </div>

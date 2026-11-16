@@ -16,6 +16,7 @@ import type { AssetUrlResolver } from "../react/asset-images.js";
 import type { AssetUploader } from "../upload/logo-upload.js";
 import type { EditorWording } from "./content.js";
 import type { EditorLayout, PanelDetent } from "./layout.js";
+import type { LogoNote } from "./checks.js";
 
 export type ToolId = "design" | "colours" | "team" | "players" | "logos" | "text";
 
@@ -69,9 +70,22 @@ export interface EditorApi {
   useColour(colourId: string): void;
   /** A text field has focus: on a phone the dock hides and the panel shrinks to the field (06-editor.md 3.3). */
   setTyping(layerId: string | null): void;
-  /** Opens a tool (the start card's "See designs", for example). */
-  openTool(tool: ToolId, detent?: PanelDetent): void;
+  /** Opens a tool (the start card's "See designs", for example); `turn: false` keeps the camera where it is. */
+  openTool(tool: ToolId, detent?: PanelDetent, options?: { turn?: boolean }): void;
   reducedMotion: boolean;
+  /** The selected item (06-editor.md 4.8, 5), or null. Not part of undo. */
+  selectedId: string | null;
+  /**
+   * Selects an item (null: nothing). With `turn`, the camera turns to it (a row of "On this kit", a tool's
+   * slot); with `openTool`, its tool opens. A tap on the model does neither turn nor move the camera.
+   */
+  select(layerId: string | null, options?: { turn?: boolean; openTool?: boolean }): void;
+  /** What the upload checks found about each uploaded file this session (a box behind the logo), by asset id. */
+  logoNotes: Readonly<Record<string, LogoNote>>;
+  setLogoNote(assetId: string, note: LogoNote): void;
+  /** Snapping to guides while placing (on by default; Alt holds it off with a mouse). */
+  snapping: boolean;
+  setSnapping(on: boolean): void;
   /** Logs a timing for the performance log (06-editor.md 11.3; E3 logs, E5 measures). */
   markTiming(name: string): void;
 }

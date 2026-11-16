@@ -58,6 +58,14 @@ Choices taken while building the engine, kept because later work depends on them
 - **Saving on the device** is an optional helper (IndexedDB for the design and its uploaded images); the host decides to use it. "Done" is a host callback until the Done panel exists (E3b).
 - **Every sentence of the interface is in one module** (`packages/editor/src/ui/content.ts`), grouped as in section 14 of the specification.
 
+## Added 12 Nov, after editing on the model was built (task E3b)
+
+- **Handles are placed through a UV-to-surface lookup** built once per model (13 to 40 ms for the jersey's 103,000 triangles on a desktop), with no cost while nothing is selected. Where a corner falls off the cut shape or across a seam it is placed on the tangent plane at the item's centre, so near strongly curved parts a handle sits a little off the cloth. Only "faces the camera" is detected (75 degrees), not "hidden behind another part".
+- **Print areas are an optional rectangle per piece** in the product definition (format version 2, no new version). The stand-ins' areas are placeholders; the real ones come with the factories' pattern pieces.
+- **On touch, select first, then drag;** with a mouse, drag directly. Snapping is held off with Alt, or with a switch in Fine-tune on touch.
+- **During a gesture the model uses a half-size texture** and returns to full quality on release; the tool panel shows the design as it was when the gesture started.
+- **The Done panel is a native modal dialog** with host slots (`primaryAction`, share); nothing about the proof is shown until E5.
+
 ## Alternatives rejected
 
 - **One large E3:** too big to review in one step, and the founder would wait longer to see anything.
