@@ -21,4 +21,15 @@ describe("the Cash on delivery panel", () => {
     expect(source).toMatch(/state\.note/)
     expect(source).toMatch(/state\.capture_warning/)
   })
+
+  // QA's thirteenth review, B1: the new state, red, with its figures, its note and the slip field
+  // that records without a capture.
+  it("shows the canceled order whose cash is still held, with its figures and note, and lets staff record the slip", () => {
+    expect(source).toMatch(/"canceled_cash_held"/)
+    expect(source).toMatch(/canceled_cash_held: \{ label: "Canceled, cash still held", color: "red" \}/)
+    expect(source).toMatch(/state\.held_amount/)
+    expect(source).toMatch(/label="Still held"/)
+    // The note (what to do) is shown in the form and in the refused states, not only once recorded.
+    expect(source.match(/state\.note/g)?.length ?? 0).toBeGreaterThanOrEqual(3)
+  })
 })

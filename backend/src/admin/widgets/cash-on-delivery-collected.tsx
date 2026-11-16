@@ -10,9 +10,13 @@
  * - Captured without slip (captured with Medusa's own "Capture payment" button, or the reference
  *   could not be saved after the capture): the same field, with "Record slip reference"; the
  *   payment is not captured again.
+ * - Canceled, cash still held (the order or its payment is canceled, but more is captured than
+ *   refunded): red, with the figures (captured, refunded, still held) and what to do, and the same
+ *   field with "Record slip reference"; the payment is not captured again.
  * - Collected: the reference, when it was recorded, and who captured the payment and when (from
  *   Medusa's own capture record). When the order was canceled or the payment refunded afterwards,
- *   the badge and a note say so ("Collected, then canceled and refunded").
+ *   the badge and a note say so ("Collected, then canceled and refunded"). A slip recorded on a
+ *   payment that is not fully captured says so ("Slip recorded, not captured").
  * - A warning, in any state, when the order's capture transactions do not add up to the payment's
  *   captures (a Medusa fault seen when two captures run at once): staff are told not to refund
  *   from the order's paid figure and to tell the developer.
@@ -29,7 +33,13 @@ import { Badge, Button, Container, Heading, Input, Label, Text } from "@medusajs
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useState, type FormEvent, type ReactNode } from "react"
 
-type Stage = "not_collected" | "partly_captured" | "captured_without_slip" | "recorded" | "unavailable"
+type Stage =
+  | "not_collected"
+  | "partly_captured"
+  | "captured_without_slip"
+  | "canceled_cash_held"
+  | "recorded"
+  | "unavailable"
 
 type CashCollection = {
   applies: boolean
@@ -43,6 +53,7 @@ type CashCollection = {
   amount: number | null
   captured_amount: number | null
   refunded_amount?: number | null
+  held_amount?: number | null
   order_canceled?: boolean
   captured_by: string | null
   captured_by_email: string | null
@@ -67,6 +78,7 @@ const BADGES: Record<Stage, { label: string; color: "green" | "orange" | "red" |
   not_collected: { label: "Not collected", color: "orange" },
   partly_captured: { label: "Partly captured", color: "orange" },
   captured_without_slip: { label: "Captured, no slip", color: "orange" },
+  canceled_cash_held: { label: "Canceled, cash still held", color: "red" },
   recorded: { label: "Collected", color: "green" },
   unavailable: { label: "Not collected", color: "grey" },
 }
@@ -201,15 +213,24 @@ const CashOnDeliveryCollectedWidget = ({ data: order }: DetailWidgetProps<AdminO
         </div>
       ) : state.can_record ? (
         <form className="flex flex-col gap-y-3 px-6 py-4" onSubmit={submit}>
-          <Text size="small" className="text-ui-fg-subtle">
-            {state.stage === "partly_captured"
-              ? `Part of this payment is already captured. When the courier hands over the slip for this order, enter its reference. This captures the remaining ${formatAmount(
-                  remaining(state),
-                  order.currency_code
-                )}.`
-              : state.capture_needed
-                ? "When the courier hands over the slip for this order, enter its reference. This captures the payment."
-                : "The payment is already captured, but no courier slip reference is recorded. Enter it here; the payment is not captured again."}
+          {state.stage === "canceled_cash_held" ? (
+            <>
+              <Row label="Captured">{formatAmount(state.captured_amount, order.currency_code)}</Row>
+              <Row label="Refunded">{formatAmount(state.refunded_amount ?? null, order.currency_code)}</Row>
+              <Row label="Still held">{formatAmount(state.held_amount ?? null, order.currency_code)}</Row>
+            </>
+          ) : null}
+          <Text size="small" className="text-ui-fg-subtle" data-testid="cod-note">
+            {state.note
+              ? state.note
+              : state.stage === "partly_captured"
+                ? `Part of this payment is already captured. When the courier hands over the slip for this order, enter its reference. This captures the remaining ${formatAmount(
+                    remaining(state),
+                    order.currency_code
+                  )}.`
+                : state.capture_needed
+                  ? "When the courier hands over the slip for this order, enter its reference. This captures the payment."
+                  : "The payment is already captured, but no courier slip reference is recorded. Enter it here; the payment is not captured again."}
           </Text>
           {state.stage === "partly_captured" ? (
             <Row label="Captured">
@@ -252,7 +273,7 @@ const CashOnDeliveryCollectedWidget = ({ data: order }: DetailWidgetProps<AdminO
       ) : (
         <div className="px-6 py-4">
           <Text size="small" className="text-ui-fg-subtle">
-            {REASONS[state.reason ?? ""] ?? "The cash cannot be recorded as collected."}
+            {state.note ?? REASONS[state.reason ?? ""] ?? "The cash cannot be recorded as collected."}
           </Text>
         </div>
       )}

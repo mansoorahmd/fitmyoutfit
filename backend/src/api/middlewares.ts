@@ -15,6 +15,9 @@
  * POST /store/carts/:id/rush, at the server's price. Medusa's own routes that add a line or change
  * one refuse it (refuseRushThroughCartRoutes); removing it with Medusa's DELETE line route works.
  * Before a cart is completed its rush line is priced once more (priceRushBeforeCompletion).
+ *
+ * Medusa's order cancel (POST /admin/orders/:id/cancel) holds the order's cash lock for as long as
+ * it runs, so it never interleaves with "mark cash as collected" (holdOrderCashLockDuringCancel).
  */
 import {
   defineMiddlewares,
@@ -33,6 +36,8 @@ import {
   reservedKeysMessage,
 } from "../lib/rules/order-metadata"
 import { isRushKind } from "../lib/rules/rush-charge"
+import { ORDER_BUSY_FOR_CANCEL_MESSAGE } from "../lib/rules/cash-collection"
+import { OrderCashLockBusy, withOrderCashLock } from "../workflows/cash-collection/order-cash-lock"
 import { assertCheckoutAllowed } from "../workflows/checkout-rules/load-checkout-rules"
 import { includesRushVariant, loadRushCart } from "../workflows/rush/rush-cart"
 import { repriceRushWorkflow } from "../workflows/rush/rush-workflows"
@@ -174,6 +179,49 @@ export async function priceRushBeforeCompletion(
   }
 }
 
+/** The longest a cancel holds the order's cash lock, whatever happens to its response. */
+const CANCEL_LOCK_LIMIT_MS = 120 * 1000
+
+/**
+ * Before POST /admin/orders/:id/cancel (Medusa's route, cancelOrderWorkflow): takes the order's
+ * cash lock (workflows/cash-collection/order-cash-lock.ts) and holds it until the response is sent,
+ * so the cancel reads and changes the order's payments while no "mark cash as collected" runs on
+ * the order, and a press waits until the cancel is done (QA's thirteenth review, B1). When the lock
+ * is not free in time the cancel is not run: HTTP 409 with a sentence for staff.
+ */
+export function holdOrderCashLockDuringCancel(
+  req: MedusaRequest,
+  res: MedusaResponse,
+  next: MedusaNextFunction
+): void {
+  let release: () => void = () => undefined
+  const done = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  res.once("finish", () => release())
+  res.once("close", () => release())
+  setTimeout(() => release(), CANCEL_LOCK_LIMIT_MS).unref()
+  let handedOn = false
+  withOrderCashLock(req.scope, req.params.id, async () => {
+    handedOn = true
+    next()
+    await done
+  }).catch((error: unknown) => {
+    if (handedOn) {
+      // The cancel ran and answered; only releasing the lock failed (it ends with its connection).
+      req.scope
+        .resolve(ContainerRegistrationKeys.LOGGER)
+        .warn(`Order cash lock of ${req.params.id}: ${(error as Error)?.message ?? error}`)
+      return
+    }
+    next(
+      error instanceof OrderCashLockBusy
+        ? new MedusaError(MedusaError.Types.CONFLICT, ORDER_BUSY_FOR_CANCEL_MESSAGE)
+        : error
+    )
+  })
+}
+
 export default defineMiddlewares({
   routes: [
     {
@@ -222,6 +270,11 @@ export default defineMiddlewares({
       matcher: "/store/orders/:id",
       method: ["GET"],
       middlewares: [hideStaffOnlyOrderKeys],
+    },
+    {
+      matcher: "/admin/orders/:id/cancel",
+      method: ["POST"],
+      middlewares: [holdOrderCashLockDuringCancel],
     },
     {
       // Medusa's order-transfer routes answer with the order too.

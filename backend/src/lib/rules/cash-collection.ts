@@ -12,11 +12,16 @@
  *
  * Capture first, then record: the capture runs to its end on its own; the record is then one
  * insert, made only if, at that moment and under the order's and the payment's row locks, the
- * order is not canceled and the payment neither canceled nor refunded (recordRefusalAtInsert). The
- * database allows one record per order, so of several presses at once exactly one records, on any
- * number of server instances. A payment that is fully captured without a record (Medusa's own
- * "Capture payment" button, or a record that failed after the capture) can get its record once,
- * without a second capture.
+ * order is not canceled and the payment neither canceled nor refunded, or, on a canceled order or
+ * payment, cash is still held for it (recordRefusalAtInsert). The database allows one record per
+ * order, so of several presses at once exactly one records, on any number of server instances. A
+ * payment that is fully captured without a record (Medusa's own "Capture payment" button, or a
+ * record that failed after the capture) can get its record once, without a second capture.
+ *
+ * A canceled order whose captures exceed its refunds (QA's thirteenth review, B1: a cancel and a
+ * press at the same moment, before the order lock of workflows/cash-collection/order-cash-lock.ts)
+ * is never shown as "not collected": it has a state of its own, "Canceled, cash still held", with
+ * the figures and what to do, and the courier's slip may still be recorded on it, without a capture.
  *
  * Money is worked out exactly (exact-amount.ts): Medusa keeps amounts as decimal strings, and a
  * remainder such as 1124.995 less 333.5 must be captured to the last digit, never rounded.
@@ -174,6 +179,9 @@ export function captureMismatchWarning(mismatch: CaptureMismatch, currencyCode?:
  *   the slip captures the rest, because the courier's slip is for the whole order.
  * - `captured_without_slip`: the whole amount is captured but no slip is recorded; recording the
  *   slip does not capture again.
+ * - `canceled_cash_held`: the order (or its cash-on-delivery payment) is canceled, but more is
+ *   captured than refunded, so cash is still held for it; staff refund the rest, and may record
+ *   the slip (the paper trail of cash that was collected) without a capture.
  * - `recorded`: the slip reference is recorded (what happened after, a cancel or a refund, is in
  *   `order_canceled` and `refunded_amount`, and in the label).
  * - `unavailable`: none of these; `reason` says why.
@@ -182,6 +190,7 @@ export type CashCollectionStage =
   | "not_collected"
   | "partly_captured"
   | "captured_without_slip"
+  | "canceled_cash_held"
   | "recorded"
   | "unavailable"
 
@@ -223,6 +232,8 @@ export type CashCollectionState = {
   captured_amount: number | null
   /** What is refunded of the cash-on-delivery payment (null when there is no such payment). */
   refunded_amount: number | null
+  /** What is captured and not refunded, never below 0 (null when there is no such payment). */
+  held_amount: number | null
   /** True when the order is canceled. */
   order_canceled: boolean
   /** Exactly what recording the slip would capture, as a decimal string, or null. */
@@ -293,6 +304,58 @@ function recordedBadge(
   return { label: "Collected", tone: "green", note: null }
 }
 
+/**
+ * The badge of a canceled order (or canceled cash-on-delivery payment) for which cash is still
+ * held: more is captured than refunded (QA's thirteenth review, B1). Red, with the figures and
+ * what to do. `recorded` leaves out the invitation to record the slip.
+ */
+function cashHeldBadge(
+  orderCanceled: boolean,
+  captured: Exact,
+  refunded: Exact,
+  currencyCode: string | null | undefined,
+  recorded: boolean
+): { label: string; tone: CashCollectionTone; note: string } {
+  const held = toNumber(sub(captured, refunded))
+  const what = orderCanceled ? "This order is canceled" : "The cash-on-delivery payment of this order is canceled"
+  return {
+    label: orderCanceled ? "Canceled, cash still held" : "Payment canceled, cash still held",
+    tone: "red",
+    note:
+      `${what}, but cash is still held for it: ${money(currencyCode, toNumber(captured))} captured, ` +
+      `${money(currencyCode, toNumber(refunded))} refunded, ${money(currencyCode, held)} still held. ` +
+      `The cash is with us or with the courier. Refund the ${money(currencyCode, held)} in the order's ` +
+      `Payments section; if the Payments section does not offer a refund, tell the developer, with ` +
+      `the order number.` +
+      (recorded ? "" : " If you have the courier's slip, record its reference here: nothing more is captured."),
+  }
+}
+
+/**
+ * The badge of a recorded slip on a payment that is not fully captured (an order recorded before
+ * 12 Nov, moved from its metadata; QA's thirteenth review, B2): never "Collected" while the
+ * captured figure says otherwise. The capture is made in Medusa's Payments section.
+ */
+function slipWithoutCaptureBadge(
+  shown: CollectionPayment | null,
+  captured: Exact,
+  refunded: Exact,
+  currencyCode: string | null | undefined
+): { label: string; tone: CashCollectionTone; note: string } {
+  const capturedSome = compare(captured, ZERO) > 0
+  const figures = shown
+    ? `only ${money(currencyCode, toNumber(captured))} of the ${money(currencyCode, toNumber(amountOf(shown.amount)))} is captured` +
+      (compare(refunded, ZERO) > 0 ? ` and ${money(currencyCode, toNumber(refunded))} is refunded` : "")
+    : "the payment is not fully captured"
+  return {
+    label: capturedSome ? "Slip recorded, partly captured" : "Slip recorded, not captured",
+    tone: "orange",
+    note:
+      `A courier slip is recorded for this order, but ${figures}. If the courier collected the cash, ` +
+      `capture the rest in the order's Payments section ("Capture payment").`,
+  }
+}
+
 const UNAVAILABLE_BADGES: Record<CashCollectionRefusal, { label: string; tone: CashCollectionTone }> = {
   not_cash_on_delivery: { label: "Not cash on delivery", tone: "grey" },
   already_recorded: { label: "Collected", tone: "green" },
@@ -309,15 +372,26 @@ const OPEN_BADGES: Record<"not_collected" | "partly_captured" | "captured_withou
 }
 
 /**
- * The order's state. The checks run in this order, and the order matters (unit tests pin it):
+ * The order's state: the decision table of the admin panel (the unit tests go through every
+ * combination of order canceled or not, payment canceled or not, captured none / part / all,
+ * refunded none / part / all and record present or not). The checks run in this order, and the
+ * order matters (unit tests pin it):
  * 1. no cash-on-delivery payment: the panel does not apply;
- * 2. a record exists: "recorded", always shown, with what happened since (a cancel, a refund) in
- *    its label; a record is never hidden by a later cancel or refund;
- * 3. the order is canceled: nothing may be recorded;
- * 4. the cash-on-delivery payment is canceled;
- * 5. several live cash-on-delivery payments;
- * 6. the payment is (partly) refunded: a refunded payment is not collected cash;
- * 7. otherwise open: captured without slip, partly captured, or not collected.
+ * 2. a record exists: "recorded", always shown; a record is never hidden by a later cancel or
+ *    refund. Its badge:
+ *    a. the payment is fully captured: "Collected", with what happened since (a cancel, a refund);
+ *    b. not fully captured, and the order or payment canceled with cash still held: "Canceled,
+ *       cash still held" (as 3);
+ *    c. not fully captured, canceled, no cash held: as 4 and 5 ("Canceled, not collected");
+ *    d. not fully captured otherwise: "Slip recorded, partly captured" or "not captured", never
+ *       "Collected";
+ * 3. the order is canceled, or its cash-on-delivery payment, and more is captured than refunded:
+ *    "Canceled, cash still held"; the slip may be recorded, without a capture;
+ * 4. the order is canceled: nothing may be recorded;
+ * 5. the cash-on-delivery payment is canceled;
+ * 6. several live cash-on-delivery payments;
+ * 7. the payment is (partly) refunded: a refunded payment is not collected cash;
+ * 8. otherwise open: captured without slip, partly captured, or not collected.
  */
 export function cashCollectionState(input: CashCollectionInput): CashCollectionState {
   const cod = input.payments.filter((p) => p.provider_id === COD_PAYMENT_PROVIDER_ID)
@@ -331,8 +405,13 @@ export function cashCollectionState(input: CashCollectionInput): CashCollectionS
     : undefined
   const captured = shown ? capturedAmount(shown) : ZERO
   const refunded = shown ? refundedAmount(shown) : ZERO
+  const held = compare(captured, refunded) > 0 ? sub(captured, refunded) : ZERO
   const slipReference = stringOrNull(input.record?.slip_reference)
   const orderCanceled = input.orderStatus === "canceled"
+  const paymentCanceled = live.length === 0
+  // Canceled (the order, or every cash-on-delivery payment) while cash is still held for it.
+  const cashHeld = (orderCanceled || paymentCanceled) && compare(held, ZERO) > 0
+  const collected = shown ? isFullyCaptured(shown) : cod.some(isFullyCaptured)
   // Compared only when the caller read the order's transactions (the admin route always does).
   const mismatch =
     input.orderCaptureTransactions === undefined
@@ -345,10 +424,11 @@ export function cashCollectionState(input: CashCollectionInput): CashCollectionS
     amount: shown ? toNumber(amountOf(shown.amount)) : null,
     captured_amount: shown ? toNumber(captured) : null,
     refunded_amount: shown ? toNumber(refunded) : null,
+    held_amount: shown ? toNumber(held) : null,
     order_canceled: orderCanceled,
     captured_by: latestCapture?.created_by ?? null,
     captured_at: latestCapture?.created_at ?? null,
-    collected: shown ? isFullyCaptured(shown) : cod.some(isFullyCaptured),
+    collected,
     capture_mismatch: mismatch,
     capture_warning: mismatch ? captureMismatchWarning(mismatch, input.currencyCode) : null,
   }
@@ -382,29 +462,54 @@ export function cashCollectionState(input: CashCollectionInput): CashCollectionS
   }
   // 2.
   if (slipReference !== null) {
+    const recorded = refuse("recorded", "already_recorded")
+    // a.
+    if (collected) {
+      return { ...recorded, ...recordedBadge(orderCanceled, captured, refunded, input.currencyCode) }
+    }
+    // b.
+    if (cashHeld) {
+      return { ...recorded, ...cashHeldBadge(orderCanceled, captured, refunded, input.currencyCode, true) }
+    }
+    // c.
+    if (orderCanceled || paymentCanceled) {
+      return { ...recorded, ...UNAVAILABLE_BADGES[orderCanceled ? "order_canceled" : "payment_canceled"] }
+    }
+    // d.
+    return { ...recorded, ...slipWithoutCaptureBadge(shown, captured, refunded, input.currencyCode) }
+  }
+  // 3. The slip may be recorded against the payment the cash was captured on, without a capture.
+  if (cashHeld && shown) {
     return {
-      ...refuse("recorded", "already_recorded"),
-      ...recordedBadge(orderCanceled, captured, refunded, input.currencyCode),
+      ...base,
+      applies: true,
+      stage: "canceled_cash_held",
+      payment_id: shown.id,
+      can_record: true,
+      capture_needed: false,
+      reason: null,
+      remaining: null,
+      ...cashHeldBadge(orderCanceled, captured, refunded, input.currencyCode, false),
     }
   }
-  // 3.
+  // 4.
   if (orderCanceled) {
     return refuse("unavailable", "order_canceled")
   }
-  // 4.
-  if (live.length === 0) {
+  // 5.
+  if (paymentCanceled) {
     return refuse("unavailable", "payment_canceled")
   }
-  // 5. Completing a cart makes one payment. Several mean the order was changed by hand; staff then
+  // 6. Completing a cart makes one payment. Several mean the order was changed by hand; staff then
   // capture in Medusa's own payment section, which shows each payment.
   if (!payment) {
     return refuse("unavailable", "several_payments")
   }
-  // 6.
+  // 7.
   if (compare(refunded, ZERO) > 0) {
     return refuse("unavailable", "payment_refunded")
   }
-  // 7.
+  // 8.
   if (isFullyCaptured(payment)) {
     return open("captured_without_slip", payment)
   }
@@ -414,25 +519,45 @@ export function cashCollectionState(input: CashCollectionInput): CashCollectionS
   return open("not_collected", payment)
 }
 
+/** The payment as the database holds it at the insert (record-cash-collection.ts). */
+export type PaymentAtInsert = {
+  canceled: boolean
+  /** The sum of its captures, exactly (a decimal string). */
+  captured: AmountInput
+  /** The sum of its refunds that were not abandoned, exactly. */
+  refunded: AmountInput
+  /** How many such refunds it has. */
+  refunds: number
+}
+
 /**
  * The last check before the record is inserted, on what the database holds at that moment under
  * the order's and the payment's row locks (workflows/cash-collection/record-cash-collection.ts):
  * Medusa's cancel and refund change those rows, so each of them either finished before this check
  * (and is seen here) or waits until the record is saved (and the panel then says "Collected, then
  * canceled" or "then refunded"). Checked in the same order as cashCollectionState. Null: record it.
+ *
+ * - On a canceled order or a canceled payment, the record is made only while cash is still held
+ *   for it (more captured than refunded): the slip is then the paper trail of cash that was
+ *   collected, and the panel says what is still to refund ("Collected, then canceled, not
+ *   refunded"). Nothing captured, or everything refunded: refused.
+ * - A payment that is gone (`payment` null) counts as canceled with nothing held.
+ * - Otherwise a refund refuses it, as before.
  */
 export function recordRefusalAtInsert(input: {
   orderStatus: string | null | undefined
-  paymentCanceled: boolean
-  refunds: number
+  payment: PaymentAtInsert | null
 }): CashCollectionRefusal | null {
-  if (input.orderStatus === "canceled") {
-    return "order_canceled"
+  const { payment } = input
+  const orderCanceled = input.orderStatus === "canceled"
+  if (orderCanceled || !payment || payment.canceled) {
+    const held = payment !== null && compare(amountOf(payment.captured), amountOf(payment.refunded)) > 0
+    if (held) {
+      return null
+    }
+    return orderCanceled ? "order_canceled" : "payment_canceled"
   }
-  if (input.paymentCanceled) {
-    return "payment_canceled"
-  }
-  if (input.refunds > 0) {
+  if (payment.refunds > 0) {
     return "payment_refunded"
   }
   return null
@@ -477,6 +602,14 @@ const LINE_BREAK_OR_TAB_RE = /[\p{Cc}\p{Zl}\p{Zp}]/u
  * currency symbols (+ = $ Rs) and modifier symbols stay allowed.
  */
 const OTHER_SYMBOL_RE = /\p{So}/u
+/**
+ * What staff are told about such a symbol: what to type instead (QA's thirteenth review, B4: the
+ * signs № ° ™ © are refused by the same general rule, and the message spoke of emoji and boxes).
+ */
+const SYMBOL_PROBLEM =
+  "This one has a sign in it that is not a letter, a digit or punctuation, such as №, °, ™, © or " +
+  "an emoji. Write it with letters and digits, for example No. 12 instead of № 12; if you pasted " +
+  "it, type it again by hand."
 /**
  * A combining mark is allowed only on a letter or digit (or after another mark): Arabic and Urdu
  * vowel marks, accents (and see FOREIGN_MARK_RE).
@@ -523,10 +656,7 @@ export function readSlipReference(raw: unknown): SlipReferenceResult {
     )
   }
   if (OTHER_SYMBOL_RE.test(raw)) {
-    return refusal(
-      "This one has a symbol in it that is not punctuation, such as an emoji, a box or a blank " +
-        "placeholder. Type it again by hand, without pasting."
-    )
+    return refusal(SYMBOL_PROBLEM)
   }
   const value = raw.replace(SPACES_RE, " ").trim()
   if (LOOSE_MARK_RE.test(value) || FOREIGN_MARK_RE.test(value)) {
@@ -612,7 +742,7 @@ export function decideCashCollection(
  * the underlying error: it can hold SQL or internal ids, and is logged instead.
  */
 export function captureFailureMessage(after: CashCollectionState): string {
-  if (after.stage === "recorded" || after.stage === "captured_without_slip") {
+  if (after.stage === "recorded" || after.stage === "captured_without_slip" || after.stage === "canceled_cash_held") {
     return (
       "The payment was captured by another request at the same moment, so this slip reference " +
       "was not recorded. Reload the order to see what is recorded."
@@ -626,6 +756,40 @@ export function captureFailureMessage(after: CashCollectionState): string {
     "if it fails again, check the Payments section of the order."
   )
 }
+
+/**
+ * How a failed capture is answered: `not_allowed` (HTTP 400) when the order's state now explains
+ * it (another press captured or recorded it, or the order or payment was canceled or refunded at
+ * the same moment: QA's thirteenth review, B3, where a press that lost to a cancel answered 500),
+ * `unexpected` (HTTP 500) only when nothing does. The message is captureFailureMessage.
+ */
+export function captureFailure(after: CashCollectionState): {
+  kind: "not_allowed" | "unexpected"
+  message: string
+} {
+  const explained =
+    after.stage === "recorded" ||
+    after.stage === "captured_without_slip" ||
+    after.stage === "canceled_cash_held" ||
+    after.reason === "order_canceled" ||
+    after.reason === "payment_canceled" ||
+    after.reason === "payment_refunded"
+  return { kind: explained ? "not_allowed" : "unexpected", message: captureFailureMessage(after) }
+}
+
+/**
+ * What staff are told when "mark cash as collected" waited too long for the order's cash lock
+ * (workflows/cash-collection/order-cash-lock.ts): a cancel of the order, or another press, is
+ * running at that moment.
+ */
+export const ORDER_BUSY_FOR_RECORD_MESSAGE =
+  "This order is being canceled, or its cash recorded, by another request at this moment. " +
+  "Nothing was recorded. Reload the order to see what happened, and try again if it is still needed."
+
+/** What staff are told when a cancel waited too long for the order's cash lock. */
+export const ORDER_BUSY_FOR_CANCEL_MESSAGE =
+  "The cash for this order is being recorded at this moment, so the order was not canceled. " +
+  "Reload the order and cancel it again if it is still needed."
 
 /**
  * What staff are told when the order was canceled, or the payment canceled or refunded, between

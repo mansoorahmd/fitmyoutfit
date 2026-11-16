@@ -21,6 +21,13 @@
  *    Medusa left it (payment, capture and the order's payment transaction): the order is then
  *    "captured without slip", and staff record the reference again without a second capture.
  *
+ * All three run under the order's cash lock (./order-cash-lock.ts), which Medusa's order cancel
+ * route takes too: a cancel and a press on one order never interleave (QA's thirteenth review,
+ * B1). A press that waited too long for it is answered HTTP 409 with nothing done.
+ *
+ * On a canceled order whose cash is still held ("Canceled, cash still held"), step 1 decides no
+ * capture, and step 3 records the slip as the paper trail of that cash.
+ *
  * Not a Medusa workflow on purpose: a workflow would undo the capture's order transaction when
  * the record fails, while the capture itself stays (QA's eighth review, N1).
  *
@@ -32,14 +39,16 @@ import type { MedusaContainer } from "@medusajs/framework/types"
 import { ContainerRegistrationKeys, MedusaError } from "@medusajs/framework/utils"
 import { capturePaymentWorkflow } from "@medusajs/medusa/core-flows"
 import {
-  captureFailureMessage,
+  captureFailure,
   decideCashCollection,
+  ORDER_BUSY_FOR_RECORD_MESSAGE,
   ORDER_NOT_FOUND_MESSAGE,
   RECORD_FAILURE_MESSAGE,
   recordedNothingMessage,
   refusalMessage,
 } from "../../lib/rules/cash-collection"
 import { loadCashCollection } from "./load-cash-collection"
+import { OrderCashLockBusy, withOrderCashLock } from "./order-cash-lock"
 import { insertCashCollectionRecord } from "./record-cash-collection"
 import { staffError } from "./staff-error"
 
@@ -57,11 +66,25 @@ function logFailure(container: MedusaContainer, what: string, orderId: string, e
     .error(`Cash collection, order ${orderId}: ${what}: ${(error as Error)?.message ?? error}`)
 }
 
-/** Captures, records, and returns nothing: the caller reads the new state. Throws staffError. */
+/**
+ * Captures, records, and returns nothing: the caller reads the new state. Throws staffError. The
+ * whole press holds the order's cash lock.
+ */
 export async function markCashCollected(
   container: MedusaContainer,
   input: MarkCashCollectedInput
 ): Promise<void> {
+  try {
+    await withOrderCashLock(container, input.order_id, () => markUnderLock(container, input))
+  } catch (error) {
+    if (error instanceof OrderCashLockBusy) {
+      throw staffError(MedusaError.Types.CONFLICT, ORDER_BUSY_FOR_RECORD_MESSAGE)
+    }
+    throw error
+  }
+}
+
+async function markUnderLock(container: MedusaContainer, input: MarkCashCollectedInput): Promise<void> {
   const orderId = input.order_id
 
   // 1. The check.
@@ -89,12 +112,13 @@ export async function markCashCollected(
     })
     if (errors?.length) {
       logFailure(container, "the capture failed", orderId, errors[0]?.error)
-      const after = await loadCashCollection(container, orderId)
-      const lostToAnotherPress =
-        after.state.stage === "recorded" || after.state.stage === "captured_without_slip"
+      // A refusal (400) when the order's state now explains the failure (another press, a cancel
+      // or a refund at the same moment), an error (500) only when nothing does (QA's thirteenth
+      // review, B3).
+      const failure = captureFailure((await loadCashCollection(container, orderId)).state)
       throw staffError(
-        lostToAnotherPress ? MedusaError.Types.NOT_ALLOWED : MedusaError.Types.UNEXPECTED_STATE,
-        captureFailureMessage(after.state)
+        failure.kind === "not_allowed" ? MedusaError.Types.NOT_ALLOWED : MedusaError.Types.UNEXPECTED_STATE,
+        failure.message
       )
     }
   }

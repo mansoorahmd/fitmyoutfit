@@ -1,4 +1,5 @@
 import {
+  captureFailure,
   captureFailureMessage,
   capturedAmount,
   captureMismatch,
@@ -63,6 +64,7 @@ describe("cashCollectionState", () => {
       amount: 2250,
       captured_amount: 0,
       refunded_amount: 0,
+      held_amount: 0,
       order_canceled: false,
       remaining: "2250",
       captured_by: null,
@@ -96,6 +98,7 @@ describe("cashCollectionState", () => {
       amount: 2250,
       captured_amount: 2250,
       refunded_amount: 0,
+      held_amount: 2250,
       order_canceled: false,
       remaining: null,
       captured_by: "user_1",
@@ -137,6 +140,7 @@ describe("cashCollectionState", () => {
       amount: 2250,
       captured_amount: 1000,
       refunded_amount: 0,
+      held_amount: 1000,
       order_canceled: false,
       remaining: "1250",
       captured_by: "user_1",
@@ -149,12 +153,33 @@ describe("cashCollectionState", () => {
     })
   })
 
-  it("counts a record as recorded even if the capture is not visible", () => {
-    const state = cashCollectionState({ payments: [cod()], record: { slip_reference: "A1", collected_at: null } })
-    expect(state).toMatchObject({ stage: "recorded", collected: false, can_record: false, reason: "already_recorded" })
+  // QA's thirteenth review, B2: a record on a payment that is not fully captured (an order moved
+  // from its legacy metadata) is shown as recorded, but never as "Collected".
+  it("shows a record on a payment that is not fully captured as recorded, not as collected", () => {
+    const state = cashCollectionState({
+      currencyCode: "pkr",
+      payments: [cod()],
+      record: { slip_reference: "A1", collected_at: null },
+    })
+    expect(state).toMatchObject({
+      stage: "recorded",
+      collected: false,
+      can_record: false,
+      reason: "already_recorded",
+      slip_reference: "A1",
+      label: "Slip recorded, not captured",
+      tone: "orange",
+    })
+    expect(state.note).toBe(
+      "A courier slip is recorded for this order, but only PKR 0 of the PKR 2,250 is captured. If the courier " +
+        `collected the cash, capture the rest in the order's Payments section ("Capture payment").`
+    )
+    const part = cashCollectionState({ currencyCode: "pkr", payments: [partly()], record: recorded })
+    expect(part).toMatchObject({ label: "Slip recorded, partly captured", tone: "orange", collected: false })
+    expect(part.note).toContain("only PKR 1,000 of the PKR 2,250 is captured.")
   })
 
-  it("refuses on a canceled order or a canceled payment", () => {
+  it("refuses on a canceled order or a canceled payment with nothing captured", () => {
     expect(cashCollectionState({ orderStatus: "canceled", payments: [cod()], record: null })).toMatchObject({
       applies: true,
       can_record: false,
@@ -164,11 +189,6 @@ describe("cashCollectionState", () => {
       applies: true,
       can_record: false,
       reason: "payment_canceled",
-    })
-    // A canceled order with a partly captured payment is not collected either.
-    expect(cashCollectionState({ orderStatus: "canceled", payments: [partly()], record: null })).toMatchObject({
-      can_record: false,
-      reason: "order_canceled",
     })
   })
 
@@ -214,8 +234,9 @@ describe("readSlipReference", () => {
   const invisible = refused(
     "This one has a character in it that is invisible or shows as blank (often pasted along with the text). Type it again by hand, without pasting."
   )
+  // QA's thirteenth review, B4: what to type instead, in plain words.
   const symbol = refused(
-    "This one has a symbol in it that is not punctuation, such as an emoji, a box or a blank placeholder. Type it again by hand, without pasting."
+    "This one has a sign in it that is not a letter, a digit or punctuation, such as №, °, ™, © or an emoji. Write it with letters and digits, for example No. 12 instead of № 12; if you pasted it, type it again by hand."
   )
   const looseMark = refused(
     "This one has an accent or vowel mark that is not on a letter of its own writing system. Type it again by hand, without pasting."
@@ -567,6 +588,12 @@ describe("the order's capture transactions against the payment's captures", () =
       order_transactions: 1124.995,
       payment_captures: 1124.99,
     })
+    // QA's thirteenth review, mutation B6: also when the order shows less than was captured.
+    expect(captureMismatch(["2250"], [cod({ captures: [capture(333), capture(2250)] })])).toEqual({
+      order_transactions: 2250,
+      payment_captures: 2583,
+    })
+    expect(captureMismatch([], [captured()])).toEqual({ order_transactions: 0, payment_captures: 2250 })
   })
 
   it("is a plain warning with both figures and what to do, shown in any state", () => {
@@ -660,11 +687,32 @@ describe("after the cash: canceled and refunded orders", () => {
   })
 
   it("checks again at the insert, under the row locks, in the same order", () => {
-    expect(recordRefusalAtInsert({ orderStatus: "pending", paymentCanceled: false, refunds: 0 })).toBeNull()
-    expect(recordRefusalAtInsert({ orderStatus: "canceled", paymentCanceled: true, refunds: 2 })).toBe("order_canceled")
-    expect(recordRefusalAtInsert({ orderStatus: "pending", paymentCanceled: true, refunds: 2 })).toBe("payment_canceled")
-    expect(recordRefusalAtInsert({ orderStatus: "pending", paymentCanceled: false, refunds: 1 })).toBe("payment_refunded")
-    expect(recordRefusalAtInsert({ orderStatus: null, paymentCanceled: false, refunds: 0 })).toBeNull()
+    const at = (canceled: boolean, captured: string, refunded: string, refunds: number) => ({ canceled, captured, refunded, refunds })
+    expect(recordRefusalAtInsert({ orderStatus: "pending", payment: at(false, "0", "0", 0) })).toBeNull()
+    expect(recordRefusalAtInsert({ orderStatus: "canceled", payment: at(true, "2250", "2250", 2) })).toBe("order_canceled")
+    expect(recordRefusalAtInsert({ orderStatus: "canceled", payment: at(false, "0", "0", 0) })).toBe("order_canceled")
+    expect(recordRefusalAtInsert({ orderStatus: "pending", payment: at(true, "2250", "2250", 2) })).toBe("payment_canceled")
+    expect(recordRefusalAtInsert({ orderStatus: "pending", payment: at(true, "0", "0", 0) })).toBe("payment_canceled")
+    expect(recordRefusalAtInsert({ orderStatus: "pending", payment: at(false, "2250", "1", 1) })).toBe("payment_refunded")
+    expect(recordRefusalAtInsert({ orderStatus: null, payment: at(false, "2250", "0", 0) })).toBeNull()
+  })
+
+  // QA's thirteenth review, B1: on a canceled order (or payment) whose cash is still held, the
+  // record is the paper trail of the cash; it is made, without a capture.
+  it("records at the insert on a canceled order or payment while cash is still held for it", () => {
+    const at = (canceled: boolean, captured: string, refunded: string, refunds: number) => ({ canceled, captured, refunded, refunds })
+    expect(recordRefusalAtInsert({ orderStatus: "canceled", payment: at(true, "2250", "0", 0) })).toBeNull()
+    expect(recordRefusalAtInsert({ orderStatus: "canceled", payment: at(false, "2250", "777", 1) })).toBeNull()
+    expect(recordRefusalAtInsert({ orderStatus: "pending", payment: at(true, "2250", "0", 0) })).toBeNull()
+    // Exactly: 0.005 still held is held; everything refunded is not.
+    expect(recordRefusalAtInsert({ orderStatus: "canceled", payment: at(false, "1124.995", "1124.99", 1) })).toBeNull()
+    expect(recordRefusalAtInsert({ orderStatus: "canceled", payment: at(false, "1124.995", "1124.995", 2) })).toBe("order_canceled")
+  })
+
+  // QA's thirteenth review, mutation B8: a payment that is gone counts as canceled, with nothing held.
+  it("refuses at the insert when the payment is gone", () => {
+    expect(recordRefusalAtInsert({ orderStatus: "pending", payment: null })).toBe("payment_canceled")
+    expect(recordRefusalAtInsert({ orderStatus: "canceled", payment: null })).toBe("order_canceled")
   })
 
   it("tells the press that lost to a cancel or a refund what happened", () => {
@@ -677,5 +725,238 @@ describe("after the cash: canceled and refunded orders", () => {
       "This order is canceled, so the cash cannot be recorded as collected. It happened at the same moment as " +
         "this press; nothing was recorded."
     )
+  })
+})
+
+// QA's thirteenth review, B1: the panel's decision table, every combination of order canceled or
+// not, payment canceled or not, captured none / part / all (0, 1,000 or 2,250 of PKR 2,250),
+// refunded none / part / all (of what was captured: 0, 40% or all of it) and a record or not.
+// Refunded part or all with nothing captured cannot happen (Medusa refunds only what is captured)
+// and is left out: 56 rows. Each row: stage | label | tone | what staff may do | what a press does.
+describe("the panel's decision table", () => {
+  const TABLE: [string, string][] = [
+      ["open     pay-live     cap-none ref-none none  ", "not_collected | Not collected | orange | record+capture | full"],
+      ["open     pay-live     cap-none ref-none record", "recorded | Slip recorded, not captured | orange | no | already_recorded"],
+      ["open     pay-live     cap-part ref-none none  ", "partly_captured | Partly captured | orange | record+capture | remainder"],
+      ["open     pay-live     cap-part ref-none record", "recorded | Slip recorded, partly captured | orange | no | already_recorded"],
+      ["open     pay-live     cap-part ref-part none  ", "unavailable | Refunded, not collected | grey | no | payment_refunded"],
+      ["open     pay-live     cap-part ref-part record", "recorded | Slip recorded, partly captured | orange | no | already_recorded"],
+      ["open     pay-live     cap-part ref-all  none  ", "unavailable | Refunded, not collected | grey | no | payment_refunded"],
+      ["open     pay-live     cap-part ref-all  record", "recorded | Slip recorded, partly captured | orange | no | already_recorded"],
+      ["open     pay-live     cap-all  ref-none none  ", "captured_without_slip | Captured, no slip | orange | record | none"],
+      ["open     pay-live     cap-all  ref-none record", "recorded | Collected | green | no | already_recorded"],
+      ["open     pay-live     cap-all  ref-part none  ", "unavailable | Refunded, not collected | grey | no | payment_refunded"],
+      ["open     pay-live     cap-all  ref-part record", "recorded | Collected, partly refunded | orange | no | already_recorded"],
+      ["open     pay-live     cap-all  ref-all  none  ", "unavailable | Refunded, not collected | grey | no | payment_refunded"],
+      ["open     pay-live     cap-all  ref-all  record", "recorded | Collected, then refunded | grey | no | already_recorded"],
+      ["open     pay-canceled cap-none ref-none none  ", "unavailable | Payment canceled, not collected | grey | no | payment_canceled"],
+      ["open     pay-canceled cap-none ref-none record", "recorded | Payment canceled, not collected | grey | no | already_recorded"],
+      ["open     pay-canceled cap-part ref-none none  ", "canceled_cash_held | Payment canceled, cash still held | red | record | none"],
+      ["open     pay-canceled cap-part ref-none record", "recorded | Payment canceled, cash still held | red | no | already_recorded"],
+      ["open     pay-canceled cap-part ref-part none  ", "canceled_cash_held | Payment canceled, cash still held | red | record | none"],
+      ["open     pay-canceled cap-part ref-part record", "recorded | Payment canceled, cash still held | red | no | already_recorded"],
+      ["open     pay-canceled cap-part ref-all  none  ", "unavailable | Payment canceled, not collected | grey | no | payment_canceled"],
+      ["open     pay-canceled cap-part ref-all  record", "recorded | Payment canceled, not collected | grey | no | already_recorded"],
+      ["open     pay-canceled cap-all  ref-none none  ", "canceled_cash_held | Payment canceled, cash still held | red | record | none"],
+      ["open     pay-canceled cap-all  ref-none record", "recorded | Collected | green | no | already_recorded"],
+      ["open     pay-canceled cap-all  ref-part none  ", "canceled_cash_held | Payment canceled, cash still held | red | record | none"],
+      ["open     pay-canceled cap-all  ref-part record", "recorded | Collected, partly refunded | orange | no | already_recorded"],
+      ["open     pay-canceled cap-all  ref-all  none  ", "unavailable | Payment canceled, not collected | grey | no | payment_canceled"],
+      ["open     pay-canceled cap-all  ref-all  record", "recorded | Collected, then refunded | grey | no | already_recorded"],
+      ["canceled pay-live     cap-none ref-none none  ", "unavailable | Canceled, not collected | grey | no | order_canceled"],
+      ["canceled pay-live     cap-none ref-none record", "recorded | Canceled, not collected | grey | no | already_recorded"],
+      ["canceled pay-live     cap-part ref-none none  ", "canceled_cash_held | Canceled, cash still held | red | record | none"],
+      ["canceled pay-live     cap-part ref-none record", "recorded | Canceled, cash still held | red | no | already_recorded"],
+      ["canceled pay-live     cap-part ref-part none  ", "canceled_cash_held | Canceled, cash still held | red | record | none"],
+      ["canceled pay-live     cap-part ref-part record", "recorded | Canceled, cash still held | red | no | already_recorded"],
+      ["canceled pay-live     cap-part ref-all  none  ", "unavailable | Canceled, not collected | grey | no | order_canceled"],
+      ["canceled pay-live     cap-part ref-all  record", "recorded | Canceled, not collected | grey | no | already_recorded"],
+      ["canceled pay-live     cap-all  ref-none none  ", "canceled_cash_held | Canceled, cash still held | red | record | none"],
+      ["canceled pay-live     cap-all  ref-none record", "recorded | Collected, then canceled, not refunded | red | no | already_recorded"],
+      ["canceled pay-live     cap-all  ref-part none  ", "canceled_cash_held | Canceled, cash still held | red | record | none"],
+      ["canceled pay-live     cap-all  ref-part record", "recorded | Collected, then canceled, partly refunded | red | no | already_recorded"],
+      ["canceled pay-live     cap-all  ref-all  none  ", "unavailable | Canceled, not collected | grey | no | order_canceled"],
+      ["canceled pay-live     cap-all  ref-all  record", "recorded | Collected, then canceled and refunded | grey | no | already_recorded"],
+      ["canceled pay-canceled cap-none ref-none none  ", "unavailable | Canceled, not collected | grey | no | order_canceled"],
+      ["canceled pay-canceled cap-none ref-none record", "recorded | Canceled, not collected | grey | no | already_recorded"],
+      ["canceled pay-canceled cap-part ref-none none  ", "canceled_cash_held | Canceled, cash still held | red | record | none"],
+      ["canceled pay-canceled cap-part ref-none record", "recorded | Canceled, cash still held | red | no | already_recorded"],
+      ["canceled pay-canceled cap-part ref-part none  ", "canceled_cash_held | Canceled, cash still held | red | record | none"],
+      ["canceled pay-canceled cap-part ref-part record", "recorded | Canceled, cash still held | red | no | already_recorded"],
+      ["canceled pay-canceled cap-part ref-all  none  ", "unavailable | Canceled, not collected | grey | no | order_canceled"],
+      ["canceled pay-canceled cap-part ref-all  record", "recorded | Canceled, not collected | grey | no | already_recorded"],
+      ["canceled pay-canceled cap-all  ref-none none  ", "canceled_cash_held | Canceled, cash still held | red | record | none"],
+      ["canceled pay-canceled cap-all  ref-none record", "recorded | Collected, then canceled, not refunded | red | no | already_recorded"],
+      ["canceled pay-canceled cap-all  ref-part none  ", "canceled_cash_held | Canceled, cash still held | red | record | none"],
+      ["canceled pay-canceled cap-all  ref-part record", "recorded | Collected, then canceled, partly refunded | red | no | already_recorded"],
+      ["canceled pay-canceled cap-all  ref-all  none  ", "unavailable | Canceled, not collected | grey | no | order_canceled"],
+      ["canceled pay-canceled cap-all  ref-all  record", "recorded | Collected, then canceled and refunded | grey | no | already_recorded"],
+  ]
+  const captures = { none: 0, part: 1000, all: 2250 } as const
+  type Level = keyof typeof captures
+  const combinations = () => {
+    const rows: { key: string; orderCanceled: boolean; paymentCanceled: boolean; captured: number; refunded: number; record: boolean }[] = []
+    for (const orderCanceled of [false, true]) {
+      for (const paymentCanceled of [false, true]) {
+        for (const c of ["none", "part", "all"] as Level[]) {
+          for (const r of ["none", "part", "all"] as Level[]) {
+            for (const record of [false, true]) {
+              if (c === "none" && r !== "none") {
+                continue
+              }
+              const captured = captures[c]
+              const refunded = r === "none" ? 0 : r === "part" ? captured * 0.4 : captured
+              const key =
+                `${orderCanceled ? "canceled" : "open    "} ${paymentCanceled ? "pay-canceled" : "pay-live    "} ` +
+                `cap-${c.padEnd(4)} ref-${r.padEnd(4)} ${record ? "record" : "none  "}`
+              rows.push({ key, orderCanceled, paymentCanceled, captured, refunded, record })
+            }
+          }
+        }
+      }
+    }
+    return rows
+  }
+  const stateOf = (row: ReturnType<typeof combinations>[number]) =>
+    cashCollectionState({
+      orderStatus: row.orderCanceled ? "canceled" : "pending",
+      currencyCode: "pkr",
+      payments: [
+        cod({
+          canceled: row.paymentCanceled,
+          captured_at: row.captured === 2250 ? at : null,
+          captures: row.captured ? [capture(row.captured)] : [],
+          refunds: row.refunded ? [row.refunded] : [],
+        }),
+      ],
+      record: row.record ? recorded : null,
+    })
+
+  it("has one row for every combination", () => {
+    expect(TABLE.map(([key]) => key)).toEqual(combinations().map((row) => row.key))
+  })
+
+  it("gives each combination its state", () => {
+    const expected = new Map(TABLE)
+    for (const row of combinations()) {
+      const state = stateOf(row)
+      const decision = decideCashCollection(state, "TCS 2")
+      const may = state.can_record ? (state.capture_needed ? "record+capture" : "record") : "no"
+      const press = decision.ok ? decision.capture : decision.reason
+      expect({ key: row.key, got: `${state.stage} | ${state.label} | ${state.tone} | ${may} | ${press}` }).toEqual({
+        key: row.key,
+        got: expected.get(row.key),
+      })
+    }
+  })
+
+  // The same rows, judged by their money alone, independently of the table above.
+  it("never shows a label that contradicts the money", () => {
+    for (const row of combinations()) {
+      const state = stateOf(row)
+      const held = row.captured - row.refunded
+      const canceled = row.orderCanceled || row.paymentCanceled
+      const facts = { key: row.key, label: state.label }
+      // "not collected" (and "Canceled, not collected" above all) only when no cash is held.
+      if (canceled && held > 0) {
+        expect(facts).toMatchObject({ label: expect.not.stringMatching(/not collected/) })
+        expect(state.held_amount).toBe(held)
+        // Red, except a recorded collection on an open order whose payment alone was canceled
+        // after the capture: still "Collected", with what was refunded.
+        if (!(row.record && row.captured === 2250 && !row.orderCanceled)) {
+          expect({ ...facts, tone: state.tone }).toMatchObject({ tone: "red" })
+        }
+      }
+      // "Collected" only for a recorded slip on a fully captured payment.
+      if (state.label.startsWith("Collected")) {
+        expect({ ...facts, record: row.record, captured: row.captured }).toMatchObject({ record: true, captured: 2250 })
+      }
+      // A canceled order with cash held says what to do, with the figures.
+      if (canceled && held > 0 && !(row.record && row.captured === 2250)) {
+        expect(state.note).toContain(`PKR ${row.captured.toLocaleString("en-GB")} captured`)
+        expect(state.note).toContain(`PKR ${row.refunded.toLocaleString("en-GB")} refunded`)
+        expect(state.note).toContain(`PKR ${held.toLocaleString("en-GB")} still held`)
+      }
+      // Never a capture on a canceled order or payment.
+      if (canceled) {
+        expect({ ...facts, capture_needed: state.capture_needed }).toMatchObject({ capture_needed: false })
+      }
+    }
+  })
+
+  it("tells staff what to do with the cash still held, and lets them record the slip without a capture", () => {
+    const state = cashCollectionState({
+      orderStatus: "canceled",
+      currencyCode: "pkr",
+      payments: [captured({ canceled: true })],
+      record: null,
+    })
+    expect(state).toMatchObject({
+      applies: true,
+      stage: "canceled_cash_held",
+      collected: true,
+      can_record: true,
+      capture_needed: false,
+      reason: null,
+      payment_id: "pay_cod",
+      captured_amount: 2250,
+      refunded_amount: 0,
+      held_amount: 2250,
+      order_canceled: true,
+      remaining: null,
+      label: "Canceled, cash still held",
+      tone: "red",
+    })
+    expect(state.note).toBe(
+      "This order is canceled, but cash is still held for it: PKR 2,250 captured, PKR 0 refunded, PKR 2,250 " +
+        "still held. The cash is with us or with the courier. Refund the PKR 2,250 in the order's Payments " +
+        "section; if the Payments section does not offer a refund, tell the developer, with the order number. " +
+        "If you have the courier's slip, record its reference here: nothing more is captured."
+    )
+    expect(decideCashCollection(state, " TCS 9 ")).toEqual({ ok: true, slipReference: "TCS 9", paymentId: "pay_cod", capture: "none" })
+    // QA's second shape: 777 captured first, the cancel refunded only that, the press captured the rest.
+    const part = cashCollectionState({
+      orderStatus: "canceled",
+      currencyCode: "pkr",
+      payments: [captured({ captures: [capture(777), capture(1473)], refunds: ["777"] })],
+      record: null,
+    })
+    expect(part).toMatchObject({ stage: "canceled_cash_held", held_amount: 1473, label: "Canceled, cash still held" })
+    expect(part.note).toContain("PKR 2,250 captured, PKR 777 refunded, PKR 1,473 still held.")
+  })
+})
+
+// QA's thirteenth review, B3: a press that lost to a cancel answered HTTP 500 with a refusal.
+describe("how a failed capture is answered", () => {
+  it("is a refusal (400 not_allowed) when the order's state now explains it", () => {
+    const explained = [
+      cashCollectionState({ orderStatus: "canceled", payments: [cod()], record: null }),
+      cashCollectionState({ payments: [cod({ canceled: true })], record: null }),
+      cashCollectionState({ payments: [partly({ refunds: ["1"] })], record: null }),
+      cashCollectionState({ payments: [captured()], record: null }),
+      cashCollectionState({ payments: [captured()], record: recorded }),
+      cashCollectionState({ orderStatus: "canceled", payments: [captured({ canceled: true })], record: null }),
+    ]
+    for (const after of explained) {
+      expect({ stage: after.stage, reason: after.reason, answer: captureFailure(after) }).toMatchObject({
+        answer: { kind: "not_allowed", message: captureFailureMessage(after) },
+      })
+    }
+    expect(captureFailure(explained[0]).message).toBe(
+      "This order is canceled, so the cash cannot be recorded as collected. It happened at the same moment as " +
+        "this press; nothing was recorded."
+    )
+  })
+
+  it("is an error (500) only when nothing explains it", () => {
+    for (const payment of [cod(), partly()]) {
+      const after = cashCollectionState({ payments: [payment], record: null })
+      expect(captureFailure(after)).toEqual({
+        kind: "unexpected",
+        message:
+          "The payment could not be captured. Nothing was recorded. Reload the order and try again; " +
+          "if it fails again, check the Payments section of the order.",
+      })
+    }
   })
 })

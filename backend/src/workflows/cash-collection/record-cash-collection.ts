@@ -10,14 +10,15 @@
  *    each of them either finished before these locks were taken, and is seen in step 2, or waits
  *    until this transaction ends, and happens after the record (the panel then says so: "Collected,
  *    then canceled and refunded");
- * 2. read the order's status, the payment's cancel time and its refunds, and ask the rule
- *    (recordRefusalAtInsert in lib/rules/cash-collection.ts);
+ * 2. read the order's status, the payment's cancel time, its captures and its refunds, and ask the
+ *    rule (recordRefusalAtInsert in lib/rules/cash-collection.ts): on a canceled order or payment
+ *    the record is made only while cash is still held for it (QA's thirteenth review, B1);
  * 3. insert the record; the unique index on the order (among rows not deleted) lets one insert
  *    win on any number of server instances, and a second one inserts nothing ("already
  *    recorded").
  *
  * A deliberate coupling to Medusa's tables: `order` (id, status, deleted_at), `payment` (id,
- * canceled_at, deleted_at) and `refund` (payment_id, deleted_at), and to our own module's table
+ * canceled_at, deleted_at), `capture` and `refund` (payment_id, amount, deleted_at), and to our own module's table
  * `cash_collection`. Check them on every Medusa upgrade (decision 010).
  */
 import type { MedusaContainer } from "@medusajs/framework/types"
@@ -53,16 +54,27 @@ export async function insertCashCollectionRecord(
         input.paymentId,
       ])
     ).rows?.[0]
-    const refunds = (
-      await trx.raw(`SELECT count(*)::int AS n FROM refund WHERE payment_id = ? AND deleted_at IS NULL`, [
-        input.paymentId,
-      ])
+    // Exact sums (numeric, as text): what is captured and what refunded decide, on a canceled order
+    // or payment, whether cash is still held for it.
+    const money = (
+      await trx.raw(
+        `SELECT (SELECT coalesce(sum(amount), 0)::text FROM capture WHERE payment_id = ? AND deleted_at IS NULL) AS captured,
+                (SELECT coalesce(sum(amount), 0)::text FROM refund WHERE payment_id = ? AND deleted_at IS NULL) AS refunded,
+                (SELECT count(*)::int FROM refund WHERE payment_id = ? AND deleted_at IS NULL) AS refunds`,
+        [input.paymentId, input.paymentId, input.paymentId]
+      )
     ).rows?.[0]
     const refusal = recordRefusalAtInsert({
       orderStatus: (order.status as string | null) ?? null,
-      // A payment that is gone counts as canceled: nothing to record against.
-      paymentCanceled: !payment || payment.canceled_at !== null,
-      refunds: Number(refunds?.n ?? 0),
+      // A payment that is gone is passed as null: the rule counts it as canceled, nothing held.
+      payment: payment
+        ? {
+            canceled: payment.canceled_at !== null,
+            captured: String(money?.captured ?? "0"),
+            refunded: String(money?.refunded ?? "0"),
+            refunds: Number(money?.refunds ?? 0),
+          }
+        : null,
     })
     if (refusal) {
       return refusal
