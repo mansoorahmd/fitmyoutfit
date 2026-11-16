@@ -311,6 +311,51 @@ medusaIntegrationTestRunner({
           expect(rushLines(response.data.cart)).toHaveLength(0)
         })
 
+        // QA's thirteenth review, mutation A12: every rush line goes, not only the first.
+        it("removes every rush line when a cart holds several (written past the routes)", async () => {
+          const cart = await createCart("pk", [{ handle: "t-shirt", size: "M", quantity: 1 }])
+          await addRush(cart.id)
+          await getContainer()
+            .resolve(Modules.CART)
+            .addLineItems(cart.id, [
+              { title: "Rush Production", variant_id: rushVariantId, product_id: rushProductId, quantity: 1, unit_price: 400 },
+              { title: "Rush Production", variant_id: rushVariantId, product_id: rushProductId, quantity: 1, unit_price: 400 },
+            ] as any)
+          expect(rushLines(await getCart(cart.id))).toHaveLength(3)
+          const response = await removeRush(cart.id)
+          expect(response.status).toBe(200)
+          expect(rushLines(await getCart(cart.id))).toHaveLength(0)
+          expect((await getCart(cart.id)).items).toHaveLength(1)
+        })
+
+        // QA's thirteenth review, A2 and A7: a busy cart (its lock held, here by a completion) is
+        // answered 409 after Medusa's short wait of 2 seconds, by the rush route also when the cart
+        // holds rush already, and by our promotions route (was: 30 s, and 500).
+        it("answers 409 after a short wait when the cart's lock is held, on the rush and promotions routes", async () => {
+          const cart = await createCart("pk", [{ handle: "t-shirt", size: "M", quantity: 1 }])
+          await addRush(cart.id)
+          const code = await createPromotion(10)
+          const locking = getContainer().resolve(Modules.LOCKING)
+          await locking.acquire(cart.id, { ownerId: "s16b-test", expire: 40 })
+          try {
+            for (const send of [
+              () => addRush(cart.id),
+              () => removeRush(cart.id),
+              () => api.post(`/store/carts/${cart.id}/promotions`, { promo_codes: [code] }, { headers, ...allow }),
+              () => api.delete(`/store/carts/${cart.id}/promotions`, { headers, data: { promo_codes: [code] }, ...allow }),
+            ]) {
+              const started = Date.now()
+              const response = await send()
+              const waited = Date.now() - started
+              expect({ status: response.status, type: response.data?.type }).toEqual({ status: 409, type: "conflict" })
+              expect(waited).toBeLessThan(10000)
+            }
+          } finally {
+            await locking.release(cart.id, { ownerId: "s16b-test" })
+          }
+          expect(rushLines(await getCart(cart.id))).toHaveLength(1)
+        })
+
         it("keeps one rush line when several adds arrive at once", async () => {
           const cart = await createCart("pk", [{ handle: "t-shirt", size: "M", quantity: 2 }])
           const responses = await Promise.all(Array.from({ length: 10 }, () => addRush(cart.id)))
@@ -767,6 +812,90 @@ medusaIntegrationTestRunner({
           const read = await api.get(`/store/orders/${orderId}/delivery-promise`, { headers })
           expect(read.data.delivery_promise).toMatchObject({ days: 10, applies: "rush" })
           expect((await orderMetadata(orderId)).delivery_promise).toMatchObject({ days: 10, applies: "rush" })
+        })
+
+        /** A confirmed admin order edit (Medusa's order-edit routes), with `change` in between. */
+        async function orderEdit(orderId: string, change: () => Promise<{ status: number }>) {
+          expect((await api.post("/admin/order-edits", { order_id: orderId }, { headers: adminHeaders, ...allow })).status).toBe(200)
+          expect((await change()).status).toBe(200)
+          expect((await api.post(`/admin/order-edits/${orderId}/request`, {}, { headers: adminHeaders, ...allow })).status).toBe(200)
+          expect((await api.post(`/admin/order-edits/${orderId}/confirm`, {}, { headers: adminHeaders, ...allow })).status).toBe(200)
+        }
+        const readPromise = async (orderId: string) =>
+          (await api.get(`/store/orders/${orderId}/delivery-promise`, { headers })).data.delivery_promise
+        async function currentItems(orderId: string) {
+          const { data } = await api.get(`/admin/orders/${orderId}?fields=id,version,*items`, { headers: adminHeaders })
+          return data.order as { version: number; items: { id: string; variant_id: string; quantity: number }[] }
+        }
+
+        // QA's thirteenth review, A1: an order's promised date is fixed when the order is placed; a
+        // later order edit never changes it.
+        it("keeps the promise exactly as placed when an order edit removes the rush line, with the days changed in between", async () => {
+          const { orderId } = await placeRushOrder()
+          const placed = await promiseOncePlaced(orderId)
+          expect(placed).toMatchObject({ days: 10, applies: "rush" })
+          await setStoreMetadata(getContainer(), { delivery_days_standard: 20, delivery_days_rush: 7 })
+          const rushItem = (await currentItems(orderId)).items.find((item) => item.variant_id === rushVariantId)!
+          await orderEdit(orderId, () =>
+            api.post(`/admin/order-edits/${orderId}/items/item/${rushItem.id}`, { quantity: 0 }, { headers: adminHeaders, ...allow })
+          )
+          const after = await currentItems(orderId)
+          expect(after.version).toBe(2)
+          expect(after.items.filter((item) => item.variant_id === rushVariantId && item.quantity > 0)).toEqual([])
+          expect(await readPromise(orderId)).toEqual(placed)
+          expect((await orderMetadata(orderId)).delivery_promise).toEqual(placed)
+        })
+
+        it("keeps the promise exactly as placed when an order edit adds the rush line, with the days changed in between", async () => {
+          const cart = await createCart("pk", [{ handle: "t-shirt", size: "M", quantity: 1 }])
+          await addShipping(cart.id)
+          await choosePayment(cart.id, COD)
+          const orderId = (await complete(cart.id)).data.order.id
+          const placed = await promiseOncePlaced(orderId)
+          expect(placed).toMatchObject({ days: 15, applies: "standard" })
+          await setStoreMetadata(getContainer(), { delivery_days_standard: 20, delivery_days_rush: 7 })
+          await orderEdit(orderId, () =>
+            api.post(
+              `/admin/order-edits/${orderId}/items`,
+              { items: [{ variant_id: rushVariantId, quantity: 1 }] },
+              { headers: adminHeaders, ...allow }
+            )
+          )
+          expect((await currentItems(orderId)).items.some((item) => item.variant_id === rushVariantId)).toBe(true)
+          expect(await readPromise(orderId)).toEqual(placed)
+          expect((await orderMetadata(orderId)).delivery_promise).toEqual(placed)
+        })
+
+        it("still replaces a promise copied from the cart (written before the reserved-key refusal)", async () => {
+          const cart = await createCart("pk", [{ handle: "t-shirt", size: "M", quantity: 1 }])
+          const forged = { date: addCalendarDays(today(), 1), days: 1, based_on: today(), applies: "standard" }
+          await getContainer().resolve(Modules.CART).updateCarts(cart.id, { metadata: { delivery_promise: forged } })
+          await addShipping(cart.id)
+          await choosePayment(cart.id, COD)
+          const orderId = (await complete(cart.id)).data.order.id
+          await promiseOncePlaced(orderId)
+          // The order's own promise overwritten with the cart's copy again (as before the subscriber ran).
+          await sql(
+            `UPDATE "order" SET metadata = jsonb_set(metadata, '{delivery_promise}', CAST(? AS jsonb)) WHERE id = ?`,
+            [JSON.stringify(forged), orderId]
+          )
+          expect(await readPromise(orderId)).toEqual({ date: addCalendarDays(today(), 15), days: 15, based_on: today(), applies: "standard" })
+        })
+
+        // QA's thirteenth review, mutation A11: the kinds are read with deleted products, so a rush
+        // order still gets the rush date after the rush product is deleted.
+        it("works out the rush date of a rush order after the rush product was deleted", async () => {
+          const { orderId } = await placeRushOrder()
+          await promiseOncePlaced(orderId)
+          // The kept promise lost (as when the settings were invalid at placement and it was emptied).
+          await sql(`UPDATE "order" SET metadata = jsonb_set(metadata, '{delivery_promise}', 'null'::jsonb) WHERE id = ?`, [orderId])
+          const product = getContainer().resolve(Modules.PRODUCT)
+          await product.softDeleteProducts([rushProductId])
+          try {
+            expect(await readPromise(orderId)).toEqual({ date: addCalendarDays(today(), 10), days: 10, based_on: today(), applies: "rush" })
+          } finally {
+            await product.restoreProducts([rushProductId])
+          }
         })
 
         it("keeps standard on an order without rush", async () => {

@@ -10,7 +10,7 @@ import { MedusaError } from "@medusajs/framework/utils"
 import { addToCartWorkflow, deleteLineItemsWorkflow } from "@medusajs/medusa/core-flows"
 import { isRushKind, RUSH_QUANTITY, rushOffer, rushRefusalMessage } from "../../lib/rules/rush-charge"
 import { currencyDigits, findRushVariant, loadRushCart, rushPercentage, type RushCart } from "./rush-cart"
-import { repriceRushWorkflow } from "./rush-workflows"
+import { repriceRushNowWorkflow } from "./rush-workflows"
 
 /**
  * Medusa's cart workflows wait at most 2 seconds for the cart's lock (in-memory in M1, one per
@@ -22,7 +22,11 @@ export function isCartLockTimeout(error: unknown): boolean {
   return /^Failed to acquire lock for key /.test(String((error as Error | undefined)?.message ?? ""))
 }
 
-async function asConflictOnLockTimeout(cartId: string, run: () => Promise<unknown>): Promise<void> {
+/**
+ * Runs `run`, answering Medusa's cart-lock timeout as HTTP 409 (`conflict`). Used by the rush
+ * routes and by our promotions route (QA's thirteenth review, A7).
+ */
+export async function asConflictOnLockTimeout(cartId: string, run: () => Promise<unknown>): Promise<void> {
   try {
     await run()
   } catch (error) {
@@ -48,8 +52,10 @@ async function cartOrNotFound(container: MedusaContainer, cartId: string): Promi
  * Adds the rush line, or leaves it (priced again) when the cart has it. Refused with HTTP 404 for
  * an unknown cart, 500 naming the key or the product when `rush_percentage` is missing or invalid
  * or the rush product is missing, and 400 `not_allowed` when the cart has no garment line or the
- * percentage is 0. A completed cart is refused by Medusa's own cart check (400). HTTP 409 when
- * other changes to the cart hold its lock for longer than Medusa waits (isCartLockTimeout).
+ * percentage is 0. A completed cart without a rush line is refused by Medusa's own cart check
+ * (400); a completed cart that holds rush answers 200 and nothing changes. HTTP 409 when other
+ * changes to the cart (or its completion) hold its lock for longer than Medusa's cart workflows
+ * wait, 2 seconds, in every case (isCartLockTimeout).
  */
 export async function addRush(container: MedusaContainer, cartId: string): Promise<void> {
   const cart = await cartOrNotFound(container, cartId)
@@ -60,9 +66,10 @@ export async function addRush(container: MedusaContainer, cartId: string): Promi
     throw new MedusaError(MedusaError.Types.NOT_ALLOWED, rushRefusalMessage(offer.reason))
   }
   if (cart.lines.some((line) => isRushKind(line.kind))) {
-    // Already there: nothing to add (idempotent), but the price is made right on the way.
+    // Already there: nothing to add (idempotent), but the price is made right on the way, waiting
+    // for the cart's lock as briefly as the add does (QA's thirteenth review, A2).
     await asConflictOnLockTimeout(cartId, () =>
-      repriceRushWorkflow(container).run({ input: { cart_id: cartId } })
+      repriceRushNowWorkflow(container).run({ input: { cart_id: cartId } })
     )
     return
   }

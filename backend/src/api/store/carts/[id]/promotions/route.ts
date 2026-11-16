@@ -10,21 +10,29 @@
  * (workflows/rush/rush-workflows.ts), because Medusa's promotion workflow does not refresh the
  * cart's items and so never reaches our refresh hook.
  *
+ * One difference: when another change holds the cart's lock for longer than Medusa waits
+ * (2 seconds), it answers HTTP 409 (`conflict`, try again) like the rush routes, where Medusa's
+ * handler answers 500 (QA's thirteenth review, A7).
+ *
  * Check on every Medusa upgrade: Medusa's handler (node_modules/@medusajs/medusa/dist/api/store/
  * carts/[id]/promotions/route.js) against this copy.
  */
 import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { PromotionActions } from "@medusajs/framework/utils"
 import { refetchCart } from "@medusajs/medusa/api/store/carts/helpers"
+import { asConflictOnLockTimeout } from "../../../../../workflows/rush/add-remove-rush"
 import { updateCartPromotionsWithRushWorkflow } from "../../../../../workflows/rush/rush-workflows"
 
 type PromotionsBody = { promo_codes?: string[] }
 
+/** HTTP 409 (`conflict`) when the cart's lock is held too long, as the rush routes answer. */
 async function run(req: MedusaRequest, action: string): Promise<void> {
   const body = (req.validatedBody ?? req.body ?? {}) as PromotionsBody
-  await updateCartPromotionsWithRushWorkflow(req.scope).run({
-    input: { cart_id: req.params.id, promo_codes: body.promo_codes ?? [], action },
-  })
+  await asConflictOnLockTimeout(req.params.id, () =>
+    updateCartPromotionsWithRushWorkflow(req.scope).run({
+      input: { cart_id: req.params.id, promo_codes: body.promo_codes ?? [], action },
+    })
+  )
 }
 
 export async function POST(req: MedusaRequest, res: MedusaResponse): Promise<void> {
