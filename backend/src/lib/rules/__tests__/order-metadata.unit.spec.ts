@@ -11,6 +11,7 @@ import {
   reservedKeysMessage,
 } from "../order-metadata"
 import type { PromisedDelivery } from "../delivery-promise"
+import type { CollectionPayment } from "../cash-collection"
 
 const days = { ok: true as const, value: { standard: 15, rush: 10 } }
 const invalidDays = { ok: false as const, error: "delivery_days_standard is not set." }
@@ -289,49 +290,115 @@ describe("decideOrderPromise", () => {
 })
 
 
-// QA's tenth review, M1.
+// QA's tenth review, M1, and thirteenth review, B2 (the shapes of qa13/e-legacy.out).
 describe("legacy cod_ keys on orders recorded before 12 Nov", () => {
-  it("plans the record from the keys, and removes every cod_ key", () => {
+  const at = "2026-11-11T09:00:00.000Z"
+  const codPayment = (overrides: Partial<CollectionPayment> = {}): CollectionPayment => ({
+    id: "pay_cod",
+    provider_id: "pp_cod_cod",
+    amount: 2250,
+    captured_at: at,
+    canceled: false,
+    captures: [{ amount: 2250, created_by: "user_1", created_at: at }],
+    refunds: [],
+    ...overrides,
+  })
+  const captured = [codPayment()]
+
+  it("plans the record from the keys of an order whose cash-on-delivery payment is fully captured, and removes every cod_ key (o1)", () => {
     expect(
-      legacyCashCollectionPlan({
-        delivery_promise: kept,
-        cod_slip_reference: "  TCS 778812 ",
-        cod_collected_at: "2026-11-11T09:30:00.000Z",
-        cod_collected_by: "user_01ABC",
-        team: "Lahore Lions",
-      })
+      legacyCashCollectionPlan(
+        {
+          delivery_promise: kept,
+          cod_slip_reference: "  TCS 778812 ",
+          cod_collected_at: "2026-11-11T09:30:00.000Z",
+          cod_collected_by: "user_01ABC",
+          team: "Lahore Lions",
+        },
+        captured
+      )
     ).toEqual({
       record: { slip_reference: "TCS 778812", collected_at: "2026-11-11T09:30:00.000Z" },
+      dropped: null,
       staffKeys: ["cod_collected_at", "cod_collected_by", "cod_slip_reference"],
     })
   })
 
-  it("keeps a slip reference as it was recorded, even one today's rule would refuse", () => {
-    expect(legacyCashCollectionPlan({ cod_slip_reference: "A".repeat(80) }).record?.slip_reference).toBe("A".repeat(80))
+  it("keeps a slip reference as it was recorded, trimmed, even one today's rule would refuse (o2, o10)", () => {
+    expect(legacyCashCollectionPlan({ cod_slip_reference: "  LEO 2002  " }, captured).record?.slip_reference).toBe("LEO 2002")
+    expect(legacyCashCollectionPlan({ cod_slip_reference: "A".repeat(80) }, captured).record?.slip_reference).toBe("A".repeat(80))
+    expect(legacyCashCollectionPlan({ cod_slip_reference: "SLIP \u{1F600} 10" }, captured).record?.slip_reference).toBe("SLIP \u{1F600} 10")
+  })
+
+  it('reads a numeric slip as its text: 12345 is "12345" (o4)', () => {
+    expect(
+      legacyCashCollectionPlan({ cod_slip_reference: 12345, cod_collected_at: { when: "yesterday" }, cod_extra: [1, 2], cod_: null }, captured)
+    ).toEqual({
+      record: { slip_reference: "12345", collected_at: null },
+      dropped: null,
+      staffKeys: ["cod_", "cod_collected_at", "cod_extra", "cod_slip_reference"],
+    })
+    expect(legacyCashCollectionPlan({ cod_slip_reference: 0 }, captured).record?.slip_reference).toBe("0")
   })
 
   it("leaves the time to the caller when the key holds no valid time", () => {
-    for (const at of [undefined, null, "", "yesterday", 1731300000000]) {
-      expect(legacyCashCollectionPlan({ cod_slip_reference: "TCS 1", cod_collected_at: at }).record).toEqual({
+    for (const time of [undefined, null, "", "yesterday", 1731300000000]) {
+      expect(legacyCashCollectionPlan({ cod_slip_reference: "TCS 1", cod_collected_at: time }, captured).record).toEqual({
         slip_reference: "TCS 1",
         collected_at: null,
       })
     }
   })
 
-  it("records nothing without a slip reference, but still removes the keys", () => {
-    for (const slip of [undefined, null, "", "   ", 42, { ref: "TCS 1" }]) {
-      expect(legacyCashCollectionPlan({ cod_slip_reference: slip, cod_collected_by: "user_1" })).toEqual({
+  it("records nothing without a slip reference, but still removes the keys (o3, o9)", () => {
+    for (const slip of [undefined, null, "", "   ", Number.NaN, Infinity, { ref: "TCS 1" }, true]) {
+      expect(legacyCashCollectionPlan({ cod_slip_reference: slip, cod_collected_by: "user_1" }, captured)).toEqual({
         record: null,
+        dropped: null,
         staffKeys: ["cod_collected_by", "cod_slip_reference"],
       })
     }
-    expect(legacyCashCollectionPlan({ cod_note: "x" })).toEqual({ record: null, staffKeys: ["cod_note"] })
+    expect(legacyCashCollectionPlan({ cod_note: "x" }, captured)).toEqual({ record: null, dropped: null, staffKeys: ["cod_note"] })
+  })
+
+  it("drops the slip of an order whose cash-on-delivery payment is not fully captured, saying why (o7)", () => {
+    for (const payment of [
+      codPayment({ captured_at: null, captures: [] }),
+      codPayment({ captured_at: null, captures: [{ amount: 777, created_by: null, created_at: at }] }),
+    ]) {
+      expect(legacyCashCollectionPlan({ cod_slip_reference: "FORGED-7", cod_collected_at: at }, [payment])).toEqual({
+        record: null,
+        dropped: { slip_reference: "FORGED-7", reason: "not_fully_captured" },
+        staffKeys: ["cod_collected_at", "cod_slip_reference"],
+      })
+    }
+  })
+
+  it("drops the slip of an order paid another way, or with no payment (o8)", () => {
+    const card = codPayment({ id: "pay_card", provider_id: "pp_system_default" })
+    for (const payments of [[card], []]) {
+      expect(legacyCashCollectionPlan({ cod_slip_reference: "CARD-8" }, payments)).toEqual({
+        record: null,
+        dropped: { slip_reference: "CARD-8", reason: "not_cash_on_delivery" },
+        staffKeys: ["cod_slip_reference"],
+      })
+    }
+  })
+
+  it("drops the slip when several live cash-on-delivery payments leave it unclear, and uses the one live one otherwise", () => {
+    expect(legacyCashCollectionPlan({ cod_slip_reference: "TCS 2" }, [codPayment({ id: "a" }), codPayment({ id: "b" })]).dropped).toEqual({
+      slip_reference: "TCS 2",
+      reason: "several_payments",
+    })
+    const oneLive = [codPayment({ id: "a", canceled: true, captured_at: null, captures: [] }), codPayment({ id: "b" })]
+    expect(legacyCashCollectionPlan({ cod_slip_reference: "TCS 3" }, oneLive).record?.slip_reference).toBe("TCS 3")
+    const liveOpen = [codPayment({ id: "a", canceled: true }), codPayment({ id: "b", captured_at: null, captures: [] })]
+    expect(legacyCashCollectionPlan({ cod_slip_reference: "TCS 4" }, liveOpen).dropped?.reason).toBe("not_fully_captured")
   })
 
   it("has nothing to do for metadata without cod_ keys, or that is not an object", () => {
     for (const metadata of [{}, { team: "A" }, null, undefined, "cod_slip_reference", ["cod_x"]]) {
-      expect(legacyCashCollectionPlan(metadata)).toEqual({ record: null, staffKeys: [] })
+      expect(legacyCashCollectionPlan(metadata, captured)).toEqual({ record: null, dropped: null, staffKeys: [] })
     }
   })
 })

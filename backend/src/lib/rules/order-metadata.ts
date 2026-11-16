@@ -24,6 +24,8 @@ import {
   type PromisedDelivery,
 } from "./delivery-promise"
 import type { DeliveryDays } from "../settings/delivery-days"
+import { isFullyCaptured, type CollectionPayment } from "./cash-collection"
+import { COD_PAYMENT_PROVIDER_ID } from "../../modules/cod/constants"
 import type { SettingResult } from "../settings/read-number-setting"
 
 /** Key of the promised delivery in the order's metadata. */
@@ -80,34 +82,78 @@ export function hideStaffOnlyKeysInOrders<T>(body: T): T {
 export const LEGACY_SLIP_REFERENCE_KEY = "cod_slip_reference"
 export const LEGACY_COLLECTED_AT_KEY = "cod_collected_at"
 
+/** Why a legacy slip reference is not moved into the cash-collection table. */
+export type LegacySlipDropReason =
+  /** The order has no cash-on-delivery payment (a card order, say): there is no cash to record. */
+  | "not_cash_on_delivery"
+  /** Its cash-on-delivery payment is not fully captured: the keys do not prove the cash came in. */
+  | "not_fully_captured"
+  /** Several live cash-on-delivery payments: which one the slip is for is not known. */
+  | "several_payments"
+
 /** What the move of an order's legacy `cod_*` keys into the cash-collection table does. */
 export type LegacyCashCollectionPlan = {
   /**
    * The record to create when the order has none: the slip reference (trimmed) and when it was
    * collected (null when the key holds no valid time; the caller then uses the time of the move).
-   * Null when the keys hold no slip reference, so there is nothing to record.
+   * Null when the keys hold no slip reference, or the slip is dropped (`dropped`).
    */
   record: { slip_reference: string; collected_at: string | null } | null
+  /** A slip reference the keys hold but that is not recorded, and why; the caller logs it. */
+  dropped: { slip_reference: string; reason: LegacySlipDropReason } | null
   /** Every `cod_` key to remove from the order's metadata (all of them, recorded or not). */
   staffKeys: string[]
 }
 
+/** The slip reference legacy keys hold: a non-blank string, trimmed, or a number as its text. */
+function legacySlipOf(value: unknown): string {
+  if (typeof value === "string") {
+    return value.trim()
+  }
+  // QA's thirteenth review, B2: a numeric slip (12345) is the text "12345", not dropped.
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return String(value)
+  }
+  return ""
+}
+
 /**
- * The plan for one order's metadata (QA's tenth review, M1). The slip reference is kept as it was
- * recorded, even if today's rule would refuse it: it is what staff entered then, and dropping it
- * would lose the record. Who recorded it (`cod_collected_by`) is not moved: Medusa's capture record
- * says who captured (decision 010, point 6).
+ * The plan for one order's metadata (QA's tenth review, M1; QA's thirteenth review, B2). The slip
+ * reference is kept as it was recorded, even if today's rule would refuse it: it is what staff
+ * entered then. Who recorded it (`cod_collected_by`) is not moved: Medusa's capture record says who
+ * captured (decision 010, point 6).
+ *
+ * A record is planned only for an order whose cash-on-delivery payment is fully captured (the
+ * payment the panel shows: the one live cash-on-delivery payment, or the only one there is), as
+ * the panel's "Collected" needs; any other slip is dropped, with the reason, for the caller to log.
+ * Every `cod_` key is removed either way.
  */
-export function legacyCashCollectionPlan(metadata: unknown): LegacyCashCollectionPlan {
+export function legacyCashCollectionPlan(
+  metadata: unknown,
+  payments: readonly CollectionPayment[]
+): LegacyCashCollectionPlan {
   if (typeof metadata !== "object" || metadata === null || Array.isArray(metadata)) {
-    return { record: null, staffKeys: [] }
+    return { record: null, dropped: null, staffKeys: [] }
   }
   const values = metadata as Record<string, unknown>
   const staffKeys = Object.keys(values).filter(isStaffOnlyKey).sort()
-  const slip = values[LEGACY_SLIP_REFERENCE_KEY]
-  const slipReference = typeof slip === "string" ? slip.trim() : ""
+  const slipReference = legacySlipOf(values[LEGACY_SLIP_REFERENCE_KEY])
   if (slipReference === "") {
-    return { record: null, staffKeys }
+    return { record: null, dropped: null, staffKeys }
+  }
+  const cod = payments.filter((payment) => payment.provider_id === COD_PAYMENT_PROVIDER_ID)
+  const live = cod.filter((payment) => !payment.canceled)
+  const payment = live.length === 1 ? live[0] : live.length === 0 && cod.length === 1 ? cod[0] : null
+  const reason: LegacySlipDropReason | null =
+    cod.length === 0
+      ? "not_cash_on_delivery"
+      : payment === null
+        ? "several_payments"
+        : isFullyCaptured(payment)
+          ? null
+          : "not_fully_captured"
+  if (reason) {
+    return { record: null, dropped: { slip_reference: slipReference, reason }, staffKeys }
   }
   const at = values[LEGACY_COLLECTED_AT_KEY]
   const time = typeof at === "string" ? new Date(at) : null
@@ -116,6 +162,7 @@ export function legacyCashCollectionPlan(metadata: unknown): LegacyCashCollectio
       slip_reference: slipReference,
       collected_at: time && !Number.isNaN(time.getTime()) ? time.toISOString() : null,
     },
+    dropped: null,
     staffKeys,
   }
 }

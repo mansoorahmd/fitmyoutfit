@@ -63,7 +63,7 @@ medusaIntegrationTestRunner({
         return (await knex.raw(statement, bindings)).rows as any[]
       }
 
-      async function placeCashOnDeliveryOrder(requestHeaders = headers): Promise<string> {
+      async function placeCashOnDeliveryOrder(requestHeaders = headers, providerId = COD): Promise<string> {
         const { data } = await api.post(
           "/store/carts",
           {
@@ -78,7 +78,7 @@ medusaIntegrationTestRunner({
         const { data: options } = await api.get(`/store/shipping-options?cart_id=${cartId}`, { headers })
         await api.post(`/store/carts/${cartId}/shipping-methods`, { option_id: options.shipping_options[0].id }, { headers })
         const { data: pc } = await api.post("/store/payment-collections", { cart_id: cartId }, { headers })
-        await api.post(`/store/payment-collections/${pc.payment_collection.id}/payment-sessions`, { provider_id: COD }, { headers })
+        await api.post(`/store/payment-collections/${pc.payment_collection.id}/payment-sessions`, { provider_id: providerId }, { headers })
         const completed = await api.post(`/store/carts/${cartId}/complete`, {}, { headers: requestHeaders })
         expect(completed.data.type).toBe("order")
         return completed.data.order.id
@@ -489,7 +489,7 @@ medusaIntegrationTestRunner({
           expect(await panel(orderId)).toMatchObject({ stage: "captured_without_slip" })
 
           const first = await moveLegacyCodMetadata(container)
-          expect(first).toEqual({ orders: 1, recordsCreated: 1, withoutSlip: [] })
+          expect(first).toEqual({ orders: 1, recordsCreated: 1, withoutSlip: [], dropped: [], differing: [] })
           expect(await records(orderId)).toEqual([
             { slip_reference: "TCS OLD-1", collected_at: new Date("2026-11-11T09:30:00.000Z") },
           ])
@@ -505,7 +505,7 @@ medusaIntegrationTestRunner({
           })
 
           const second = await moveLegacyCodMetadata(container)
-          expect(second).toEqual({ orders: 0, recordsCreated: 0, withoutSlip: [] })
+          expect(second).toEqual({ orders: 0, recordsCreated: 0, withoutSlip: [], dropped: [], differing: [] })
           expect(await records(orderId)).toHaveLength(1)
         })
 
@@ -515,12 +515,102 @@ medusaIntegrationTestRunner({
           expect((await record(recordedSince, "TCS NEW-9")).status).toBe(200)
           const noSlip = await legacyOrder(headers, { cod_collected_by: "user_01OLDSTAFF" })
           const result = await moveLegacyCodMetadata(container)
-          expect(result).toEqual({ orders: 2, recordsCreated: 0, withoutSlip: [noSlip] })
+          // The table's record differs from the keys' slip: the table's is kept, and the difference
+          // is listed for the log (QA's thirteenth review, B2), not dropped silently.
+          expect(result).toEqual({
+            orders: 2,
+            recordsCreated: 0,
+            withoutSlip: [noSlip],
+            dropped: [],
+            differing: [{ order_id: recordedSince, slip_reference: "TCS OLD-1", kept: "TCS NEW-9" }],
+          })
           expect((await records(recordedSince)).map((r) => r.slip_reference)).toEqual(["TCS NEW-9"])
           expect(await records(noSlip)).toEqual([])
           for (const id of [recordedSince, noSlip]) {
             expect(Object.keys(await metadataOf(id)).filter((k) => k.startsWith("cod_"))).toEqual([])
           }
+        })
+
+        // QA's thirteenth review, B2 (the shapes of qa13/e-legacy.out) and mutation B9.
+        it("records only on a fully captured cash-on-delivery payment, drops and lists any other slip, and reads a numeric slip as text", async () => {
+          const container = getContainer()
+          const uncaptured = await placeCashOnDeliveryOrder()
+          const card = await placeCashOnDeliveryOrder(headers, "pp_system_default")
+          for (const [orderId, slip] of [[uncaptured, "FORGED-7"], [card, "CARD-8"]] as const) {
+            await sql(`UPDATE "order" SET metadata = coalesce(metadata, '{}'::jsonb) || CAST(? AS jsonb) WHERE id = ?`, [
+              JSON.stringify({ cod_slip_reference: slip, cod_collected_at: "2026-11-11T13:00:00Z" }),
+              orderId,
+            ])
+          }
+          const numeric = await legacyOrder(headers, { cod_slip_reference: 12345, cod_collected_at: { when: "yesterday" } })
+          const deleted = await legacyOrder(headers, { cod_slip_reference: "DEL-6", cod_collected_at: "2026-11-11T12:00:00Z" })
+          await sql(`UPDATE "order" SET deleted_at = now() WHERE id = ?`, [deleted])
+
+          const result = await moveLegacyCodMetadata(container)
+          expect(result.orders).toBe(4)
+          expect(result.recordsCreated).toBe(2)
+          expect(result.withoutSlip).toEqual([])
+          expect(result.differing).toEqual([])
+          expect([...result.dropped].sort((a, b) => a.slip_reference.localeCompare(b.slip_reference))).toEqual([
+            { order_id: card, slip_reference: "CARD-8", reason: "not_cash_on_delivery" },
+            { order_id: uncaptured, slip_reference: "FORGED-7", reason: "not_fully_captured" },
+          ])
+          expect((await records(numeric)).map((r) => r.slip_reference)).toEqual(["12345"])
+          expect((await records(deleted)).map((r) => r.slip_reference)).toEqual(["DEL-6"])
+          for (const id of [uncaptured, card]) {
+            expect(await records(id)).toEqual([])
+          }
+          for (const id of [uncaptured, card, numeric, deleted]) {
+            expect(Object.keys(await metadataOf(id)).filter((k) => k.startsWith("cod_"))).toEqual([])
+          }
+          // The uncaptured order is open to record, with the capture, as any other.
+          expect(await panel(uncaptured)).toMatchObject({ stage: "not_collected", can_record: true, capture_needed: true })
+          expect(await panel(numeric)).toMatchObject({ stage: "recorded", label: "Collected", slip_reference: "12345" })
+        })
+
+        it("shows a record on an uncaptured payment truthfully, and the capture can still be made", async () => {
+          // As the first migration left it (QA13 o7): a record on a payment with nothing captured.
+          const orderId = await placeCashOnDeliveryOrder()
+          await sql(
+            `INSERT INTO cash_collection (id, order_id, slip_reference, collected_at) VALUES ('cashcol_s16b_o7', ?, 'FORGED-7', now())`,
+            [orderId]
+          )
+          expect(await panel(orderId)).toMatchObject({
+            stage: "recorded",
+            collected: false,
+            captured_amount: 0,
+            label: "Slip recorded, not captured",
+            tone: "orange",
+          })
+          expect((await captureInMedusa(orderId)).status).toBe(200)
+          expect(await panel(orderId)).toMatchObject({ stage: "recorded", collected: true, label: "Collected", tone: "green" })
+        })
+
+        it("logs every dropped slip and every differing slip, with the order id", async () => {
+          const uncaptured = await placeCashOnDeliveryOrder()
+          await sql(`UPDATE "order" SET metadata = coalesce(metadata, '{}'::jsonb) || CAST(? AS jsonb) WHERE id = ?`, [
+            JSON.stringify({ cod_slip_reference: "LOG-1" }),
+            uncaptured,
+          ])
+          const recordedSince = await legacyOrder(headers, { cod_slip_reference: "OLD-2" })
+          expect((await record(recordedSince, "NEW-2")).status).toBe(200)
+          const warnings: string[] = []
+          const logger = getContainer().resolve(ContainerRegistrationKeys.LOGGER)
+          const warn = jest.spyOn(logger, "warn").mockImplementation((message: string) => {
+            warnings.push(message)
+            return logger
+          })
+          try {
+            await moveCodMetadataToCashCollection({ container: getContainer(), args: [] } as any)
+          } finally {
+            warn.mockRestore()
+          }
+          expect(warnings).toEqual(
+            expect.arrayContaining([
+              expect.stringMatching(new RegExp(`order ${uncaptured} had the slip reference "LOG-1" .*not fully captured`)),
+              expect.stringMatching(new RegExp(`order ${recordedSince} had the slip reference "OLD-2" .*already records "NEW-2"`)),
+            ])
+          )
         })
 
         it("runs as a migration script, twice without harm", async () => {
