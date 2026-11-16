@@ -46,6 +46,19 @@ export function contextBarPlacement(input: { top: number; freeBottom: number; he
   return atBottom < atTop ? "bottom" : "top";
 }
 
+/**
+ * What a tap or click on the model does to the panels (E3d, R1): on an item, its tool opens (when it is not the
+ * one open already); while the start card is open, the card closes as "Skip" (what was picked is kept) and the
+ * item's tool opens, so nothing is ever edited with no tool in view. A tap on empty stage or bare fabric (no item)
+ * changes no panel: turning and zooming leave the start card open.
+ */
+export function modelTapAction(input: { startCard: boolean; itemTool: ToolId | null; activeTool: ToolId | null; tools: readonly ToolId[] }): { closeStartCard: boolean; openTool: ToolId | null } {
+  if (input.itemTool === null) return { closeStartCard: false, openTool: null };
+  const available = input.tools.includes(input.itemTool) ? input.itemTool : null;
+  if (input.startCard) return { closeStartCard: true, openTool: available };
+  return { closeStartCard: false, openTool: available !== input.activeTool ? available : null };
+}
+
 /** The tool that edits an item: the team name in Team, names and numbers in Players, logos in Logos, free text in Text. */
 export function toolForLayer(layer: Pick<Layer, "role" | "kind">): ToolId {
   switch (layer.role) {

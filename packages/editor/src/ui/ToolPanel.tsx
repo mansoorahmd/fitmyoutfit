@@ -166,17 +166,17 @@ export function ToolPanel(props: ToolPanelProps) {
           {props.title ?? wording.tools[tool]}
         </h2>
         {!props.title && (
-          <button type="button" className="fmo-round" style={{ border: 0, background: "none" }} aria-label={wording.tools.help} aria-expanded={help} title={wording.tools.help} onClick={() => setHelp((h) => !h)} data-testid="panel-help">
+          <button type="button" className="fmo-icon-btn" aria-label={wording.tools.help} aria-expanded={help} title={wording.tools.help} onClick={() => setHelp((h) => !h)} data-testid="panel-help">
             <EditorIcon name="help" />
           </button>
         )}
         {compact && (!fitsNormal || detent === "expanded") && (
-          <button type="button" className="fmo-btn fmo-btn-text" style={{ minHeight: 44, padding: "0 8px" }} onClick={() => props.onDetent(detent === "expanded" ? "normal" : "expanded")} data-testid="panel-expand">
+          <button type="button" className="fmo-btn fmo-btn-text" onClick={() => props.onDetent(detent === "expanded" ? "normal" : "expanded")} data-testid="panel-expand">
             {detent === "expanded" ? wording.tools.showLess : wording.tools.showAll}
           </button>
         )}
         {layout !== "wide" && (
-          <button type="button" className="fmo-round" style={{ border: 0, background: "none" }} aria-label={wording.tools.closePanel} title={wording.tools.closePanel} onClick={props.onClose} data-testid="panel-close">
+          <button type="button" className="fmo-icon-btn" aria-label={wording.tools.closePanel} title={wording.tools.closePanel} onClick={props.onClose} data-testid="panel-close">
             <EditorIcon name={compact ? "chevronDown" : "close"} />
           </button>
         )}

@@ -21,6 +21,7 @@ export function Swatch({
   onPick,
   onPreview,
   testId,
+  badge,
 }: {
   hex: string;
   /** The accessible name ("Navy" or "Navy, selected"). */
@@ -30,6 +31,8 @@ export function Swatch({
   /** Pointer devices: preview the colour while hovering (null on leave). */
   onPreview?: (on: boolean) => void;
   testId?: string;
+  /** A small mark on the swatch's top end corner (the start card's pick order, "1", "2", "3"); the label says it in words. */
+  badge?: string;
 }) {
   return (
     <button
@@ -47,6 +50,11 @@ export function Swatch({
       {selected && (
         <span className="fmo-check" style={{ color: markColourOn(hex), display: "flex", alignItems: "center", justifyContent: "center" }}>
           <EditorIcon name="check" size={22} />
+        </span>
+      )}
+      {badge && (
+        <span className="fmo-swatch-order" aria-hidden="true">
+          {badge}
         </span>
       )}
     </button>

@@ -19,7 +19,7 @@ import { TEAM_COLOUR_ROLES, type DesignDocument, type Layer } from "../design/sc
 import { teamColourValue } from "../design/team-colours.js";
 import { resolveTextDirection } from "../design/text.js";
 import { hasPictographs, stripPictographs } from "../design/typed-text.js";
-import { fieldCheck, fieldStep, type FieldState } from "./lettering.js";
+import { fieldCheck, fieldStep, fontDisplayName, type FieldState } from "./lettering.js";
 import { PictographAlert } from "./parts.js";
 import { fill } from "./content.js";
 import { useEditor } from "./context.js";
@@ -187,7 +187,7 @@ function TextItem({ layer }: { layer: TextLayer }) {
             role="radio"
             aria-checked={layer.fontId === f.id}
             className="fmo-chip fmo-font-chip"
-            title={f.name}
+            title={fontDisplayName(f)}
             onClick={() => api.commit((d) => updateLayer(addCatalogFont(d, fonts, f.id), layer.id, { fontId: f.id }, opts), "font")}
             data-testid={`text-font-${layer.id}-${f.id}`}
           >

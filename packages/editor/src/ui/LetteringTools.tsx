@@ -22,7 +22,7 @@ import type { EditLabel } from "../state/history.js";
 import { fill, presetWords } from "./content.js";
 import { useEditor, type EditorApi } from "./context.js";
 import { EditorIcon } from "./icons.js";
-import { convertDigits, digitChoiceOf, fieldCheck, fieldStep, playerSwitches, presetsFor, type DigitChoice, type FieldState } from "./lettering.js";
+import { convertDigits, digitChoiceOf, fieldCheck, fieldStep, fontDisplayName, playerSwitches, presetsFor, type DigitChoice, type FieldState } from "./lettering.js";
 import { Alert, PresetChips, Segmented, Swatch, SwitchRow } from "./parts.js";
 import { colourName } from "./stage-logic.js";
 
@@ -88,7 +88,7 @@ function StyleControls({ roles, fontRoles, onFonts }: { roles: ValueRole[]; font
 
   return (
     <section className="fmo-section" aria-label={w.style}>
-      <span className="fmo-label">{w.style}</span>
+      <span className="fmo-section-title">{w.style}</span>
       {fontRoles.map(({ role, label }) => {
         const l = roleLayers(design, role)[0];
         const font = l && api.fonts.fonts.find((f) => f.id === l.fontId);
@@ -96,7 +96,7 @@ function StyleControls({ roles, fontRoles, onFonts }: { roles: ValueRole[]; font
         return (
           <button key={role} type="button" className="fmo-btn fmo-btn-block fmo-font-button" onClick={() => onFonts(role)} data-testid={`font-${role}`}>
             <span>{label}</span>
-            <span style={{ fontFamily: font ? `"${font.family}"` : undefined, fontWeight: font?.weight }}>{font?.name ?? l.fontId}</span>
+            <span style={{ fontFamily: font ? `"${font.family}"` : undefined, fontWeight: font?.weight }}>{font ? fontDisplayName(font) : l.fontId}</span>
           </button>
         );
       })}
@@ -192,12 +192,12 @@ function FontList({ role, sample, onBack }: { role: ValueRole; sample: string; o
                 data-testid={`font-option-${f.id}`}
               >
                 <span className="fmo-muted">
-                  {f.name} {current === f.id && <EditorIcon name="check" size={16} />}
+                  {fontDisplayName(f)} {current === f.id && <EditorIcon name="check" size={16} />}
                 </span>
                 <span className="fmo-font-sample fmo-bdi" dir="auto" style={{ fontFamily: `"${f.family}"${fallback ? `, "${fallback.family}"` : ""}`, fontWeight: f.weight }}>
                   {sample}
                 </span>
-                {latinOnly && fallback && <span className="fmo-muted">{fill(wording.lettering.latinOnly, { font: fallback.name })}</span>}
+                {latinOnly && fallback && <span className="fmo-muted">{fill(wording.lettering.latinOnly, { font: fontDisplayName(fallback) })}</span>}
               </button>
             );
           })}
@@ -348,7 +348,7 @@ export function TeamTool() {
       <ValueField label={w.teamName} value={design.teamName} placeholder={wording.start.namePlaceholder} layerId={layers[0]?.id ?? null} onType={(v) => api.preview((d) => setTeamName(d, v))} testId="team-name" editLabel="team-name" />
       {hasPictographs(design.teamName) && <PictographAlert onRemove={(d) => setTeamName(d, stripPictographs(d.teamName))} testId="pictographs-team-name" />}
       <div>
-        <span className="fmo-label">{w.where}</span>
+        <span className="fmo-section-title">{w.where}</span>
         <PresetChips product={product} presets={presets} current={at} words={(p) => presetWords(wording, p)} onPick={place} offLabel={w.off} onOff={off} testIdPrefix="team-where" />
       </div>
       <ReadabilityWarnings roles={["team-name"]} />
@@ -374,7 +374,7 @@ export function PlayersTool() {
   return (
     <>
       <p className="fmo-muted">{w.fromTeamList}</p>
-      <span className="fmo-label" data-keep-typing>
+      <span className="fmo-section-title" data-keep-typing>
         {w.previewAs}
       </span>
       <div className="fmo-fields" data-keep-typing>
@@ -383,7 +383,7 @@ export function PlayersTool() {
       </div>
       {hasPictographs(design.samplePlayer.name) && <PictographAlert onRemove={(d) => setSamplePlayer(d, { name: stripPictographs(d.samplePlayer.name) })} testId="pictographs-player-name" />}
       <section className="fmo-section" aria-label={w.onTheShirt}>
-        <span className="fmo-label">{w.onTheShirt}</span>
+        <span className="fmo-section-title">{w.onTheShirt}</span>
         {playerSwitches(product, wording).map((s) => (
           <SwitchRow
             key={`${s.role}-${s.preset.id}`}

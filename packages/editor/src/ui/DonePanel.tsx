@@ -76,7 +76,7 @@ export function DonePanel(props: DonePanelProps) {
             <h2 className="fmo-panel-title" id="fmo-done-title">
               {w.title}
             </h2>
-            <button type="button" className="fmo-round" style={{ border: 0, background: "none" }} aria-label={w.close} title={w.close} onClick={props.onClose} data-testid="done-close">
+            <button type="button" className="fmo-icon-btn" aria-label={w.close} title={w.close} onClick={props.onClose} data-testid="done-close">
               <EditorIcon name={props.layout === "compact" ? "chevronDown" : "close"} />
             </button>
           </div>
@@ -120,7 +120,7 @@ export function DonePanel(props: DonePanelProps) {
             </>
           )}
           {props.share && <div data-testid="done-share">{props.share}</div>}
-          <button type="button" className="fmo-btn fmo-btn-text" onClick={props.onClose} data-testid="done-keep-designing">
+          <button type="button" className="fmo-btn fmo-btn-text fmo-btn-pad" onClick={props.onClose} data-testid="done-keep-designing">
             {w.keepDesigning}
           </button>
         </div>

@@ -193,7 +193,7 @@ export function Stage({ canvasRef, ...props }: StageProps) {
                 <button type="button" className="fmo-btn" onClick={props.onRetry} data-testid="stage-retry">
                   {wording.states.tryAgain}
                 </button>
-                <button type="button" className="fmo-btn fmo-btn-text" onClick={props.onUseFlat} data-testid="stage-use-flat">
+                <button type="button" className="fmo-btn fmo-btn-text fmo-btn-pad" onClick={props.onUseFlat} data-testid="stage-use-flat">
                   {wording.states.useFlat}
                 </button>
               </div>

@@ -118,3 +118,11 @@ export function playerSwitches(product: ProductDefinition, wording: EditorWordin
   if (sleeve) out.push({ role: "player-number", preset: sleeve, label: wording.lettering.slots.sleeve });
   return out;
 }
+
+/**
+ * The name a coach sees for a font (E3d, R19): the family's own name ("Oswald", "Graduate"), never the
+ * catalogue's notes for us ("Oswald Bold (names)").
+ */
+export function fontDisplayName(font: { family: string; name: string }): string {
+  return font.family.trim() || font.name.replace(/\s*\(.*?\)\s*/g, " ").trim();
+}

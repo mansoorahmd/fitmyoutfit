@@ -47,7 +47,8 @@ import { EDITOR_CSS } from "./styles.js";
 import { TOOL_ORDER, ToolPanel, ToolTabs } from "./ToolPanel.js";
 import { TopBar } from "./TopBar.js";
 import { hasWebGL2, readLocal, writeLocal } from "./webgl.js";
-import { toolForLayer } from "./selection.js";
+import { markRow, refreshFinish } from "./finish.js";
+import { modelTapAction, toolForLayer } from "./selection.js";
 import { namedLabel } from "./items.js";
 import { KitButton, OnThisKit } from "./OnThisKit.js";
 import { DonePanel } from "./DonePanel.js";
@@ -200,6 +201,25 @@ export function EditorShell(props: EditorShellProps) {
   const root = useRef<HTMLDivElement>(null);
   const size = useElementSize(root);
   const layout = chooseLayout(size.width || 390, size.height || 844);
+  // E3d (R3, R4): the panel body's gutter and the sideways rows' end fade, after every render and on scroll.
+  useEffect(() => {
+    if (root.current) refreshFinish(root.current);
+  });
+  useEffect(() => {
+    const el = root.current;
+    if (!el) return;
+    const onScroll = (event: Event) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.classList?.contains("fmo-scroll-row")) markRow(target);
+    };
+    const onResize = () => refreshFinish(el);
+    el.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onResize);
+    return () => {
+      el.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onResize);
+    };
+  }, []);
   const reducedMotion = useReducedMotion();
   // A design brought back (or upgraded) gets the print-area rule once: every item inside its area.
   const history = useDesignHistory(() => fitDesignToAreas(props.product, props.initialDesign));
@@ -747,9 +767,10 @@ export function EditorShell(props: EditorShellProps) {
       if (layerId === selectedId) return;
       setSelectedId(layerId);
       const layer = layerId ? designRef.current.layers.find((l) => l.id === layerId) : undefined;
-      if (!layer || startCard) return;
-      const next = toolForLayer(layer);
-      if (next !== activeTool && tools.includes(next)) openTool(next, detent === "expanded" ? "normal" : detent, { turn: false });
+      // R1: the first tap on an item while the start card is open closes it as "Skip" and opens the item's tool.
+      const action = modelTapAction({ startCard, itemTool: layer ? toolForLayer(layer) : null, activeTool: startCard ? null : activeTool, tools });
+      if (action.closeStartCard) setStartCard(false);
+      if (action.openTool) openTool(action.openTool, detent === "expanded" ? "normal" : detent, { turn: false });
     },
     [selectedId, setSelectedId, startCard, activeTool, tools, openTool, detent],
   );
@@ -947,6 +968,7 @@ export function EditorShell(props: EditorShellProps) {
         data-layout={layout}
         data-typing={typing}
         data-detent={panelOpen ? detent : "closed"}
+        data-start={startCard}
         data-reduced-motion={reducedMotion}
         data-selected={selectedId ?? ""}
         role="application"
@@ -1137,7 +1159,7 @@ export function EditorShell(props: EditorShellProps) {
               </button>
               <button
                 type="button"
-                className="fmo-btn fmo-btn-text"
+                className="fmo-btn fmo-btn-text fmo-btn-pad"
                 onClick={() => {
                   setLeaving(false);
                   props.onClose?.();

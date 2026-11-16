@@ -72,6 +72,10 @@ export const EDITOR_WORDING = {
     allColours: "All colours", // W-ED44
     clearSlot: "Remove {role}", // NEW: accessible name of a filled colour slot
     emptySlot: "{role}: not chosen", // NEW
+    skipLater: "Skip for now: you can change everything later", // NEW (E3d, R5): the skip line and the reassurance in one line
+    pickedAs: "{colour}, {role}", // NEW (E3d, R5): a picked swatch's accessible name ("Red, Main"); tap again to remove
+    pickedRole: "{role}: {colour}", // NEW (E3d, R5): one pick in the line under the swatches ("Main: Red")
+    pickedJoin: " · ", // NEW (E3d, R5): between the picks in that line
   },
   /** Design (`templates`). */
   templates: {
@@ -285,6 +289,7 @@ export const EDITOR_WORDING = {
     continueTitle: "Continue your last design?", // W-ED142
     continue: "Continue", // W-ED142
     startAgain: "Start again", // W-ED142
+    continueBody: "We kept the kit you were working on, on this device.", // NEW (E3d, R40): DRAFT WORDING, founders to confirm
     noWebgl: "The 3D view can't run on this device. You can still design your kit here.", // W-ED143
     restarting: "Restarting the 3D view…", // W-ED144
     changeFailed: "That change couldn't be made.", // W-ED149
