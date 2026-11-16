@@ -11,7 +11,7 @@ import { createDesign } from "./create";
 import { updateLayer } from "./edit";
 import { paletteColourRef } from "./palette";
 import { applyReadabilityRemedy, designReadability, itemReadability, makeReadable, readabilityRemedy } from "./readability";
-import { findLayers, setOutline } from "./roles";
+import { findLayers, setOutline, setSamplePlayer, setTeamName } from "./roles";
 import type { DesignDocument, ProductDefinition } from "./schema";
 import { setTeamColor, swapTeamColors } from "./team-colours";
 import { applyTemplate, type Template } from "./template";
@@ -129,6 +129,13 @@ describe("a design starts without warnings (B4, the first impression)", () => {
       }
     }
    }, 60_000);
+
+  it("a slot still empty when the colours are chosen (the team name typed after them) is made readable too", () => {
+    const empty = applyTemplate(createDesign(jersey, { teamName: "", samplePlayer: { name: "", number: "10" } }), templatesOf("stand-in-jersey").find((t) => t.id === "classic")!, { product: jersey, fonts });
+    const d = makeReadable(jersey, setTeamColor(setTeamColor(empty, "main", colour("placeholder-red")), "second", colour("placeholder-navy")), palette);
+    const named = setTeamName(setSamplePlayer(d, { name: "MUHAMMAD ALI" }), "TIGERS");
+    expect(designReadability(jersey, named).filter((r) => !r.passes)).toEqual([]);
+  });
 
   it("never overrides a colour the coach chose (their warning shows instead)", () => {
     const base = kit(jersey, templatesOf("stand-in-jersey").find((t) => t.id === "classic")!);

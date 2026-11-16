@@ -278,8 +278,11 @@ export function makeReadable(
   options: { keep?: ReadonlySet<string>; minimum?: number } = {},
 ): DesignDocument {
   let next = design;
-  for (const r of designReadability(product, design, options.minimum)) {
-    if (r.passes || options.keep?.has(r.layerId)) continue;
+  // Every name, number and text slot, even one still empty (a team name typed after the colours were chosen).
+  for (const layer of design.layers) {
+    if ((layer.kind !== "text" && layer.kind !== "number") || options.keep?.has(layer.id)) continue;
+    const r = itemReadability(product, next, layer.id, options.minimum);
+    if (!r || r.passes) continue;
     const remedy = readabilityRemedy(next, r, { palette, minimum: options.minimum });
     next = applyReadabilityRemedy(next, [r.layerId], remedy, { product });
   }
