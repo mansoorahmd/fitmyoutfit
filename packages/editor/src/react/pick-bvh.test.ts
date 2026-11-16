@@ -77,6 +77,26 @@ describe("picking through a bounding-volume hierarchy", () => {
     expect(hits).toBeGreaterThan(300);
   }, 60_000);
 
+  it("gives the nearest of several layers of cloth (the front, not the back behind it)", () => {
+    const front = sheet(8);
+    const positions = new Float32Array(front.positions.length * 2);
+    positions.set(front.positions);
+    for (let k = 0; k < front.positions.length; k += 3) {
+      positions[front.positions.length + k] = front.positions[k]!;
+      positions[front.positions.length + k + 1] = front.positions[k + 1]!;
+      positions[front.positions.length + k + 2] = front.positions[k + 2]! - 1;
+    }
+    const n = front.positions.length / 3;
+    const index = [...front.index, ...front.index.map((v) => v + n)];
+    const bvh = buildPickBvh(positions, index, null);
+    for (const z of [3, -3]) {
+      const hit = pickBvh(bvh, [0.1, 0.1, z], [0, 0, -Math.sign(z)])!;
+      const slow = brute(positions, index, [0.1, 0.1, z], [0, 0, -Math.sign(z)])!;
+      expect(hit.distance).toBeCloseTo(slow.distance, 5);
+      expect(hit.triangle < index.length / 6).toBe(z > 0);
+    }
+  });
+
   it("gives the UV at the hit, and nothing for a ray that misses", () => {
     const { positions, uvs, index } = sheet(4);
     const flat = new Float32Array(positions);
