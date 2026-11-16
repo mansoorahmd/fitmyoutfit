@@ -250,7 +250,7 @@ medusaIntegrationTestRunner({
         async function canceledWithCashHeld(): Promise<string> {
           const orderId = await placeCashOnDeliveryOrder()
           expect((await captureInMedusa(orderId)).status).toBe(200)
-          await sql(`UPDATE "order" SET status = 'canceled' WHERE id = ?`, [orderId])
+          await sql(`UPDATE "order" SET status = 'canceled', canceled_at = now() WHERE id = ?`, [orderId])
           await sql(`UPDATE payment SET canceled_at = now() WHERE id = ?`, [(await paymentOf(orderId)).id])
           return orderId
         }
@@ -277,12 +277,14 @@ medusaIntegrationTestRunner({
           expect(response.status).toBe(200)
           expect(await captureCount(orderId)).toBe(1)
           expect((await records(orderId)).map((r) => r.slip_reference)).toEqual(["TCS 801"])
+          // Recorded after the cancel: the cash is still held, so the state says so, with the slip.
           expect(response.data.cash_collection).toMatchObject({
             stage: "recorded",
             slip_reference: "TCS 801",
-            label: "Collected, then canceled, not refunded",
+            label: "Canceled, cash still held",
             tone: "red",
             can_record: false,
+            held_amount: 2250,
           })
           // A second press is refused: already recorded.
           expect((await record(orderId, "TCS 802")).status).toBe(400)
@@ -293,12 +295,20 @@ medusaIntegrationTestRunner({
           expect((await captureInMedusa(orderId, 777)).status).toBe(200)
           expect((await captureInMedusa(orderId, 1473)).status).toBe(200)
           expect((await refund(orderId, 777)).status).toBe(200)
-          await sql(`UPDATE "order" SET status = 'canceled' WHERE id = ?`, [orderId])
+          await sql(`UPDATE "order" SET status = 'canceled', canceled_at = now() WHERE id = ?`, [orderId])
           const state = await panel(orderId)
           expect(state).toMatchObject({ stage: "canceled_cash_held", captured_amount: 2250, refunded_amount: 777, held_amount: 1473 })
           expect(state.note).toContain("PKR 2,250 captured, PKR 777 refunded, PKR 1,473 still held.")
           expect((await record(orderId, "TCS 803")).status).toBe(200)
-          expect(await panel(orderId)).toMatchObject({ label: "Collected, then canceled, partly refunded", slip_reference: "TCS 803" })
+          expect(await panel(orderId)).toMatchObject({ label: "Canceled, cash still held", held_amount: 1473, slip_reference: "TCS 803" })
+          // The rest refunded in Medusa's Payments section. Medusa 2.22.6's refund route answers 400
+          // on a canceled order ("has been canceled") but has recorded the refund on the payment by
+          // then (no refund transaction on the order): the panel follows the payment's refunds.
+          // (Check on every Medusa upgrade: the note tells staff to report an error here.)
+          const refunded = await refund(orderId, 1473)
+          expect(refunded.status).toBe(400)
+          expect(refunded.data.message).toMatch(/has been canceled/)
+          expect(await panel(orderId)).toMatchObject({ label: "Canceled, slip recorded, refunded", tone: "grey", held_amount: 0 })
         })
 
         it("records at the insert on a canceled order only while cash is held, and never against a payment that is gone", async () => {

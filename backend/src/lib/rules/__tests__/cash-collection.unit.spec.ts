@@ -910,7 +910,8 @@ describe("the panel's decision table", () => {
     expect(state.note).toBe(
       "This order is canceled, but cash is still held for it: PKR 2,250 captured, PKR 0 refunded, PKR 2,250 " +
         "still held. The cash is with us or with the courier. Refund the PKR 2,250 in the order's Payments " +
-        "section; if the Payments section does not offer a refund, tell the developer, with the order number. " +
+        "section; if the Payments section does not offer a refund or shows an error, tell the developer, with the " +
+        "order number. " +
         "If you have the courier's slip, record its reference here: nothing more is captured."
     )
     expect(decideCashCollection(state, " TCS 9 ")).toEqual({ ok: true, slipReference: "TCS 9", paymentId: "pay_cod", capture: "none" })
@@ -923,6 +924,29 @@ describe("the panel's decision table", () => {
     })
     expect(part).toMatchObject({ stage: "canceled_cash_held", held_amount: 1473, label: "Canceled, cash still held" })
     expect(part.note).toContain("PKR 2,250 captured, PKR 777 refunded, PKR 1,473 still held.")
+  })
+
+  it("never says 'Collected, then canceled' for a slip recorded after the cancel", () => {
+    const canceledAt = "2026-11-12T10:00:00.500Z"
+    const after = { slip_reference: "TCS 9", collected_at: "2026-11-12T10:05:00.000Z" }
+    const before = { slip_reference: "TCS 9", collected_at: "2026-11-12T10:00:00.100Z" }
+    const state = (payment: CollectionPayment, record: CashCollectionRecord, orderCanceledAt: string | null = canceledAt) =>
+      cashCollectionState({ orderStatus: "canceled", orderCanceledAt, currencyCode: "pkr", payments: [payment], record })
+    // Recorded after the cancel, cash still held: still the held state, with the slip, red.
+    const heldAfter = state(captured({ canceled: true }), after)
+    expect(heldAfter).toMatchObject({ stage: "recorded", slip_reference: "TCS 9", label: "Canceled, cash still held", tone: "red", can_record: false })
+    expect(heldAfter.note).toContain("PKR 2,250 still held.")
+    expect(heldAfter.note).not.toContain("record its reference here")
+    expect(state(captured({ refunds: ["777"] }), after)).toMatchObject({ label: "Canceled, cash still held", held_amount: 1473 })
+    // ...and once all is refunded.
+    const refundedAfter = state(captured({ refunds: ["2250"] }), after)
+    expect(refundedAfter).toMatchObject({ label: "Canceled, slip recorded, refunded", tone: "grey" })
+    expect(refundedAfter.note).toBe(
+      "The order was canceled; the courier's slip was recorded afterwards, and the payment is refunded. PKR 2,250 of the PKR 2,250 captured is refunded."
+    )
+    // Recorded before the cancel, or the cancel time unknown: as before.
+    expect(state(captured({ refunds: ["2250"] }), before)).toMatchObject({ label: "Collected, then canceled and refunded" })
+    expect(state(captured(), after, null)).toMatchObject({ label: "Collected, then canceled, not refunded" })
   })
 })
 

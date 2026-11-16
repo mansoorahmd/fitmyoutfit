@@ -42,6 +42,7 @@ type RawPayment = {
 type OrderRow = {
   id: string
   status?: string | null
+  canceled_at?: unknown
   currency_code?: string | null
   payment_collections?: ({ payments?: RawPayment[] | null } | null)[] | null
   transactions?: ({ amount?: unknown; raw_amount?: unknown; reference?: string | null } | null)[] | null
@@ -90,6 +91,7 @@ export async function loadCashCollection(
     fields: [
       "id",
       "status",
+      "canceled_at",
       "currency_code",
       "payment_collections.payments.id",
       "payment_collections.payments.provider_id",
@@ -145,6 +147,7 @@ export async function loadCashCollection(
   return {
     state: cashCollectionState({
       orderStatus: order.status,
+      orderCanceledAt: toIso(order.canceled_at),
       currencyCode: order.currency_code,
       payments,
       record,

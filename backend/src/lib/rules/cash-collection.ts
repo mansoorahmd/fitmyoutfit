@@ -76,6 +76,8 @@ export type CollectionPayment = {
 export type CashCollectionInput = {
   /** The order's status (`canceled` stops collection). */
   orderStatus?: string | null
+  /** When the order was canceled (Medusa's `canceled_at`), as an ISO time, if known. */
+  orderCanceledAt?: string | null
   /** The order's currency, for the figures in sentences ("PKR 2250"). */
   currencyCode?: string | null
   /** Every payment of the order. */
@@ -325,8 +327,8 @@ function cashHeldBadge(
       `${what}, but cash is still held for it: ${money(currencyCode, toNumber(captured))} captured, ` +
       `${money(currencyCode, toNumber(refunded))} refunded, ${money(currencyCode, held)} still held. ` +
       `The cash is with us or with the courier. Refund the ${money(currencyCode, held)} in the order's ` +
-      `Payments section; if the Payments section does not offer a refund, tell the developer, with ` +
-      `the order number.` +
+      `Payments section; if the Payments section does not offer a refund or shows an error, tell ` +
+      `the developer, with the order number.` +
       (recorded ? "" : " If you have the courier's slip, record its reference here: nothing more is captured."),
   }
 }
@@ -356,6 +358,13 @@ function slipWithoutCaptureBadge(
   }
 }
 
+/** True when both times are known and the record is later than the cancel. */
+function recordedAfter(recordedAt: string | null | undefined, canceledAt: string | null | undefined): boolean {
+  const recordTime = recordedAt ? Date.parse(recordedAt) : Number.NaN
+  const cancelTime = canceledAt ? Date.parse(canceledAt) : Number.NaN
+  return !Number.isNaN(recordTime) && !Number.isNaN(cancelTime) && recordTime > cancelTime
+}
+
 const UNAVAILABLE_BADGES: Record<CashCollectionRefusal, { label: string; tone: CashCollectionTone }> = {
   not_cash_on_delivery: { label: "Not cash on delivery", tone: "grey" },
   already_recorded: { label: "Collected", tone: "green" },
@@ -380,6 +389,9 @@ const OPEN_BADGES: Record<"not_collected" | "partly_captured" | "captured_withou
  * 2. a record exists: "recorded", always shown; a record is never hidden by a later cancel or
  *    refund. Its badge:
  *    a. the payment is fully captured: "Collected", with what happened since (a cancel, a refund);
+ *       a slip recorded after the order was canceled is never "Collected, then canceled": while
+ *       cash is held it reads "Canceled, cash still held", once all is refunded "Canceled, slip
+ *       recorded, refunded";
  *    b. not fully captured, and the order or payment canceled with cash still held: "Canceled,
  *       cash still held" (as 3);
  *    c. not fully captured, canceled, no cash held: as 4 and 5 ("Canceled, not collected");
@@ -465,6 +477,23 @@ export function cashCollectionState(input: CashCollectionInput): CashCollectionS
     const recorded = refuse("recorded", "already_recorded")
     // a.
     if (collected) {
+      // Recorded after the order was canceled (in the "Canceled, cash still held" state): never
+      // "Collected, then canceled". While cash is held it stays that state, with the slip shown.
+      if (orderCanceled && recordedAfter(input.record?.collected_at, input.orderCanceledAt)) {
+        return {
+          ...recorded,
+          ...(compare(held, ZERO) > 0
+            ? cashHeldBadge(true, captured, refunded, input.currencyCode, true)
+            : {
+                label: "Canceled, slip recorded, refunded",
+                tone: "grey" as const,
+                note:
+                  `The order was canceled; the courier's slip was recorded afterwards, and the payment ` +
+                  `is refunded. ${money(input.currencyCode, toNumber(refunded))} of the ` +
+                  `${money(input.currencyCode, toNumber(captured))} captured is refunded.`,
+              }),
+        }
+      }
       return { ...recorded, ...recordedBadge(orderCanceled, captured, refunded, input.currencyCode) }
     }
     // b.
