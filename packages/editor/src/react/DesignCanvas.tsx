@@ -16,6 +16,7 @@ import {
   CanvasTexture,
   DoubleSide,
   LinearFilter,
+  Matrix4,
   NeutralToneMapping,
   Raycaster,
   SRGBColorSpace,
@@ -33,6 +34,7 @@ import { buildSurfaceLookup, projectItem, projectPieceLine, type ItemOnScreen, t
 import { extractGarmentMeshes } from "./garment-geometry.js";
 import { TAP_MAX_MS, pressAction, travelledPast, type DragOnlySelected } from "./press-policy.js";
 import { DraftPolicy, type GestureTiming } from "./draft-quality.js";
+import { buildPickBvh, pickBvh, type PickBvh } from "./pick-bvh.js";
 import { dragPosition, layerAtPoint, pieceAtMeshUv, round3, startLayerDrag, type LayerDrag } from "../design/placement.js";
 import { backgroundAt } from "../design/readability.js";
 import { DEFAULT_TEXTURE_SIZE, drawPatternTexture, type DrawPatternResult } from "../texture/pattern-texture.js";
@@ -127,6 +129,13 @@ export interface DesignCanvasHandle {
   turnBy(degrees: number): void;
   /** The side the camera faces now, or null. */
   getSide(): CameraSide | null;
+  /**
+   * Shows a design on the model at once, outside React (E3c, S1): the previews of a drag, a resize or a turn,
+   * so the host does not re-render on every pointer move. The texture and the selection's handles follow it.
+   * `null` ends the preview; with `redraw` the `design` prop is drawn again at once (a cancelled gesture),
+   * otherwise the next `design` prop is (the gesture's result, committed by the host).
+   */
+  preview(design: DesignDocument | null, options?: { redraw?: boolean }): void;
 }
 
 export interface DesignCanvasProps {
@@ -467,6 +476,8 @@ function ModelView({
   const lastProjected = useRef<SelectionGeometry | null>(null);
   const geometryOut = useLatest(onSelectionGeometry);
   const lastGeometry = useRef<string>("");
+  const previewDesign = useRef<DesignDocument | null>(null);
+  const previewHandler = useRef<DesignCanvasHandle["preview"]>(() => undefined);
   const selectionInputs = useLatest({ design, product, selectedLayerId, guides, viewSize });
   useEffect(() => {
     lastGeometry.current = "";
@@ -475,7 +486,8 @@ function ModelView({
   useFrame(({ camera: cam }) => {
     const report = geometryOut.current;
     if (!report) return;
-    const { design: d, product: p, selectedLayerId: id, guides: g, viewSize: vs } = selectionInputs.current;
+    const { design: fromProps, product: p, selectedLayerId: id, guides: g, viewSize: vs } = selectionInputs.current;
+    const d = previewDesign.current ?? fromProps;
     const layer = id ? d.layers.find((l) => l.id === id) : undefined;
     const piece = layer ? p.pieces.find((x) => x.id === layer.pieceId) : undefined;
     if (!layer || !piece) {
@@ -527,9 +539,10 @@ function ModelView({
       resetView: () => rig.reset(),
       turnBy: (degrees) => rig.turnBy(degrees),
       getSide: () => rig.side(),
+      preview: (d, options) => previewHandler.current(d, options),
     });
     return () => setHandle(handle, null);
-  }, [handle, rig, latest]);
+  }, [handle, rig, latest, previewHandler]);
 
   // The pieces' materials show the pattern texture; their inside shows the colour zones only.
   const inside = usePatternSurface(INSIDE_TEXTURE_SIZE);
@@ -593,6 +606,17 @@ function ModelView({
   // 3D context comes back. The model is not reloaded.
   const onDrawn = useLatest(onTextureDrawn);
   const outlinedLayerId = outlineSelected ? (selectedLayerId ?? null) : null;
+  // A gesture's preview, drawn outside React (S1); the selection's handles follow it too.
+  const drawPreview = useLatest((d: DesignDocument) => {
+    const target = draft.useDraft(gestureNow.current, draftQuality) ? draftSurface : surface;
+    const info = redrawPattern(target, product, d, images, outlinedLayerId, highlight);
+    draft.drawn(info.drawMs);
+    if (showing.current !== target.texture) {
+      applyPatternTexture(prepared.pieceMaterials, target.texture);
+      showing.current = target.texture;
+    }
+    invalidate();
+  });
   const fullRedraw = useLatest(() => {
     const info = redrawPattern(surface, product, design, images, outlinedLayerId, highlight);
     applyPatternTexture(prepared.pieceMaterials, surface.texture);
@@ -601,6 +625,19 @@ function ModelView({
     onDrawn.current?.(info);
   });
   useEffect(() => {
+    previewHandler.current = (d, options) => {
+      previewDesign.current = d;
+      // Ended without a redraw: the host's next design follows at once; the handles stay where they are till then.
+      if (!d && !options?.redraw) return;
+      if (d) drawPreview.current(d);
+      else fullRedraw.current();
+      lastGeometry.current = "";
+      invalidate();
+    };
+  });
+  useEffect(() => {
+    // A new design from the host replaces any gesture preview.
+    previewDesign.current = null;
     // During a slow gesture, the half-size surface; otherwise (and once on release) the full one.
     const useDraft = draft.useDraft(gestureNow.current, draftQuality);
     const target = useDraft ? draftSurface : surface;
@@ -686,11 +723,66 @@ function ModelView({
       return g && g.layerId === layerId ? g.pxPerMm : 2;
     };
 
+    // Picking (S1): a bounding-volume hierarchy per mesh, built when the browser is idle after the model is
+    // ready; until then (and if it fails) three.js's own raycast, which tests every triangle.
+    let bvhs: Map<Mesh, PickBvh> | null = null;
+    const buildBvhs = () => {
+      try {
+        const built = new Map<Mesh, PickBvh>();
+        for (const mesh of meshes) {
+          const position = mesh.geometry.getAttribute("position");
+          const uv = mesh.geometry.getAttribute("uv");
+          const positions = new Float32Array(position.count * 3);
+          for (let v = 0; v < position.count; v++) {
+            positions[3 * v] = position.getX(v);
+            positions[3 * v + 1] = position.getY(v);
+            positions[3 * v + 2] = position.getZ(v);
+          }
+          let uvs: Float32Array | null = null;
+          if (uv) {
+            uvs = new Float32Array(uv.count * 2);
+            for (let v = 0; v < uv.count; v++) {
+              uvs[2 * v] = uv.getX(v);
+              uvs[2 * v + 1] = uv.getY(v);
+            }
+          }
+          const index = mesh.geometry.getIndex();
+          built.set(mesh, buildPickBvh(positions, index ? (index.array as ArrayLike<number>) : null, uvs));
+        }
+        bvhs = built;
+      } catch (error) {
+        console.error("[editor] picking tree:", error);
+      }
+    };
+    const idle = (globalThis as { requestIdleCallback?: (fn: () => void, options?: { timeout: number }) => number }).requestIdleCallback;
+    const bvhTimer = idle ? null : setTimeout(buildBvhs, 300);
+    const bvhIdle = idle ? idle(buildBvhs, { timeout: 2000 }) : null;
+    const inverse = new Matrix4();
+    const localO = new Vector3();
+    const localT = new Vector3();
+    const pick = (): { object: Mesh; uv: { x: number; y: number } | null } | null => {
+      if (!bvhs) {
+        const [first] = raycaster.intersectObjects(meshes, false);
+        return first ? { object: first.object as Mesh, uv: first.uv ?? null } : null;
+      }
+      let best: { object: Mesh; uv: { x: number; y: number } | null; distance: number } | null = null;
+      for (const [mesh, bvh] of bvhs) {
+        if (!mesh.visible) continue;
+        inverse.copy(mesh.matrixWorld).invert();
+        // The ray into the mesh's own space, keeping its length scale, so distances compare across meshes.
+        localO.copy(raycaster.ray.origin).applyMatrix4(inverse);
+        localT.copy(raycaster.ray.origin).add(raycaster.ray.direction).applyMatrix4(inverse).sub(localO);
+        const hit = pickBvh(bvh, [localO.x, localO.y, localO.z], [localT.x, localT.y, localT.z]);
+        if (hit && (!best || hit.distance < best.distance)) best = { object: mesh, uv: hit.uv, distance: hit.distance };
+      }
+      return best;
+    };
+
     const hitAt = (event: { clientX: number; clientY: number }) => {
       const rect = canvas.getBoundingClientRect();
       ndc.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1);
       raycaster.setFromCamera(ndc, camera);
-      const [first] = raycaster.intersectObjects(meshes, false);
+      const first = pick();
       const name = first && prepared.pieceMeshes.get(first.object as Mesh);
       if (!first?.uv || !name) return null;
       return pieceAtMeshUv(latest.current.product, name, { u: first.uv.x, v: first.uv.y });
@@ -838,6 +930,8 @@ function ModelView({
     window.addEventListener("pointerup", onUp, { capture: true });
     window.addEventListener("pointercancel", onCancel, { capture: true });
     return () => {
+      if (bvhTimer !== null) clearTimeout(bvhTimer);
+      if (bvhIdle !== null) (globalThis as { cancelIdleCallback?: (id: number) => void }).cancelIdleCallback?.(bvhIdle);
       host.removeEventListener("pointerdown", onDown, { capture: true });
       window.removeEventListener("pointerup", onUp, { capture: true });
       window.removeEventListener("pointercancel", onCancel, { capture: true });
@@ -964,6 +1058,7 @@ export function DesignCanvas({ className, style, onError, errorFallback, onLoadP
       resetView: () => handle.current?.resetView(),
       turnBy: (degrees) => handle.current?.turnBy(degrees),
       getSide: () => handle.current?.getSide() ?? null,
+      preview: (design, options) => handle.current?.preview(design, options),
     }),
     [],
   );

@@ -19,7 +19,7 @@ import { collectFitNotices, fitDesignToAreas } from "../design/print-area.js";
 import { makeReadable } from "../design/readability.js";
 import { createItemGestures, forwardGestures, type GestureEndReason, type GesturePhase, type ItemGestures } from "./item-gestures.js";
 import { layerSide } from "../design/roles.js";
-import type { EditLabel } from "../state/history.js";
+import { sameJson, type EditLabel } from "../state/history.js";
 import { useDesignHistory } from "../react/useDesignHistory.js";
 import type { CameraInfo, DesignCanvasHandle, LayerDragEvent, PieceGuide, TextureDrawInfo, ZoneTap } from "../react/DesignCanvas.js";
 import type { GestureTiming } from "../react/draft-quality.js";
@@ -570,7 +570,8 @@ export function EditorShell(props: EditorShellProps) {
   }, [placing]);
   const onTextureDrawn = useCallback(
     (info: TextureDrawInfo) => {
-      setTextFits(info.textFits);
+      // Only when it changed (S1: a new array every drawing re-rendered the whole editor after each tap).
+      setTextFits((now) => (JSON.stringify(now) === JSON.stringify(info.textFits) ? now : info.textFits));
       const pending = timing.current;
       if (!pending) return;
       timing.current = null;
@@ -720,18 +721,43 @@ export function EditorShell(props: EditorShellProps) {
   useEffect(() => {
     gestureDeps.current = { history, product, snapOn, reducedMotion, announce, wording };
   });
+  // The gesture's design while it goes on (S1), outside React state: its start, its latest preview, its label.
+  const gestureDraft = useRef<{ start: DesignDocument; current: DesignDocument; label: EditLabel } | null>(null);
   // The controller is made once, in an effect (its callbacks read refs); `gestures` forwards to it.
   const [gestureHolder] = useState<{ current: ItemGestures | null }>(() => ({ current: null }));
   const [gestures] = useState(() => forwardGestures(gestureHolder));
   useEffect(() => {
     gestureHolder.current ??= createItemGestures({
       product: () => gestureDeps.current.product,
-      design: () => designRef.current,
+      design: () => gestureDraft.current?.current ?? designRef.current,
+      // Previews go straight to the canvas, outside React (S1: no re-render of the shell and the tools on
+      // every pointer move); the result is committed as one undo step on release. Without a canvas, the history's gesture.
       history: {
-        begin: (label) => gestureDeps.current.history.begin(label),
-        preview: (update) => gestureDeps.current.history.preview(update),
-        end: () => gestureDeps.current.history.end(),
-        cancel: () => gestureDeps.current.history.cancel(),
+        begin: (label) => {
+          if (canvas.current) gestureDraft.current = { start: designRef.current, current: designRef.current, label };
+          else gestureDeps.current.history.begin(label);
+        },
+        preview: (update) => {
+          const g = gestureDraft.current;
+          if (!g) return gestureDeps.current.history.preview(update);
+          const next = update(g.current);
+          if (next === g.current) return;
+          g.current = next;
+          canvas.current?.preview(next);
+        },
+        end: () => {
+          const g = gestureDraft.current;
+          if (!g) return gestureDeps.current.history.end();
+          gestureDraft.current = null;
+          canvas.current?.preview(null);
+          if (!sameJson(g.current, g.start)) gestureDeps.current.history.commit(g.current, g.label);
+        },
+        cancel: () => {
+          const g = gestureDraft.current;
+          if (!g) return gestureDeps.current.history.cancel();
+          gestureDraft.current = null;
+          canvas.current?.preview(null, { redraw: true });
+        },
       },
       setGuides: (g) => setGuides(g),
       setPlacing: (kind) => setPlacing(kind),

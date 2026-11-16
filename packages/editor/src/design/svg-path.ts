@@ -237,9 +237,29 @@ export function flattenPath(commands: readonly PathCommand[], segments = CURVE_S
  * rule (the default fill rule of SVG and of the 2D canvas). Every subpath
  * counts as closed, as when it is filled.
  */
+/** Each closed polyline's bounds, worked out once: a point outside them is never inside it (E3c, S1: readability samples). */
+const lineBoundsCache = new WeakMap<Polyline, { x0: number; y0: number; x1: number; y1: number }>();
+function boundsOf(line: Polyline) {
+  let b = lineBoundsCache.get(line);
+  if (!b) {
+    b = { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity };
+    for (const q of line.points) {
+      b.x0 = Math.min(b.x0, q.x);
+      b.y0 = Math.min(b.y0, q.y);
+      b.x1 = Math.max(b.x1, q.x);
+      b.y1 = Math.max(b.y1, q.y);
+    }
+    lineBoundsCache.set(line, b);
+  }
+  return b;
+}
+
 export function pointInPolylines(polylines: readonly Polyline[], p: PathPoint): boolean {
   let winding = 0;
   for (const line of polylines) {
+    // A closed line winds round no point outside its bounds.
+    const b = boundsOf(line);
+    if (p.x < b.x0 || p.x > b.x1 || p.y < b.y0 || p.y > b.y1) continue;
     const pts = line.points;
     for (let k = 0; k < pts.length; k++) {
       const a = pts[k]!;

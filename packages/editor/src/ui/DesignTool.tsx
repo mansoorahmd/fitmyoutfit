@@ -25,6 +25,13 @@ const CARD_TEXTURE = 512;
  */
 const queue: Array<() => void> = [];
 let pumping = false;
+/** When the browser is idle (S1: the cards stay off the path of a tap), else on the next task. */
+function later(fn: () => void): void {
+  const idle = (globalThis as { requestIdleCallback?: (fn: () => void, options?: { timeout: number }) => void }).requestIdleCallback;
+  if (idle) idle(fn, { timeout: 1000 });
+  else setTimeout(fn, 0);
+}
+
 function scheduleCard(job: () => void): void {
   queue.push(job);
   if (pumping) return;
@@ -36,9 +43,9 @@ function scheduleCard(job: () => void): void {
       return;
     }
     next();
-    setTimeout(pump, 0);
+    later(pump);
   };
-  setTimeout(pump, 0);
+  later(pump);
 }
 
 /** One shared canvas for the cards' textures, made when first needed. */
@@ -84,19 +91,21 @@ function TemplateCard({ template, design, previous, current, onPick, images, ver
     let cancelled = false;
     // A short wait, so typing a team name does not redraw every card on every key.
     const timer = setTimeout(() => {
-      let applied: DesignDocument;
-      try {
-        applied = applyTemplate(design, template, { product, fonts, previous });
-        // As a tap would apply it: names and numbers readable (B4).
-        if (readable) applied = readable(applied);
-      } catch (error) {
-        console.error("template card", template.id, error);
-        return;
-      }
-      // The same picture as last time (after a tap, most cards do not change): nothing to draw.
-      const key = `${version}|${JSON.stringify(applied)}`;
-      if (key === drawn.current) return;
+      // Applying the template is work too: it waits for the browser to be idle, as the drawing does (S1).
       scheduleCard(() => {
+        if (cancelled) return;
+        let applied: DesignDocument;
+        try {
+          applied = applyTemplate(design, template, { product, fonts, previous });
+          // As a tap would apply it: names and numbers readable (B4).
+          if (readable) applied = readable(applied);
+        } catch (error) {
+          console.error("template card", template.id, error);
+          return;
+        }
+        // The same picture as last time (after a tap, most cards do not change): nothing to draw.
+        const key = `${version}|${JSON.stringify(applied)}`;
+        if (key === drawn.current) return;
         const tex = scratchTexture();
         const ctx = canvas.getContext("2d");
         if (cancelled || !tex || !ctx) return;
@@ -115,7 +124,7 @@ function TemplateCard({ template, design, previous, current, onPick, images, ver
           console.error("template card", template.id, error);
         }
       });
-    }, 120);
+    }, 250);
     return () => {
       cancelled = true;
       clearTimeout(timer);

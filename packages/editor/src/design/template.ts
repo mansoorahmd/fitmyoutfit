@@ -256,6 +256,17 @@ function styleFor(
   return style;
 }
 
+/** `validateTemplate`, remembered per template object, product and catalogue (S1: a template is applied on every tap and card). */
+const validated = new WeakMap<object, { product: ProductDefinition; fonts: FontCatalog; result: ReturnType<typeof validateTemplate> }>();
+function validatedTemplate(template: Template, product: ProductDefinition, fonts: FontCatalog): ReturnType<typeof validateTemplate> {
+  if (typeof template !== "object" || template === null) return validateTemplate(template, { product, fonts });
+  const hit = validated.get(template);
+  if (hit && hit.product === product && hit.fonts === fonts) return hit.result;
+  const result = validateTemplate(template, { product, fonts });
+  validated.set(template, { product, fonts, result });
+  return result;
+}
+
 /**
  * The design with a template applied (see the module comment for what is
  * kept and what changes). Throws a DesignError when the template does not fit
@@ -263,7 +274,7 @@ function styleFor(
  */
 export function applyTemplate(design: DesignDocument, template: Template, options: ApplyTemplateOptions): DesignDocument {
   const { product, fonts } = options;
-  const checked = validateTemplate(template, { product, fonts });
+  const checked = validatedTemplate(template, product, fonts);
   if (!checked.ok) throw new DesignError(`Cannot apply template "${(template as { id?: unknown }).id}"`, checked.errors);
   if (design.product.id !== product.id) throw new DesignError(`Cannot apply template: the design is for "${design.product.id}", the product given is "${product.id}"`);
   const fallback = template.accentFallback ?? "second";
