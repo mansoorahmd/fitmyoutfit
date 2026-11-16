@@ -58,7 +58,7 @@ To move the backend or the storefront:
 `npm run dev` hands each part its port (the storefront gets `STOREFRONT_PORT` and not `PORT`) and prints both URLs; `npm run setup` prints the admin URL with the backend's port. The two parts find each other through settings that do **not** follow these variables, so when you change either port, change these to match:
 
 - `storefront/.env.local`: `MEDUSA_BACKEND_URL` (the backend's URL) and `NEXT_PUBLIC_BASE_URL` (the storefront's).
-- `backend/.env`: `STORE_CORS` (the storefront's URL), `ADMIN_CORS` (the backend's) and `AUTH_CORS` (both).
+- `backend/.env`: `STORE_CORS` (the storefront's URL), `ADMIN_CORS` (the backend's) and `AUTH_CORS` (both), and `STOREFRONT_URL` and `BACKEND_URL` (the addresses written into password-reset links, see "Password reset" below).
 
 Then restart `npm run dev`.
 
@@ -155,6 +155,31 @@ The panel shows only on an order paid by cash on delivery; an order paid another
 
 If two staff press at once, even on two servers, the payment is captured once and one reference is kept; the other press is told the cash is already recorded. If the capture fails, nothing is recorded and the panel says so; press again. If the reference cannot be saved after the capture, the payment stays captured (with the order's payment transaction, so nothing shows as outstanding) and the panel shows Captured, no slip: record the reference again; the payment is not captured a second time. Error messages are sentences for staff; the underlying error is in the backend's log. The same action is `POST /admin/orders/:id/cash-collection` with `{ "slip_reference": "..." }` (admin login); `GET` on the same path returns the panel's state. The rule is in `backend/src/lib/rules/cash-collection.ts`, the steps in `backend/src/workflows/cash-collection/`.
 
+## Password reset (M1)
+
+The contract is [docs/contracts/m1-password-reset.md](docs/contracts/m1-password-reset.md). Medusa creates the reset token and emits the event `auth.password_reset`, and sends nothing itself. Our subscriber (`backend/src/subscribers/password-reset-link.ts`) builds the link and asks Medusa's Notification Module to send it: channel `email`, template `password-reset`, data `{ link, email, actor_type, expires_in_minutes }`. The rules are plain TypeScript in `backend/src/lib/rules/password-reset.ts`; the settings in `backend/src/lib/config/public-urls.ts` and `email-delivery.ts`.
+
+- **Ask for a link:** `POST /auth/customer/emailpass/reset-password` with `{ "identifier": "<email>" }` (admin users: `/auth/user/emailpass/reset-password`). The answer is always `201` with the text `Created`, whether or not the account exists. Medusa compares the email exactly as stored, without trimming or changing case; the storefront stores emails trimmed and in lower case, so it must send them that way.
+- **The link:** customers get `<STOREFRONT_URL>/account/reset-password?token=<token>&email=<email>` (the storefront adds the country itself), admin users `<BACKEND_URL>/app/reset-password?token=<token>&email=<email>` (Medusa's admin page, which reads only `token`). Both values are percent-encoded (`+` is `%2B`, `@` is `%40`). A link lasts 15 minutes (Medusa's fixed lifetime; the subscriber reads it from the token), works once, and asking again makes the earlier link stop working. An actor type with no reset page (anything but `customer` and `user`) gets no link.
+- **Set the new password:** `POST /auth/customer/emailpass/update` with the header `Authorization: Bearer <token>` and the body `{ "password": "<new>" }`: `200 {"success":true}`. An expired, used, wrong or missing token answers `401 {"type":"unauthorized","message":"Invalid token"}`. Medusa has no password rule of its own, and a request with no password (or an empty one) answers `401` and uses the token up, so a reset page must check the password before it sends it.
+
+**In development** the email is written to the backend's log by Medusa's local notification provider (the `npm run dev` terminal). Look for the line, all on one line:
+
+```
+info:    Attempting to send a notification to: 'ali@example.com' on the channel: 'email' with template: 'password-reset' and data: '{"link":"http://localhost:8000/account/reset-password?token=eyJ...&email=ali%40example.com","email":"ali@example.com","actor_type":"customer","expires_in_minutes":15}'
+```
+
+Copy the `link` value and open it in the browser. For the admin: press "Forgot password" on the admin's login page (or call the `/auth/user/...` route), and open the `/app/reset-password?...` link from the log. An unknown email writes no such line. The subscriber itself logs nothing in development, except an info line `Password reset asked for actor type "...", which has no reset page: no link sent.` for an actor type with no page. The notification is also kept in the database (`notification` table, development only).
+
+| Setting (`backend/.env`) | Development default | Meaning |
+| --- | --- | --- |
+| `STOREFRONT_URL` | `http://localhost:8000` | The storefront's public address, the start of customers' links |
+| `BACKEND_URL` | `http://localhost:9000` | This backend's public address, the start of admin users' links (the admin is at `/app`) |
+
+Write each as an origin only: `http(s)://<host>[:<port>]`, with no path, query, fragment, user name or password. In development and test an unset value uses the default above, and a value that is set but unusable stops the backend at start. Outside development and test both must be set and use `https` (see "Production start" below).
+
+**In production nothing is sent** until an email provider is connected (Resend, Sprint 2, [decision 002](docs/decisions/002-email-provider.md)): a reset link is a credential and is never written to a log. Outside development and test the `email` channel has no provider, and for each reset request the subscriber sends nothing and logs one warning, which names the email's domain at most: `Password reset link for a customer account at example.com was not sent: no email provider is configured, ...`. The request still answers `201`. So password reset does not work in production yet; it is on the launch list.
+
 ## Commands
 
 | Command | What it does |
@@ -208,6 +233,7 @@ Backend integration tests create and drop temporary databases on the PostgreSQL 
 - A `DATABASE_URL` that does not name its database server: one with no host after the `@` (`postgres://user:pw@/db`, where `pg` would take the server from `PGHOST` or its default), one with a `host` or `hostaddr` query parameter (which would choose the server in place of the host after the `@`), and a string that is not a `postgres://` or `postgresql://` URL (a socket path, or libpq's `host=... user=...` form). Write `postgres://<user>:<password>@<host>:<port>/<database>`, with special characters in the user or password percent-encoded. The login is checked either way; this makes sure the server it is checked for is the one in the URL.
 - The dev database login `medusa` / `medusa`, wherever the PostgreSQL driver (`pg`) would take it from: the user and password in `DATABASE_URL`, its `user` and `password` query parameters (which win over them), and `PGUSER` / `PGPASSWORD` (`backend/src/lib/config/database-login.ts`). `DATABASE_URL` is checked as given and also as Medusa rewrites it before `pg` sees it (Medusa removes its own `ssl_mode` parameter; a unit test checks that our copy of that rewrite still matches the installed Medusa).
 - The dev database user `medusa` with no password in `DATABASE_URL` or `PGPASSWORD`. `pg` would then take the password from a pgpass file (`PGPASSFILE`, `~/.pgpass`, or on Windows `%APPDATA%\postgresql\pgpass.conf` even with no variable set), which is not checked. Give the password explicitly, or use a different database user.
+- `STOREFRONT_URL` or `BACKEND_URL` unset or empty, not `https`, or with a path, query, fragment, user name or password (`backend/src/lib/config/public-urls.ts`). They are written into password-reset links; see "Password reset" above. The message says what to write and never repeats the value.
 
 Medusa's `supersecret` fallback is used only in development and test. The seed creates the dev admin user only in development and test.
 
