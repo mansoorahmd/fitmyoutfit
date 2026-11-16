@@ -104,22 +104,71 @@ export function readabilitySamples(layer: Pick<TextLike, "position" | "rotation"
   return points;
 }
 
+type Under = { what: { kind: "zone"; zoneId: string } | { kind: "shape"; index: number }; count: number };
+const underCache = new Map<string, Under[]>();
+
+/** What paints each sample of an item's area (a zone, or the topmost shape by its index among the piece's shapes), counted, in the order found. */
+function underItem(product: ProductDefinition, layer: Pick<TextLike, "pieceId" | "position" | "rotation" | "size" | "fontSize" | "outline">, onPiece: Pick<DesignDocument["shapes"][number], "path">[]): Under[] {
+  const key = `${product.id}|${layer.pieceId}|${layer.position.x},${layer.position.y}|${layer.rotation}|${layer.size.width},${layer.size.height}|${layer.fontSize}|${layer.outline?.width ?? 0}|${onPiece.map((s) => s.path).join("#")}`;
+  const hit = underCache.get(key);
+  if (hit) return hit;
+  const piece = product.pieces.find((p) => p.id === layer.pieceId);
+  const out: Under[] = [];
+  const index = new Map<string, Under>();
+  if (piece) {
+    for (const point of readabilitySamples(layer)) {
+      const zoneId = zoneAtPiecePoint(piece, point);
+      if (zoneId === null) continue;
+      let what: Under["what"] = { kind: "zone", zoneId };
+      for (let i = onPiece.length - 1; i >= 0; i--) {
+        const polylines = polylinesOf(onPiece[i]!.path);
+        if (polylines && pointInPolylines(polylines, point)) {
+          what = { kind: "shape", index: i };
+          break;
+        }
+      }
+      const k = what.kind === "zone" ? `z${what.zoneId}` : `s${what.index}`;
+      const entry = index.get(k);
+      if (entry) entry.count++;
+      else {
+        const created = { what, count: 1 };
+        index.set(k, created);
+        out.push(created);
+      }
+    }
+  }
+  if (underCache.size > 2000) underCache.clear();
+  underCache.set(key, out);
+  return out;
+}
+
 /** Every distinct colour under an item's area (by what paints it), in the order found, with how much of the area each covers (0 to 1). */
 export function backgroundsUnder(
   product: ProductDefinition,
   design: Pick<DesignDocument, "zones" | "shapes">,
   layer: Pick<TextLike, "pieceId" | "position" | "rotation" | "size" | "fontSize" | "outline">,
 ): Array<Background & { share: number }> {
+  // What lies under each sample depends on where the item is and on the shapes' outlines, not on any colour:
+  // that part is remembered (S1: a team colour change or a template tap re-judges every item, and the cards too).
+  const onPiece = design.shapes.filter((s) => s.pieceId === layer.pieceId);
+  const where = underItem(product, layer, onPiece);
   const found = new Map<string, Background & { share: number }>();
   let total = 0;
-  for (const point of readabilitySamples(layer)) {
-    const background = backgroundAt(product, design, layer.pieceId, point);
+  for (const { what, count } of where) {
+    let background: Background | null;
+    if (what.kind === "shape") {
+      const shape = onPiece[what.index]!;
+      background = { kind: "shape", shapeId: shape.id, group: shape.group, colour: shape.fill };
+    } else {
+      const colour = Object.prototype.hasOwnProperty.call(design.zones, what.zoneId) ? design.zones[what.zoneId] : product.zones.find((z) => z.id === what.zoneId)?.defaultColor;
+      background = colour ? { kind: "zone", zoneId: what.zoneId, colour } : null;
+    }
     if (!background) continue;
-    total++;
+    total += count;
     const key = `${background.kind === "zone" ? `zone:${background.zoneId}` : `shape:${background.group}`}:${background.colour.hex}`;
     const entry = found.get(key);
-    if (entry) entry.share++;
-    else found.set(key, { ...background, share: 1 });
+    if (entry) entry.share += count;
+    else found.set(key, { ...background, share: count });
   }
   const list = [...found.values()];
   for (const entry of list) entry.share = total > 0 ? entry.share / total : 0;

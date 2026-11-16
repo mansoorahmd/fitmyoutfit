@@ -477,6 +477,7 @@ function ModelView({
   const geometryOut = useLatest(onSelectionGeometry);
   const lastGeometry = useRef<string>("");
   const previewDesign = useRef<DesignDocument | null>(null);
+  const projectedLines = useRef<{ key: string; lines: SelectionGeometry["guides"] } | null>(null);
   const previewHandler = useRef<DesignCanvasHandle["preview"]>(() => undefined);
   const selectionInputs = useLatest({ design, product, selectedLayerId, guides, viewSize });
   useEffect(() => {
@@ -520,10 +521,18 @@ function ModelView({
       report(null);
       return;
     }
-    const lines = (g ?? []).flatMap((line) => {
-      const linePiece = p.pieces.find((x) => x.id === line.pieceId);
-      return linePiece ? [{ kind: line.kind, runs: projectPieceLine(surface, linePiece, line.from, line.to, screen) }] : [];
-    });
+    // The lines (print area, guides) move only with the camera or when they change: projected again only then (S1).
+    const linesKey = JSON.stringify([cam.matrixWorld.elements, cam.projectionMatrix.elements, g, vs.width, vs.height]);
+    if (projectedLines.current?.key !== linesKey) {
+      projectedLines.current = {
+        key: linesKey,
+        lines: (g ?? []).flatMap((line) => {
+          const linePiece = p.pieces.find((x) => x.id === line.pieceId);
+          return linePiece ? [{ kind: line.kind, runs: projectPieceLine(surface, linePiece, line.from, line.to, screen) }] : [];
+        }),
+      };
+    }
+    const lines = projectedLines.current.lines;
     const geometry: SelectionGeometry = { ...on, layerId: layer.id, guides: lines, width: vs.width, height: vs.height };
     lastProjected.current = geometry;
     report(geometry);
