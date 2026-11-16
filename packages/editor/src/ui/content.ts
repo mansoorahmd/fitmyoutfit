@@ -340,25 +340,25 @@ export const EDITOR_WORDING = {
     fallback: "Change",
   } satisfies Record<EditLabel | "fallback", string>,
   /**
-   * The same, naming what changed (E3c, 10.5: "Undone: Body colour", "Logo position"), NEW: {subject} is the part
+   * The same, naming what changed (E3c, 10.5: "Undone: Body colour", "Logo position"), NEW: {item} is the part
    * of the kit or the item ("Body front", "Logo", "Team name"). A key not listed uses `changes`.
    */
   changesOf: {
-    "zone-colour": "{subject} colour",
-    "shape-colour": "{subject} colour",
-    "add-item": "{subject} added",
-    "remove-item": "{subject} removed",
-    move: "{subject} position",
-    resize: "{subject} size",
-    rotate: "{subject} turn",
-    order: "{subject} order",
-    placement: "{subject} position",
-    text: "{subject} text",
-    font: "{subject} font",
-    colour: "{subject} colour",
-    outline: "{subject} outline",
-    size: "{subject} size",
-    align: "{subject} alignment",
+    "zone-colour": "{item} colour",
+    "shape-colour": "{item} colour",
+    "add-item": "{item} added",
+    "remove-item": "{item} removed",
+    move: "{item} position",
+    resize: "{item} size",
+    rotate: "{item} turn",
+    order: "{item} order",
+    placement: "{item} position",
+    text: "{item} text",
+    font: "{item} font",
+    colour: "{item} colour",
+    outline: "{item} outline",
+    size: "{item} size",
+    align: "{item} alignment",
   } as Record<string, string>,
   /**
    * The "Where" chips: words for the products' placement presets, by preset id.
@@ -435,7 +435,7 @@ export function changeWords(wording: EditorWording, label: string | null | undef
   // A label may name what changed: "move|Logo" (E3c, 10.5).
   const [key, subject] = (label ?? "").split("|");
   const named = key && subject ? wording.changesOf[key] : undefined;
-  if (named) return fill(named, { subject: subject! });
+  if (named) return fill(named, { item: subject! });
   return (key && (wording.changes as Record<string, string>)[key]) || wording.changes.fallback;
 }
 
