@@ -43,6 +43,8 @@ const goodProductionEnv = {
   S3_ACCESS_KEY_ID: "AKIAREALKEY",
   S3_SECRET_ACCESS_KEY: "real-secret-access-key",
   S3_FILE_URL: "https://files.example.com",
+  STOREFRONT_URL: "https://shop.example.com",
+  BACKEND_URL: "https://api.example.com",
 }
 
 const s3Env = {
@@ -159,9 +161,9 @@ describe("production secrets", () => {
   it("refuses the whole dev .env.example in production and lists every problem at once", () => {
     const env = { ...devValues, NODE_ENV: "production" }
     const problems = productionSecretProblems(env)
-    expect(problems).toHaveLength(6)
+    expect(problems).toHaveLength(8)
     expect(() => buildMedusaConfig(env)).toThrow(
-      /JWT_SECRET[\s\S]*MEDUSA_ADMIN_PASSWORD[\s\S]*DATABASE_URL/
+      /JWT_SECRET[\s\S]*MEDUSA_ADMIN_PASSWORD[\s\S]*DATABASE_URL[\s\S]*STOREFRONT_URL must use https[\s\S]*BACKEND_URL must use https/
     )
   })
 
@@ -171,7 +173,7 @@ describe("production secrets", () => {
     "refuses the dev .env.example when NODE_ENV is %j",
     (nodeEnv) => {
       const env = { ...devValues, NODE_ENV: nodeEnv }
-      expect(productionSecretProblems(env)).toHaveLength(6)
+      expect(productionSecretProblems(env)).toHaveLength(8)
       expect(() => buildMedusaConfig(env)).toThrow(ConfigError)
       expect(() => buildMedusaConfig(env)).toThrow(
         `Refusing to start with NODE_ENV=${JSON.stringify(nodeEnv)}`
@@ -618,6 +620,42 @@ describe("production secrets", () => {
   })
 })
 
+describe("public URLs at start (STOREFRONT_URL, BACKEND_URL)", () => {
+  it.each([
+    ["unset", undefined, "STOREFRONT_URL is not set"],
+    ["empty", "", "STOREFRONT_URL is not set"],
+    ["http", "http://shop.example.com", "STOREFRONT_URL must use https"],
+    ["with a path", "https://shop.example.com/pk", "STOREFRONT_URL must not have a path"],
+    ["with credentials", "https://u:p@shop.example.com", "STOREFRONT_URL must not contain a user name or password"],
+  ])("refuses to start in production with STOREFRONT_URL %s, saying what to write", (_name, value, message) => {
+    const env = { ...goodProductionEnv, STOREFRONT_URL: value }
+    expect(() => buildMedusaConfig(env)).toThrow(ConfigError)
+    expect(() => buildMedusaConfig(env)).toThrow(
+      new RegExp(`Refusing to start with NODE_ENV="production":\n- ${message}.*Write .*https://<host>`)
+    )
+  })
+
+  it("refuses BACKEND_URL the same way, and starts with both correct", () => {
+    expect(() => buildMedusaConfig({ ...goodProductionEnv, BACKEND_URL: undefined })).toThrow(
+      "BACKEND_URL is not set"
+    )
+    expect(() =>
+      buildMedusaConfig({ ...goodProductionEnv, BACKEND_URL: "http://api.example.com" })
+    ).toThrow("BACKEND_URL must use https")
+    expect(() => buildMedusaConfig(goodProductionEnv)).not.toThrow()
+  })
+
+  it("in development starts without them, but refuses one that is set and unusable", () => {
+    expect(() => buildMedusaConfig({ NODE_ENV: "development" })).not.toThrow()
+    expect(() =>
+      buildMedusaConfig({ NODE_ENV: "development", STOREFRONT_URL: "http://localhost:8000/uk" })
+    ).toThrow(/Refusing to start with NODE_ENV="development":\n- STOREFRONT_URL must not have a path/)
+    expect(() => buildMedusaConfig({ NODE_ENV: "test", BACKEND_URL: "localhost:9000" })).toThrow(
+      ConfigError
+    )
+  })
+})
+
 describe("buildMedusaConfig", () => {
   it("passes the database and Redis URLs through, and leaves Redis out when unset", () => {
     const config = buildMedusaConfig({
@@ -633,7 +671,7 @@ describe("buildMedusaConfig", () => {
 describe("buildModules", () => {
   it("combines redis, file and payment modules, and our own", () => {
     const modules = buildModules({ ...s3Env, REDIS_URL: "redis://x:6379" })
-    expect(modules).toHaveLength(6)
+    expect(modules).toHaveLength(7)
   })
 
   it("always registers the cash-collection record's module", () => {
