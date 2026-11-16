@@ -6,7 +6,7 @@
  */
 import { updateLayer } from "../design/edit.js";
 import { round3 } from "../design/placement.js";
-import { clampToPrintArea, maxScaleInArea, printAreaOf } from "../design/print-area.js";
+import { fitLayerToArea, maxScaleInArea, minItemSide, printAreaOf } from "../design/print-area.js";
 import type { DesignDocument, Layer, LogoAssetRef, PlacementPreset, ProductDefinition } from "../design/schema.js";
 import { DEFAULT_UPLOAD_LIMITS, logoLayerWarnings, maxPrintWidthMm } from "../design/upload-checks.js";
 
@@ -44,7 +44,7 @@ export function logoSizeWord(product: ProductDefinition, layer: LogoLayer): Logo
 export function logoSizeLimits(product: ProductDefinition, layer: LogoLayer): { canShrink: boolean; canGrow: boolean } {
   const piece = product.pieces.find((p) => p.id === layer.pieceId);
   const room = piece ? maxScaleInArea(printAreaOf(piece), layer) : Infinity;
-  return { canShrink: Math.min(layer.size.width, layer.size.height) / LOGO_SIZE_STEP >= 5, canGrow: room > 1.0005 };
+  return { canShrink: Math.min(layer.size.width, layer.size.height) / LOGO_SIZE_STEP >= minItemSide(product, "logo") - 1e-6, canGrow: room > 1.0005 };
 }
 
 /** The widest the logo prints sharp (mm), and in whole centimetres down, for the coach ("Sharp up to 9 cm wide"). */
@@ -70,8 +70,8 @@ export function makeLogoSharp(design: DesignDocument, layerId: string, options: 
   const factor = mm / printed;
   // Rounded down, so it is not a hair over the limit.
   const size = { width: Math.floor(layer.size.width * factor * 1000) / 1000, height: Math.floor(layer.size.height * factor * 1000) / 1000 };
-  const position = clampToPrintArea(options.product, { ...layer, size });
-  return updateLayer(design, layerId, { size, position }, options);
+  const fitted = fitLayerToArea(options.product, { ...layer, size });
+  return updateLayer(design, layerId, { size: fitted.size, position: fitted.position }, options);
 }
 
 /** A new file for a logo: its place and width kept, its height from the new image's proportions, inside the print area. */
@@ -79,14 +79,9 @@ export function replaceLogoAsset(design: DesignDocument, layerId: string, asset:
   const layer = design.layers.find((l) => l.id === layerId);
   if (!layer || layer.kind !== "logo") return design;
   const width = layer.size.width;
-  let size = { width: round3(width), height: round3((width * asset.height) / asset.width) };
-  const piece = options.product.pieces.find((p) => p.id === layer.pieceId);
-  if (piece) {
-    const room = maxScaleInArea(printAreaOf(piece), { ...layer, size });
-    if (room < 1) size = { width: round3(size.width * room), height: round3(size.height * room) };
-  }
-  const position = clampToPrintArea(options.product, { ...layer, size });
-  return updateLayer(design, layerId, { asset: { ...asset }, size, position }, options);
+  const size = { width: round3(width), height: round3((width * asset.height) / asset.width) };
+  const fitted = fitLayerToArea(options.product, { ...layer, asset: { ...asset }, size });
+  return updateLayer(design, layerId, { asset: { ...asset }, size: fitted.size, position: fitted.position }, options);
 }
 
 /** Where the next logo goes: the first place in the usual order that is free (no item there), else the first. */

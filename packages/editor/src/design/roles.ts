@@ -26,6 +26,7 @@ import { addLayer, roleValue, setRoleValue, updateLayer, type EditOptions, type 
 import { addCatalogFont, type FontCatalog } from "./font-catalog.js";
 import { newNumberLayer, newTextLayer, nextLayerId, requirePreset } from "./new-layers.js";
 import { round3 } from "./placement.js";
+import { fitLayerToArea } from "./print-area.js";
 import { DesignError } from "./validate.js";
 
 /** Sets the team name: the design's `teamName` and every team-name layer. One edit. */
@@ -195,7 +196,7 @@ export function newRoleLayer(design: DesignDocument, product: ProductDefinition,
     kind === "number"
       ? newNumberLayer(product, { ...common, role: "player-number", value })
       : newTextLayer(product, { ...common, role: role as "team-name" | "player-name", value });
-  return { ...layer, size };
+  return fitLayerToArea(product, { ...layer, size });
 }
 
 /**
@@ -251,12 +252,14 @@ export function placeAtPreset(design: DesignDocument, layerId: string, presetId:
   if (layer.kind === "text" || layer.kind === "number") {
     const step = sizeStepOf(product, layer) ?? "medium";
     const { fontSize, size } = presetBox(preset, layer.kind, SIZE_STEPS[step], layer.fontSize);
-    const outline = layer.outline ? { ...layer.outline, width: outlineWidthMm(fontSize, outlineStepOf(layer)!) } : undefined;
-    return updateLayer(design, layerId, { ...place, fontSize, size, ...(outline ? { outline } : {}) }, options);
+    const fitted = fitLayerToArea(product, { ...layer, ...place, fontSize, size });
+    const outline = layer.outline ? { ...layer.outline, width: outlineWidthMm(fitted.fontSize, outlineStepOf(layer)!) } : undefined;
+    return updateLayer(design, layerId, { ...place, position: fitted.position, fontSize: fitted.fontSize, size: fitted.size, ...(outline ? { outline } : {}) }, options);
   }
   const ratio = layer.size.height / layer.size.width;
   const width = Math.min(layer.size.width, preset.maxSize.width, preset.maxSize.height / ratio);
-  return updateLayer(design, layerId, { ...place, size: { width: round3(width), height: round3(width * ratio) } }, options);
+  const fitted = fitLayerToArea(product, { ...layer, ...place, size: { width: round3(width), height: round3(width * ratio) } });
+  return updateLayer(design, layerId, { ...place, position: fitted.position, size: fitted.size }, options);
 }
 
 /** Sets the size step of a text or number layer at its preset (Small, Medium, Large). One edit. */
@@ -266,8 +269,9 @@ export function setSizeStep(design: DesignDocument, layerId: string, step: SizeS
   if (layer.preset === undefined) throw new DesignError(`Cannot resize layer "${layerId}" by steps: it is not at a placement preset`);
   const preset = requirePreset(options.product, layer.preset);
   const { fontSize, size } = presetBox(preset, layer.kind, SIZE_STEPS[step], layer.fontSize);
-  const outline = layer.outline ? { ...layer.outline, width: outlineWidthMm(fontSize, outlineStepOf(layer)!) } : undefined;
-  return updateLayer(design, layerId, { fontSize, size, ...(outline ? { outline } : {}) }, options);
+  const fitted = fitLayerToArea(options.product, { ...layer, fontSize, size });
+  const outline = layer.outline ? { ...layer.outline, width: outlineWidthMm(fitted.fontSize, outlineStepOf(layer)!) } : undefined;
+  return updateLayer(design, layerId, { fontSize: fitted.fontSize, size: fitted.size, position: fitted.position, ...(outline ? { outline } : {}) }, options);
 }
 
 /**

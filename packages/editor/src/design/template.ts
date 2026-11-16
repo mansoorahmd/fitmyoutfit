@@ -41,6 +41,7 @@ import { checkJerseyNumber } from "./jersey-number.js";
 import { roleValue, type ValueRole } from "./edit.js";
 import { addCatalogFont, type FontCatalog } from "./font-catalog.js";
 import { nextLayerId } from "./new-layers.js";
+import { fitDesignToAreas } from "./print-area.js";
 import { OUTLINE_STEPS, SIZE_STEPS, newRoleLayer, outlineStepOf, sizeStepOf, type LetteringStyle, type OutlineStep, type SizeStep } from "./roles.js";
 import { flattenPath, parseSvgPath, shapesOverlap } from "./svg-path.js";
 import { teamColourValue } from "./team-colours.js";
@@ -341,7 +342,8 @@ export function applyTemplate(design: DesignDocument, template: Template, option
     takenIds.add(shapeId);
     shapes.push({ id: shapeId, kind: "shape", group: shape.group, pieceId: shape.pieceId, path: shape.path, fill: resolveTemplateColour(next, shape.fill, fallback), locked: true });
   }
-  const result: DesignDocument = { ...next, shapes, layers };
+  // Every item inside its print area (the print-area rule; a logo kept from the last design included).
+  const result: DesignDocument = fitDesignToAreas(product, { ...next, shapes, layers });
   const valid = validateDesign(result, { product });
   if (!valid.ok) throw new DesignError(`Applying template "${template.id}" would give an invalid design`, valid.errors);
   return valid.value;

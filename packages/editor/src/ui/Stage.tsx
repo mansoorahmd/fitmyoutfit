@@ -8,7 +8,8 @@
 import { useEffect, useMemo, useState, type ReactNode, type Ref } from "react";
 import { DesignCanvas, type CameraInfo, type DesignCanvasHandle, type DesignCanvasProps, type SelectionGeometry } from "../react/DesignCanvas.js";
 import { createBus } from "./handles.js";
-import { SelectionOverlay, type GesturePhase } from "./SelectionOverlay.js";
+import { SelectionOverlay } from "./SelectionOverlay.js";
+import type { GestureEndReason, GesturePhase } from "./item-gestures.js";
 import { StageContextBar } from "./SelectedItem.js";
 import { CONTEXT_BAR_HEIGHT } from "./selection.js";
 import type { ViewInsets } from "../react/camera.js";
@@ -29,6 +30,11 @@ import { creditForm, type StageTone } from "./stage-logic.js";
 export const CREDIT_ROOM = 24;
 export const VIEW_ROW = 60;
 export const HINT_ROOM = 44;
+
+/** Whether the stage keeps the hint's room: while it shows, and after, until the frame changes for another reason. */
+export function keepsHintRoom(hintShown: boolean, heldFor: string | null, frameKey: string): boolean {
+  return hintShown || heldFor === frameKey;
+}
 
 export interface StageLoad {
   /** 0 to 1, or null when unknown. */
@@ -81,6 +87,8 @@ export interface StageProps {
   onResize?: (phase: GesturePhase, factor: number) => void;
   onRotate?: (phase: GesturePhase, degrees: number, free: boolean) => void;
   onTurnTo?: () => void;
+  /** A handle's gesture interrupted (capture lost, the handle gone, a second finger): it is ended (cancelled). */
+  onGestureInterrupt?: (reason: GestureEndReason) => void;
   /** Handles hidden (a phone while typing). */
   handlesHidden?: boolean;
   /** The contextual bar on the stage (phones, with an item selected): the garment is framed below it. */
@@ -100,7 +108,13 @@ export function Stage({ canvasRef, ...props }: StageProps) {
   const controlsBottom = insets.bottom + 12;
   // The garment is framed between the credit line and the view buttons, above (or beside) the panel.
   const hintShown = Boolean(props.hint) && props.viewControls !== "none";
-  const barTop = (props.credit && mode === "3d" ? CREDIT_ROOM : 0) + (hintShown && mode === "3d" ? HINT_ROOM : 0);
+  // The hint's room is kept after the hint goes, until the stage is re-framed for another reason (a panel, the
+  // contextual bar), so showing or dismissing the hint never moves the garment (E3c, B3).
+  const frameKey = `${layout}|${insets.top}|${insets.right}|${insets.bottom}|${insets.left}|${props.viewControls}|${Boolean(props.contextBar)}|${mode}`;
+  const [hintRoomFor, setHintRoomFor] = useState<string | null>(null);
+  if (hintShown && hintRoomFor !== frameKey) setHintRoomFor(frameKey);
+  const hintRoom = keepsHintRoom(hintShown, hintRoomFor, frameKey);
+  const barTop = (props.credit && mode === "3d" ? CREDIT_ROOM : 0) + (hintRoom && mode === "3d" ? HINT_ROOM : 0);
   const canvasInsets = { top: barTop + (props.contextBar ? CONTEXT_BAR_HEIGHT : 0), right: insets.right, bottom: insets.bottom + (mode === "3d" && props.viewControls === "full" ? VIEW_ROW : 0), left: insets.left };
   const sides = ["front", "back", "left", "right"] as const;
   // The selected item's box on the screen, from the canvas to the overlay (only the overlay re-renders per frame).
@@ -121,6 +135,7 @@ export function Stage({ canvasRef, ...props }: StageProps) {
             onResize={props.onResize ?? (() => undefined)}
             onRotate={props.onRotate ?? (() => undefined)}
             onTurnTo={props.onTurnTo ?? (() => undefined)}
+            onInterrupt={props.onGestureInterrupt}
             hidden={props.handlesHidden}
             warn={props.selectionWarn}
           />

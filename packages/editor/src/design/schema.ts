@@ -559,6 +559,20 @@ export const productDefinitionSchema = z.strictObject({
   zones: z.array(zoneSchema).min(1),
   /** Named positions for layers, in the order the interface offers them. */
   placements: z.array(placementPresetSchema).max(100),
+  /**
+   * The smallest an item may be (E3c): the shorter side of its box, in mm, per kind of item. Resizing stops
+   * there, and the print-area rule (`fitLayerToArea`) keeps every item at least this big where its area
+   * allows. Business data: PLACEHOLDERS until the factories give their smallest printable sizes. Without
+   * it, 5 mm for every kind.
+   */
+  minItemSize: z
+    .strictObject({ text: finite.positive(), number: finite.positive(), logo: finite.positive(), clipart: finite.positive() })
+    .optional(),
+  /**
+   * Where new items go first (E3c): for logos and for free text, the presets in the order a new item takes
+   * them (the first free one). Presets not listed come after, in the order of `placements`.
+   */
+  placementOrder: z.strictObject({ logo: z.array(id).max(100), text: z.array(id).max(100) }).optional(),
 });
 
 export type PaletteRef = z.infer<typeof paletteRefSchema>;

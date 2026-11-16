@@ -202,6 +202,7 @@ export const EDITOR_WORDING = {
     clipped: "Part of this is cut off at the seam.", // W-ED111
     moveIn: "Move it in", // W-ED111b
     tooBigToFit: "Make it smaller so it fits on the shirt.", // NEW: when no place fits ("Move it in" cannot help)
+    madeSmaller: "Made smaller so it fits where it prints.", // NEW (E3c): the print-area rule had to shrink the item (a turn, a place, a size)
     turnToEdit: "Turn to edit", // W-ED112
     fineTune: "Fine-tune", // W-ED113
     bigger: "Bigger", // W-ED114

@@ -31,7 +31,7 @@ import {
 import type { DesignDocument, Point, ProductDefinition } from "../design/schema.js";
 import { buildSurfaceLookup, projectItem, projectPieceLine, type ItemOnScreen, type ScreenPoint, type SurfaceLookup } from "../texture/surface-lookup.js";
 import { extractGarmentMeshes } from "./garment-geometry.js";
-import { TAP_MAX_MS, pressAction, type DragOnlySelected } from "./press-policy.js";
+import { TAP_MAX_MS, pressAction, travelledPast, type DragOnlySelected } from "./press-policy.js";
 import { DraftPolicy, type GestureTiming } from "./draft-quality.js";
 import { dragPosition, layerAtPoint, pieceAtMeshUv, round3, startLayerDrag, type LayerDrag } from "../design/placement.js";
 import { backgroundAt } from "../design/readability.js";
@@ -61,6 +61,11 @@ export interface LayerDragEvent {
   free?: boolean;
   /** Screen px per piece mm where the item is (snapping takes 8 px or 6 mm, whichever is larger). */
   pxPerMm?: number;
+  /**
+   * On "end": false when the pointer never travelled past `DRAG_SLOP_PX` from the press (a click, not a move:
+   * the item keeps its place and no undo step is made, whatever the camera did meanwhile).
+   */
+  moved?: boolean;
 }
 
 /** A line on a piece to draw over the model while placing (a snapping guide, or the print area's edge), in piece mm. */
@@ -660,7 +665,19 @@ function ModelView({
     const ndc = new Vector2();
     const meshes = [...prepared.pieceMeshes.keys()];
     const down = new Set<number>();
-    let drag: { pointerId: number; state: LayerDrag; position: Point; pending: Point | null; pointer: { clientX: number; clientY: number } | null; frame: number | null; free: boolean; pxPerMm: number } | null = null;
+    let drag: {
+      pointerId: number;
+      state: LayerDrag;
+      position: Point;
+      pending: Point | null;
+      pointer: { clientX: number; clientY: number } | null;
+      frame: number | null;
+      free: boolean;
+      pxPerMm: number;
+      /** Where the press was (client px), and whether the pointer has gone past the slop since (B3). */
+      origin: { x: number; y: number };
+      moved: boolean;
+    } | null = null;
     let tap: { pointerId: number; x: number; y: number; time: number; selects: string | null } | null = null;
 
     // Screen px per mm at the item, from the last projection (for snapping distances); 2 until known.
@@ -681,7 +698,7 @@ function ModelView({
 
     const emit = (phase: LayerDragEvent["phase"], position: Point) => {
       if (!drag) return;
-      latest.current.onLayerDrag?.({ phase, layerId: drag.state.layerId, pieceId: drag.state.pieceId, position, free: drag.free, pxPerMm: drag.pxPerMm });
+      latest.current.onLayerDrag?.({ phase, layerId: drag.state.layerId, pieceId: drag.state.pieceId, position, free: drag.free, pxPerMm: drag.pxPerMm, ...(phase === "end" ? { moved: drag.moved } : {}) });
     };
 
     // The ray to the model is cast once per frame, for the latest pointer position (pointer events can come
@@ -706,6 +723,9 @@ function ModelView({
       if (!drag || event.pointerId !== drag.pointerId) return;
       event.preventDefault();
       drag.free = event.altKey;
+      // Until the pointer really travels, nothing moves (a click is not a move, B3).
+      if (!drag.moved && !travelledPast(drag.origin, { x: event.clientX, y: event.clientY })) return;
+      drag.moved = true;
       drag.pointer = { clientX: event.clientX, clientY: event.clientY };
       drag.frame ??= requestAnimationFrame(flush);
     };
@@ -733,7 +753,8 @@ function ModelView({
       }
       if (!drag || event.pointerId !== drag.pointerId) return;
       if (drag.frame !== null) cancelAnimationFrame(drag.frame);
-      if (phase === "end") {
+      if (phase === "end" && (drag.moved || travelledPast(drag.origin, { x: event.clientX, y: event.clientY }))) {
+        drag.moved = true;
         drag.pointer ??= { clientX: event.clientX, clientY: event.clientY };
         flush();
       }
@@ -752,8 +773,18 @@ function ModelView({
       down.add(event.pointerId);
       const { design: current, onSelectLayer: select, onLayerDrag: dragHandler, touchSlopMm: slop, pickZones: zones } = latest.current;
       if (drag) {
-        // A second finger during a drag: ignore it, and keep it from the orbit controls.
+        // A second finger during a drag ends the drag (cancelled: the item goes back; two fingers move the
+        // camera, never the item), and is kept from the orbit controls, which did not see the first finger.
         event.stopPropagation();
+        const first = drag;
+        if (first.frame !== null) cancelAnimationFrame(first.frame);
+        emit("cancel", first.position);
+        drag = null;
+        down.delete(first.pointerId);
+        window.removeEventListener("pointermove", onMove);
+        const controlsNow = latest.current.controls;
+        if (controlsNow) controlsNow.enabled = true;
+        canvas.style.cursor = "";
         return;
       }
       if (busy) {
@@ -784,7 +815,18 @@ function ModelView({
       event.preventDefault();
       select?.(layer.id);
       if (!dragHandler) return;
-      drag = { pointerId: event.pointerId, state: startLayerDrag(layer, hit.point), position: layer.position, pending: null, pointer: null, frame: null, free: event.altKey, pxPerMm: pxPerMmAt(layer.id) };
+      drag = {
+        pointerId: event.pointerId,
+        state: startLayerDrag(layer, hit.point),
+        position: layer.position,
+        pending: null,
+        pointer: null,
+        frame: null,
+        free: event.altKey,
+        pxPerMm: pxPerMmAt(layer.id),
+        origin: { x: event.clientX, y: event.clientY },
+        moved: false,
+      };
       const controlsNow = latest.current.controls;
       if (controlsNow) controlsNow.enabled = false;
       canvas.style.cursor = "grabbing";
