@@ -163,6 +163,11 @@ describe("databaseHostProblem", () => {
     // QA's tenth review, M5: an empty host with a port is a missing host, not "not a URL".
     expect(databaseHostProblem("postgres://u:p@:5433/db")).toBe("no_host")
     expect(databaseHostProblem("postgresql://u:p@:5433")).toBe("no_host")
+    // QA's thirteenth review, B5: no login and no host at all is a missing host too.
+    expect(databaseHostProblem("postgres://:5433/db")).toBe("no_host")
+    expect(databaseHostProblem("postgresql://:5433")).toBe("no_host")
+    expect(databaseHostProblem("postgres://:5433/db?ssl_mode=disable")).toBe("no_host")
+    expect(databaseHostProblem("mysql://:5433/db")).toBe("not_a_url")
     expect(databaseHostProblem("postgres://u:p@?sslmode=require")).toBe("no_host")
     expect(databaseHostProblem("mysql://u:p@:5433/db")).toBe("not_a_url")
     expect(databaseHostProblem("postgres://u:p@%2Ftmp/x")).toBe("no_host")
