@@ -72,6 +72,9 @@ const COMPONENTS = [
   "modules/order/templates/order-completed-template.tsx",
   // S1-5: sign-in, create account and the account area
   ...ACCOUNT_FILES,
+  // S1-6c: the rush option
+  "modules/cart/components/rush-choice/index.tsx",
+  "app/[countryCode]/(main)/cart/page.tsx",
 ]
 
 describe("M1 wording", () => {
@@ -104,6 +107,9 @@ describe("M1 wording", () => {
       ...strings(checkoutContent.delivery),
       cartContent.summary.codOverLimit,
       productContent.minimum.line,
+      // S1-6c: the percentage, the amount and the dates of rush come from the rules
+      ...strings(cartContent.rush),
+      checkoutContent.errors.totalChangedText,
     ]) {
       expect(text, text).not.toMatch(/\d/)
     }
