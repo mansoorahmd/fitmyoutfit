@@ -149,29 +149,37 @@ The storefront checkout (S1-4) and account pages (S1-5) are built against these.
 - **Cash on delivery collected (staff).** `GET` and `POST /admin/orders/:id/cash-collection` (admin sign-in only). Recording the courier's slip captures what is still open of the cash-on-delivery payment (all of it, or the rest when part was captured in Medusa's Payments section), then records the slip reference and the time (UTC) once. The record is kept in a table of its own (`cash_collection`), one per order, not in the order's metadata: for orders recorded since S1-1d a customer's `GET /store/orders` and `GET /store/orders/:id` return nothing about it, and Medusa's own order edits cannot remove it. Who captured is Medusa's own capture record. The storefront does not read any of it in M1. **Known gap:** an order recorded before S1-1d (development databases only) still carries `cod_slip_reference`, `cod_collected_at` and `cod_collected_by` in its metadata, and the customer's order list still returns them; the next backend task moves them into the table and removes the keys.
 - **Open, for when a real gateway is connected (M3).** A payment provider's webhook completes the cart without the store route. QA saw it: a UK cart of 9 with an "authorized" webhook gives no order, and a later "captured" webhook still captures the money. The checks must pass before the payment is started, and a refused completion after payment needs a refund or an alert. Not decided yet. Cash on delivery and the placeholder payment have no webhook.
 
-## 9. Rush charge (task S1-6; agreed 12 Nov, not built yet)
+## 9. Rush charge (task S1-6; as built, checked sentence by sentence by QA on 16 Nov in PKR, GBP, AED and USD; the backend is not merged yet)
 
-Reasons and alternatives are in [decision 011](../decisions/011-rush-charge.md). This section is corrected to "as built" when the backend task is accepted.
+Reasons and the mechanism are in [decision 011](../decisions/011-rush-charge.md). The storefront half is built against this section.
 
-- **What rush is in a cart.** One line of the seeded product "Rush Production" (product `metadata.kind` `rush_add_on`), quantity 1. Its unit price is the rush charge, worked out by the server. A cart holds rush or it does not; there is no other flag.
-- **The charge.** The cart's garment lines (every line whose product kind is not `fit_kit` or `rush_add_on`), taken after item discounts and before delivery and tax, times `rush_percentage` / 100, rounded half up to the currency's smallest unit (PKR 2,000 at 20% is PKR 400; GBP 220.00 at 20% is GBP 44.00).
-- **Adding and removing.**
-  - `POST /store/carts/:id/rush` (publishable key): adds the rush line, or leaves it if it is there. Answers 200 with `{ "cart": … }` as Medusa's cart routes do.
-  - `DELETE /store/carts/:id/rush`: removes it, or does nothing if it is not there. Answers 200 with `{ "cart": … }`. Medusa's own `DELETE /store/carts/:id/line-items/:line_id` on the rush line does the same.
-  - Refusals: a cart with no garment line, HTTP 400 `{ "type": "not_allowed" }`; an unknown cart, 404; a missing or invalid `rush_percentage`, or the rush product missing, HTTP 500 with a message naming it. A `rush_percentage` of 0 means rush is not offered: 400 `not_allowed`.
-  - The rush product cannot be put in a cart any other way: `POST /store/carts/:id/line-items` with its variant, and a quantity change on its line, answer 400 `not_allowed`.
-- **Always the server's figure.** After any change to the cart through the store API (lines added, changed or removed, a region change, a discount) the rush line is priced again before the answer is sent. When the last garment line goes, the rush line goes with it. At completion it is priced once more, so an order's rush line always equals the rule; completion is not refused for it.
+- **What rush is in a cart.** One line of the seeded product "Rush Production" (product `metadata.kind` `rush_add_on`), quantity 1, priced only by the server. A cart holds rush or it does not; there is no other flag.
+- **The charge.** The garment lines (every line whose kind is not `fit_kit` or `rush_add_on`) after item discounts (an order-wide discount is shared with the fit kit), before delivery and tax, times `rush_percentage` / 100, rounded half up to the currency's smallest unit (PKR 2,000 at 20% is PKR 400; GBP 220.00 at 20% is GBP 44.00). The rush line itself is never discounted. Its variant carries a placeholder price of 0 per currency that is never charged.
+- **Adding and removing.** `POST /store/carts/:id/rush` adds it or leaves it; `DELETE /store/carts/:id/rush` removes it or does nothing. Both answer 200 with `{ "cart": … }`. Refusals:
+  - no garment line, or a `rush_percentage` of 0 (rush is not offered): 400 `not_allowed`;
+  - an unknown cart: 404;
+  - `rush_percentage` missing or invalid, or the rush product missing: 500 with a message naming it;
+  - the cart is being changed by another request at the same moment: 409 `conflict`, always with Medusa's generic message; nothing changed, send it again;
+  - a completed cart: 400 `invalid_data` (except that `POST` on a completed cart that already holds rush answers 200 and changes nothing).
+- **No other way in.** The rush product is refused with 400 `not_allowed` in the `items` of `POST /store/carts`, in `POST /store/carts/:id/line-items`, and for any `POST` on its line (quantity, metadata). A `unit_price` in a body is refused by Medusa's own validator with 400 `invalid_data`. Medusa's `DELETE /store/carts/:id/line-items/:line_id` on the rush line removes it (and answers in Medusa's own shape for that route).
+- **Always the server's figure.** After every cart change through the store API (lines, quantities, region, address, sales channel, transfer to a customer, promotions through either route or `promo_codes`) the line is priced again before the answer is sent. When the last garment line goes, the rush line goes with it.
+- **At completion** the line is priced once more, and no order is ever made with a rush line other than the rule's. The storefront must handle three answers by trying again:
+  - 400 `invalid_data` "Payment sessions are required to complete cart": the price changed at that moment (a changed `rush_percentage`, or rush removed because the percentage became 0), so Medusa dropped the payment session. Create the session again and complete.
+  - 409 `conflict`: another request changed the cart during completion. Complete again; that attempt may answer the 400 above first.
+  - rarely 404 `not_found` naming a payment session (Medusa's own race, once in 150 rounds across two servers): create the session again and complete.
 - **The rules route** (`GET /store/carts/:id/checkout-rules`) gains:
 
   ```json
   "rush": { "available": true, "in_cart": false, "percentage": 20, "amount": 400, "currency_code": "pkr" }
   ```
 
-  - `amount` is the charge this cart has, or would have, in whole currency units like `cod_max_total`. `available` is false when the cart has no garment line or the percentage is 0; `amount` is then 0.
-  - `delivery_promise.applies` is `"rush"` when the cart holds rush, else `"standard"`.
-- **The other rules.** The rush line does not count towards the minimum quantity. The cash-on-delivery limit is checked against the cart total including the rush charge.
-- **The order.** The promised date kept on an order with a rush line uses `delivery_days_rush` and `"applies": "rush"`.
-- **What the storefront shows** is in [05-m1-pages.md](../design/05-m1-pages.md), section 4 ("Rush add-on": a line with no thumbnail, no stepper and no Remove of its own) and its delivery-date rules; the storefront task follows the backend task.
+  - `amount` is the rule's figure for this cart, whether or not the line is there and even while the line still holds an older figure. It is in currency units like `cod_max_total` and can have decimals (GBP 0.53). `available` is false when the cart has no garment line or the percentage is 0; `amount` is then 0.
+  - `delivery_promise.applies` is `"rush"` while the cart holds the line, else `"standard"`.
+  - A missing or invalid `rush_percentage` makes the rules route, choosing cash on delivery, completion and (with rush in the cart) any cart change answer 500 naming the key, like every other setting. `DELETE /store/carts/:id/rush` still works then.
+- **The other rules.** The rush line does not count towards the minimum quantity. The cash-on-delivery limit is checked against the cart total including the rush charge, when cash on delivery is chosen and at completion.
+- **The order.** The promised date kept on an order with a rush line uses `delivery_days_rush` and `"applies": "rush"`. The promise is fixed when the order is placed; a later order edit by staff does not change it (being built in the fix round after QA's review).
+- **Not covered:** a promotion with a cart-total rule (possible through the API only) is applied while counting the rush line and dropped at the next cart change; the rush line itself stays right. A cart completed by a payment provider's webhook with a stale rush price is refused after payment; this belongs with the open webhook item in 8.1.
+- **What the storefront shows** is in [05-m1-pages.md](../design/05-m1-pages.md), section 4 ("Rush add-on": a line with no thumbnail, no stepper and no Remove of its own) and its delivery-date rules.
 
 ## 10. Not in this contract
 
