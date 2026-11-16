@@ -65,10 +65,10 @@ export default async function Checkout(props: { params: Promise<{ countryCode: s
   let rules = firstRules
   let rushDropped = false
   if (rushIsStale(rules) && (await dropStaleRush())) {
-    const fresh = await retrieveCheckoutCart()
+    const fresh = await retrieveCheckoutCart({ again: true })
     if (fresh.cart && !fresh.cart.completed_at && fresh.cart.items?.length) {
       cart = fresh.cart
-      rules = await getCheckoutRules(cart.id)
+      rules = await getCheckoutRules(cart.id, { again: true })
       rushDropped = true
     }
   }

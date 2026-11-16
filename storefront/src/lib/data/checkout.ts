@@ -64,7 +64,7 @@ const fetchCart = async (id: string, fields = CHECKOUT_CART_FIELDS, signal?: Abo
  * what is placed must be what is shown). No cookie or an unknown cart is
  * "no cart"; no answer or a 5xx is a failure (the server-error block).
  */
-export async function retrieveCheckoutCart(): Promise<{
+export async function retrieveCheckoutCart({ again = false }: { again?: boolean } = {}): Promise<{
   cart: HttpTypes.StoreCart | null
   failed: boolean
 }> {
@@ -72,7 +72,9 @@ export async function retrieveCheckoutCart(): Promise<{
   if (!id) {
     return { cart: null, failed: false }
   }
-  const result = await fetchCart(id)
+  // `again`: a second read in the same render, with a signal of its own so
+  // Next.js doesn't answer it with the first read (retrieveCartForPage)
+  const result = await fetchCart(id, CHECKOUT_CART_FIELDS, again ? new AbortController().signal : undefined)
   if (result.ok) {
     return { cart: result.body, failed: false }
   }

@@ -9,7 +9,7 @@ import { checkoutCartPkRush, noSessionAfterPriceChange } from "./fixtures/rush"
 // backend behind the SDK. Failures are thrown like the SDK's FetchError:
 // an Error with the backend's message and the HTTP status.
 
-type Call = { path: string; method: string; query?: unknown }
+type Call = { path: string; method: string; query?: unknown; signal?: boolean }
 
 const { state } = vi.hoisted(() => ({
   state: {
@@ -30,9 +30,9 @@ const fail = (status: number, message = "failed") => {
 vi.mock("@lib/config", () => ({
   sdk: {
     client: {
-      fetch: async (path: string, init: { method?: string; query?: unknown } = {}) => {
+      fetch: async (path: string, init: { method?: string; query?: unknown; signal?: unknown } = {}) => {
         const method = init.method ?? "GET"
-        state.calls.push({ path, method, query: init.query })
+        state.calls.push({ path, method, query: init.query, ...(init.signal ? { signal: true } : {}) })
         if (path.endsWith("/rush")) return (state.rush.shift() ?? (() => ({ cart: { id: "cart_1" } })))()
         if (path.endsWith("/complete")) return (state.complete.shift() ?? (() => completedPk))()
         if (path.startsWith("/store/carts/")) return (state.cartReads.shift() ?? (() => ({ cart: state.cart })))()
@@ -68,8 +68,11 @@ vi.mock("next/navigation", () => ({
   },
 }))
 vi.mock("@lib/data/checkout-rules", () => ({ getCheckoutRules: vi.fn(async () => null) }))
+vi.mock("@lib/data/regions", () => ({ getRegion: async () => null }))
+vi.mock("@lib/data/locale-actions", () => ({ getLocale: async () => null }))
 
-import { placeOrder } from "@lib/data/checkout"
+import { retrieveCartForPage } from "@lib/data/cart"
+import { placeOrder, retrieveCheckoutCart } from "@lib/data/checkout"
 import { chooseRush, dropStaleRush } from "@lib/data/rush"
 
 const rushCalls = () => state.calls.filter((c) => c.path.endsWith("/rush"))
@@ -185,5 +188,17 @@ describe("placeOrder with rush (contract 9)", () => {
     expect(await run(placeOrder("pp_cod_cod", "pk", 5050))).toEqual({ kind: "total_changed", total: 5250, currencyCode: "pkr" })
     expect(completions()).toHaveLength(1)
     expect(allCartTagsRevalidated()).toBe(true)
+  })
+})
+
+describe("reading the cart again after a stale rush line was taken off", () => {
+  // Next.js answers an identical GET in the same render with the first
+  // response; the page saw the removed rush row until a signal opted out.
+  it("the second read has a signal of its own; the first is as before", async () => {
+    await retrieveCartForPage()
+    await retrieveCartForPage({ again: true })
+    await retrieveCheckoutCart()
+    await retrieveCheckoutCart({ again: true })
+    expect(state.calls.map((c) => !!c.signal)).toEqual([false, true, false, true])
   })
 })

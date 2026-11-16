@@ -88,10 +88,10 @@ export default async function Cart(props: {
   let rules = firstRules
   let rushDropped = false
   if (rushIsStale(rules) && (await dropStaleRush())) {
-    const fresh = await retrieveCartForPage()
+    const fresh = await retrieveCartForPage({ again: true })
     if (fresh.cart && !fresh.cart.completed_at && fresh.cart.items?.length) {
       cart = fresh.cart
-      rules = await getCheckoutRules(cart.id)
+      rules = await getCheckoutRules(cart.id, { again: true })
       rushDropped = true
     }
   }

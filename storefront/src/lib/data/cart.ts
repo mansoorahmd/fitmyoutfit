@@ -75,8 +75,13 @@ const CART_PAGE_FIELDS =
  * HTTP 200 and its items, and only `completed_at` tells it is an order. A
  * cached copy from before "Place order" would show the ordered cart as a
  * live one (QA S1-4, D1).
+ *
+ * `again`: a second read in the same render, after the page changed the
+ * cart (a stale rush line taken off). Next.js would otherwise answer it
+ * with the first read's response (it dedupes identical GETs within one
+ * render); a signal of its own opts out.
  */
-export async function retrieveCartForPage(): Promise<{
+export async function retrieveCartForPage({ again = false }: { again?: boolean } = {}): Promise<{
   cart: HttpTypes.StoreCart | null
   failed: boolean
 }> {
@@ -94,6 +99,7 @@ export async function retrieveCartForPage(): Promise<{
         query: { fields: CART_PAGE_FIELDS },
         headers: { ...(await getAuthHeaders()) },
         cache: "no-store",
+        ...(again ? { signal: new AbortController().signal } : {}),
       }
     )
     return { cart, failed: false }

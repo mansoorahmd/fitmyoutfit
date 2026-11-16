@@ -14,10 +14,12 @@ import { getAuthHeaders } from "./cookies"
  * enforces the rules when the order is placed. Never a made-up answer.
  *
  * Not cached: the rules change with every change to the cart, and the date
- * moves at midnight in Karachi.
+ * moves at midnight in Karachi. `again`: read once more in the same render
+ * after the page changed the cart (see retrieveCartForPage).
  */
 export async function getCheckoutRules(
-  cartId: string | null | undefined
+  cartId: string | null | undefined,
+  { again = false }: { again?: boolean } = {}
 ): Promise<CheckoutRules | null> {
   if (!cartId) {
     return null
@@ -30,6 +32,7 @@ export async function getCheckoutRules(
         method: "GET",
         headers: { ...(await getAuthHeaders()) },
         cache: "no-store",
+        ...(again ? { signal: new AbortController().signal } : {}),
       }
     )
     return parseCheckoutRules(json)

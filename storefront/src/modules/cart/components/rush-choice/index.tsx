@@ -276,8 +276,9 @@ export const RushCodHint = ({ className }: { className?: string }) => {
     return null
   }
   return (
-    <p className={clx("type-small text-brand-ink", className)} data-testid="cod-rush-hint">
-      {words.codHint}{" "}
+    // the sentence, then the action on a line of its own, so its 44 px hit area never spreads the sentence's lines
+    <div className={clx("flex flex-col items-start type-small text-brand-ink", className)} data-testid="cod-rush-hint">
+      <p>{words.codHint}</p>
       <button
         type="button"
         onClick={() => state.choose("standard")}
@@ -287,7 +288,7 @@ export const RushCodHint = ({ className }: { className?: string }) => {
       >
         {words.chooseStandard}
       </button>
-    </p>
+    </div>
   )
 }
 
