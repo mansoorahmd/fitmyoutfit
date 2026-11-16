@@ -158,10 +158,18 @@ describe("the cart's cached reads after a region switch", () => {
   })
 })
 
+describe("the cart page reads the cart fresh (QA S1-4, D1)", () => {
+  it("asks the backend every time, with completed_at, so an ordered cart is never shown from an old copy", async () => {
+    await retrieveCartForPage()
+    await retrieveCartForPage()
+    expect(backend.hits).toBe(2)
+  })
+})
+
 describe("every change to the cart makes every cached read of it ask the backend again", () => {
+  // The cart page's cart is not here: it is read fresh every time (below).
   const reads: [string, () => Promise<unknown>][] = [
     ["the header's cart", () => retrieveCart()],
-    ["the cart page's cart", () => retrieveCartForPage()],
     ["the cart page's shipping options", () => listCartOptions()],
     ["the checkout's shipping options", () => listCartShippingMethods("cart_1")],
   ]

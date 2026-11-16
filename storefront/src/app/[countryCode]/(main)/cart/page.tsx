@@ -6,10 +6,15 @@ import { getCheckoutRules } from "@lib/data/checkout-rules"
 import { getGarmentsCollection } from "@lib/data/collections"
 import { retrieveCustomer } from "@lib/data/customer"
 import { getRegion } from "@lib/data/regions"
+import { cartInOtherRegion } from "@lib/util/checkout-view"
 import EmptyCartMessage from "@modules/cart/components/empty-cart-message"
+import MoveCartToRegion from "@modules/cart/components/move-cart-to-region"
+import RegionMovedNotice from "@modules/cart/components/region-moved-notice"
 import { UndoToastProvider } from "@modules/cart/components/undo-toast/provider"
 import CartTemplate from "@modules/cart/templates"
+import CompletedCartRecovery from "@modules/checkout/components/completed-cart"
 import ServerError from "@modules/common/components/server-error"
+import SkeletonCartPage from "@modules/skeletons/templates/skeleton-cart-page"
 import ProductRail, {
   GarmentsSection,
 } from "@modules/home/components/featured-products/product-rail"
@@ -37,6 +42,12 @@ export default async function Cart(props: {
     return <ServerError />
   }
 
+  // Already an order (the answer to "Place order" was lost): its
+  // confirmation, never the ordered cart as a live one (QA S1-4, D1).
+  if (cart?.completed_at) {
+    return <CompletedCartRecovery countryCode={countryCode} cartId={cart.id} />
+  }
+
   if (!cart?.items?.length) {
     const [region, garments] = await Promise.all([
       getRegion(countryCode),
@@ -54,6 +65,13 @@ export default async function Cart(props: {
     )
   }
 
+  // A cart from another region (the visitor typed /pk/cart with a UK cart)
+  // is moved to the URL's region before it is shown.
+  const region = await getRegion(countryCode)
+  if (cartInOtherRegion(cart, region?.id)) {
+    return <MoveCartToRegion countryCode={countryCode} fallback={<SkeletonCartPage />} />
+  }
+
   const [rules, options] = await Promise.all([
     getCheckoutRules(cart.id),
     listCartOptions()
@@ -61,8 +79,19 @@ export default async function Cart(props: {
       .catch(() => null),
   ])
 
+  const countryName =
+    region?.countries?.find((c) => c.iso_2?.toLowerCase() === countryCode)?.display_name ??
+    countryCode.toUpperCase()
+
   return (
     <UndoToastProvider>
+      <div className="content-container pt-4 empty:hidden">
+        <RegionMovedNotice
+          countryCode={countryCode}
+          countryName={countryName}
+          currencyCode={cart.currency_code}
+        />
+      </div>
       <CartTemplate
         cart={cart}
         rules={rules}

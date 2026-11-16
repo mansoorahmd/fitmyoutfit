@@ -27,6 +27,8 @@ export const footerContent = {
       { label: "Sign in", href: "/account" },
       { label: "Cart", href: "/cart" },
     ] as FooterLink[],
+    /** For a signed-in customer, in place of "Sign in" (the header says "Account" too). */
+    signedInLink: { label: "Your account", href: "/account" } as FooterLink,
   },
   regionLabel: "Region",
   /** After "© <year> <store name>." */
