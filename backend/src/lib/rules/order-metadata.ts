@@ -222,8 +222,20 @@ export type OrderPromiseInput = {
   createdAt: Date
   /** The delivery days settings as they are now. */
   days: SettingResult<DeliveryDays>
-  /** Which date applies to the order. */
+  /**
+   * Which date applies to the order: from the lines it was placed with when those are known
+   * (`appliesFromPlacement`), else from its lines now.
+   */
   applies: DeliverySpeed
+  /**
+   * True when `applies` comes from the lines the order was placed with (an order made from a cart:
+   * Medusa keeps its first version's lines). An order's promised date is fixed when it is placed,
+   * and a later order edit never changes it (QA's thirteenth review, A1): with the placement lines
+   * known, a kept promise for another speed is not the order's own. False (an order converted
+   * from a draft, whose first version is not its placement): a kept promise that is otherwise the
+   * order's own keeps its own `applies`, whatever the lines say now. Default true.
+   */
+  appliesFromPlacement?: boolean
   trust: PromiseTrust
 }
 
@@ -242,7 +254,8 @@ export type OrderPromiseOutcome =
 
 /**
  * Whether a kept promise is the order's own: a valid promise (readPromisedDelivery) for the date
- * that applies to the order (`applies`), based on the order's own creation date in Asia/Karachi,
+ * that applied when the order was placed (`applies`, when `appliesFromPlacement`; an order edit
+ * since then changes nothing), based on the order's own creation date in Asia/Karachi,
  * with `date` = `based_on` + `days`, and not a copy of the promise its cart carried. The days may
  * differ from today's setting: an order keeps the days of the setting when it was placed.
  *
@@ -254,9 +267,9 @@ export type OrderPromiseOutcome =
  */
 export function isOrderOwnPromise(
   kept: PromisedDelivery,
-  input: Pick<OrderPromiseInput, "cartKept" | "createdAt" | "applies">
+  input: Pick<OrderPromiseInput, "cartKept" | "createdAt" | "applies" | "appliesFromPlacement">
 ): boolean {
-  if (kept.applies !== input.applies) {
+  if ((input.appliesFromPlacement ?? true) && kept.applies !== input.applies) {
     return false
   }
   if (kept.based_on !== calendarDateIn(input.createdAt, DELIVERY_TIME_ZONE)) {

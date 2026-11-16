@@ -217,6 +217,38 @@ describe("decideOrderPromise", () => {
     expect(input({ kept, applies: "rush" })).toEqual({ action: "write", promise: rushPromise })
   })
 
+  // QA's thirteenth review, A1: an order's promised date is fixed when the order is placed; a
+  // later order edit (the rush line added or removed) never changes it.
+  it("judges a kept promise against the lines the order was placed with, not its lines now", () => {
+    const rushPromise = { date: "2026-11-21", days: 10, based_on: "2026-11-11", applies: "rush" }
+    // Placed with rush (the placement lines), rush line removed in an edit since, days changed: kept.
+    expect(input({ kept: rushPromise, applies: "rush", appliesFromPlacement: true, days: changed })).toEqual({
+      action: "keep",
+      promise: rushPromise,
+    })
+    // Placed without rush, rush added in an edit since: kept.
+    expect(input({ kept, applies: "standard", appliesFromPlacement: true, days: changed })).toEqual({ action: "keep", promise: kept })
+    // With the placement lines known, a promise for another speed is not the order's own.
+    expect(input({ kept, applies: "rush", appliesFromPlacement: true })).toEqual({ action: "write", promise: rushPromise })
+  })
+
+  it("keeps the kept promise's own applies when the placement lines are not known (an order from a draft)", () => {
+    const rushPromise = { date: "2026-11-21", days: 10, based_on: "2026-11-11", applies: "rush" }
+    // Its lines now say standard (rush removed in an edit): the kept rush promise stays.
+    expect(input({ kept: rushPromise, applies: "standard", appliesFromPlacement: false, days: changed })).toEqual({
+      action: "keep",
+      promise: rushPromise,
+    })
+    expect(input({ kept, applies: "rush", appliesFromPlacement: false })).toEqual({ action: "keep", promise: kept })
+    // The old-cart protection still holds: a copy of the cart's promise is replaced.
+    expect(input({ kept: forged, cartKept: forged, applies: "rush", appliesFromPlacement: false })).toEqual({
+      action: "write",
+      promise: rushPromise,
+    })
+    // ...and so is a promise based on another date.
+    expect(input({ kept: yesterday, appliesFromPlacement: false })).toEqual({ action: "write", promise: kept })
+  })
+
   it("never invents a date when the settings are invalid", () => {
     expect(input({ days: invalidDays })).toEqual({ action: "fail", error: invalidDays.error, clear: false })
     expect(input({ kept: null, days: invalidDays })).toEqual({ action: "fail", error: invalidDays.error, clear: false })
