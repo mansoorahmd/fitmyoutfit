@@ -278,6 +278,8 @@ export function createAutosave(options: {
   let timer: unknown = null;
   let state: SaveState | null = null;
   let running: Promise<void> = Promise.resolve();
+  // Every save started gets a number: only the newest one may say "saved" (E3c, S9).
+  let started = 0;
   const set = (next: SaveState) => {
     state = next;
     options.onState?.(next);
@@ -290,13 +292,15 @@ export function createAutosave(options: {
     const design = pending;
     pending = null;
     if (!design) return running;
+    const mine = ++started;
     // One save at a time, in order: the later save always wins.
     running = running
       .catch(() => undefined)
       .then(() => options.save(design))
       .then(
         () => {
-          if (pending === null && timer === null) set("saved");
+          // "Saved" only when nothing newer waits: no change scheduled, none waiting, no later save still running.
+          if (mine === started && pending === null && timer === null) set("saved");
         },
         (error: unknown) => {
           set("failed");
