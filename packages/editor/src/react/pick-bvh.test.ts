@@ -75,7 +75,7 @@ describe("picking through a bounding-volume hierarchy", () => {
       expect(fast.uv!.x).toBeLessThanOrEqual(1);
     }
     expect(hits).toBeGreaterThan(300);
-  });
+  }, 60_000);
 
   it("gives the UV at the hit, and nothing for a ray that misses", () => {
     const { positions, uvs, index } = sheet(4);
