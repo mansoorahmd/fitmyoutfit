@@ -117,6 +117,10 @@ interface Config {
   placements: PlacementPreset[];
   /** Print areas by piece id, in the generated pieces' millimetres (N6; placeholders until the factories give theirs). */
   printAreas?: Record<string, { x: number; y: number; width: number; height: number }>;
+  /** The smallest item per kind, in mm (E3c; placeholders; copied into the product definition). */
+  minItemSize?: ProductDefinition["minItemSize"];
+  /** Where new logos and free text go first (E3c; copied into the product definition). */
+  placementOrder?: ProductDefinition["placementOrder"];
   outlineToleranceMm: number;
   /** How the pieces are packed into the texture (model-prep/packing.ts; default "shelf"). */
   packing?: "shelf" | "skyline" | "best";
@@ -417,6 +421,8 @@ const productJson = {
   }),
   zones: config.zones,
   placements: config.placements,
+  ...(config.minItemSize ? { minItemSize: config.minItemSize } : {}),
+  ...(config.placementOrder ? { placementOrder: config.placementOrder } : {}),
 };
 const checked = validateProductDefinition(productJson);
 if (!checked.ok) throw new Error(`The generated product definition is invalid:\n${checked.errors.map((e) => `${e.path}: ${e.message}`).join("\n")}`);
