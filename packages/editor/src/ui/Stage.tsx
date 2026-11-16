@@ -5,7 +5,7 @@
  * reset), and the model's credit line. The garment is framed in the free
  * area above (or beside) the panel by the canvas itself (`viewInsets`).
  */
-import { useEffect, useMemo, useState, type ReactNode, type Ref } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
 import { DesignCanvas, type CameraInfo, type DesignCanvasHandle, type DesignCanvasProps, type SelectionGeometry } from "../react/DesignCanvas.js";
 import { createBus } from "./handles.js";
 import { SelectionOverlay } from "./SelectionOverlay.js";
@@ -119,6 +119,19 @@ export function Stage({ canvasRef, ...props }: StageProps) {
   const sides = ["front", "back", "left", "right"] as const;
   // The selected item's box on the screen, from the canvas to the overlay (only the overlay re-renders per frame).
   const bus = useMemo(() => createBus<SelectionGeometry | null>(null), []);
+  // The width of "On this kit" (an icon on a narrow stage, words on a wider one): the top band leaves it room.
+  const kitPlace = useRef<HTMLDivElement>(null);
+  const [kitWidth, setKitWidth] = useState(44);
+  useEffect(() => {
+    const el = kitPlace.current;
+    if (!el) return;
+    const measure = () => setKitWidth(el.offsetWidth || 44);
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [props.kitButton]);
   return (
     <div className="fmo-stage" data-tone={props.tone} data-testid="stage" style={props.credit && mode === "3d" ? ({ "--fmo-credit-room": `${CREDIT_ROOM}px` } as React.CSSProperties) : undefined} onPointerDownCapture={props.onStagePointerDown}>
       <div className="fmo-stage-deep" />
@@ -188,7 +201,8 @@ export function Stage({ canvasRef, ...props }: StageProps) {
           )}
         </div>
       )}
-      <div className="fmo-stage-top" style={{ right: insets.right }}>
+      {/* The hint and the status line stay clear of "On this kit" at the top right (E3c: they overlapped in landscape). */}
+      <div className="fmo-stage-top" style={{ right: insets.right, paddingInlineEnd: props.kitButton ? kitWidth + 16 : undefined }}>
         {hintShown && (
           <div className="fmo-hint" data-testid="stage-hint">
             {props.hint}
@@ -214,7 +228,7 @@ export function Stage({ canvasRef, ...props }: StageProps) {
         </div>
       </div>
       {props.kitButton && (
-        <div className="fmo-kit-place" style={{ insetInlineEnd: (layout === "short" ? insets.right : 0) + 8 }}>
+        <div ref={kitPlace} className="fmo-kit-place" style={{ insetInlineEnd: (layout === "short" ? insets.right : 0) + 8 }}>
           {props.kitButton}
           {props.kitPopover}
         </div>

@@ -203,7 +203,7 @@ export const EDITOR_CSS = /* css */ `
 .fmo-status:empty { display: none; }
 .fmo-status button { height: 32px; padding: 0 12px; border: 1px solid rgb(255 255 255 / 0.7); border-radius: 16px; background: transparent; color: #fff; cursor: pointer; font-weight: 600; }
 .fmo-status-quiet { padding-inline-end: 14px; }
-.fmo-hint { padding: 6px 12px; border-radius: 16px; background: var(--fmo-overlay-control); border: 1px solid var(--fmo-border); font-size: 13px; line-height: 18px; max-width: calc(100% - 8px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fmo-hint { padding: 4px 12px; border-radius: 16px; background: var(--fmo-overlay-control); border: 1px solid var(--fmo-border); font-size: 13px; line-height: 17px; max-width: calc(100% - 8px); box-sizing: border-box; text-align: center; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .fmo-banner { align-self: stretch; display: flex; gap: 8px; align-items: flex-start; padding: 10px 12px; border-radius: var(--fmo-radius-card); background: var(--fmo-surface); border: 1px solid var(--fmo-border); font-size: 14px; }
 .fmo-credit { position: absolute; top: 0; inset-inline-start: 8px; z-index: 3; height: 24px; display: flex; align-items: center; gap: 2px; margin: 0; font-size: 11px; line-height: 16px; color: var(--fmo-ink-muted); text-align: start; }
 .fmo-credit-line { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
