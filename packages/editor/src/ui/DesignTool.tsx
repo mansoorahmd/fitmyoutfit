@@ -28,7 +28,7 @@ let pumping = false;
 /** When the browser is idle (S1: the cards stay off the path of a tap), else on the next task. */
 function later(fn: () => void): void {
   const idle = (globalThis as { requestIdleCallback?: (fn: () => void, options?: { timeout: number }) => void }).requestIdleCallback;
-  if (idle) idle(fn, { timeout: 1000 });
+  if (idle) idle(fn, { timeout: 3000 });
   else setTimeout(fn, 0);
 }
 
@@ -111,6 +111,9 @@ function TemplateCard({ template, design, previous, current, onPick, images, ver
         // The same picture as last time (after a tap, most cards do not change): nothing to draw.
         const key = `${version}|${JSON.stringify(applied)}`;
         if (key === drawn.current) return;
+        // The drawing is its own idle job (S1: shorter jobs, so a tap is not kept waiting behind a card).
+        scheduleCard(() => {
+        if (cancelled) return;
         const tex = scratchTexture();
         const insideTex = scratchTexture(CARD_INSIDE_TEXTURE);
         const ctx = canvas.getContext("2d");
@@ -130,8 +133,9 @@ function TemplateCard({ template, design, previous, current, onPick, images, ver
         } catch (error) {
           console.error("template card", template.id, error);
         }
+        });
       });
-    }, 250);
+    }, 400);
     return () => {
       cancelled = true;
       clearTimeout(timer);
