@@ -182,6 +182,7 @@ export const EDITOR_WORDING = {
     missingFile: "A logo in this design isn't on this device any more. Add it again, or remove it.", // NEW (E3c, S2): said when a saved design opens
     missingCard: "This logo's file isn't on this device any more.", // NEW (E3c, S2): on the logo's card
     addAgain: "Add it again", // NEW (E3c, S2)
+    tooMany: "A kit can carry up to {count} logos. Remove one to add another.", // NEW (E3c): several files dropped at once, beyond the limit
     storageFull: "This device's storage is full, so your logo couldn't be kept. Free some space (or remove logos you no longer use), then try again.", // NEW (E3c, S4): with Try again
     replace: "Replace", // W-ED98
     remove: "Remove", // W-ED98

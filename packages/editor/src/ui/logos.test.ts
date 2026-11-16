@@ -14,7 +14,7 @@ import { addCatalogFont } from "../design/font-catalog";
 import { setRoleSlot } from "../design/roles";
 import { designChecks, itemChecks } from "./checks";
 import { EDITOR_WORDING as W } from "./content";
-import { logoIsBlurry, logoSizeWord, makeLogoSharp, nextPreset, placementOrder, replaceLogoAsset, sharpWidth } from "./logos";
+import { countLogos, logoIsBlurry, logoLimit, logoSizeWord, makeLogoSharp, nextPreset, placementOrder, replaceLogoAsset, sharpWidth } from "./logos";
 import type { DesignDocument, LogoAssetRef } from "../design/schema";
 
 const product = loadStandInJerseyProduct();
@@ -112,5 +112,14 @@ describe("the checks summary (9.2)", () => {
   it("is empty for a kit with nothing to check", () => {
     const d = withLogo(1200);
     expect(designChecks(W, product, d, { notes: {}, palette }).filter((c) => c.layerId === "logo-1")).toEqual([]);
+  });
+});
+
+describe("several logos at once (E3c minor)", () => {
+  it("allows one per place that takes a logo, from the product's data", () => {
+    const limit = logoLimit(product);
+    expect(limit).toBe(product.placements.filter((p) => p.roles.includes("crest") || p.roles.includes("sponsor")).length);
+    expect(limit).toBeGreaterThanOrEqual(3);
+    expect(countLogos(withLogo(800))).toBe(1);
   });
 });

@@ -680,6 +680,7 @@ export function EditorShell(props: EditorShellProps) {
     // While a drag, resize or turn goes on, the tools see the design as it was when it started (5.3: the
     // stage is what must stay quick; the panel catches up on release).
     design: frozenDesign ?? design,
+    latestDesign: () => designRef.current,
     commit,
     begin: (label) => history.begin(label),
     preview,

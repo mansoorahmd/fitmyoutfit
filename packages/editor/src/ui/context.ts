@@ -50,6 +50,8 @@ export interface EditorApi {
   setDetent(detent: PanelDetent): void;
   /** The design as it is (not a hover preview). */
   design: DesignDocument;
+  /** The design as it is at this moment, even between two renders (an async flow adding several files). */
+  latestDesign?(): DesignDocument;
   /** Applies an edit as one undo step. False (and "That change couldn't be made.") when the edit throws. */
   commit(edit: (design: DesignDocument) => DesignDocument, label: EditLabel): boolean;
   /** A gesture (typing): begin, preview as often as needed, end: one undo step. */

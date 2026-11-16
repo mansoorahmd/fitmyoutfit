@@ -48,16 +48,21 @@ function scheduleCard(job: () => void): void {
   later(pump);
 }
 
-/** One shared canvas for the cards' textures, made when first needed. */
-let scratch: { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D } | null = null;
-function scratchTexture() {
+/** The inside of the garment (seen through the neck) is drawn without prints, small (E3c). */
+const CARD_INSIDE_TEXTURE = 128;
+
+/** Shared canvases for the cards' textures (the outside, and the inside), made when first needed. */
+const scratches = new Map<number, { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D }>();
+function scratchTexture(size = CARD_TEXTURE) {
+  let scratch = scratches.get(size);
   if (!scratch) {
     const canvas = document.createElement("canvas");
-    canvas.width = CARD_TEXTURE;
-    canvas.height = CARD_TEXTURE;
+    canvas.width = size;
+    canvas.height = size;
     const ctx = canvas.getContext("2d", { willReadFrequently: true });
     if (!ctx) return null;
     scratch = { canvas, ctx };
+    scratches.set(size, scratch);
   }
   return scratch;
 }
@@ -107,6 +112,7 @@ function TemplateCard({ template, design, previous, current, onPick, images, ver
         const key = `${version}|${JSON.stringify(applied)}`;
         if (key === drawn.current) return;
         const tex = scratchTexture();
+        const insideTex = scratchTexture(CARD_INSIDE_TEXTURE);
         const ctx = canvas.getContext("2d");
         if (cancelled || !tex || !ctx) return;
         const start = performance.now();
@@ -116,6 +122,7 @@ function TemplateCard({ template, design, previous, current, onPick, images, ver
             view: garmentView,
             images: images.lookup,
             texture: { ctx: tex.ctx, size: CARD_TEXTURE, read: () => samplerFromRgba(tex.ctx.getImageData(0, 0, CARD_TEXTURE, CARD_TEXTURE).data, CARD_TEXTURE, CARD_TEXTURE) },
+            ...(insideTex ? { insideTexture: { ctx: insideTex.ctx, size: CARD_INSIDE_TEXTURE, read: () => samplerFromRgba(insideTex.ctx.getImageData(0, 0, CARD_INSIDE_TEXTURE, CARD_INSIDE_TEXTURE).data, CARD_INSIDE_TEXTURE, CARD_INSIDE_TEXTURE) } } : {}),
           });
           ctx.putImageData(out, 0, 0);
           drawn.current = key;

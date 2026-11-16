@@ -93,3 +93,16 @@ export function nextPreset(product: Pick<ProductDefinition, "placementOrder" | "
   const ordered = placementOrder(product, kind).flatMap((id) => presets.filter((p) => p.id === id));
   return ordered.find((p) => !used.has(p.id)) ?? ordered[0] ?? null;
 }
+
+/**
+ * How many logos a kit may carry (E3c): one per place on the product that takes a logo (data, not code: the
+ * product's presets). Placeholder until the factories say otherwise.
+ */
+export function logoLimit(product: Pick<ProductDefinition, "placements">): number {
+  return Math.max(1, product.placements.filter((p) => p.roles.includes("crest") || p.roles.includes("sponsor")).length);
+}
+
+/** The logos on a design. */
+export function countLogos(design: Pick<DesignDocument, "layers">): number {
+  return design.layers.filter((l) => l.kind === "logo").length;
+}

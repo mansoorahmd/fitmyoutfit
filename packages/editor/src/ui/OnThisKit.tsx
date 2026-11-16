@@ -62,6 +62,16 @@ export function OnThisKit({ onDone }: { onDone: () => void }) {
   const pick = (layer: Layer) => {
     api.select(layer.id, { turn: true, openTool: true });
     onDone();
+    // Focus goes to the selected item's tool (E3c minor), not to the page: two frames, once the tool is shown.
+    if (typeof requestAnimationFrame === "function") {
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => {
+          const panel = document.getElementById("fmo-panel");
+          const target = panel?.querySelector<HTMLElement>('[data-testid="selected-item-section"] summary, [data-testid="selected-item-section"] button') ?? panel?.querySelector<HTMLElement>("input, button, summary");
+          target?.focus({ preventScroll: true });
+        }),
+      );
+    }
   };
   return (
     <div className="fmo-kit" ref={list} data-testid="kit-list">
