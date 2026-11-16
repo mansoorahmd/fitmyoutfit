@@ -179,6 +179,9 @@ export const EDITOR_WORDING = {
     makeSharp: "Make it sharp", // W-ED96b
     network: "Your logo didn't upload. Check your connection and try again.", // W-ED97
     tryAgain: "Try again", // W-ED97
+    missingFile: "A logo in this design isn't on this device any more. Add it again, or remove it.", // NEW (E3c, S2): said when a saved design opens
+    missingCard: "This logo's file isn't on this device any more.", // NEW (E3c, S2): on the logo's card
+    addAgain: "Add it again", // NEW (E3c, S2)
     storageFull: "This device's storage is full, so your logo couldn't be kept. Free some space (or remove logos you no longer use), then try again.", // NEW (E3c, S4): with Try again
     replace: "Replace", // W-ED98
     remove: "Remove", // W-ED98

@@ -260,15 +260,20 @@ function LogoCard({ logo, onReplace }: { logo: LogoLayer; onReplace: () => void 
   const sizeWord = logoSizeWord(product, logo);
   const limits = logoSizeLimits(product, logo);
   const selected = api.selectedId === logo.id;
+  // The file is not on this device (S2): it would be ordered without its picture.
+  const missing = api.missingAssets?.has(logo.asset.assetId) ?? false;
+  const remove = () => {
+    if (api.commit((d) => removeLayer(d, logo.id), "remove-item") && selected) api.select(null);
+  };
   return (
-    <div className="fmo-item" data-testid={`logo-${logo.id}`} data-selected={selected}>
+    <div className="fmo-item" data-testid={`logo-${logo.id}`} data-selected={selected} data-missing={missing}>
       <div className="fmo-item-head">
         <button type="button" className="fmo-item-pick" aria-label={fill(w.selectName, { file: name })} aria-pressed={selected} onClick={() => api.select(logo.id, { turn: true })} data-testid={`select-${logo.id}`}>
           {url ? <img src={url} alt="" /> : <EditorIcon name="logos" />}
           <span className="fmo-item-name fmo-bdi" dir="auto">
             {fill(w.logoName, { file: name })}
           </span>
-          {(blurry || (note?.box && !note.kept)) && (
+          {(missing || blurry || (note?.box && !note.kept)) && (
             <span className="fmo-badge" aria-hidden="true">
               <EditorIcon name="alert" size={16} />
             </span>
@@ -281,14 +286,25 @@ function LogoCard({ logo, onReplace }: { logo: LogoLayer; onReplace: () => void 
           type="button"
           className="fmo-btn fmo-btn-text"
           aria-label={fill(w.removeName, { file: name })}
-          onClick={() => {
-            if (api.commit((d) => removeLayer(d, logo.id), "remove-item") && selected) api.select(null);
-          }}
+          onClick={remove}
           data-testid={`remove-${logo.id}`}
         >
           {w.remove}
         </button>
       </div>
+      {missing && (
+        <Alert kind="warning" testId={`logo-missing-${logo.id}`}>
+          <p>{w.missingCard}</p>
+          <div className="fmo-row">
+            <button type="button" className="fmo-btn" onClick={onReplace} data-testid={`add-again-${logo.id}`}>
+              {w.addAgain}
+            </button>
+            <button type="button" className="fmo-btn fmo-btn-text" onClick={remove} data-testid={`missing-remove-${logo.id}`}>
+              {w.remove}
+            </button>
+          </div>
+        </Alert>
+      )}
       <span className="fmo-label">{w.where}</span>
       <ItemWhere layer={logo} role={logo.role} />
       <div className="fmo-stepper-row">

@@ -70,7 +70,7 @@ export function OnThisKit({ onDone }: { onDone: () => void }) {
         <ul className="fmo-kit-rows" role="list">
           {items.map((layer, k) => {
             const words = itemWords(wording, product, layer, { fileName: assets.fileName });
-            const warn = itemChecks(product, design, layer, { notes: api.logoNotes }).length > 0;
+            const warn = itemChecks(product, design, layer, { notes: api.logoNotes, missingAssets: api.missingAssets }).length > 0;
             const index = design.layers.length - 1 - k;
             return (
               <li key={layer.id} className="fmo-kit-row" data-selected={api.selectedId === layer.id} data-testid={`kit-row-${layer.id}`}>

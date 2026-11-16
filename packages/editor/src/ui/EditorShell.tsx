@@ -17,6 +17,7 @@ import type { DesignDocument, ProductDefinition } from "../design/schema.js";
 import type { Template } from "../design/template.js";
 import { collectFitNotices, fitDesignToAreas } from "../design/print-area.js";
 import { makeReadable } from "../design/readability.js";
+import { assetsNoLongerUsed, designAssetIds } from "../storage/device-store.js";
 import { createItemGestures, forwardGestures, type GestureEndReason, type GesturePhase, type ItemGestures } from "./item-gestures.js";
 import { layerSide } from "../design/roles.js";
 import { sameJson, type EditLabel } from "../state/history.js";
@@ -250,7 +251,10 @@ export function EditorShell(props: EditorShellProps) {
   // The Done panel (9.2).
   const [doneOpen, setDoneOpen] = useState(false);
   // What the upload checks found about each file this session (a logo without a transparent background), by asset id.
-  const [logoNotes, setLogoNotes] = useState<Record<string, LogoNote>>({});
+  // Kept with the files by the host when it can (S3), so "prints as a box" survives a reload.
+  const [logoNotes, setLogoNotes] = useState<Record<string, LogoNote>>(() => ({ ...(props.assets.notes?.() ?? {}) }));
+  // Files the design brought back refers to that are not on this device (S2).
+  const [missingAssets] = useState<ReadonlySet<string>>(() => new Set(props.assets.missing ?? []));
   // A drag, resize or turn is going on (draft quality, 5.3), and which.
   const [placing, setPlacingState] = useState<string | null>(null);
   const [frozenDesign, setFrozenDesign] = useState<DesignDocument | null>(null);
@@ -609,6 +613,26 @@ export function EditorShell(props: EditorShellProps) {
     return () => window.removeEventListener("beforeunload", warn);
   }, [props.saveState]);
 
+  // ---- Files (S7): a stored file no design state refers to any more (the present, every undo and redo step,
+  // an open gesture's start) is let go: the host deletes it and revokes its URL. Files of this session only.
+  const [knownAssets] = useState(() => new Set<string>());
+  const releaseFile = assets.release;
+  useEffect(() => {
+    const h = history.history;
+    for (const state of [h.present, ...h.past, ...h.future]) for (const id of designAssetIds(state)) knownAssets.add(id);
+    if (!releaseFile) return;
+    for (const id of assetsNoLongerUsed(knownAssets, [h.present, ...h.past, ...h.future, h.gestureStart?.value, gestureDraft.current?.start])) {
+      knownAssets.delete(id);
+      releaseFile(id);
+    }
+  }, [history.history, knownAssets, releaseFile]);
+
+  // ---- A logo whose file is missing on this device (S2): said once, when the design opens.
+  useEffect(() => {
+    const missing = designAssetIds(designRef.current).filter((id) => missingAssets.has(id));
+    if (missing.length > 0) announce(wording.logos.missingFile, { ms: 10000 });
+  }, [missingAssets, announce, wording]);
+
   // ---- The one hint, once per design (7.4; E3b): after the start card, in its own band above the garment,
   // gone at the first press on the stage (a drag or a tap).
   const [hintSeen, setHintSeen] = useState(() => !(props.showHint ?? props.showStartCard ?? false));
@@ -691,7 +715,11 @@ export function EditorShell(props: EditorShellProps) {
       }
     },
     logoNotes,
-    setLogoNote: (assetId, note) => setLogoNotes((all) => ({ ...all, [assetId]: { ...all[assetId], ...note } })),
+    setLogoNote: (assetId, note) => {
+      setLogoNotes((all) => ({ ...all, [assetId]: { ...all[assetId], ...note } }));
+      assets.saveNote?.(assetId, note);
+    },
+    missingAssets,
     snapping: snapOn,
     setSnapping: setSnapOn,
     markTiming: (name) => {
@@ -829,8 +857,8 @@ export function EditorShell(props: EditorShellProps) {
   const toolDesign = frozenDesign ?? design;
   const selectionWarn = useMemo(() => {
     const layer = selectedId ? toolDesign.layers.find((l) => l.id === selectedId) : undefined;
-    return layer ? itemChecks(product, toolDesign, layer, { notes: logoNotes }).length > 0 : false;
-  }, [selectedId, toolDesign, product, logoNotes]);
+    return layer ? itemChecks(product, toolDesign, layer, { notes: logoNotes, missingAssets }).length > 0 : false;
+  }, [selectedId, toolDesign, product, logoNotes, missingAssets]);
   const kitInPanel = kitOpen && layout !== "wide" && !startCard;
   const kitPanel = kitInPanel ? (
     <ToolPanel

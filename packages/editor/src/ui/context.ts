@@ -26,6 +26,13 @@ export interface EditorAssets {
   url: AssetUrlResolver;
   /** The file name a logo was uploaded with, when known ("Logo: crest.png"). */
   fileName?: (assetId: string) => string | null;
+  /** E3c, S2: files a design brought back refers to that are not on this device (the coach is told; the item shows it). */
+  missing?: readonly string[];
+  /** E3c, S3: what the checks found about each stored file (a box behind the logo, "Keep it"), kept with the files. */
+  notes?: () => Readonly<Record<string, LogoNote>>;
+  saveNote?: (assetId: string, note: LogoNote) => void;
+  /** E3c, S7: a file no design state in the undo and redo history refers to any more: delete it, revoke its URL. */
+  release?: (assetId: string) => void;
 }
 
 /** A colour zone or a group of shapes, as the Colours tool chooses them. */
@@ -83,6 +90,8 @@ export interface EditorApi {
   /** What the upload checks found about each uploaded file this session (a box behind the logo), by asset id. */
   logoNotes: Readonly<Record<string, LogoNote>>;
   setLogoNote(assetId: string, note: LogoNote): void;
+  /** E3c, S2: logo files the design refers to that are not on this device. */
+  missingAssets?: ReadonlySet<string>;
   /** Snapping to guides while placing (on by default; Alt holds it off with a mouse). */
   snapping: boolean;
   setSnapping(on: boolean): void;

@@ -130,6 +130,11 @@ export interface SavedAsset {
   bytes: Blob;
   mediaType: string;
   fileName: string;
+  /**
+   * What the upload checks found about the file, kept with it (E3c, S3): no transparent background (it prints
+   * as a box), and whether the coach chose "Keep it". So the finding survives a reload.
+   */
+  notes?: { box?: boolean; kept?: boolean };
 }
 
 export class DeviceDesignStore {
@@ -169,6 +174,17 @@ export class DeviceDesignStore {
     return found && found.bytes ? found : null;
   }
 
+  /** Keeps what the checks found about a file with it (S3). Nothing when the file is not stored. */
+  async putAssetNotes(assetId: string, notes: { box?: boolean; kept?: boolean }): Promise<void> {
+    const found = await this.getAsset(assetId);
+    if (found) await this.kv.put("assets", assetId, { ...found, notes: { ...found.notes, ...notes } });
+  }
+
+  /** Deletes one stored file (S7: no design state refers to it any more). */
+  async deleteAsset(assetId: string): Promise<void> {
+    await this.kv.delete("assets", assetId);
+  }
+
   /** Deletes logo files no saved design refers to. Returns the ids deleted. */
   async pruneAssets(): Promise<string[]> {
     const used = new Set<string>();
@@ -184,6 +200,16 @@ export class DeviceDesignStore {
     }
     return removed;
   }
+}
+
+/**
+ * The files to let go (E3c, S7): the ids among `known` that no design state refers to (the present, every
+ * undo and redo step, an open gesture's start). Plain logic; the editor calls the host's `release` for each.
+ */
+export function assetsNoLongerUsed(known: Iterable<string>, states: Iterable<Pick<DesignDocument, "layers"> | null | undefined>): string[] {
+  const used = new Set<string>();
+  for (const state of states) if (state) for (const id of designAssetIds(state)) used.add(id);
+  return [...new Set(known)].filter((id) => !used.has(id));
 }
 
 /** The ids of the logo files a design uses. */
@@ -203,6 +229,12 @@ export interface DeviceAssetStore {
   fileName(assetId: string): string | null;
   /** Loads the files with these ids from the device; returns the ids that are missing. */
   restore(assetIds: readonly string[]): Promise<string[]>;
+  /** What the checks found about each file (S3), as kept with the files: by asset id. */
+  notes(): Record<string, { box?: boolean; kept?: boolean }>;
+  /** Keeps a finding with its file (S3). */
+  saveNote(assetId: string, note: { box?: boolean; kept?: boolean }): void;
+  /** Lets a file go (S7): its stored copy is deleted and its object URL revoked. */
+  release(assetId: string): void;
   dispose(): void;
 }
 
@@ -212,6 +244,7 @@ export function createDeviceAssetStore(store: DeviceDesignStore, options: { pref
   const createUrl = options.createUrl ?? ((blob: Blob) => (typeof URL !== "undefined" && typeof URL.createObjectURL === "function" ? URL.createObjectURL(blob) : null));
   const revokeUrl = options.revokeUrl ?? ((url: string) => URL.revokeObjectURL(url));
   const prefix = options.prefix ?? "device";
+  const notes = new Map<string, { box?: boolean; kept?: boolean }>();
   let counter = 0;
   return {
     async upload(request) {
@@ -240,8 +273,22 @@ export function createDeviceAssetStore(store: DeviceDesignStore, options: { pref
         }
         urls.set(id, createUrl(saved.bytes));
         if (saved.fileName) names.set(id, saved.fileName);
+        if (saved.notes) notes.set(id, { ...saved.notes });
       }
       return missing;
+    },
+    notes: () => Object.fromEntries(notes),
+    saveNote(assetId, note) {
+      notes.set(assetId, { ...notes.get(assetId), ...note });
+      store.putAssetNotes(assetId, note).catch((error: unknown) => console.warn("[editor] a logo's note was not saved:", error));
+    },
+    release(assetId) {
+      const url = urls.get(assetId);
+      if (url) revokeUrl(url);
+      urls.delete(assetId);
+      names.delete(assetId);
+      notes.delete(assetId);
+      store.deleteAsset(assetId).catch((error: unknown) => console.warn("[editor] a logo file was not deleted:", error));
     },
     dispose() {
       for (const url of urls.values()) if (url) revokeUrl(url);
