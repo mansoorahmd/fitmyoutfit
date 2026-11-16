@@ -6,6 +6,7 @@
 import { designReadability, readabilityRemedy, type Readability, type ReadabilityRemedy } from "../design/readability.js";
 import type { Palette } from "../design/palette.js";
 import { isClipped } from "../design/print-area.js";
+import { hasPictographs } from "../design/typed-text.js";
 import type { DesignDocument, ItemRole, Layer, ProductDefinition } from "../design/schema.js";
 import { logoIsBlurry } from "./logos.js";
 import { fill, type EditorWording } from "./content.js";
@@ -33,6 +34,8 @@ export function readabilityWarnings(
   design: DesignDocument,
   palette: Pick<Palette, "colors"> | null,
   roles: readonly ItemRole[] | null = null,
+  /** Items whose colours the coach chose: their fix keeps the letters and adds an outline (B4). */
+  coachColoured: ReadonlySet<string> = new Set(),
 ): ReadabilityWarning[] {
   const out: ReadabilityWarning[] = [];
   for (const r of designReadability(product, design)) {
@@ -45,9 +48,15 @@ export function readabilityWarnings(
       same.layerIds.push(r.layerId);
       continue;
     }
-    out.push({ text, readability: r, layerIds: [r.layerId], remedy: readabilityRemedy(design, r, { palette: palette ?? undefined }) });
+    out.push({ text, readability: r, layerIds: [r.layerId], remedy: readabilityRemedy(design, r, { palette: palette ?? undefined, prefer: coachColoured.has(r.layerId) ? "outline" : "letters" }) });
   }
   return out;
+}
+
+/** The fix button's words: what it will do ("Use white letters", "Add white outline"). */
+export function remedyWords(wording: EditorWording, palette: Pick<Palette, "colors"> | null, remedy: ReadabilityRemedy): string {
+  const colour = colourName(palette, remedy.colour).toLowerCase();
+  return fill(remedy.kind === "outline" ? wording.lettering.addColourOutline : wording.lettering.useLetterColour, { colour });
 }
 
 /** What the editor knows about an uploaded file beyond the design (found by the upload checks, this session). */
@@ -58,16 +67,18 @@ export interface LogoNote {
   kept?: boolean;
 }
 
-export type ItemCheck = "hard-to-read" | "clipped" | "blurry" | "box";
+export type ItemCheck = "hard-to-read" | "clipped" | "blurry" | "box" | "pictographs" | "missing";
 
 /** The open warnings of one item: hard to read, cut off at the seam, low resolution, a box behind the logo (kept boxes are not open). */
 export function itemChecks(
   product: ProductDefinition,
   design: DesignDocument,
   layer: Layer,
-  options: { notes?: Readonly<Record<string, LogoNote>>; hardToRead?: ReadonlySet<string> } = {},
+  options: { notes?: Readonly<Record<string, LogoNote>>; hardToRead?: ReadonlySet<string>; missingAssets?: ReadonlySet<string> } = {},
 ): ItemCheck[] {
   const out: ItemCheck[] = [];
+  // A logo whose file is not on this device (S2): it would be ordered without its picture.
+  if ((layer.kind === "logo" || layer.kind === "clipart") && options.missingAssets?.has(layer.asset.assetId)) out.push("missing");
   const hardToRead = options.hardToRead ?? new Set(designReadability(product, design).filter((r) => !r.passes).map((r) => r.layerId));
   if (hardToRead.has(layer.id)) out.push("hard-to-read");
   if (isClipped(product, layer)) out.push("clipped");
@@ -76,6 +87,8 @@ export function itemChecks(
     const note = options.notes?.[layer.asset.assetId];
     if (note?.box && !note.kept) out.push("box");
   }
+  // Emoji and picture symbols (S5): an older saved design may hold them; they can't be printed in a kit colour.
+  if (layer.kind === "text" && hasPictographs(layer.value)) out.push("pictographs");
   return out;
 }
 
@@ -94,13 +107,13 @@ export function designChecks(
   wording: EditorWording,
   product: ProductDefinition,
   design: DesignDocument,
-  options: { notes?: Readonly<Record<string, LogoNote>>; palette?: Pick<Palette, "colors"> | null; fileName?: (assetId: string) => string | null } = {},
+  options: { notes?: Readonly<Record<string, LogoNote>>; palette?: Pick<Palette, "colors"> | null; fileName?: (assetId: string) => string | null; missingAssets?: ReadonlySet<string> } = {},
 ): DesignCheck[] {
   const results = designReadability(product, design);
   const hardToRead = new Set(results.filter((r) => !r.passes).map((r) => r.layerId));
   const out: DesignCheck[] = [];
   for (const layer of [...design.layers].reverse()) {
-    for (const check of itemChecks(product, design, layer, { notes: options.notes, hardToRead })) {
+    for (const check of itemChecks(product, design, layer, { notes: options.notes, hardToRead, missingAssets: options.missingAssets })) {
       const item = itemWords(wording, product, layer, { fileName: options.fileName });
       let reason: string;
       if (check === "hard-to-read") {

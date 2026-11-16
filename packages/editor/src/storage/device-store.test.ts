@@ -130,6 +130,34 @@ describe("autosave", () => {
     expect(auto.state).toBe("saved");
   });
 
+  it("never says Saved while a newer change still waits: scheduled, or being saved (S9, QA mutation M11)", async () => {
+    const states: SaveState[] = [];
+    const timers = manualTimers();
+    const resolvers: Array<() => void> = [];
+    const auto = createAutosave({ save: () => new Promise<void>((resolve) => resolvers.push(resolve)), onState: (s) => states.push(s), ...timers });
+    // A is being saved; B comes in and waits for its timer.
+    auto.schedule(createDesign(product, { teamName: "A" }));
+    timers.fire();
+    await vi.waitFor(() => expect(resolvers).toHaveLength(1));
+    auto.schedule(createDesign(product, { teamName: "B" }));
+    resolvers[0]!();
+    await new Promise((r) => setTimeout(r, 10));
+    expect(auto.state).toBe("saving");
+    // B's timer fires: B is being saved after A. A third change C waits.
+    timers.fire();
+    await vi.waitFor(() => expect(resolvers).toHaveLength(2));
+    auto.schedule(createDesign(product, { teamName: "C" }));
+    timers.fire();
+    resolvers[1]!();
+    await new Promise((r) => setTimeout(r, 10));
+    // B is saved, but C is still being saved: not "saved" yet.
+    expect(auto.state).toBe("saving");
+    await vi.waitFor(() => expect(resolvers).toHaveLength(3));
+    resolvers[2]!();
+    await vi.waitFor(() => expect(auto.state).toBe("saved"));
+    expect(states.filter((s) => s === "saved")).toHaveLength(1);
+  });
+
   it("flush saves at once (Done, leaving); a failed save says Not saved", async () => {
     const states: SaveState[] = [];
     const timers = manualTimers();

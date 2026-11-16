@@ -88,6 +88,11 @@ export interface DesignViewOptions {
   /** The garment seen from the front (or the back), from `renderGarmentView`, once per product. */
   view: GarmentView;
   texture: CardTexture;
+  /**
+   * A second, small texture for the inside of the garment (E3c): seen through the neck, it is drawn without the
+   * prints, as the 3D view and the flat view draw it. Without it the inside shows the outside's texture.
+   */
+  insideTexture?: CardTexture;
   images?: AssetImageLookup;
 }
 
@@ -98,7 +103,12 @@ export interface DesignViewOptions {
  */
 export function drawDesignView(out: Uint8ClampedArray, product: ProductDefinition, design: DesignDocument, options: DesignViewOptions): DrawPatternResult {
   const result = drawPatternTexture(options.texture.ctx, product, design, { size: options.texture.size, images: options.images });
-  composeGarmentView(options.view, options.texture.read(), out);
+  let inside: TextureSampler | undefined;
+  if (options.insideTexture) {
+    drawPatternTexture(options.insideTexture.ctx, product, { ...design, layers: [] }, { size: options.insideTexture.size });
+    inside = options.insideTexture.read();
+  }
+  composeGarmentView(options.view, options.texture.read(), out, inside);
   return result;
 }
 

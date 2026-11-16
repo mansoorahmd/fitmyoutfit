@@ -15,15 +15,12 @@ import type { FontCatalog } from "../design/font-catalog.js";
 import type { Palette } from "../design/palette.js";
 import type { DesignDocument, ProductDefinition } from "../design/schema.js";
 import type { Template } from "../design/template.js";
-import { updateLayer } from "../design/edit.js";
-import { scaleLayer } from "../design/placement.js";
-import { clampToPrintArea, maxScaleInArea, printAreaOf } from "../design/print-area.js";
-import { printAreaLines, snapPosition, snapReachMm } from "../design/snapping.js";
-import type { Layer } from "../design/schema.js";
-import { snapAngle } from "./handles.js";
-import type { GesturePhase } from "./SelectionOverlay.js";
+import { collectFitNotices, fitDesignToAreas } from "../design/print-area.js";
+import { makeReadable } from "../design/readability.js";
+import { assetsNoLongerUsed, designAssetIds } from "../storage/device-store.js";
+import { createItemGestures, forwardGestures, type GestureEndReason, type GesturePhase, type ItemGestures } from "./item-gestures.js";
 import { layerSide } from "../design/roles.js";
-import type { EditLabel } from "../state/history.js";
+import { sameJson, type EditLabel } from "../state/history.js";
 import { useDesignHistory } from "../react/useDesignHistory.js";
 import type { CameraInfo, DesignCanvasHandle, LayerDragEvent, PieceGuide, TextureDrawInfo, ZoneTap } from "../react/DesignCanvas.js";
 import type { GestureTiming } from "../react/draft-quality.js";
@@ -51,6 +48,7 @@ import { TOOL_ORDER, ToolPanel, ToolTabs } from "./ToolPanel.js";
 import { TopBar } from "./TopBar.js";
 import { hasWebGL2, readLocal, writeLocal } from "./webgl.js";
 import { toolForLayer } from "./selection.js";
+import { namedLabel } from "./items.js";
 import { KitButton, OnThisKit } from "./OnThisKit.js";
 import { DonePanel } from "./DonePanel.js";
 import { itemChecks, type LogoNote } from "./checks.js";
@@ -176,6 +174,26 @@ function useReducedMotion(): boolean {
 
 const RECENT_KEY = "fmo-editor-recent";
 
+/** Whether the selected item stays selected when a tool opens: only in its own tool (E3c minor). */
+export function keepsSelection(design: Pick<DesignDocument, "layers">, selectedId: string, tool: ToolId): boolean {
+  const layer = design.layers.find((l) => l.id === selectedId);
+  return layer ? toolForLayer(layer) === tool : false;
+}
+
+/** The edits that apply a design (B4): names and numbers that would be hard to read get a readable colour. */
+const APPLIES_DESIGN: ReadonlySet<EditLabel> = new Set<EditLabel>(["template", "team-colour", "swap-team-colours"]);
+
+/** The text and number items whose letters' or outline's colour differs between two designs. */
+export function colourChanges(before: DesignDocument, after: DesignDocument): string[] {
+  const was = new Map(before.layers.map((l) => [l.id, l]));
+  return after.layers.flatMap((l) => {
+    if (l.kind !== "text" && l.kind !== "number") return [];
+    const old = was.get(l.id);
+    if (!old || (old.kind !== "text" && old.kind !== "number")) return [];
+    return old.fill.hex !== l.fill.hex || old.outline?.color.hex !== l.outline?.color.hex ? [l.id] : [];
+  });
+}
+
 export function EditorShell(props: EditorShellProps) {
   const { product, palette, fonts, templates, assets } = props;
   const wording = useMemo(() => mergeWording(props.wording), [props.wording]);
@@ -183,7 +201,8 @@ export function EditorShell(props: EditorShellProps) {
   const size = useElementSize(root);
   const layout = chooseLayout(size.width || 390, size.height || 844);
   const reducedMotion = useReducedMotion();
-  const history = useDesignHistory(props.initialDesign);
+  // A design brought back (or upgraded) gets the print-area rule once: every item inside its area.
+  const history = useDesignHistory(() => fitDesignToAreas(props.product, props.initialDesign));
   const design = history.design;
   const designRef = useRef(design);
   useEffect(() => {
@@ -239,7 +258,10 @@ export function EditorShell(props: EditorShellProps) {
   // The Done panel (9.2).
   const [doneOpen, setDoneOpen] = useState(false);
   // What the upload checks found about each file this session (a logo without a transparent background), by asset id.
-  const [logoNotes, setLogoNotes] = useState<Record<string, LogoNote>>({});
+  // Kept with the files by the host when it can (S3), so "prints as a box" survives a reload.
+  const [logoNotes, setLogoNotes] = useState<Record<string, LogoNote>>(() => ({ ...(props.assets.notes?.() ?? {}) }));
+  // Files the design brought back refers to that are not on this device (S2).
+  const [missingAssets] = useState<ReadonlySet<string>>(() => new Set(props.assets.missing ?? []));
   // A drag, resize or turn is going on (draft quality, 5.3), and which.
   const [placing, setPlacingState] = useState<string | null>(null);
   const [frozenDesign, setFrozenDesign] = useState<DesignDocument | null>(null);
@@ -247,7 +269,6 @@ export function EditorShell(props: EditorShellProps) {
     setPlacingState(kind);
     setFrozenDesign(kind ? designRef.current : null);
   }, []);
-  const lastSnap = useRef("");
   const setSelectedId = useCallback((id: string | null) => setSelectedIdState(id), []);
   const [saveInfo, setSaveInfo] = useState(false);
   const [leaving, setLeaving] = useState(false);
@@ -271,12 +292,24 @@ export function EditorShell(props: EditorShellProps) {
     flashTimers.current.forEach(clearTimeout);
   }, []);
 
+  // The items whose colours the coach chose this session (B4: never recoloured when a design is applied).
+  const [coachColoured] = useState(() => new Set<string>());
+  const readable = useCallback((d: DesignDocument) => makeReadable(product, d, palette, { keep: coachColoured }), [product, palette, coachColoured]);
   // ---- Edits: one undo step each; an edit that throws is not applied (10.7).
   const commit = useCallback(
     (edit: (d: DesignDocument) => DesignDocument, label: EditLabel): boolean => {
       try {
         setHover(null);
-        history.commit(edit(designRef.current), label);
+        // The print-area rule may have made an item smaller to fit: never silently (B2).
+        const before = designRef.current;
+        const { value: edited, notices } = collectFitNotices(() => edit(before));
+        // A design applied (a template, the team's colours): every name and number readable (B4), except
+        // colours the coach chose; and the coach's own colour choices are remembered.
+        const value = APPLIES_DESIGN.has(label) ? makeReadable(product, edited, palette, { keep: coachColoured }) : edited;
+        if (label === "colour" || label === "outline") for (const id of colourChanges(before, value)) coachColoured.add(id);
+        // The step says what changed, in the coach's words (10.5: "Body colour", "Logo position").
+        history.commit(value, namedLabel(wording, product, label, before, value) as EditLabel);
+        if (notices.length > 0) announce(wording.selection.madeSmaller);
         return true;
       } catch (error) {
         console.error("[editor] edit refused:", error);
@@ -284,7 +317,7 @@ export function EditorShell(props: EditorShellProps) {
         return false;
       }
     },
-    [history, announce, wording],
+    [history, announce, wording, product, palette, coachColoured],
   );
   const preview = useCallback(
     (edit: (d: DesignDocument) => DesignDocument) => {
@@ -361,6 +394,10 @@ export function EditorShell(props: EditorShellProps) {
       announce(wording.tools.almostReady);
       return;
     }
+    gestures.finish("tool-change");
+    // A tool the selected item does not belong to: the item is let go (E3c minor), so no handles or
+    // "Turn to edit" stay over another tool's view.
+    if (selectedId && keepsSelection(designRef.current, selectedId, next) === false) setSelectedId(null);
     if (startCard) setStartCard(false);
     if (kitOpen) {
       openTool(next, detent === "expanded" ? "expanded" : "normal");
@@ -548,7 +585,8 @@ export function EditorShell(props: EditorShellProps) {
   }, [placing]);
   const onTextureDrawn = useCallback(
     (info: TextureDrawInfo) => {
-      setTextFits(info.textFits);
+      // Only when it changed (S1: a new array every drawing re-rendered the whole editor after each tap).
+      setTextFits((now) => (JSON.stringify(now) === JSON.stringify(info.textFits) ? now : info.textFits));
       const pending = timing.current;
       if (!pending) return;
       timing.current = null;
@@ -586,6 +624,26 @@ export function EditorShell(props: EditorShellProps) {
     return () => window.removeEventListener("beforeunload", warn);
   }, [props.saveState]);
 
+  // ---- Files (S7): a stored file no design state refers to any more (the present, every undo and redo step,
+  // an open gesture's start) is let go: the host deletes it and revokes its URL. Files of this session only.
+  const [knownAssets] = useState(() => new Set<string>());
+  const releaseFile = assets.release;
+  useEffect(() => {
+    const h = history.history;
+    for (const state of [h.present, ...h.past, ...h.future]) for (const id of designAssetIds(state)) knownAssets.add(id);
+    if (!releaseFile) return;
+    for (const id of assetsNoLongerUsed(knownAssets, [h.present, ...h.past, ...h.future, h.gestureStart?.value, gestureDraft.current?.start])) {
+      knownAssets.delete(id);
+      releaseFile(id);
+    }
+  }, [history.history, knownAssets, releaseFile]);
+
+  // ---- A logo whose file is missing on this device (S2): said once, when the design opens.
+  useEffect(() => {
+    const missing = designAssetIds(designRef.current).filter((id) => missingAssets.has(id));
+    if (missing.length > 0) announce(wording.logos.missingFile, { ms: 10000 });
+  }, [missingAssets, announce, wording]);
+
   // ---- The one hint, once per design (7.4; E3b): after the start card, in its own band above the garment,
   // gone at the first press on the stage (a drag or a tap).
   const [hintSeen, setHintSeen] = useState(() => !(props.showHint ?? props.showStartCard ?? false));
@@ -622,6 +680,7 @@ export function EditorShell(props: EditorShellProps) {
     // While a drag, resize or turn goes on, the tools see the design as it was when it started (5.3: the
     // stage is what must stay quick; the panel catches up on release).
     design: frozenDesign ?? design,
+    latestDesign: () => designRef.current,
     commit,
     begin: (label) => history.begin(label),
     preview,
@@ -668,12 +727,18 @@ export function EditorShell(props: EditorShellProps) {
       }
     },
     logoNotes,
-    setLogoNote: (assetId, note) => setLogoNotes((all) => ({ ...all, [assetId]: { ...all[assetId], ...note } })),
+    setLogoNote: (assetId, note) => {
+      setLogoNotes((all) => ({ ...all, [assetId]: { ...all[assetId], ...note } }));
+      assets.saveNote?.(assetId, note);
+    },
+    missingAssets,
     snapping: snapOn,
     setSnapping: setSnapOn,
     markTiming: (name) => {
       timing.current = { name, start: performance.now() };
     },
+    coachColoured: coachColoured,
+    readable,
   };
 
   const selectOnModel = useCallback(
@@ -689,114 +754,88 @@ export function EditorShell(props: EditorShellProps) {
     [selectedId, setSelectedId, startCard, activeTool, tools, openTool, detent],
   );
 
-  // The handles (5.2): a corner scales the item evenly about its centre, the turn handle turns it (snapping at
-  // 0, 15, 45 and 90 degrees unless Alt is held). Each gesture is one undo step.
-  const gestureStart = useRef<Layer | null>(null);
-  const onResize = useCallback(
-    (phase: GesturePhase, factor: number) => {
-      const id = selectedId;
-      if (!id) return;
-      if (phase === "start") {
-        gestureStart.current = designRef.current.layers.find((l) => l.id === id) ?? null;
-        history.begin("resize");
-        setPlacing("resize");
-        return;
-      }
-      const start = gestureStart.current;
-      if (!start) return;
-      if (phase === "cancel") {
-        history.cancel();
-        gestureStart.current = null;
-        setGuides([]);
-        setPlacing(null);
-        return;
-      }
-      const piece = product.pieces.find((p) => p.id === start.pieceId);
-      const limited = piece ? Math.min(factor, maxScaleInArea(printAreaOf(piece), start)) : factor;
-      const scaled = scaleLayer(start, limited);
-      const position = clampToPrintArea(product, { ...start, size: scaled.size });
-      setGuides(phase === "end" ? [] : printAreaLines(product, start.pieceId).map((l) => ({ ...l, kind: "area" as const })));
-      try {
-        history.preview((d) => updateLayer(d, id, { ...scaled, position }, { product }));
-      } catch (error) {
-        console.error("[editor] resize refused:", error);
-      }
-      if (phase === "end") {
-        history.end();
-        gestureStart.current = null;
-        setPlacing(null);
-      }
-    },
-    [selectedId, history, product, setGuides, setPlacing],
-  );
-  const onRotate = useCallback(
-    (phase: GesturePhase, degrees: number, free: boolean) => {
-      const id = selectedId;
-      if (!id) return;
-      if (phase === "start") {
-        gestureStart.current = designRef.current.layers.find((l) => l.id === id) ?? null;
-        history.begin("rotate");
-        setPlacing("rotate");
-        return;
-      }
-      const start = gestureStart.current;
-      if (!start) return;
-      if (phase === "cancel") {
-        history.cancel();
-        gestureStart.current = null;
-        return;
-      }
-      const rotation = snapAngle(start.rotation + degrees, free).angle;
-      const position = clampToPrintArea(product, { ...start, rotation });
-      setGuides(phase === "end" ? [] : printAreaLines(product, start.pieceId).map((l) => ({ ...l, kind: "area" as const })));
-      try {
-        history.preview((d) => updateLayer(d, id, { rotation, position }, { product }));
-      } catch (error) {
-        console.error("[editor] turn refused:", error);
-      }
-      if (phase === "end") {
-        history.end();
-        gestureStart.current = null;
-        setPlacing(null);
-      }
-    },
-    [selectedId, history, product, setGuides, setPlacing],
-  );
-
-  const onLayerDrag = useCallback(
-    (event: LayerDragEvent) => {
-      const areaLines = printAreaLines(product, event.pieceId).map((l) => ({ ...l, kind: "area" as const }));
-      if (event.phase === "start") {
-        history.begin("move");
-        lastSnap.current = "";
-        setGuides(areaLines);
-        setPlacing("move");
-        return;
-      }
-      if (event.phase === "cancel") {
-        history.cancel();
-        setGuides([]);
-        setPlacing(null);
-        return;
-      }
-      const current = designRef.current;
-      const layer = current.layers.find((l) => l.id === event.layerId);
-      if (!layer) return;
-      const snapped = snapPosition(product, current, layer, event.position, { reachMm: snapReachMm(event.pxPerMm), free: Boolean(event.free) || !snapOn });
-      const position = clampToPrintArea(product, layer, snapped.position);
-      history.preview((d) => updateLayer(d, event.layerId, { position }, { product }));
-      // A short buzz on Android when a new line catches the item (7.5), never with reduced motion.
-      const snapKey = snapped.guides.map((g) => `${g.axis}${g.from.x},${g.from.y}`).join("|");
-      if (snapKey && snapKey !== lastSnap.current && !reducedMotion && typeof navigator !== "undefined" && typeof navigator.vibrate === "function") navigator.vibrate(10);
-      lastSnap.current = snapKey;
-      if (event.phase === "end") {
-        history.end();
-        setGuides([]);
-        setPlacing(null);
-      } else setGuides([...areaLines, ...snapped.guides.map((g) => ({ pieceId: g.pieceId, from: g.from, to: g.to, kind: "guide" as const }))]);
-    },
-    [history, product, snapOn, reducedMotion, setGuides, setPlacing],
-  );
+  // Placing an item (5.1, 5.2): a drag, a corner resize or a turn, through one controller, so every way a
+  // gesture ends (release, cancel, lost capture, the handle gone, the tab hidden, a second finger, the window
+  // blurred, another tool, item or the Done panel) commits or cancels it and clears the lines and "placing" (B1).
+  const gestureDeps = useRef({ history, product, snapOn, reducedMotion, announce, wording });
+  useEffect(() => {
+    gestureDeps.current = { history, product, snapOn, reducedMotion, announce, wording };
+  });
+  // The gesture's design while it goes on (S1), outside React state: its start, its latest preview, its label.
+  const gestureDraft = useRef<{ start: DesignDocument; current: DesignDocument; label: EditLabel } | null>(null);
+  // The controller is made once, in an effect (its callbacks read refs); `gestures` forwards to it.
+  const [gestureHolder] = useState<{ current: ItemGestures | null }>(() => ({ current: null }));
+  const [gestures] = useState(() => forwardGestures(gestureHolder));
+  useEffect(() => {
+    gestureHolder.current ??= createItemGestures({
+      product: () => gestureDeps.current.product,
+      design: () => gestureDraft.current?.current ?? designRef.current,
+      // Previews go straight to the canvas, outside React (S1: no re-render of the shell and the tools on
+      // every pointer move); the result is committed as one undo step on release. Without a canvas, the history's gesture.
+      history: {
+        begin: (label) => {
+          if (canvas.current) gestureDraft.current = { start: designRef.current, current: designRef.current, label };
+          else gestureDeps.current.history.begin(label);
+        },
+        preview: (update) => {
+          const g = gestureDraft.current;
+          if (!g) return gestureDeps.current.history.preview(update);
+          const next = update(g.current);
+          if (next === g.current) return;
+          g.current = next;
+          canvas.current?.preview(next);
+        },
+        end: () => {
+          const g = gestureDraft.current;
+          if (!g) return gestureDeps.current.history.end();
+          gestureDraft.current = null;
+          canvas.current?.preview(null);
+          const { wording: words, product: p } = gestureDeps.current;
+          if (!sameJson(g.current, g.start)) gestureDeps.current.history.commit(g.current, namedLabel(words, p, g.label, g.start, g.current) as EditLabel);
+        },
+        cancel: () => {
+          const g = gestureDraft.current;
+          if (!g) return gestureDeps.current.history.cancel();
+          gestureDraft.current = null;
+          canvas.current?.preview(null, { redraw: true });
+        },
+      },
+      setGuides: (g) => setGuides(g),
+      setPlacing: (kind) => setPlacing(kind),
+      snapping: () => gestureDeps.current.snapOn,
+      onSnap: () => {
+        // A short buzz on Android when a new line catches the item (7.5), never with reduced motion.
+        if (!gestureDeps.current.reducedMotion && typeof navigator !== "undefined" && typeof navigator.vibrate === "function") navigator.vibrate(10);
+      },
+      onEnd: ({ shrunk }) => {
+        if (shrunk) gestureDeps.current.announce(gestureDeps.current.wording.selection.madeSmaller);
+      },
+    });
+  });
+  const onResize = useCallback((phase: GesturePhase, factor: number) => selectedId && gestures.resize(selectedId, phase, factor), [selectedId, gestures]);
+  const onRotate = useCallback((phase: GesturePhase, degrees: number, free: boolean) => selectedId && gestures.rotate(selectedId, phase, degrees, free), [selectedId, gestures]);
+  const onLayerDrag = useCallback((event: LayerDragEvent) => gestures.drag(event), [gestures]);
+  const onGestureInterrupt = useCallback((reason: GestureEndReason) => gestures.finish(reason), [gestures]);
+  // The tab hidden or the window blurred: the gesture is cancelled (nothing is left half placed).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onHidden = () => {
+      if (document.visibilityState === "hidden") gestures.finish("hidden");
+    };
+    const onBlur = () => gestures.finish("blur");
+    document.addEventListener("visibilitychange", onHidden);
+    window.addEventListener("blur", onBlur);
+    return () => {
+      document.removeEventListener("visibilitychange", onHidden);
+      window.removeEventListener("blur", onBlur);
+      gestures.finish("unmount");
+    };
+  }, [gestures]);
+  // Another item selected (or none) while placing: what was placed is kept.
+  useEffect(() => {
+    const open = gestures.active();
+    if (open && open.layerId !== selectedId) gestures.finish("selection-change");
+  }, [selectedId, gestures]);
 
   const onStageKey = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     // With an item selected, the arrows move it (the window's key handler, 5.1); the garment does not turn.
@@ -831,8 +870,8 @@ export function EditorShell(props: EditorShellProps) {
   const toolDesign = frozenDesign ?? design;
   const selectionWarn = useMemo(() => {
     const layer = selectedId ? toolDesign.layers.find((l) => l.id === selectedId) : undefined;
-    return layer ? itemChecks(product, toolDesign, layer, { notes: logoNotes }).length > 0 : false;
-  }, [selectedId, toolDesign, product, logoNotes]);
+    return layer ? itemChecks(product, toolDesign, layer, { notes: logoNotes, missingAssets }).length > 0 : false;
+  }, [selectedId, toolDesign, product, logoNotes, missingAssets]);
   const kitInPanel = kitOpen && layout !== "wide" && !startCard;
   const kitPanel = kitInPanel ? (
     <ToolPanel
@@ -929,6 +968,9 @@ export function EditorShell(props: EditorShellProps) {
           onSaveInfo={() => setSaveInfo(true)}
           onClose={() => (props.saveState === "failed" ? setLeaving(true) : props.onClose?.())}
           onDone={() => {
+            gestures.finish("done-panel");
+            // The Done panel lets go of the selected item (E3c minor): no handles behind it.
+            setSelectedId(null);
             setKitOpen(false);
             setDoneOpen(true);
           }}
@@ -1032,6 +1074,7 @@ export function EditorShell(props: EditorShellProps) {
             onStagePointerDown={dismissHint}
             onResize={onResize}
             onRotate={onRotate}
+            onGestureInterrupt={onGestureInterrupt}
             onTurnTo={() => selectedId && canvas.current?.focusOn(selectedId)}
             handlesHidden={typing || doneOpen}
             contextBar={Boolean(selectedLayer) && layout !== "wide" && !typing && mode === "3d" && !doneOpen}

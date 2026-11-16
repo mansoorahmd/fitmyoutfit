@@ -150,7 +150,7 @@ interface Session {
 /** The editor as a coach sees it: the interface of task E3a-2, saving on this device. */
 function EditorPage({ data }: { data: DemoData }) {
   const { product } = data;
-  const [store, setStore] = useState<{ designs: DeviceDesignStore; assets: DeviceAssetStore; persistent: boolean } | null>(null);
+  const [store, setStore] = useState<{ designs: DeviceDesignStore; assets: DeviceAssetStore; persistent: boolean; missing: string[] } | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [saveState, setSaveState] = useState<SaveState | null>(null);
   const [done, setDone] = useState(false);
@@ -170,8 +170,10 @@ function EditorPage({ data }: { data: DemoData }) {
         const assets = createDeviceAssetStore(designs);
         const saved = persistent ? await designs.loadDesign(product).catch(() => null) : null;
         if (!alive) return;
-        if (saved) await assets.restore(designAssetIds(saved.design));
-        setStore({ designs, assets, persistent });
+        // A design brought back: its files (the missing ones are told to the editor, S2); the files it does not use go (S7).
+        const missing = saved ? await assets.restore(designAssetIds(saved.design)) : [];
+        if (saved) await designs.pruneAssets().catch(() => undefined);
+        setStore({ designs, assets, persistent, missing });
         setSession(saved ? { key: 1, design: saved.design, startCard: false, resume: true } : { key: 1, design: newDesign(data), startCard: true, resume: false });
         if (!persistent) setSaveState("failed");
       });
@@ -219,7 +221,10 @@ function EditorPage({ data }: { data: DemoData }) {
   }, []);
 
   const assets = useMemo(
-    () => (store ? { upload: store.assets.upload, url: store.assets.url, fileName: store.assets.fileName } : null),
+    () =>
+      store
+        ? { upload: store.assets.upload, url: store.assets.url, fileName: store.assets.fileName, missing: store.missing, notes: store.assets.notes, saveNote: store.assets.saveNote, release: store.assets.release }
+        : null,
     [store],
   );
   if (!session || !assets || !store) return null;

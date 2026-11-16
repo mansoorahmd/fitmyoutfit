@@ -13,11 +13,8 @@ import {
   evaluateCheckoutRules,
   type CheckoutRules,
 } from "../../lib/rules/checkout-rules"
-import {
-  appliedDeliverySpeed,
-  calendarDateIn,
-  DELIVERY_TIME_ZONE,
-} from "../../lib/rules/delivery-promise"
+import { calendarDateIn, DELIVERY_TIME_ZONE } from "../../lib/rules/delivery-promise"
+import { currencyDigits, RUSH_LINE_FIELDS, ruleLine, type RawLineItem } from "../rush/rush-cart"
 
 type Metadata = Record<string, unknown> | null | undefined
 
@@ -31,7 +28,7 @@ type CartRow = {
     metadata?: Metadata
     countries?: ({ iso_2?: string | null } | null)[] | null
   } | null
-  items?: ({ quantity?: unknown; product?: { metadata?: Metadata } | null } | null)[] | null
+  items?: RawLineItem[] | null
 }
 
 export type LoadedCheckoutRules = {
@@ -67,8 +64,7 @@ export async function loadCheckoutRules(
       "region.name",
       "region.metadata",
       "region.countries.iso_2",
-      "items.quantity",
-      "items.product.metadata",
+      ...RUSH_LINE_FIELDS,
     ],
     filters: { id: cartId },
   })
@@ -89,9 +85,10 @@ export async function loadCheckoutRules(
       item
         ? [
             {
+              // The kind is passed on as it is: the rule counts a missing or unknown kind as a
+              // garment.
+              ...ruleLine(item, item.product?.metadata?.kind),
               quantity: toNumber(item.quantity),
-              // Passed on as it is: the rule counts a missing or unknown kind as a garment.
-              kind: item.product?.metadata?.kind,
             },
           ]
         : []
@@ -102,11 +99,10 @@ export async function loadCheckoutRules(
       metadata: cart.region.metadata,
     },
     currencyCode: cart.currency_code,
+    currencyDigits: await currencyDigits(container, cart.currency_code),
     total,
     storeSettings,
     baseDate: calendarDateIn(now, DELIVERY_TIME_ZONE),
-    // The same answer the order's kept promise uses (workflows/delivery-promise/).
-    deliverySpeed: appliedDeliverySpeed(),
   })
   if (!result.ok) {
     throw new MedusaError(

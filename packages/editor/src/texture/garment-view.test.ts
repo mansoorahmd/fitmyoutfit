@@ -166,3 +166,24 @@ describe("template cards look like the garment (fault 1)", () => {
     expect([...out].every((v) => v === 0)).toBe(true);
   });
 });
+
+describe("the inside seen through the neck (E3c minor)", () => {
+  it("is drawn on a card without the prints, as the flat view and the 3D view draw it", async () => {
+    const { newTextLayer } = await import("../design/new-layers");
+    const { addCatalogFont } = await import("../design/font-catalog");
+    const { addLayer } = await import("../design/edit");
+    const view = renderGarmentView(jerseyMeshes, { width: 80, height: 100 });
+    const font = fonts.fonts.find((f) => f.uses.includes("text"))!;
+    let design = addCatalogFont(setZoneColor(createDesign(jersey), "body_back", RED, { product: jersey }), fonts, font.id);
+    design = addLayer(design, newTextLayer(jersey, { id: "text-1", preset: "back-name", value: "ALI", fontId: font.id, fill: GREEN }), { product: jersey });
+    const outside = rasterTexture();
+    const inside = rasterTexture(64);
+    const out = new Uint8ClampedArray(view.width * view.height * 4);
+    drawDesignView(out, jersey, design, { view, texture: outside, insideTexture: inside });
+    const texts = (t: { ctx: RasterContext }) => t.ctx.calls.filter((c) => c.op === "fillText").length;
+    expect(texts(outside)).toBeGreaterThan(0);
+    expect(texts(inside)).toBe(0);
+    // The inside is drawn (its zones), only without the prints.
+    expect(inside.ctx.calls.length).toBeGreaterThan(0);
+  });
+});

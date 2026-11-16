@@ -24,6 +24,8 @@ import {
   type PromisedDelivery,
 } from "./delivery-promise"
 import type { DeliveryDays } from "../settings/delivery-days"
+import { isFullyCaptured, type CollectionPayment } from "./cash-collection"
+import { COD_PAYMENT_PROVIDER_ID } from "../../modules/cod/constants"
 import type { SettingResult } from "../settings/read-number-setting"
 
 /** Key of the promised delivery in the order's metadata. */
@@ -39,6 +41,130 @@ export const STAFF_ONLY_KEY_PREFIX = "cod_"
 /** Whether only staff may write this metadata key. */
 export function isStaffOnlyKey(key: string): boolean {
   return key.startsWith(STAFF_ONLY_KEY_PREFIX)
+}
+
+/**
+ * A copy of `metadata` without the staff-only keys (what a customer may be shown). Anything that
+ * is not a plain object is returned as it is.
+ */
+export function withoutStaffOnlyKeys<T>(metadata: T): T {
+  if (typeof metadata !== "object" || metadata === null || Array.isArray(metadata)) {
+    return metadata
+  }
+  const entries = Object.entries(metadata as Record<string, unknown>)
+  if (!entries.some(([key]) => isStaffOnlyKey(key))) {
+    return metadata
+  }
+  return Object.fromEntries(entries.filter(([key]) => !isStaffOnlyKey(key))) as T
+}
+
+/**
+ * A store answer about orders (`{ order }` or `{ orders: [...] }`) with the staff-only keys left
+ * out of each order's metadata. Other answers are returned as they are.
+ */
+export function hideStaffOnlyKeysInOrders<T>(body: T): T {
+  if (typeof body !== "object" || body === null) {
+    return body
+  }
+  const answer = body as { order?: unknown; orders?: unknown }
+  const clean = (order: unknown) =>
+    typeof order === "object" && order !== null && "metadata" in order
+      ? { ...order, metadata: withoutStaffOnlyKeys((order as { metadata?: unknown }).metadata) }
+      : order
+  return {
+    ...answer,
+    ...("order" in answer ? { order: clean(answer.order) } : {}),
+    ...(Array.isArray(answer.orders) ? { orders: answer.orders.map(clean) } : {}),
+  } as T
+}
+
+/** The keys an order recorded as collected before 12 Nov (S1-1c) kept in its metadata. */
+export const LEGACY_SLIP_REFERENCE_KEY = "cod_slip_reference"
+export const LEGACY_COLLECTED_AT_KEY = "cod_collected_at"
+
+/** Why a legacy slip reference is not moved into the cash-collection table. */
+export type LegacySlipDropReason =
+  /** The order has no cash-on-delivery payment (a card order, say): there is no cash to record. */
+  | "not_cash_on_delivery"
+  /** Its cash-on-delivery payment is not fully captured: the keys do not prove the cash came in. */
+  | "not_fully_captured"
+  /** Several live cash-on-delivery payments: which one the slip is for is not known. */
+  | "several_payments"
+
+/** What the move of an order's legacy `cod_*` keys into the cash-collection table does. */
+export type LegacyCashCollectionPlan = {
+  /**
+   * The record to create when the order has none: the slip reference (trimmed) and when it was
+   * collected (null when the key holds no valid time; the caller then uses the time of the move).
+   * Null when the keys hold no slip reference, or the slip is dropped (`dropped`).
+   */
+  record: { slip_reference: string; collected_at: string | null } | null
+  /** A slip reference the keys hold but that is not recorded, and why; the caller logs it. */
+  dropped: { slip_reference: string; reason: LegacySlipDropReason } | null
+  /** Every `cod_` key to remove from the order's metadata (all of them, recorded or not). */
+  staffKeys: string[]
+}
+
+/** The slip reference legacy keys hold: a non-blank string, trimmed, or a number as its text. */
+function legacySlipOf(value: unknown): string {
+  if (typeof value === "string") {
+    return value.trim()
+  }
+  // QA's thirteenth review, B2: a numeric slip (12345) is the text "12345", not dropped.
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return String(value)
+  }
+  return ""
+}
+
+/**
+ * The plan for one order's metadata (QA's tenth review, M1; QA's thirteenth review, B2). The slip
+ * reference is kept as it was recorded, even if today's rule would refuse it: it is what staff
+ * entered then. Who recorded it (`cod_collected_by`) is not moved: Medusa's capture record says who
+ * captured (decision 010, point 6).
+ *
+ * A record is planned only for an order whose cash-on-delivery payment is fully captured (the
+ * payment the panel shows: the one live cash-on-delivery payment, or the only one there is), as
+ * the panel's "Collected" needs; any other slip is dropped, with the reason, for the caller to log.
+ * Every `cod_` key is removed either way.
+ */
+export function legacyCashCollectionPlan(
+  metadata: unknown,
+  payments: readonly CollectionPayment[]
+): LegacyCashCollectionPlan {
+  if (typeof metadata !== "object" || metadata === null || Array.isArray(metadata)) {
+    return { record: null, dropped: null, staffKeys: [] }
+  }
+  const values = metadata as Record<string, unknown>
+  const staffKeys = Object.keys(values).filter(isStaffOnlyKey).sort()
+  const slipReference = legacySlipOf(values[LEGACY_SLIP_REFERENCE_KEY])
+  if (slipReference === "") {
+    return { record: null, dropped: null, staffKeys }
+  }
+  const cod = payments.filter((payment) => payment.provider_id === COD_PAYMENT_PROVIDER_ID)
+  const live = cod.filter((payment) => !payment.canceled)
+  const payment = live.length === 1 ? live[0] : live.length === 0 && cod.length === 1 ? cod[0] : null
+  const reason: LegacySlipDropReason | null =
+    cod.length === 0
+      ? "not_cash_on_delivery"
+      : payment === null
+        ? "several_payments"
+        : isFullyCaptured(payment)
+          ? null
+          : "not_fully_captured"
+  if (reason) {
+    return { record: null, dropped: { slip_reference: slipReference, reason }, staffKeys }
+  }
+  const at = values[LEGACY_COLLECTED_AT_KEY]
+  const time = typeof at === "string" ? new Date(at) : null
+  return {
+    record: {
+      slip_reference: slipReference,
+      collected_at: time && !Number.isNaN(time.getTime()) ? time.toISOString() : null,
+    },
+    dropped: null,
+    staffKeys,
+  }
 }
 
 /** Whether a customer may not write this metadata key on a cart. */
@@ -143,8 +269,20 @@ export type OrderPromiseInput = {
   createdAt: Date
   /** The delivery days settings as they are now. */
   days: SettingResult<DeliveryDays>
-  /** Which date applies to the order. */
+  /**
+   * Which date applies to the order: from the lines it was placed with when those are known
+   * (`appliesFromPlacement`), else from its lines now.
+   */
   applies: DeliverySpeed
+  /**
+   * True when `applies` comes from the lines the order was placed with (an order made from a cart:
+   * Medusa keeps its first version's lines). An order's promised date is fixed when it is placed,
+   * and a later order edit never changes it (QA's thirteenth review, A1): with the placement lines
+   * known, a kept promise for another speed is not the order's own. False (an order converted
+   * from a draft, whose first version is not its placement): a kept promise that is otherwise the
+   * order's own keeps its own `applies`, whatever the lines say now. Default true.
+   */
+  appliesFromPlacement?: boolean
   trust: PromiseTrust
 }
 
@@ -163,7 +301,8 @@ export type OrderPromiseOutcome =
 
 /**
  * Whether a kept promise is the order's own: a valid promise (readPromisedDelivery) for the date
- * that applies to the order (`applies`), based on the order's own creation date in Asia/Karachi,
+ * that applied when the order was placed (`applies`, when `appliesFromPlacement`; an order edit
+ * since then changes nothing), based on the order's own creation date in Asia/Karachi,
  * with `date` = `based_on` + `days`, and not a copy of the promise its cart carried. The days may
  * differ from today's setting: an order keeps the days of the setting when it was placed.
  *
@@ -175,9 +314,9 @@ export type OrderPromiseOutcome =
  */
 export function isOrderOwnPromise(
   kept: PromisedDelivery,
-  input: Pick<OrderPromiseInput, "cartKept" | "createdAt" | "applies">
+  input: Pick<OrderPromiseInput, "cartKept" | "createdAt" | "applies" | "appliesFromPlacement">
 ): boolean {
-  if (kept.applies !== input.applies) {
+  if ((input.appliesFromPlacement ?? true) && kept.applies !== input.applies) {
     return false
   }
   if (kept.based_on !== calendarDateIn(input.createdAt, DELIVERY_TIME_ZONE)) {

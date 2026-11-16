@@ -14,7 +14,7 @@ import { addCatalogFont } from "../design/font-catalog";
 import { setRoleSlot } from "../design/roles";
 import { designChecks, itemChecks } from "./checks";
 import { EDITOR_WORDING as W } from "./content";
-import { LOGO_ORDER, logoIsBlurry, logoSizeWord, makeLogoSharp, nextLogoPreset, replaceLogoAsset, sharpWidth } from "./logos";
+import { countLogos, logoIsBlurry, logoLimit, logoSizeWord, makeLogoSharp, nextPreset, placementOrder, replaceLogoAsset, sharpWidth } from "./logos";
 import type { DesignDocument, LogoAssetRef } from "../design/schema";
 
 const product = loadStandInJerseyProduct();
@@ -34,10 +34,19 @@ const logo = (d: DesignDocument) => d.layers.find((l) => l.id === "logo-1") as E
 describe("where logos go (4.6)", () => {
   it("first on the left chest, then the centre of the chest, then the upper back", () => {
     const presets = product.placements.filter((p) => p.roles.includes("sponsor"));
-    expect(LOGO_ORDER.slice(0, 3)).toEqual(["left-chest", "chest-centre", "upper-back"]);
-    expect(nextLogoPreset({ layers: [] }, presets)!.id).toBe("left-chest");
-    expect(nextLogoPreset({ layers: [{ preset: "left-chest" }] } as never, presets)!.id).toBe("chest-centre");
-    expect(nextLogoPreset({ layers: [{ preset: "left-chest" }, { preset: "chest-centre" }] } as never, presets)!.id).toBe("upper-back");
+    // The order is product data (E3c), not code.
+    expect(placementOrder(product, "logo").slice(0, 3)).toEqual(["left-chest", "chest-centre", "upper-back"]);
+    expect(nextPreset(product, "logo", { layers: [] }, presets)!.id).toBe("left-chest");
+    expect(nextPreset(product, "logo", { layers: [{ preset: "left-chest" }] } as never, presets)!.id).toBe("chest-centre");
+    expect(nextPreset(product, "logo", { layers: [{ preset: "left-chest" }, { preset: "chest-centre" }] } as never, presets)!.id).toBe("upper-back");
+  });
+
+  it("follows the product's own order when it gives another, and its presets' order without one", () => {
+    const presets = product.placements.filter((p) => p.roles.includes("sponsor"));
+    const other = { ...product, placementOrder: { logo: ["upper-back", "left-chest"], text: [] } };
+    expect(nextPreset(other, "logo", { layers: [] }, presets)!.id).toBe("upper-back");
+    const none = { ...product, placementOrder: undefined };
+    expect(placementOrder(none, "logo")).toEqual(product.placements.map((p) => p.id));
   });
 });
 
@@ -103,5 +112,14 @@ describe("the checks summary (9.2)", () => {
   it("is empty for a kit with nothing to check", () => {
     const d = withLogo(1200);
     expect(designChecks(W, product, d, { notes: {}, palette }).filter((c) => c.layerId === "logo-1")).toEqual([]);
+  });
+});
+
+describe("several logos at once (E3c minor)", () => {
+  it("allows one per place that takes a logo, from the product's data", () => {
+    const limit = logoLimit(product);
+    expect(limit).toBe(product.placements.filter((p) => p.roles.includes("crest") || p.roles.includes("sponsor")).length);
+    expect(limit).toBeGreaterThanOrEqual(3);
+    expect(countLogos(withLogo(800))).toBe(1);
   });
 });

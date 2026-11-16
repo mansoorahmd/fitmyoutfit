@@ -14,7 +14,9 @@
  * - prices: a variant gets the seed's price for each seed currency it has no base price in (a
  *   price with no price list and no rules, which is what the seed and the admin's price editor
  *   write). A price that exists is never changed, so an amount an admin set stays. A variant
- *   with no price set gets one. The rush add-on has no fixed prices, so it gets none;
+ *   with no price set gets one. The rush add-on, which the server prices, gets the placeholder
+ *   price of 0 in each seed currency it has no base price in (Medusa needs one to put it in a
+ *   cart), so a store seeded before the rush charge existed is brought in line;
  * - option values: a seed variant (matched by SKU, then by title) with no value for one of its
  *   product's options gets the seed's value back (its size, for the garments). When that is not
  *   possible (the option lacks the value, another variant already has that combination, or the
@@ -310,10 +312,11 @@ export function planProductRepair(
     }
   }
 
-  // Every variant needs a price set, even one with no fixed price (the rush add-on): Medusa's
-  // update-variant workflow, which the admin uses to edit prices, only writes into an existing
-  // price set, so prices entered for a variant without one would be dropped.
-  const seedPrices = seed.has_fixed_prices ? (seedInput.variants[0]?.prices ?? []) : []
+  // Every variant needs a price set: Medusa's update-variant workflow, which the admin uses to
+  // edit prices, only writes into an existing price set, so prices entered for a variant without
+  // one would be dropped. The prices are the seed's (the placeholder 0 for the rush add-on,
+  // build-product-input.ts).
+  const seedPrices = seedInput.variants[0]?.prices ?? []
   for (const variant of variants) {
     const label = labelOf(variant)
     if (!variant.price_set?.id) {

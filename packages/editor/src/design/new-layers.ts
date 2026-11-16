@@ -29,6 +29,7 @@ import type { TextAlign, TextDirection } from "./text.js";
 import { normalizeText } from "./text.js";
 import { DEFAULT_UPLOAD_LIMITS, maxPrintWidthMm } from "./upload-checks.js";
 import { round3 } from "./placement.js";
+import { fitLayerToArea } from "./print-area.js";
 import { DesignError } from "./validate.js";
 
 type TextLayer = Extract<Layer, { kind: "text" }>;
@@ -219,5 +220,6 @@ export function newLogoLayer(product: ProductDefinition, options: NewLogoOptions
     asset: { ...asset },
   };
   if (preset) layer.preset = preset.id;
-  return layer;
+  // A very tall or wide image may not fit the place's print area at that width: the print-area rule.
+  return fitLayerToArea(product, layer);
 }

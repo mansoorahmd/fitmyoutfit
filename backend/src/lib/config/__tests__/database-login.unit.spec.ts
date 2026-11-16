@@ -52,6 +52,17 @@ describe("connectionStringLogin", () => {
   it("returns null for a string pg cannot read at all", () => {
     expect(connectionStringLogin("postgres://[bad")).toBeNull()
   })
+
+  // QA's tenth review, M5: an empty host with a port. pg itself cannot read it (checked against
+  // the installed pg-connection-string), so there is no login either.
+  it("returns null for an empty host with a port, as pg cannot read it", () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { parse } = require("pg-connection-string") as { parse: (url: string) => unknown }
+    for (const url of ["postgres://u:p@:5433/db", "postgresql://u:p@:5433", "postgres://u:p@:5433/db?ssl_mode=disable"]) {
+      expect(() => parse(url)).toThrow()
+      expect(connectionStringLogin(url)).toBeNull()
+    }
+  })
 })
 
 describe("effectiveDatabaseLogin", () => {
@@ -149,6 +160,16 @@ describe("databaseHostProblem", () => {
 
   it("finds a missing host, a host parameter and a string that is not a URL", () => {
     expect(databaseHostProblem("postgres://u:p@/x")).toBe("no_host")
+    // QA's tenth review, M5: an empty host with a port is a missing host, not "not a URL".
+    expect(databaseHostProblem("postgres://u:p@:5433/db")).toBe("no_host")
+    expect(databaseHostProblem("postgresql://u:p@:5433")).toBe("no_host")
+    // QA's thirteenth review, B5: no login and no host at all is a missing host too.
+    expect(databaseHostProblem("postgres://:5433/db")).toBe("no_host")
+    expect(databaseHostProblem("postgresql://:5433")).toBe("no_host")
+    expect(databaseHostProblem("postgres://:5433/db?ssl_mode=disable")).toBe("no_host")
+    expect(databaseHostProblem("mysql://:5433/db")).toBe("not_a_url")
+    expect(databaseHostProblem("postgres://u:p@?sslmode=require")).toBe("no_host")
+    expect(databaseHostProblem("mysql://u:p@:5433/db")).toBe("not_a_url")
     expect(databaseHostProblem("postgres://u:p@%2Ftmp/x")).toBe("no_host")
     expect(databaseHostProblem("postgres://u:p@db/x?host=other")).toBe("host_parameter")
     expect(databaseHostProblem("postgres://u:p@db/x?Hostaddr=10.0.0.1")).toBe("host_parameter")

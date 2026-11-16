@@ -20,6 +20,7 @@
  */
 import type { MedusaContainer } from "@medusajs/framework/types"
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils"
+import { STAFF_ONLY_KEY_PREFIX } from "../../lib/rules/order-metadata"
 
 type Knex = {
   raw: (sql: string, bindings: unknown[]) => Promise<{ rows?: unknown[]; rowCount?: number }>
@@ -62,4 +63,30 @@ export async function replaceOrderMetadataKey(
     ]
   )
   return changed(result)
+}
+
+/**
+ * Removes every key starting with `cod_` (lib/rules/order-metadata.ts, isStaffOnlyKey) from the
+ * order's metadata, in one statement: the keys to remove are read from the row as it is when
+ * PostgreSQL has locked it, so a key another writer adds or changes at the same moment is kept.
+ * Returns the removed keys (none when there were none or the order does not exist).
+ */
+export async function removeStaffOnlyOrderKeys(container: MedusaContainer, orderId: string): Promise<string[]> {
+  const result = await knexOf(container).raw(
+    `WITH target AS (
+       SELECT id, ARRAY(SELECT k FROM jsonb_object_keys(metadata) AS k WHERE left(k, ?) = ?) AS keys
+         FROM "order"
+        WHERE id = ? AND deleted_at IS NULL AND jsonb_typeof(metadata) = 'object'
+        FOR UPDATE
+     )
+     UPDATE "order" o
+        SET metadata = o.metadata - target.keys,
+            updated_at = now()
+       FROM target
+      WHERE o.id = target.id AND cardinality(target.keys) > 0
+      RETURNING target.keys`,
+    [STAFF_ONLY_KEY_PREFIX.length, STAFF_ONLY_KEY_PREFIX, orderId]
+  )
+  const row = (result.rows ?? [])[0] as { keys?: string[] } | undefined
+  return row?.keys ?? []
 }

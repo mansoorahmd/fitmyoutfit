@@ -3,6 +3,7 @@
  * stroke, round caps, `currentColor`, drawn in the package (no icon library).
  * Icons are decoration: the button or label next to them carries the words.
  */
+import { memo } from "react";
 const PATHS = {
   design: "M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z",
   colours: "M12 3.5c3 3.6 6 7 6 10.2a6 6 0 0 1-12 0C6 10.5 9 7.1 12 3.5zM9.5 14.5a2.5 2.5 0 0 0 2.5 2.5",
@@ -51,7 +52,8 @@ const PATHS = {
 
 export type IconName = keyof typeof PATHS;
 
-export function EditorIcon({ name, size = 24, className }: { name: IconName; size?: number; className?: string }) {
+/** Memoised (S1): the same icon is not built again on every render of a tool. */
+export const EditorIcon = memo(function EditorIcon({ name, size = 24, className }: { name: IconName; size?: number; className?: string }) {
   return (
     <svg
       className={className ? `fmo-icon ${className}` : "fmo-icon"}
@@ -69,7 +71,7 @@ export function EditorIcon({ name, size = 24, className }: { name: IconName; siz
       <path d={PATHS[name]} />
     </svg>
   );
-}
+});
 
 /** A plain shirt outline for the loading state, where the model will appear (06-editor.md 10.1). */
 export function ShirtSilhouette({ className }: { className?: string }) {

@@ -183,7 +183,10 @@ export const EDITOR_CSS = /* css */ `
 .fmo-done-panel[data-layout="compact"] { position: fixed; inset: auto 0 0 0; width: 100%; height: min(60dvh, calc(100dvh - 56px - 160px)); min-height: 320px; border-radius: var(--fmo-radius-sheet) var(--fmo-radius-sheet) 0 0; }
 .fmo-done-panel[data-layout="wide"], .fmo-done-panel[data-layout="short"] { position: fixed; inset: 64px 0 0 auto; width: 400px; height: auto; border-inline-start: 1px solid var(--fmo-border); }
 .fmo-done-panel[data-layout="short"] { inset: 48px 0 0 auto; width: 340px; }
-.fmo-done-inner { height: 100%; overflow: auto; padding: 8px 20px 24px; box-sizing: border-box; }
+.fmo-done-inner { height: 100%; overflow: hidden; padding: 8px 20px 24px; box-sizing: border-box; display: flex; flex-direction: column; }
+.fmo-done-inner > * { flex: none; }
+/* E3c (S6): the main action is always in view; the list of things to check scrolls when the panel is short (landscape). */
+.fmo-done-inner > .fmo-done-checks { flex: 0 1 auto; min-height: 64px; overflow: auto; overscroll-behavior: contain; }
 .fmo-done-kit { margin: 0; font-weight: 600; }
 .fmo-done-checks { padding: 12px; border-radius: var(--fmo-radius-card); background: var(--fmo-surface-alt); }
 .fmo-done-checks-title { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 15px; font-weight: 650; }
@@ -200,13 +203,13 @@ export const EDITOR_CSS = /* css */ `
 .fmo-status:empty { display: none; }
 .fmo-status button { height: 32px; padding: 0 12px; border: 1px solid rgb(255 255 255 / 0.7); border-radius: 16px; background: transparent; color: #fff; cursor: pointer; font-weight: 600; }
 .fmo-status-quiet { padding-inline-end: 14px; }
-.fmo-hint { padding: 6px 12px; border-radius: 16px; background: var(--fmo-overlay-control); border: 1px solid var(--fmo-border); font-size: 13px; line-height: 18px; max-width: calc(100% - 8px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fmo-hint { padding: 4px 12px; border-radius: 16px; background: var(--fmo-overlay-control); border: 1px solid var(--fmo-border); font-size: 13px; line-height: 17px; max-width: calc(100% - 8px); box-sizing: border-box; text-align: center; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .fmo-banner { align-self: stretch; display: flex; gap: 8px; align-items: flex-start; padding: 10px 12px; border-radius: var(--fmo-radius-card); background: var(--fmo-surface); border: 1px solid var(--fmo-border); font-size: 14px; }
 .fmo-credit { position: absolute; top: 0; inset-inline-start: 8px; z-index: 3; height: 24px; display: flex; align-items: center; gap: 2px; margin: 0; font-size: 11px; line-height: 16px; color: var(--fmo-ink-muted); text-align: start; }
 .fmo-credit-line { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.fmo-credit a { color: inherit; }
-.fmo-credit-more { position: relative; flex: none; width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 12px; background: transparent; color: var(--fmo-ink-muted); cursor: pointer; }
-.fmo-credit-more::before { content: ""; position: absolute; inset: -10px; }
+/* E3c: 44 px touch targets in a 24 px line (the band round the line is the stage's, never the garment's). */
+.fmo-credit a { color: inherit; display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; margin-block: -10px; }
+.fmo-credit-more { position: relative; flex: none; width: 44px; height: 44px; margin-block: -10px; margin-inline: -10px -10px; display: inline-flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 12px; background: transparent; color: var(--fmo-ink-muted); cursor: pointer; }
 .fmo-credit-more[aria-expanded="true"] { color: var(--fmo-ink); background: var(--fmo-overlay-control); }
 .fmo-credit-full { position: absolute; top: 26px; inset-inline-start: 0; width: max-content; max-width: min(340px, calc(100vw - 32px)); padding: 8px 10px; border: 1px solid var(--fmo-border); border-radius: var(--fmo-radius-card); background: var(--fmo-surface); color: var(--fmo-ink); font-size: 12px; line-height: 1.4; white-space: normal; box-shadow: 0 4px 14px rgb(11 21 48 / 0.14); }
 .fmo-view { position: absolute; inset-inline: 0; display: flex; align-items: flex-end; justify-content: space-between; gap: 8px; padding: 0 12px; pointer-events: none; z-index: 2; transition: bottom 200ms var(--fmo-ease); }
@@ -281,9 +284,10 @@ export const EDITOR_CSS = /* css */ `
 .fmo-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 0 16px; border: 1px solid var(--fmo-ink); border-radius: var(--fmo-radius-control); background: var(--fmo-surface); color: var(--fmo-ink); cursor: pointer; font-weight: 600; text-align: center; white-space: nowrap; }
 .fmo-btn:hover:not(:disabled) { background: var(--fmo-surface-alt); }
 .fmo-btn-block { display: flex; width: 100%; min-height: 48px; }
-.fmo-font-button { justify-content: space-between; text-align: start; }
+.fmo-font-button { justify-content: space-between; text-align: start; flex-wrap: wrap; row-gap: 2px; padding-block: 8px; }
 .fmo-font-button > span:first-child { white-space: nowrap; font-weight: 500; }
-.fmo-font-button > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* E3c: the font's name is never cut: it wraps under the label when the row is narrow. */
+.fmo-font-button > span:last-child { min-width: 0; margin-inline-start: auto; text-align: end; white-space: normal; overflow-wrap: anywhere; }
 .fmo-btn-text { border-color: transparent; background: transparent; text-decoration: underline; text-underline-offset: 3px; font-weight: 500; }
 .fmo-btn-text:hover:not(:disabled) { background: transparent; color: var(--fmo-ink-muted); }
 .fmo-btn:disabled { opacity: 0.5; cursor: default; }
@@ -310,7 +314,7 @@ export const EDITOR_CSS = /* css */ `
 .fmo-alert[data-kind="info"] { background: var(--fmo-surface-alt); color: var(--fmo-ink); border: 1px solid var(--fmo-border); }
 .fmo-alert > div { flex: 1 1 auto; min-width: 0; }
 .fmo-alert p { margin: 0; color: var(--fmo-ink); }
-.fmo-alert .fmo-btn { margin-top: 8px; min-height: 40px; }
+.fmo-alert .fmo-btn { margin-top: 8px; min-height: 44px; }
 .fmo-icon { flex: none; }
 .fmo-flip { transform: scaleX(-1); }
 [dir="rtl"] .fmo-flip { transform: none; }

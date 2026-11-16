@@ -3,6 +3,7 @@
  * coach-grade errors (06-editor.md 4.5), the digits switch, and which
  * placement presets the switches and "Where" chips offer.
  */
+import { checkTypedText } from "../design/typed-text.js";
 import { checkJerseyNumber } from "../design/jersey-number.js";
 import { DEFAULT_JERSEY_NUMBER_RULES } from "../design/jersey-number-rules.js";
 import type { ItemRole, PlacementPreset, ProductDefinition } from "../design/schema.js";
@@ -32,6 +33,31 @@ export function numberFieldError(value: string): NumberFieldError | null {
 }
 
 /** The coach's sentence for a number field error (W-ED79 to W-ED81). Letters and spaces get the digits rule. */
+/** What a text field does with what was typed or pasted (E3c): the value for the design, or the coach's reason it cannot be used. */
+export type FieldKind = "name" | "text" | "number";
+
+export function fieldCheck(wording: EditorWording, raw: string, kind: FieldKind): { value: string; error: string | null } {
+  if (kind === "number") {
+    const error = numberFieldError(raw);
+    return { value: raw, error: error ? numberErrorText(wording, error) : null };
+  }
+  const { value, problem } = checkTypedText(raw, { allowEmpty: kind === "name" });
+  return { value, error: problem === "pictographs" ? wording.lettering.noPictographs : problem === "blank" ? wording.lettering.textBlank : null };
+}
+
+/**
+ * A field's own state (E3c): what is shown while typing, and the error. Typing something that cannot be used
+ * shows it with the error (the kit keeps the last good value); leaving the field shows the last good value and
+ * clears the error.
+ */
+export interface FieldState {
+  draft: string | null;
+  error: string | null;
+}
+export function fieldStep(state: FieldState, action: { type: "typed"; raw: string; error: string | null } | { type: "left" }): FieldState {
+  return action.type === "left" ? { draft: null, error: null } : { draft: action.raw, error: action.error };
+}
+
 export function numberErrorText(wording: EditorWording, error: NumberFieldError): string {
   if (error === "empty") return wording.lettering.numberEmpty;
   if (error === "mixed") return wording.lettering.numberMixed;

@@ -116,7 +116,9 @@ describe("a name across a sash (fault 2)", () => {
     const r = itemReadability(jersey, navyOnNavy, name.id)!;
     expect(r.passes).toBe(false);
     expect(r.mixed).toBe(false);
-    expect(readabilityRemedy(navyOnNavy, r)).toMatchObject({ kind: "outline", role: "second" });
+    // E3c (B4): the letters first (white letters on navy); an outline when the coach chose the letters' colour.
+    expect(readabilityRemedy(navyOnNavy, r)).toMatchObject({ kind: "fill", role: "second" });
+    expect(readabilityRemedy(navyOnNavy, r, { prefer: "outline" })).toMatchObject({ kind: "outline", role: "second" });
   });
 });
 

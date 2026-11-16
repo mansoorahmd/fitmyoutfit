@@ -49,10 +49,12 @@ describe("buildProductInput", () => {
     expect(rush.variants).toHaveLength(1)
   })
 
-  it("gives a product without fixed prices a variant with no prices (rush is a percentage)", () => {
+  it("gives a product the server prices a placeholder price of 0 in every currency (rush is a percentage)", () => {
     const rush = buildProductInput(byHandle("rush-add-on"), ctx)
     expect(byHandle("rush-add-on").has_fixed_prices).toBe(false)
-    expect(rush.variants[0].prices).toEqual([])
+    expect(rush.variants[0].prices).toEqual(
+      ctx.currencies.map((currency_code) => ({ amount: 0, currency_code }))
+    )
     expect(rush.variants[0].sku).toBe("RUSH")
   })
 

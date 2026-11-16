@@ -45,8 +45,8 @@ export function DonePanel(props: DonePanelProps) {
   const w = wording.done;
   const ref = useRef<HTMLDialogElement>(null);
   const checks = useMemo(
-    () => (props.open ? designChecks(wording, product, design, { notes: api.logoNotes, palette, fileName: assets.fileName }) : []),
-    [props.open, wording, product, design, api.logoNotes, palette, assets.fileName],
+    () => (props.open ? designChecks(wording, product, design, { notes: api.logoNotes, palette, fileName: assets.fileName, missingAssets: api.missingAssets }) : []),
+    [props.open, wording, product, design, api.logoNotes, palette, assets.fileName, api.missingAssets],
   );
   useEffect(() => {
     const dialog = ref.current;

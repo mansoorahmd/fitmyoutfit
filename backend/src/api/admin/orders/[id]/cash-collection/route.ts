@@ -6,18 +6,27 @@
  * GET  /admin/orders/:id/cash-collection
  *   The order's state (lib/rules/cash-collection.ts): whether it is paid by cash on delivery
  *   (`applies`; the panel shows only then), its `stage` (not_collected, partly_captured,
- *   captured_without_slip, recorded, unavailable), whether a slip reference may be recorded now
- *   and whether that captures (all or the rest of) the payment, the recorded slip reference and
- *   time (the order's cash-collection record, modules/cash-collection), and who captured and when
- *   (from Medusa's own capture record).
+ *   captured_without_slip, canceled_cash_held, recorded, unavailable), whether a slip reference
+ *   may be recorded now and whether that captures (all or the rest of) the payment, the recorded
+ *   slip reference and time (the order's cash-collection record, modules/cash-collection), who
+ *   captured and when (from Medusa's own capture record), what is refunded and still held
+ *   (`held_amount`: captured less refunded) and whether the order is canceled, the badge (`label`,
+ *   `tone`) and a `note` (what happened after the cash was recorded, or what to do), and
+ *   `capture_warning` (with `capture_mismatch`) when the order's capture transactions do not add
+ *   up to the payment's captures (a Medusa fault; decision 010).
  *
  * POST /admin/orders/:id/cash-collection  { "slip_reference": "..." }
  *   Captures what is still open of the cash-on-delivery payment, then records the slip reference
- *   (workflows/cash-collection/mark-cash-collected.ts). Answers with the new state.
+ *   (workflows/cash-collection/mark-cash-collected.ts), under the order's cash lock, which
+ *   Medusa's order cancel route takes too. On a canceled order whose cash is still held it records
+ *   the slip without a capture. Answers with the new state.
  *   Refused with HTTP 400: `invalid_data` for a missing or invalid reference, `not_allowed` when
- *   the order is not cash on delivery, already recorded or canceled, or when another press
- *   captured or recorded it at the same moment. HTTP 500 when the capture fails (nothing is
- *   recorded) or the record fails after the capture (the capture stays; record it again).
+ *   the order is not cash on delivery, already recorded or canceled (with no cash held), its
+ *   payment canceled or refunded, or when another press captured or recorded it, or the order was
+ *   canceled or the payment refunded, at the same moment. HTTP 409 (`conflict`) when a cancel or
+ *   another press held the order's cash lock for too long (nothing was done). HTTP 500 when the
+ *   capture fails for a reason the order's state does not explain (nothing is recorded) or the
+ *   record fails after the capture (the capture stays; record it again).
  *   An unknown or deleted order: 404.
  *
  * Every error message is a sentence for staff: never SQL, a stack trace or an internal id. An
@@ -62,9 +71,17 @@ async function describe(container: MedusaContainer, orderId: string) {
       collected_at: state.collected_at,
       amount: state.amount,
       captured_amount: state.captured_amount,
+      refunded_amount: state.refunded_amount,
+      held_amount: state.held_amount,
+      order_canceled: state.order_canceled,
       captured_by: state.captured_by,
       captured_by_email: capturedByEmail,
       captured_at: state.captured_at,
+      label: state.label,
+      tone: state.tone,
+      note: state.note,
+      capture_mismatch: state.capture_mismatch,
+      capture_warning: state.capture_warning,
     },
   }
 }
@@ -104,12 +121,22 @@ export async function POST(req: AuthenticatedMedusaRequest, res: MedusaResponse)
   }
   const orderId = req.params.id
   const body = (req.body ?? {}) as { slip_reference?: unknown }
-  await forStaff(req.scope, UNEXPECTED_FAILURE_MESSAGE, () =>
-    markCashCollected(req.scope, {
-      order_id: orderId,
-      slip_reference: body.slip_reference,
-      recorded_by: actorId,
-    })
-  )
+  try {
+    await forStaff(req.scope, UNEXPECTED_FAILURE_MESSAGE, () =>
+      markCashCollected(req.scope, {
+        order_id: orderId,
+        slip_reference: body.slip_reference,
+        recorded_by: actorId,
+      })
+    )
+  } catch (error) {
+    // Answered here: Medusa's error handler replaces the message of every 409 with its own, and
+    // staff need to be told what happened.
+    if (isStaffMessage(error) && error.type === MedusaError.Types.CONFLICT) {
+      res.status(409).json({ type: error.type, message: error.message })
+      return
+    }
+    throw error
+  }
   res.json(await forStaff(req.scope, RECORDED_BUT_NOT_SHOWN_MESSAGE, () => describe(req.scope, orderId)))
 }

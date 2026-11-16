@@ -18,7 +18,7 @@ import {
   type UploadIssue,
   type UploadLimits,
 } from "../design/upload-checks.js";
-import type { ImageHeader } from "../design/image-file.js";
+import { uprightSize, type ImageHeader } from "../design/image-file.js";
 
 /** What the host's upload function receives: the original bytes, never re-encoded, and what the checks found. */
 export interface AssetUploadRequest {
@@ -91,7 +91,12 @@ export async function uploadLogo(file: Blob, options: LogoUploadOptions): Promis
     } catch {
       return error("damaged", "The image could not be opened: the file is damaged or not a complete image.");
     }
-    if (pixels.naturalWidth !== header.width || pixels.naturalHeight !== header.height) {
+    // A photo with an EXIF orientation opens turned (browsers show it upright); a decoder that ignores the
+    // tag opens it as stored. Either is the same picture (B5).
+    const seen = uprightSize(header);
+    const opensAsStored = pixels.naturalWidth === header.width && pixels.naturalHeight === header.height;
+    const opensUpright = pixels.naturalWidth === seen.width && pixels.naturalHeight === seen.height;
+    if (!opensAsStored && !opensUpright) {
       return error("damaged", `The image's header says ${header.width} x ${header.height} pixels but it opens as ${pixels.naturalWidth} x ${pixels.naturalHeight}; the file is damaged.`);
     }
     if (header.alphaChannel) {
@@ -100,13 +105,15 @@ export async function uploadLogo(file: Blob, options: LogoUploadOptions): Promis
     }
   }
 
+  // The size the picture is seen at (upright): its proportions on the kit and its sharpness come from it.
+  const { width, height } = uprightSize(header);
   let stored: { assetId: string };
   try {
     stored = await options.upload({
       bytes,
       mediaType: header.mediaType,
-      width: header.width,
-      height: header.height,
+      width,
+      height,
       fileName: file instanceof File ? file.name : "",
     });
   } catch (e) {
@@ -115,7 +122,7 @@ export async function uploadLogo(file: Blob, options: LogoUploadOptions): Promis
   if (typeof stored?.assetId !== "string" || !ID_PATTERN.test(stored.assetId)) {
     return { ok: false, issues: [...issues, { code: "damaged", severity: "error", message: "The upload failed: the storage returned no usable asset id." }] };
   }
-  return { ok: true, asset: { assetId: stored.assetId, mediaType: header.mediaType, width: header.width, height: header.height }, issues };
+  return { ok: true, asset: { assetId: stored.assetId, mediaType: header.mediaType, width, height }, issues };
 }
 
 /** Decodes with `createImageBitmap` and a canvas, scaled so the longest side is at most TRANSPARENCY_SAMPLE_PX. */
