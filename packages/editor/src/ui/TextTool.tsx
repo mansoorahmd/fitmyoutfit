@@ -25,7 +25,8 @@ import { fill } from "./content.js";
 import { useEditor } from "./context.js";
 import { EditorIcon } from "./icons.js";
 import { presetsFor } from "./lettering.js";
-import { ItemWhere, TEXT_ORDER, nextFreePreset } from "./LogosTool.js";
+import { ItemWhere } from "./LogosTool.js";
+import { nextPreset } from "./logos.js";
 import { Segmented, Swatch } from "./parts.js";
 import { colourName } from "./stage-logic.js";
 
@@ -48,7 +49,7 @@ export function TextTool() {
       return;
     }
     const value = checked.value.trim();
-    const preset = nextFreePreset(api.design, presetsFor(product, "text"), TEXT_ORDER);
+    const preset = nextPreset(product, "text", api.design, presetsFor(product, "text"));
     const layerId = nextLayerId(api.design, "text");
     const ok = api.commit((d) => addLayer(addCatalogFont(d, fonts, font.id), newTextLayer(product, { id: layerId, preset: preset?.id, pieceId: preset ? undefined : product.views.back, value, fontId: font.id, fill: teamColourValue(d, "second") }), { product }), "add-item");
     if (ok) {

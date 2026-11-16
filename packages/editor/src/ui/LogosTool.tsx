@@ -21,22 +21,12 @@ import { fill, presetWords } from "./content.js";
 import { useEditor } from "./context.js";
 import { EditorIcon } from "./icons.js";
 import { presetsFor } from "./lettering.js";
-import { LOGO_ORDER, LOGO_SIZE_STEP, logoIsBlurry, logoSizeLimits, logoSizeWord, makeLogoSharp, nextLogoPreset, replaceLogoAsset, sharpWidth, type LogoLayer } from "./logos.js";
+import { LOGO_SIZE_STEP, logoIsBlurry, logoSizeLimits, logoSizeWord, makeLogoSharp, nextPreset, replaceLogoAsset, sharpWidth, type LogoLayer } from "./logos.js";
 import { Alert, PresetChips } from "./parts.js";
 import { isStorageFull, uploadRefusal, uploadRefusalText } from "./upload-wording.js";
 
-export { LOGO_ORDER };
 export { TextTool } from "./TextTool.js";
 
-/** Where the next item of a role goes: the first of these presets that is free (nothing there yet). */
-export function nextFreePreset(design: Pick<DesignDocument, "layers">, presets: PlacementPreset[], order: string[]): PlacementPreset | null {
-  const used = new Set(design.layers.map((l) => l.preset).filter(Boolean));
-  const ordered = [...order.map((id) => presets.find((p) => p.id === id)).filter((p): p is PlacementPreset => Boolean(p)), ...presets];
-  return ordered.find((p) => !used.has(p.id)) ?? ordered[0] ?? null;
-}
-
-/** Free text: a motto low on the back first, then the upper back (4.7). */
-export const TEXT_ORDER = ["lower-back", "upper-back"];
 
 /** The "Where" chips for an item (presets for its role); a preset moves it and turns the camera. */
 export function ItemWhere({ layer, role }: { layer: Layer; role: ItemRole }) {
@@ -126,9 +116,8 @@ export function LogosTool() {
       }
       const current = api.design;
       const role = current.layers.some((l) => l.kind === "logo") ? "sponsor" : "crest";
-      // The centre of the chest is the team name's place when it is there: the next free place then.
-      const presets = presetsFor(product, role).filter((p) => !(p.id === "chest-centre" && current.layers.some((l) => l.role === "team-name" && l.preset === "chest-centre")));
-      const preset = nextLogoPreset(current, presets);
+      // The first free place in the product's order (a place the team name takes is not free).
+      const preset = nextPreset(product, "logo", current, presetsFor(product, role));
       const layerId = nextLayerId(current, "logo");
       const ok = api.commit((d) => addLayer(d, newLogoLayer(product, { id: layerId, preset: preset?.id, pieceId: preset ? undefined : product.views.front, role, asset: result.asset }), { product }), "add-item");
       if (ok) {
@@ -150,7 +139,7 @@ export function LogosTool() {
         setRefusal({ text: result.text, retry: result.retry, replace: layerId });
         return;
       }
-      if (api.commit((d) => replaceLogoAsset(d, layerId, result.asset, { product }), "add-item")) {
+      if (api.commit((d) => replaceLogoAsset(d, layerId, result.asset, { product }), "replace-logo")) {
         noteIssues(result.asset, result.issues);
         api.select(layerId);
       }

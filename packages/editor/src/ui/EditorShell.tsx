@@ -48,6 +48,7 @@ import { TOOL_ORDER, ToolPanel, ToolTabs } from "./ToolPanel.js";
 import { TopBar } from "./TopBar.js";
 import { hasWebGL2, readLocal, writeLocal } from "./webgl.js";
 import { toolForLayer } from "./selection.js";
+import { namedLabel } from "./items.js";
 import { KitButton, OnThisKit } from "./OnThisKit.js";
 import { DonePanel } from "./DonePanel.js";
 import { itemChecks, type LogoNote } from "./checks.js";
@@ -172,6 +173,12 @@ function useReducedMotion(): boolean {
 }
 
 const RECENT_KEY = "fmo-editor-recent";
+
+/** Whether the selected item stays selected when a tool opens: only in its own tool (E3c minor). */
+export function keepsSelection(design: Pick<DesignDocument, "layers">, selectedId: string, tool: ToolId): boolean {
+  const layer = design.layers.find((l) => l.id === selectedId);
+  return layer ? toolForLayer(layer) === tool : false;
+}
 
 /** The edits that apply a design (B4): names and numbers that would be hard to read get a readable colour. */
 const APPLIES_DESIGN: ReadonlySet<EditLabel> = new Set<EditLabel>(["template", "team-colour", "swap-team-colours"]);
@@ -300,7 +307,8 @@ export function EditorShell(props: EditorShellProps) {
         // colours the coach chose; and the coach's own colour choices are remembered.
         const value = APPLIES_DESIGN.has(label) ? makeReadable(product, edited, palette, { keep: coachColoured }) : edited;
         if (label === "colour" || label === "outline") for (const id of colourChanges(before, value)) coachColoured.add(id);
-        history.commit(value, label);
+        // The step says what changed, in the coach's words (10.5: "Body colour", "Logo position").
+        history.commit(value, namedLabel(wording, product, label, before, value) as EditLabel);
         if (notices.length > 0) announce(wording.selection.madeSmaller);
         return true;
       } catch (error) {
@@ -387,6 +395,9 @@ export function EditorShell(props: EditorShellProps) {
       return;
     }
     gestures.finish("tool-change");
+    // A tool the selected item does not belong to: the item is let go (E3c minor), so no handles or
+    // "Turn to edit" stay over another tool's view.
+    if (selectedId && keepsSelection(designRef.current, selectedId, next) === false) setSelectedId(null);
     if (startCard) setStartCard(false);
     if (kitOpen) {
       openTool(next, detent === "expanded" ? "expanded" : "normal");
@@ -778,7 +789,8 @@ export function EditorShell(props: EditorShellProps) {
           if (!g) return gestureDeps.current.history.end();
           gestureDraft.current = null;
           canvas.current?.preview(null);
-          if (!sameJson(g.current, g.start)) gestureDeps.current.history.commit(g.current, g.label);
+          const { wording: words, product: p } = gestureDeps.current;
+          if (!sameJson(g.current, g.start)) gestureDeps.current.history.commit(g.current, namedLabel(words, p, g.label, g.start, g.current) as EditLabel);
         },
         cancel: () => {
           const g = gestureDraft.current;
@@ -956,6 +968,8 @@ export function EditorShell(props: EditorShellProps) {
           onClose={() => (props.saveState === "failed" ? setLeaving(true) : props.onClose?.())}
           onDone={() => {
             gestures.finish("done-panel");
+            // The Done panel lets go of the selected item (E3c minor): no handles behind it.
+            setSelectedId(null);
             setKitOpen(false);
             setDoneOpen(true);
           }}

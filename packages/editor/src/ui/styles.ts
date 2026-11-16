@@ -183,7 +183,10 @@ export const EDITOR_CSS = /* css */ `
 .fmo-done-panel[data-layout="compact"] { position: fixed; inset: auto 0 0 0; width: 100%; height: min(60dvh, calc(100dvh - 56px - 160px)); min-height: 320px; border-radius: var(--fmo-radius-sheet) var(--fmo-radius-sheet) 0 0; }
 .fmo-done-panel[data-layout="wide"], .fmo-done-panel[data-layout="short"] { position: fixed; inset: 64px 0 0 auto; width: 400px; height: auto; border-inline-start: 1px solid var(--fmo-border); }
 .fmo-done-panel[data-layout="short"] { inset: 48px 0 0 auto; width: 340px; }
-.fmo-done-inner { height: 100%; overflow: auto; padding: 8px 20px 24px; box-sizing: border-box; }
+.fmo-done-inner { height: 100%; overflow: hidden; padding: 8px 20px 24px; box-sizing: border-box; display: flex; flex-direction: column; }
+.fmo-done-inner > * { flex: none; }
+/* E3c (S6): the main action is always in view; the list of things to check scrolls when the panel is short (landscape). */
+.fmo-done-inner > .fmo-done-checks { flex: 0 1 auto; min-height: 64px; overflow: auto; overscroll-behavior: contain; }
 .fmo-done-kit { margin: 0; font-weight: 600; }
 .fmo-done-checks { padding: 12px; border-radius: var(--fmo-radius-card); background: var(--fmo-surface-alt); }
 .fmo-done-checks-title { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 15px; font-weight: 650; }

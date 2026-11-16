@@ -62,6 +62,7 @@ export const EDIT_LABELS = [
   "player-number",
   "add-item",
   "remove-item",
+  "replace-logo",
   "move",
   "resize",
   "rotate",

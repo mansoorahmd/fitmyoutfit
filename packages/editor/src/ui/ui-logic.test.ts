@@ -9,7 +9,7 @@ import { bodyColour, describeStage, nextStageTone } from "./stage-logic";
 import { formatMegabytes, uploadRefusal, uploadRefusalText, uploadWarningTexts } from "./upload-wording";
 import { EDIT_LABELS } from "../state/history";
 import { teamColoursFromPicks } from "./StartCard";
-import { LOGO_ORDER, TEXT_ORDER, nextFreePreset } from "./LogosTool";
+import { nextPreset } from "./logos";
 import { createDesign } from "../design/create";
 import { setZoneColor } from "../design/edit";
 import { applyTemplate, type Template } from "../design/template";
@@ -260,12 +260,12 @@ describe("the start card's picks and where new items go", () => {
 
   it("puts the first logo on the left chest, the next where nothing is yet, in the usual order", () => {
     const presets = jersey.placements.filter((p) => p.roles.includes("crest"));
-    expect(nextFreePreset({ layers: [] }, presets, LOGO_ORDER)!.id).toBe("left-chest");
+    expect(nextPreset(jersey, "logo", { layers: [] }, presets)!.id).toBe("left-chest");
     const withCrest = { layers: [{ preset: "left-chest" }, { preset: "chest-centre" }] } as never;
     // 4.6: a third logo goes on the upper back.
-    expect(nextFreePreset(withCrest, presets, LOGO_ORDER)!.id).toBe("upper-back");
-    expect(nextFreePreset({ layers: [] }, jersey.placements.filter((p) => p.roles.includes("text")), TEXT_ORDER)!.id).toBe("lower-back");
-    expect(nextFreePreset({ layers: [] }, [], LOGO_ORDER)).toBeNull();
+    expect(nextPreset(jersey, "logo", withCrest, presets)!.id).toBe("upper-back");
+    expect(nextPreset(jersey, "text", { layers: [] }, jersey.placements.filter((p) => p.roles.includes("text")))!.id).toBe("lower-back");
+    expect(nextPreset(jersey, "logo", { layers: [] }, [])).toBeNull();
   });
 });
 

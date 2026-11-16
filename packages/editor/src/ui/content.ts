@@ -323,6 +323,7 @@ export const EDITOR_WORDING = {
     "player-number": "Number",
     "add-item": "Added item",
     "remove-item": "Removed item",
+    "replace-logo": "Logo replaced", // NEW (E3c, 10.5)
     move: "Position",
     resize: "Size",
     rotate: "Turn",
@@ -338,6 +339,27 @@ export const EDITOR_WORDING = {
     direction: "Direction",
     fallback: "Change",
   } satisfies Record<EditLabel | "fallback", string>,
+  /**
+   * The same, naming what changed (E3c, 10.5: "Undone: Body colour", "Logo position"), NEW: {subject} is the part
+   * of the kit or the item ("Body front", "Logo", "Team name"). A key not listed uses `changes`.
+   */
+  changesOf: {
+    "zone-colour": "{subject} colour",
+    "shape-colour": "{subject} colour",
+    "add-item": "{subject} added",
+    "remove-item": "{subject} removed",
+    move: "{subject} position",
+    resize: "{subject} size",
+    rotate: "{subject} turn",
+    order: "{subject} order",
+    placement: "{subject} position",
+    text: "{subject} text",
+    font: "{subject} font",
+    colour: "{subject} colour",
+    outline: "{subject} outline",
+    size: "{subject} size",
+    align: "{subject} alignment",
+  } as Record<string, string>,
   /**
    * The "Where" chips: words for the products' placement presets, by preset id.
    * A preset not listed shows the product's own name for it.
@@ -410,7 +432,11 @@ export function fill(template: string, values: Record<string, string | number>):
 
 /** The words for an undo step's label key ("zone-colour" → "Colour"); never the key itself. */
 export function changeWords(wording: EditorWording, label: string | null | undefined): string {
-  return (label && (wording.changes as Record<string, string>)[label]) || wording.changes.fallback;
+  // A label may name what changed: "move|Logo" (E3c, 10.5).
+  const [key, subject] = (label ?? "").split("|");
+  const named = key && subject ? wording.changesOf[key] : undefined;
+  if (named) return fill(named, { subject: subject! });
+  return (key && (wording.changes as Record<string, string>)[key]) || wording.changes.fallback;
 }
 
 /** The words for a placement preset: the wording's, else the product's own name for it. */

@@ -13,11 +13,14 @@ import { DEFAULT_UPLOAD_LIMITS, logoLayerWarnings, maxPrintWidthMm } from "../de
 export type LogoLayer = Extract<Layer, { kind: "logo" }>;
 
 /**
- * The usual order of logos on club kits (4.6): the crest on the left chest
- * (the wearer's left), a sponsor in the centre of the chest, a third on the
- * upper back; then the other places.
+ * Where new items of a kind go first (E3c: product data, `placementOrder`; the usual order on club kits is the
+ * crest on the left chest, a sponsor in the centre of the chest, a third on the upper back): the product's
+ * order, then its other presets in the order of `placements`.
  */
-export const LOGO_ORDER = ["left-chest", "chest-centre", "upper-back", "right-chest", "lower-back", "sleeve-left", "sleeve-right"];
+export function placementOrder(product: Pick<ProductDefinition, "placementOrder" | "placements">, kind: "logo" | "text"): string[] {
+  const first = product.placementOrder?.[kind] ?? [];
+  return [...first, ...product.placements.map((p) => p.id).filter((id) => !first.includes(id))];
+}
 
 /** The size a logo is said to be, from the stepper's reference (a third of the way each side counts as "between"). */
 export type LogoSizeWord = "small" | "medium" | "large";
@@ -84,9 +87,9 @@ export function replaceLogoAsset(design: DesignDocument, layerId: string, asset:
   return updateLayer(design, layerId, { asset: { ...asset }, size: fitted.size, position: fitted.position }, options);
 }
 
-/** Where the next logo goes: the first place in the usual order that is free (no item there), else the first. */
-export function nextLogoPreset(design: Pick<DesignDocument, "layers">, presets: readonly PlacementPreset[]): PlacementPreset | null {
+/** Where the next item goes: the first of `presets`, in the product's order for its kind, that is free (no item there), else the first. */
+export function nextPreset(product: Pick<ProductDefinition, "placementOrder" | "placements">, kind: "logo" | "text", design: Pick<DesignDocument, "layers">, presets: readonly PlacementPreset[]): PlacementPreset | null {
   const used = new Set(design.layers.map((l) => l.preset).filter(Boolean));
-  const ordered = [...LOGO_ORDER.map((id) => presets.find((p) => p.id === id)).filter((p): p is PlacementPreset => Boolean(p)), ...presets];
+  const ordered = placementOrder(product, kind).flatMap((id) => presets.filter((p) => p.id === id));
   return ordered.find((p) => !used.has(p.id)) ?? ordered[0] ?? null;
 }
