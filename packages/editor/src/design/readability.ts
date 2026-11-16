@@ -26,6 +26,8 @@ import { contrastRatio } from "./colour.js";
 import { zoneAtPiecePoint } from "./pattern.js";
 import type { ColorValue, DesignDocument, Layer, Point, ProductDefinition, TeamColourRole } from "./schema.js";
 import { TEAM_COLOUR_ROLES } from "./schema.js";
+import { updateLayer, type EditOptions } from "./edit.js";
+import { setOutline } from "./roles.js";
 import { flattenPath, parseSvgPath, pointInPolylines, type Polyline } from "./svg-path.js";
 
 /** The specification's minimum contrast for names, numbers and the team name. */
@@ -102,22 +104,71 @@ export function readabilitySamples(layer: Pick<TextLike, "position" | "rotation"
   return points;
 }
 
+type Under = { what: { kind: "zone"; zoneId: string } | { kind: "shape"; index: number }; count: number };
+const underCache = new Map<string, Under[]>();
+
+/** What paints each sample of an item's area (a zone, or the topmost shape by its index among the piece's shapes), counted, in the order found. */
+function underItem(product: ProductDefinition, layer: Pick<TextLike, "pieceId" | "position" | "rotation" | "size" | "fontSize" | "outline">, onPiece: Pick<DesignDocument["shapes"][number], "path">[]): Under[] {
+  const key = `${product.id}|${layer.pieceId}|${layer.position.x},${layer.position.y}|${layer.rotation}|${layer.size.width},${layer.size.height}|${layer.fontSize}|${layer.outline?.width ?? 0}|${onPiece.map((s) => s.path).join("#")}`;
+  const hit = underCache.get(key);
+  if (hit) return hit;
+  const piece = product.pieces.find((p) => p.id === layer.pieceId);
+  const out: Under[] = [];
+  const index = new Map<string, Under>();
+  if (piece) {
+    for (const point of readabilitySamples(layer)) {
+      const zoneId = zoneAtPiecePoint(piece, point);
+      if (zoneId === null) continue;
+      let what: Under["what"] = { kind: "zone", zoneId };
+      for (let i = onPiece.length - 1; i >= 0; i--) {
+        const polylines = polylinesOf(onPiece[i]!.path);
+        if (polylines && pointInPolylines(polylines, point)) {
+          what = { kind: "shape", index: i };
+          break;
+        }
+      }
+      const k = what.kind === "zone" ? `z${what.zoneId}` : `s${what.index}`;
+      const entry = index.get(k);
+      if (entry) entry.count++;
+      else {
+        const created = { what, count: 1 };
+        index.set(k, created);
+        out.push(created);
+      }
+    }
+  }
+  if (underCache.size > 2000) underCache.clear();
+  underCache.set(key, out);
+  return out;
+}
+
 /** Every distinct colour under an item's area (by what paints it), in the order found, with how much of the area each covers (0 to 1). */
 export function backgroundsUnder(
   product: ProductDefinition,
   design: Pick<DesignDocument, "zones" | "shapes">,
   layer: Pick<TextLike, "pieceId" | "position" | "rotation" | "size" | "fontSize" | "outline">,
 ): Array<Background & { share: number }> {
+  // What lies under each sample depends on where the item is and on the shapes' outlines, not on any colour:
+  // that part is remembered (S1: a team colour change or a template tap re-judges every item, and the cards too).
+  const onPiece = design.shapes.filter((s) => s.pieceId === layer.pieceId);
+  const where = underItem(product, layer, onPiece);
   const found = new Map<string, Background & { share: number }>();
   let total = 0;
-  for (const point of readabilitySamples(layer)) {
-    const background = backgroundAt(product, design, layer.pieceId, point);
+  for (const { what, count } of where) {
+    let background: Background | null;
+    if (what.kind === "shape") {
+      const shape = onPiece[what.index]!;
+      background = { kind: "shape", shapeId: shape.id, group: shape.group, colour: shape.fill };
+    } else {
+      const colour = Object.prototype.hasOwnProperty.call(design.zones, what.zoneId) ? design.zones[what.zoneId] : product.zones.find((z) => z.id === what.zoneId)?.defaultColor;
+      background = colour ? { kind: "zone", zoneId: what.zoneId, colour } : null;
+    }
     if (!background) continue;
-    total++;
+    total += count;
     const key = `${background.kind === "zone" ? `zone:${background.zoneId}` : `shape:${background.group}`}:${background.colour.hex}`;
     const entry = found.get(key);
-    if (entry) entry.share++;
-    else found.set(key, { ...background, share: 1 });
+    if (entry) entry.share += count;
+    else found.set(key, { ...background, share: count });
   }
   const list = [...found.values()];
   for (const entry of list) entry.share = total > 0 ? entry.share / total : 0;
@@ -202,46 +253,89 @@ export function readabilityFix(design: Pick<DesignDocument, "teamColors">, backg
   return best!;
 }
 
-/** A one-tap fix for an item that is hard to read (see `readabilityRemedy`). */
+/** A one-tap fix for an item that is hard to read (see `readabilityRemedy`): its letters, or an outline, in a colour. */
 export type ReadabilityRemedy =
-  | { kind: "outline"; role: TeamColourRole; colour: ColorValue; ratio: number }
+  | { kind: "outline"; role: TeamColourRole | null; colour: ColorValue; ratio: number }
   | { kind: "fill"; role: TeamColourRole | null; colour: ColorValue; ratio: number };
 
 /**
- * The one-tap fix for an item that is hard to read:
- * - `outline`: on one kind of background, an outline in the team colour that
- *   stands out most from it (the specification's "Add outline");
- * - `fill`: over several colours (a name across a sash), an outline cannot
- *   stop the letters looking hollow over part, so the letters take the team
- *   colour whose weakest contrast over all of them is the strongest; when no
- *   team colour reaches the minimum and a palette is given, the palette colour
- *   that does best (`role` null).
+ * The one-tap fix for an item that is hard to read (E3c, B4). With the palette it always ends with the item
+ * passing the rule (white or black stand out from any one colour). It tries the team's colours first, then the
+ * palette's colour that stands out most (in practice white or black):
+ * - `prefer: "letters"` (the default; the editor's own choice, as when a design is applied): the letters in a
+ *   team colour, else an outline in a team colour, else the letters in the palette's colour, else an outline in it;
+ * - `prefer: "outline"` (the coach chose the letters' colour: it is kept): an outline in a team colour, else in the
+ *   palette's colour; letters only when an outline cannot carry them (they show on part of what is under them).
+ * An outline carries the letters only when they stand out nowhere (the rule in the module comment).
+ * Without a palette, or when nothing passes (letters over a very light and a very dark colour at once), the
+ * colour that does best for the letters.
  */
 export function readabilityRemedy(
   design: Pick<DesignDocument, "teamColors">,
-  readability: Pick<Readability, "backgrounds" | "background" | "mixed">,
-  options: { palette?: { colors: ReadonlyArray<{ id: string; hex: string }> }; minimum?: number } = {},
+  readability: Pick<Readability, "backgrounds" | "background" | "mixed"> & { colour?: ColorValue },
+  options: { palette?: { colors: ReadonlyArray<{ id: string; hex: string }> }; minimum?: number; prefer?: "letters" | "outline" } = {},
 ): ReadabilityRemedy {
   const minimum = options.minimum ?? READABILITY_MIN_CONTRAST;
-  if (!readability.mixed) {
-    const fix = readabilityFix(design, readability.background);
-    return { kind: "outline", role: fix.role, colour: { ...design.teamColors[fix.role]!, teamColor: fix.role }, ratio: fix.ratio };
+  const backgrounds = readability.backgrounds.length > 0 ? readability.backgrounds : [readability.background];
+  const weakest = (hex: string) => Math.min(...backgrounds.map((b) => contrastRatio(hex, b.colour.hex)));
+  // An outline can carry the letters only when they stand out nowhere: from the item's own colour when known.
+  const outlineCan = readability.colour ? Math.max(...backgrounds.map((b) => contrastRatio(readability.colour!.hex, b.colour.hex))) < minimum : !readability.mixed;
+  const strongest = <T extends { ratio: number }>(list: T[]): T | null => list.reduce<T | null>((best, c) => (!best || c.ratio > best.ratio ? c : best), null);
+  const team = strongest(
+    TEAM_COLOUR_ROLES.flatMap((role) => {
+      const t = design.teamColors[role];
+      return t ? [{ role: role as TeamColourRole | null, colour: { id: t.id, hex: t.hex, teamColor: role } as ColorValue, ratio: weakest(t.hex) }] : [];
+    }),
+  );
+  const fromPalette = strongest((options.palette?.colors ?? []).map((c) => ({ role: null as TeamColourRole | null, colour: { id: c.id, hex: c.hex } as ColorValue, ratio: weakest(c.hex) })));
+  const order: Array<["fill" | "outline", typeof team]> =
+    options.prefer === "outline"
+      ? [["outline", team], ["outline", fromPalette], ["fill", team], ["fill", fromPalette]]
+      : [["fill", team], ["outline", team], ["fill", fromPalette], ["outline", fromPalette]];
+  for (const [kind, c] of order) {
+    if (!c || c.ratio < minimum || (kind === "outline" && !outlineCan)) continue;
+    return { kind, role: c.role, colour: c.colour, ratio: c.ratio };
   }
-  const weakest = (hex: string) => Math.min(...readability.backgrounds.map((b) => contrastRatio(hex, b.colour.hex)));
-  let best: ReadabilityRemedy | null = null;
-  for (const role of TEAM_COLOUR_ROLES) {
-    const team = design.teamColors[role];
-    if (!team) continue;
-    const ratio = weakest(team.hex);
-    if (!best || ratio > best.ratio) best = { kind: "fill", role, colour: { id: team.id, hex: team.hex, teamColor: role }, ratio };
-  }
-  if (best && best.ratio < minimum && options.palette) {
-    for (const c of options.palette.colors) {
-      const ratio = weakest(c.hex);
-      if (ratio > best.ratio) best = { kind: "fill", role: null, colour: { id: c.id, hex: c.hex }, ratio };
+  const best = fromPalette && (!team || fromPalette.ratio > team.ratio) ? fromPalette : team!;
+  return { kind: "fill", role: best.role, colour: best.colour, ratio: best.ratio };
+}
+
+/** Applies a one-tap readability fix to items (one edit): their letters' colour, or a thin outline. */
+export function applyReadabilityRemedy(design: DesignDocument, layerIds: readonly string[], remedy: ReadabilityRemedy, options?: EditOptions): DesignDocument {
+  return layerIds.reduce((acc, id) => {
+    const layer = acc.layers.find((l) => l.id === id);
+    if (!layer || (layer.kind !== "text" && layer.kind !== "number")) return acc;
+    if (remedy.kind === "fill") {
+      // The letters change colour; an outline in that same colour would hide them: it goes.
+      const next = updateLayer(acc, id, { fill: { ...remedy.colour } }, options);
+      return layer.outline && layer.outline.color.hex === remedy.colour.hex ? setOutline(next, id, null, options) : next;
     }
+    return setOutline(acc, id, { step: "thin", color: { ...remedy.colour } }, options);
+  }, design);
+}
+
+/**
+ * Every name, number and text item that fails the readability rule gets a readable choice by the same logic
+ * (`readabilityRemedy`, letters first), except the items in `keep` (whose colours the coach chose: their
+ * warning and its fix show instead). Used when a design is applied (the start card, a design switch, a
+ * team-colour change or swap), so a coach starts without warnings. The same object when nothing changes.
+ */
+export function makeReadable(
+  product: ProductDefinition,
+  design: DesignDocument,
+  palette: { colors: ReadonlyArray<{ id: string; hex: string }> },
+  options: { keep?: ReadonlySet<string>; minimum?: number } = {},
+): DesignDocument {
+  let next = design;
+  // Every name, number and text slot, even one still empty (a team name typed after the colours were chosen).
+  for (const layer of design.layers) {
+    if ((layer.kind !== "text" && layer.kind !== "number") || options.keep?.has(layer.id)) continue;
+    const r = itemReadability(product, next, layer.id, options.minimum);
+    if (!r || r.passes) continue;
+    const remedy = readabilityRemedy(next, r, { palette, minimum: options.minimum });
+    next = applyReadabilityRemedy(next, [r.layerId], remedy, { product });
   }
-  return best!;
+  return next;
 }
 
 /**

@@ -21,9 +21,17 @@ export class AssetImageCache {
 
   constructor(private readonly onChange: () => void) {}
 
-  /** Starts loading the images the design uses. */
+  /** Starts loading the images the design uses, and drops those it does not use. */
   watch(design: DesignDocument, resolve: AssetUrlResolver | undefined): void {
     if (!resolve || typeof Image === "undefined") return;
+    // Images the design no longer uses are dropped (E3c, S7): undo loads one again from its URL if needed.
+    const used = new Set(design.layers.flatMap((l) => (l.kind === "logo" || l.kind === "clipart" ? [l.asset.assetId] : [])));
+    for (const [key, entry] of this.entries) {
+      if (used.has(key)) continue;
+      entry.image.onload = null;
+      entry.image.onerror = null;
+      this.entries.delete(key);
+    }
     for (const layer of design.layers) {
       if (layer.kind !== "logo" && layer.kind !== "clipart") continue;
       const url = resolve(layer.asset);

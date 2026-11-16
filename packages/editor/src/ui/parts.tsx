@@ -5,7 +5,8 @@
  */
 import { useEffect, useRef, type ReactNode } from "react";
 import { contrastRatio } from "../design/colour.js";
-import type { PlacementPreset, ProductDefinition } from "../design/schema.js";
+import type { DesignDocument, PlacementPreset, ProductDefinition } from "../design/schema.js";
+import { useEditor } from "./context.js";
 import { EditorIcon, type IconName } from "./icons.js";
 
 /** White or ink, whichever stands out more on a colour (the swatch's check mark, 06-editor.md 4.3). */
@@ -101,6 +102,23 @@ export function Alert({ kind, icon, children, role, focus, testId }: { kind: "wa
       <EditorIcon name={icon ?? (kind === "info" ? "info" : "alert")} size={20} />
       <div>{children}</div>
     </div>
+  );
+}
+
+/**
+ * A saved design whose text holds emoji or picture symbols (E3c, S5): they can't be printed in a kit colour;
+ * "Remove them" removes them (one undo step).
+ */
+export function PictographAlert({ onRemove, testId }: { onRemove: (design: DesignDocument) => DesignDocument; testId: string }) {
+  const api = useEditor();
+  const w = api.wording.lettering;
+  return (
+    <Alert kind="warning" testId={testId}>
+      <p>{w.hasPictographs}</p>
+      <button type="button" className="fmo-btn" onClick={() => api.commit(onRemove, "text")} data-testid={`${testId}-remove`}>
+        {w.removePictographs}
+      </button>
+    </Alert>
   );
 }
 

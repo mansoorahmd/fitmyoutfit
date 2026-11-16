@@ -13,7 +13,7 @@ import { addLayer, removeLayer } from "../design/edit.js";
 import { scaleLayerBy } from "../design/item-edits.js";
 import { newLogoLayer, nextLayerId } from "../design/new-layers.js";
 import { placeAtPreset } from "../design/roles.js";
-import type { DesignDocument, ItemRole, Layer, LogoAssetRef, PlacementPreset } from "../design/schema.js";
+import type { ItemRole, Layer, LogoAssetRef, PlacementPreset } from "../design/schema.js";
 import { LOGO_MEDIA_TYPES } from "../design/schema.js";
 import type { UploadIssue } from "../design/upload-checks.js";
 import { uploadLogo } from "../upload/logo-upload.js";
@@ -21,22 +21,12 @@ import { fill, presetWords } from "./content.js";
 import { useEditor } from "./context.js";
 import { EditorIcon } from "./icons.js";
 import { presetsFor } from "./lettering.js";
-import { LOGO_ORDER, LOGO_SIZE_STEP, logoIsBlurry, logoSizeLimits, logoSizeWord, makeLogoSharp, nextLogoPreset, replaceLogoAsset, sharpWidth, type LogoLayer } from "./logos.js";
+import { LOGO_SIZE_STEP, countLogos, logoIsBlurry, logoLimit, logoSizeLimits, logoSizeWord, makeLogoSharp, nextPreset, replaceLogoAsset, sharpWidth, type LogoLayer } from "./logos.js";
 import { Alert, PresetChips } from "./parts.js";
-import { uploadRefusal, uploadRefusalText } from "./upload-wording.js";
+import { isStorageFull, uploadRefusal, uploadRefusalText } from "./upload-wording.js";
 
-export { LOGO_ORDER };
 export { TextTool } from "./TextTool.js";
 
-/** Where the next item of a role goes: the first of these presets that is free (nothing there yet). */
-export function nextFreePreset(design: Pick<DesignDocument, "layers">, presets: PlacementPreset[], order: string[]): PlacementPreset | null {
-  const used = new Set(design.layers.map((l) => l.preset).filter(Boolean));
-  const ordered = [...order.map((id) => presets.find((p) => p.id === id)).filter((p): p is PlacementPreset => Boolean(p)), ...presets];
-  return ordered.find((p) => !used.has(p.id)) ?? ordered[0] ?? null;
-}
-
-/** Free text: a motto low on the back first, then the upper back (4.7). */
-export const TEXT_ORDER = ["lower-back", "upper-back"];
 
 /** The "Where" chips for an item (presets for its role); a preset moves it and turns the camera. */
 export function ItemWhere({ layer, role }: { layer: Layer; role: ItemRole }) {
@@ -66,6 +56,7 @@ function useLogoUpload() {
   const api = useEditor();
   return async (file: File): Promise<Checked> => {
     let networkFailed = false;
+    let storageFull = false;
     try {
       const head = new Uint8Array(await file.slice(0, 65536).arrayBuffer());
       const result = await uploadLogo(file, {
@@ -73,21 +64,23 @@ function useLogoUpload() {
           try {
             return await api.assets.upload(request);
           } catch (error) {
-            networkFailed = true;
+            // The device's storage full (S4) is told apart from the network.
+            if (isStorageFull(error)) storageFull = true;
+            else networkFailed = true;
             throw error;
           }
         },
       });
       if (!result.ok) {
-        const kind = uploadRefusal(result.issues, { head, size: file.size, networkFailed });
+        const kind = uploadRefusal(result.issues, { head, size: file.size, networkFailed, storageFull });
         // The engine's message goes to the console for developers; the coach reads the wording.
         console.info("[editor] logo refused:", result.issues.map((i) => `${i.code}: ${i.message}`).join("; "));
-        return { ok: false, text: uploadRefusalText(api.wording, kind ?? "damaged", file.name, file.size), retry: networkFailed ? file : null };
+        return { ok: false, text: uploadRefusalText(api.wording, kind ?? "damaged", file.name, file.size), retry: networkFailed || storageFull ? file : null };
       }
       return { ok: true, asset: result.asset, issues: result.issues };
     } catch (error) {
       console.info("[editor] logo refused:", error);
-      return { ok: false, text: uploadRefusalText(api.wording, networkFailed ? "network" : "damaged", file.name, file.size), retry: networkFailed ? file : null };
+      return { ok: false, text: uploadRefusalText(api.wording, storageFull ? "storage-full" : networkFailed ? "network" : "damaged", file.name, file.size), retry: networkFailed || storageFull ? file : null };
     }
   };
 }
@@ -121,17 +114,20 @@ export function LogosTool() {
         setRefusal({ text: result.text, retry: result.retry, replace: null });
         return;
       }
-      const current = api.design;
-      const role = current.layers.some((l) => l.kind === "logo") ? "sponsor" : "crest";
-      // The centre of the chest is the team name's place when it is there: the next free place then.
-      const presets = presetsFor(product, role).filter((p) => !(p.id === "chest-centre" && current.layers.some((l) => l.role === "team-name" && l.preset === "chest-centre")));
-      const preset = nextLogoPreset(current, presets);
-      const layerId = nextLayerId(current, "logo");
-      const ok = api.commit((d) => addLayer(d, newLogoLayer(product, { id: layerId, preset: preset?.id, pieceId: preset ? undefined : product.views.front, role, asset: result.asset }), { product }), "add-item");
+      // Worked out from the design as it is when the logo is added (several files dropped at once add one by one).
+      let layerId = "";
+      let preset: PlacementPreset | null = null;
+      const ok = api.commit((d) => {
+        const role = d.layers.some((l) => l.kind === "logo") ? "sponsor" : "crest";
+        // The first free place in the product's order (a place the team name takes is not free).
+        preset = nextPreset(product, "logo", d, presetsFor(product, role));
+        layerId = nextLayerId(d, "logo");
+        return addLayer(d, newLogoLayer(product, { id: layerId, preset: preset?.id, pieceId: preset ? undefined : product.views.front, role, asset: result.asset }), { product });
+      }, "add-item");
       if (ok) {
         noteIssues(result.asset, result.issues);
         api.select(layerId);
-        api.showSide(preset?.side ?? "front");
+        api.showSide((preset as PlacementPreset | null)?.side ?? "front");
       }
     } finally {
       setBusy(false);
@@ -147,7 +143,7 @@ export function LogosTool() {
         setRefusal({ text: result.text, retry: result.retry, replace: layerId });
         return;
       }
-      if (api.commit((d) => replaceLogoAsset(d, layerId, result.asset, { product }), "add-item")) {
+      if (api.commit((d) => replaceLogoAsset(d, layerId, result.asset, { product }), "replace-logo")) {
         noteIssues(result.asset, result.issues);
         api.select(layerId);
       }
@@ -156,9 +152,17 @@ export function LogosTool() {
     }
   };
 
-  const pick = (files: FileList | null) => {
-    const file = files?.[0];
-    if (file) void add(file);
+  // Several files at once (dropped, or chosen together): each is added in turn, to the next free place, up to the
+  // limit; beyond it the coach is told (E3c minor).
+  const pick = async (files: FileList | null) => {
+    const list = [...(files ?? [])];
+    for (let k = 0; k < list.length; k++) {
+      if (countLogos(api.latestDesign?.() ?? api.design) >= logoLimit(product)) {
+        setRefusal({ text: fill(w.tooMany, { count: logoLimit(product) }), retry: null, replace: null });
+        return;
+      }
+      await add(list[k]!);
+    }
   };
 
   return (
@@ -188,9 +192,10 @@ export function LogosTool() {
         id={id}
         type="file"
         accept={LOGO_MEDIA_TYPES.join(",")}
+        multiple
         hidden
         onChange={(e) => {
-          pick(e.target.files);
+          void pick(e.target.files);
           e.target.value = "";
         }}
         data-testid="logo-file"
@@ -227,7 +232,7 @@ export function LogosTool() {
           onDrop={(e) => {
             e.preventDefault();
             setOver(false);
-            pick(e.dataTransfer.files);
+            void pick(e.dataTransfer.files);
           }}
           data-testid="logo-add"
         >
@@ -257,15 +262,20 @@ function LogoCard({ logo, onReplace }: { logo: LogoLayer; onReplace: () => void 
   const sizeWord = logoSizeWord(product, logo);
   const limits = logoSizeLimits(product, logo);
   const selected = api.selectedId === logo.id;
+  // The file is not on this device (S2): it would be ordered without its picture.
+  const missing = api.missingAssets?.has(logo.asset.assetId) ?? false;
+  const remove = () => {
+    if (api.commit((d) => removeLayer(d, logo.id), "remove-item") && selected) api.select(null);
+  };
   return (
-    <div className="fmo-item" data-testid={`logo-${logo.id}`} data-selected={selected}>
+    <div className="fmo-item" data-testid={`logo-${logo.id}`} data-selected={selected} data-missing={missing}>
       <div className="fmo-item-head">
         <button type="button" className="fmo-item-pick" aria-label={fill(w.selectName, { file: name })} aria-pressed={selected} onClick={() => api.select(logo.id, { turn: true })} data-testid={`select-${logo.id}`}>
           {url ? <img src={url} alt="" /> : <EditorIcon name="logos" />}
           <span className="fmo-item-name fmo-bdi" dir="auto">
             {fill(w.logoName, { file: name })}
           </span>
-          {(blurry || (note?.box && !note.kept)) && (
+          {(missing || blurry || (note?.box && !note.kept)) && (
             <span className="fmo-badge" aria-hidden="true">
               <EditorIcon name="alert" size={16} />
             </span>
@@ -278,14 +288,25 @@ function LogoCard({ logo, onReplace }: { logo: LogoLayer; onReplace: () => void 
           type="button"
           className="fmo-btn fmo-btn-text"
           aria-label={fill(w.removeName, { file: name })}
-          onClick={() => {
-            if (api.commit((d) => removeLayer(d, logo.id), "remove-item") && selected) api.select(null);
-          }}
+          onClick={remove}
           data-testid={`remove-${logo.id}`}
         >
           {w.remove}
         </button>
       </div>
+      {missing && (
+        <Alert kind="warning" testId={`logo-missing-${logo.id}`}>
+          <p>{w.missingCard}</p>
+          <div className="fmo-row">
+            <button type="button" className="fmo-btn" onClick={onReplace} data-testid={`add-again-${logo.id}`}>
+              {w.addAgain}
+            </button>
+            <button type="button" className="fmo-btn fmo-btn-text" onClick={remove} data-testid={`missing-remove-${logo.id}`}>
+              {w.remove}
+            </button>
+          </div>
+        </Alert>
+      )}
       <span className="fmo-label">{w.where}</span>
       <ItemWhere layer={logo} role={logo.role} />
       <div className="fmo-stepper-row">

@@ -83,12 +83,21 @@ export function makePng({ width, height, pixel, colourType = 6, animated = false
   ]);
 }
 
-/** The start of a JPEG file up to its frame header (what the checks read). */
-export function makeJpegHeader(width: number, height: number, sof = 0xc0): Uint8Array {
+/**
+ * The start of a JPEG file up to its frame header (what the checks read). With `orientation`, an EXIF APP1
+ * segment holding that Orientation tag (as phone cameras write it), in big- or little-endian TIFF order.
+ */
+export function makeJpegHeader(width: number, height: number, sof = 0xc0, orientation?: number, littleEndian = false): Uint8Array {
   const app0 = [0xff, 0xe0, 0x00, 0x10, ...text("JFIF\0"), 1, 1, 0, 0, 72, 0, 72, 0, 0];
+  const u16 = (n: number) => (littleEndian ? [n & 255, n >> 8] : [n >> 8, n & 255]);
+  const u32 = (n: number) => (littleEndian ? [n & 255, (n >> 8) & 255, (n >> 16) & 255, n >>> 24] : [n >>> 24, (n >> 16) & 255, (n >> 8) & 255, n & 255]);
+  // IFD0 with two entries (a make tag first, then Orientation), then no next IFD.
+  const tiff = [...(littleEndian ? [0x49, 0x49] : [0x4d, 0x4d]), ...u16(42), ...u32(8), ...u16(2), ...u16(0x010f), ...u16(2), ...u32(4), 0x41, 0x43, 0x4d, 0, ...u16(0x0112), ...u16(3), ...u32(1), ...u16(orientation ?? 1), 0, 0, ...u32(0)];
+  const exif = [...text("Exif"), 0, 0, ...tiff];
+  const app1 = orientation === undefined ? [] : [0xff, 0xe1, (exif.length + 2) >> 8, (exif.length + 2) & 255, ...exif];
   const dqt = [0xff, 0xdb, 0x00, 0x43, 0x00, ...new Array<number>(64).fill(1)];
   const sofSegment = [0xff, sof, 0x00, 0x11, 8, height >> 8, height & 255, width >> 8, width & 255, 3, 1, 0x22, 0, 2, 0x11, 1, 3, 0x11, 1];
-  return new Uint8Array([0xff, 0xd8, ...app0, 0xff, 0xff, ...dqt, ...sofSegment, 0xff, 0xda, 0x00, 0x02, 0xff, 0xd9]);
+  return new Uint8Array([0xff, 0xd8, ...app0, ...app1, 0xff, 0xff, ...dqt, ...sofSegment, 0xff, 0xda, 0x00, 0x02, 0xff, 0xd9]);
 }
 
 const le32 = (n: number) => [n & 255, (n >>> 8) & 255, (n >>> 16) & 255, (n >>> 24) & 255];

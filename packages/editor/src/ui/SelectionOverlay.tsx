@@ -10,14 +10,23 @@
  * When the item faces away from the camera the handles hide and one control,
  * "Turn to edit", turns the garment to it.
  */
-import { useRef, useSyncExternalStore, type PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useEffect, useRef, useSyncExternalStore, type PointerEvent as ReactPointerEvent } from "react";
 import type { SelectionGeometry } from "../react/DesignCanvas.js";
 import type { ViewInsets } from "../react/camera.js";
 import type { EditorWording } from "./content.js";
 import { EditorIcon } from "./icons.js";
 import { HANDLE_HIT, HANDLE_SIZE, TURN_KNOB, resizeFactor, turnDelta, type Bus, type Pt } from "./handles.js";
+import type { GestureEndReason, GesturePhase } from "./item-gestures.js";
 
-export type GesturePhase = "start" | "move" | "end" | "cancel";
+export type { GesturePhase };
+
+/**
+ * Whether the handles a gesture holds are gone from the screen (the item turned away, the overlay hidden, no
+ * selection): a gesture that is going on must then end, because no release will reach it (B1).
+ */
+export function handlesGone(geometry: Pick<SelectionGeometry, "facing"> | null, hidden: boolean | undefined): boolean {
+  return !geometry || Boolean(hidden) || !geometry.facing;
+}
 
 export interface SelectionOverlayProps {
   bus: Bus<SelectionGeometry | null>;
@@ -31,6 +40,12 @@ export interface SelectionOverlayProps {
   onRotate: (phase: GesturePhase, degrees: number, free: boolean) => void;
   /** "Turn to edit": turns the garment to the selected item. */
   onTurnTo: () => void;
+  /**
+   * A gesture on a handle was interrupted without a release reaching it: the pointer capture lost, the handle
+   * gone (the item turned away), a second finger. The editor ends it (cancelled). Without it, the phase
+   * "cancel" is sent to `onResize` or `onRotate`.
+   */
+  onInterrupt?: (reason: GestureEndReason) => void;
   /** Hidden while the coach types (the keyboard leaves room for the item only). */
   hidden?: boolean;
   /** The item has a warning (blurry, cut off, a box, hard to read): a badge at its top right corner (4.6). */
@@ -42,6 +57,35 @@ const points = (list: readonly Pt[]) => list.map((p) => `${p.x.toFixed(1)},${p.y
 export function SelectionOverlay(props: SelectionOverlayProps) {
   const geometry = useSyncExternalStore(props.bus.subscribe, props.bus.get, props.bus.get);
   const gesture = useRef<{ kind: "resize" | "rotate"; pointerId: number; centre: Pt; start: Pt; mirrored: boolean } | null>(null);
+  // The one way out of a gesture that no release will end.
+  const propsRef = useRef(props);
+  useEffect(() => {
+    propsRef.current = props;
+  });
+  const interrupt = useCallback((reason: GestureEndReason) => {
+    const s = gesture.current;
+    if (!s) return;
+    gesture.current = null;
+    const p = propsRef.current;
+    if (p.onInterrupt) p.onInterrupt(reason);
+    else if (s.kind === "resize") p.onResize("cancel", 1);
+    else p.onRotate("cancel", 0, false);
+  }, []);
+  const gone = handlesGone(geometry, props.hidden);
+  useEffect(() => {
+    if (gone) interrupt("unmount");
+  }, [gone, interrupt]);
+  // A second finger while a handle is held: two fingers move the camera, never the item (5.1).
+  useEffect(() => {
+    const other = (event: PointerEvent) => {
+      if (gesture.current && event.pointerId !== gesture.current.pointerId) interrupt("second-pointer");
+    };
+    window.addEventListener("pointerdown", other, true);
+    return () => {
+      window.removeEventListener("pointerdown", other, true);
+      interrupt("unmount");
+    };
+  }, [interrupt]);
   if (!geometry || props.hidden) return null;
   const g = geometry;
   const w = props.wording.selection;
@@ -67,6 +111,10 @@ export function SelectionOverlay(props: SelectionOverlayProps) {
     const now = local(event);
     if (s.kind === "resize") props.onResize("move", resizeFactor(s.centre, s.start, now));
     else props.onRotate("move", turnDelta(s.centre, s.start, now, s.mirrored), event.altKey);
+  };
+  const onLost = (event: ReactPointerEvent<SVGElement>) => {
+    // After a release the gesture is already over; otherwise the browser took the pointer away.
+    if (gesture.current?.pointerId === event.pointerId) interrupt("lost-capture");
   };
   const onUp = (event: ReactPointerEvent<SVGElement>) => {
     const s = gesture.current;
@@ -100,12 +148,12 @@ export function SelectionOverlay(props: SelectionOverlayProps) {
             {g.corners.map((c, k) => (
               <g key={k} data-testid={`handle-corner-${k}`}>
                 <rect x={c.x - half} y={c.y - half} width={HANDLE_SIZE} height={HANDLE_SIZE} className="fmo-handle" />
-                <rect x={c.x - hit} y={c.y - hit} width={HANDLE_HIT} height={HANDLE_HIT} className="fmo-hit" data-kind="resize" data-cursor={k % 2 === 0 ? "nwse" : "nesw"} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp} />
+                <rect x={c.x - hit} y={c.y - hit} width={HANDLE_HIT} height={HANDLE_HIT} className="fmo-hit" data-kind="resize" data-cursor={k % 2 === 0 ? "nwse" : "nesw"} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp} onLostPointerCapture={onLost} />
               </g>
             ))}
             <g data-testid="handle-turn">
               <circle cx={g.turn.x} cy={g.turn.y} r={TURN_KNOB / 2} className="fmo-handle" />
-              <circle cx={g.turn.x} cy={g.turn.y} r={hit} className="fmo-hit fmo-hit-turn" data-kind="rotate" onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp} />
+              <circle cx={g.turn.x} cy={g.turn.y} r={hit} className="fmo-hit fmo-hit-turn" data-kind="rotate" onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp} onLostPointerCapture={onLost} />
             </g>
           </>
         )}

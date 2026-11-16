@@ -16,6 +16,7 @@ import {
   CanvasTexture,
   DoubleSide,
   LinearFilter,
+  Matrix4,
   NeutralToneMapping,
   Raycaster,
   SRGBColorSpace,
@@ -31,8 +32,9 @@ import {
 import type { DesignDocument, Point, ProductDefinition } from "../design/schema.js";
 import { buildSurfaceLookup, projectItem, projectPieceLine, type ItemOnScreen, type ScreenPoint, type SurfaceLookup } from "../texture/surface-lookup.js";
 import { extractGarmentMeshes } from "./garment-geometry.js";
-import { TAP_MAX_MS, pressAction, type DragOnlySelected } from "./press-policy.js";
+import { TAP_MAX_MS, pressAction, travelledPast, type DragOnlySelected } from "./press-policy.js";
 import { DraftPolicy, type GestureTiming } from "./draft-quality.js";
+import { buildPickBvh, pickBvh, type PickBvh } from "./pick-bvh.js";
 import { dragPosition, layerAtPoint, pieceAtMeshUv, round3, startLayerDrag, type LayerDrag } from "../design/placement.js";
 import { backgroundAt } from "../design/readability.js";
 import { DEFAULT_TEXTURE_SIZE, drawPatternTexture, type DrawPatternResult } from "../texture/pattern-texture.js";
@@ -61,6 +63,11 @@ export interface LayerDragEvent {
   free?: boolean;
   /** Screen px per piece mm where the item is (snapping takes 8 px or 6 mm, whichever is larger). */
   pxPerMm?: number;
+  /**
+   * On "end": false when the pointer never travelled past `DRAG_SLOP_PX` from the press (a click, not a move:
+   * the item keeps its place and no undo step is made, whatever the camera did meanwhile).
+   */
+  moved?: boolean;
 }
 
 /** A line on a piece to draw over the model while placing (a snapping guide, or the print area's edge), in piece mm. */
@@ -122,6 +129,13 @@ export interface DesignCanvasHandle {
   turnBy(degrees: number): void;
   /** The side the camera faces now, or null. */
   getSide(): CameraSide | null;
+  /**
+   * Shows a design on the model at once, outside React (E3c, S1): the previews of a drag, a resize or a turn,
+   * so the host does not re-render on every pointer move. The texture and the selection's handles follow it.
+   * `null` ends the preview; with `redraw` the `design` prop is drawn again at once (a cancelled gesture),
+   * otherwise the next `design` prop is (the gesture's result, committed by the host).
+   */
+  preview(design: DesignDocument | null, options?: { redraw?: boolean }): void;
 }
 
 export interface DesignCanvasProps {
@@ -462,6 +476,9 @@ function ModelView({
   const lastProjected = useRef<SelectionGeometry | null>(null);
   const geometryOut = useLatest(onSelectionGeometry);
   const lastGeometry = useRef<string>("");
+  const previewDesign = useRef<DesignDocument | null>(null);
+  const projectedLines = useRef<{ key: string; lines: SelectionGeometry["guides"] } | null>(null);
+  const previewHandler = useRef<DesignCanvasHandle["preview"]>(() => undefined);
   const selectionInputs = useLatest({ design, product, selectedLayerId, guides, viewSize });
   useEffect(() => {
     lastGeometry.current = "";
@@ -470,7 +487,8 @@ function ModelView({
   useFrame(({ camera: cam }) => {
     const report = geometryOut.current;
     if (!report) return;
-    const { design: d, product: p, selectedLayerId: id, guides: g, viewSize: vs } = selectionInputs.current;
+    const { design: fromProps, product: p, selectedLayerId: id, guides: g, viewSize: vs } = selectionInputs.current;
+    const d = previewDesign.current ?? fromProps;
     const layer = id ? d.layers.find((l) => l.id === id) : undefined;
     const piece = layer ? p.pieces.find((x) => x.id === layer.pieceId) : undefined;
     if (!layer || !piece) {
@@ -503,10 +521,18 @@ function ModelView({
       report(null);
       return;
     }
-    const lines = (g ?? []).flatMap((line) => {
-      const linePiece = p.pieces.find((x) => x.id === line.pieceId);
-      return linePiece ? [{ kind: line.kind, runs: projectPieceLine(surface, linePiece, line.from, line.to, screen) }] : [];
-    });
+    // The lines (print area, guides) move only with the camera or when they change: projected again only then (S1).
+    const linesKey = JSON.stringify([cam.matrixWorld.elements, cam.projectionMatrix.elements, g, vs.width, vs.height]);
+    if (projectedLines.current?.key !== linesKey) {
+      projectedLines.current = {
+        key: linesKey,
+        lines: (g ?? []).flatMap((line) => {
+          const linePiece = p.pieces.find((x) => x.id === line.pieceId);
+          return linePiece ? [{ kind: line.kind, runs: projectPieceLine(surface, linePiece, line.from, line.to, screen) }] : [];
+        }),
+      };
+    }
+    const lines = projectedLines.current.lines;
     const geometry: SelectionGeometry = { ...on, layerId: layer.id, guides: lines, width: vs.width, height: vs.height };
     lastProjected.current = geometry;
     report(geometry);
@@ -522,9 +548,10 @@ function ModelView({
       resetView: () => rig.reset(),
       turnBy: (degrees) => rig.turnBy(degrees),
       getSide: () => rig.side(),
+      preview: (d, options) => previewHandler.current(d, options),
     });
     return () => setHandle(handle, null);
-  }, [handle, rig, latest]);
+  }, [handle, rig, latest, previewHandler]);
 
   // The pieces' materials show the pattern texture; their inside shows the colour zones only.
   const inside = usePatternSurface(INSIDE_TEXTURE_SIZE);
@@ -588,6 +615,17 @@ function ModelView({
   // 3D context comes back. The model is not reloaded.
   const onDrawn = useLatest(onTextureDrawn);
   const outlinedLayerId = outlineSelected ? (selectedLayerId ?? null) : null;
+  // A gesture's preview, drawn outside React (S1); the selection's handles follow it too.
+  const drawPreview = useLatest((d: DesignDocument) => {
+    const target = draft.useDraft(gestureNow.current, draftQuality) ? draftSurface : surface;
+    const info = redrawPattern(target, product, d, images, outlinedLayerId, highlight);
+    draft.drawn(info.drawMs);
+    if (showing.current !== target.texture) {
+      applyPatternTexture(prepared.pieceMaterials, target.texture);
+      showing.current = target.texture;
+    }
+    invalidate();
+  });
   const fullRedraw = useLatest(() => {
     const info = redrawPattern(surface, product, design, images, outlinedLayerId, highlight);
     applyPatternTexture(prepared.pieceMaterials, surface.texture);
@@ -596,6 +634,19 @@ function ModelView({
     onDrawn.current?.(info);
   });
   useEffect(() => {
+    previewHandler.current = (d, options) => {
+      previewDesign.current = d;
+      // Ended without a redraw: the host's next design follows at once; the handles stay where they are till then.
+      if (!d && !options?.redraw) return;
+      if (d) drawPreview.current(d);
+      else fullRedraw.current();
+      lastGeometry.current = "";
+      invalidate();
+    };
+  });
+  useEffect(() => {
+    // A new design from the host replaces any gesture preview.
+    previewDesign.current = null;
     // During a slow gesture, the half-size surface; otherwise (and once on release) the full one.
     const useDraft = draft.useDraft(gestureNow.current, draftQuality);
     const target = useDraft ? draftSurface : surface;
@@ -660,7 +711,19 @@ function ModelView({
     const ndc = new Vector2();
     const meshes = [...prepared.pieceMeshes.keys()];
     const down = new Set<number>();
-    let drag: { pointerId: number; state: LayerDrag; position: Point; pending: Point | null; pointer: { clientX: number; clientY: number } | null; frame: number | null; free: boolean; pxPerMm: number } | null = null;
+    let drag: {
+      pointerId: number;
+      state: LayerDrag;
+      position: Point;
+      pending: Point | null;
+      pointer: { clientX: number; clientY: number } | null;
+      frame: number | null;
+      free: boolean;
+      pxPerMm: number;
+      /** Where the press was (client px), and whether the pointer has gone past the slop since (B3). */
+      origin: { x: number; y: number };
+      moved: boolean;
+    } | null = null;
     let tap: { pointerId: number; x: number; y: number; time: number; selects: string | null } | null = null;
 
     // Screen px per mm at the item, from the last projection (for snapping distances); 2 until known.
@@ -669,11 +732,66 @@ function ModelView({
       return g && g.layerId === layerId ? g.pxPerMm : 2;
     };
 
+    // Picking (S1): a bounding-volume hierarchy per mesh, built when the browser is idle after the model is
+    // ready; until then (and if it fails) three.js's own raycast, which tests every triangle.
+    let bvhs: Map<Mesh, PickBvh> | null = null;
+    const buildBvhs = () => {
+      try {
+        const built = new Map<Mesh, PickBvh>();
+        for (const mesh of meshes) {
+          const position = mesh.geometry.getAttribute("position");
+          const uv = mesh.geometry.getAttribute("uv");
+          const positions = new Float32Array(position.count * 3);
+          for (let v = 0; v < position.count; v++) {
+            positions[3 * v] = position.getX(v);
+            positions[3 * v + 1] = position.getY(v);
+            positions[3 * v + 2] = position.getZ(v);
+          }
+          let uvs: Float32Array | null = null;
+          if (uv) {
+            uvs = new Float32Array(uv.count * 2);
+            for (let v = 0; v < uv.count; v++) {
+              uvs[2 * v] = uv.getX(v);
+              uvs[2 * v + 1] = uv.getY(v);
+            }
+          }
+          const index = mesh.geometry.getIndex();
+          built.set(mesh, buildPickBvh(positions, index ? (index.array as ArrayLike<number>) : null, uvs));
+        }
+        bvhs = built;
+      } catch (error) {
+        console.error("[editor] picking tree:", error);
+      }
+    };
+    const idle = (globalThis as { requestIdleCallback?: (fn: () => void, options?: { timeout: number }) => number }).requestIdleCallback;
+    const bvhTimer = idle ? null : setTimeout(buildBvhs, 300);
+    const bvhIdle = idle ? idle(buildBvhs, { timeout: 2000 }) : null;
+    const inverse = new Matrix4();
+    const localO = new Vector3();
+    const localT = new Vector3();
+    const pick = (): { object: Mesh; uv: { x: number; y: number } | null } | null => {
+      if (!bvhs) {
+        const [first] = raycaster.intersectObjects(meshes, false);
+        return first ? { object: first.object as Mesh, uv: first.uv ?? null } : null;
+      }
+      let best: { object: Mesh; uv: { x: number; y: number } | null; distance: number } | null = null;
+      for (const [mesh, bvh] of bvhs) {
+        if (!mesh.visible) continue;
+        inverse.copy(mesh.matrixWorld).invert();
+        // The ray into the mesh's own space, keeping its length scale, so distances compare across meshes.
+        localO.copy(raycaster.ray.origin).applyMatrix4(inverse);
+        localT.copy(raycaster.ray.origin).add(raycaster.ray.direction).applyMatrix4(inverse).sub(localO);
+        const hit = pickBvh(bvh, [localO.x, localO.y, localO.z], [localT.x, localT.y, localT.z]);
+        if (hit && (!best || hit.distance < best.distance)) best = { object: mesh, uv: hit.uv, distance: hit.distance };
+      }
+      return best;
+    };
+
     const hitAt = (event: { clientX: number; clientY: number }) => {
       const rect = canvas.getBoundingClientRect();
       ndc.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1);
       raycaster.setFromCamera(ndc, camera);
-      const [first] = raycaster.intersectObjects(meshes, false);
+      const first = pick();
       const name = first && prepared.pieceMeshes.get(first.object as Mesh);
       if (!first?.uv || !name) return null;
       return pieceAtMeshUv(latest.current.product, name, { u: first.uv.x, v: first.uv.y });
@@ -681,7 +799,7 @@ function ModelView({
 
     const emit = (phase: LayerDragEvent["phase"], position: Point) => {
       if (!drag) return;
-      latest.current.onLayerDrag?.({ phase, layerId: drag.state.layerId, pieceId: drag.state.pieceId, position, free: drag.free, pxPerMm: drag.pxPerMm });
+      latest.current.onLayerDrag?.({ phase, layerId: drag.state.layerId, pieceId: drag.state.pieceId, position, free: drag.free, pxPerMm: drag.pxPerMm, ...(phase === "end" ? { moved: drag.moved } : {}) });
     };
 
     // The ray to the model is cast once per frame, for the latest pointer position (pointer events can come
@@ -706,6 +824,9 @@ function ModelView({
       if (!drag || event.pointerId !== drag.pointerId) return;
       event.preventDefault();
       drag.free = event.altKey;
+      // Until the pointer really travels, nothing moves (a click is not a move, B3).
+      if (!drag.moved && !travelledPast(drag.origin, { x: event.clientX, y: event.clientY })) return;
+      drag.moved = true;
       drag.pointer = { clientX: event.clientX, clientY: event.clientY };
       drag.frame ??= requestAnimationFrame(flush);
     };
@@ -733,7 +854,8 @@ function ModelView({
       }
       if (!drag || event.pointerId !== drag.pointerId) return;
       if (drag.frame !== null) cancelAnimationFrame(drag.frame);
-      if (phase === "end") {
+      if (phase === "end" && (drag.moved || travelledPast(drag.origin, { x: event.clientX, y: event.clientY }))) {
+        drag.moved = true;
         drag.pointer ??= { clientX: event.clientX, clientY: event.clientY };
         flush();
       }
@@ -752,8 +874,18 @@ function ModelView({
       down.add(event.pointerId);
       const { design: current, onSelectLayer: select, onLayerDrag: dragHandler, touchSlopMm: slop, pickZones: zones } = latest.current;
       if (drag) {
-        // A second finger during a drag: ignore it, and keep it from the orbit controls.
+        // A second finger during a drag ends the drag (cancelled: the item goes back; two fingers move the
+        // camera, never the item), and is kept from the orbit controls, which did not see the first finger.
         event.stopPropagation();
+        const first = drag;
+        if (first.frame !== null) cancelAnimationFrame(first.frame);
+        emit("cancel", first.position);
+        drag = null;
+        down.delete(first.pointerId);
+        window.removeEventListener("pointermove", onMove);
+        const controlsNow = latest.current.controls;
+        if (controlsNow) controlsNow.enabled = true;
+        canvas.style.cursor = "";
         return;
       }
       if (busy) {
@@ -784,7 +916,18 @@ function ModelView({
       event.preventDefault();
       select?.(layer.id);
       if (!dragHandler) return;
-      drag = { pointerId: event.pointerId, state: startLayerDrag(layer, hit.point), position: layer.position, pending: null, pointer: null, frame: null, free: event.altKey, pxPerMm: pxPerMmAt(layer.id) };
+      drag = {
+        pointerId: event.pointerId,
+        state: startLayerDrag(layer, hit.point),
+        position: layer.position,
+        pending: null,
+        pointer: null,
+        frame: null,
+        free: event.altKey,
+        pxPerMm: pxPerMmAt(layer.id),
+        origin: { x: event.clientX, y: event.clientY },
+        moved: false,
+      };
       const controlsNow = latest.current.controls;
       if (controlsNow) controlsNow.enabled = false;
       canvas.style.cursor = "grabbing";
@@ -796,6 +939,8 @@ function ModelView({
     window.addEventListener("pointerup", onUp, { capture: true });
     window.addEventListener("pointercancel", onCancel, { capture: true });
     return () => {
+      if (bvhTimer !== null) clearTimeout(bvhTimer);
+      if (bvhIdle !== null) (globalThis as { cancelIdleCallback?: (id: number) => void }).cancelIdleCallback?.(bvhIdle);
       host.removeEventListener("pointerdown", onDown, { capture: true });
       window.removeEventListener("pointerup", onUp, { capture: true });
       window.removeEventListener("pointercancel", onCancel, { capture: true });
@@ -922,6 +1067,7 @@ export function DesignCanvas({ className, style, onError, errorFallback, onLoadP
       resetView: () => handle.current?.resetView(),
       turnBy: (degrees) => handle.current?.turnBy(degrees),
       getSide: () => handle.current?.getSide() ?? null,
+      preview: (design, options) => handle.current?.preview(design, options),
     }),
     [],
   );

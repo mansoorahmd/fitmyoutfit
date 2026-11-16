@@ -55,3 +55,15 @@ export const TAP_MAX_MS = 700;
 export function isTap(from: { x: number; y: number; time: number }, to: { x: number; y: number; time: number }): boolean {
   return Math.hypot(to.x - from.x, to.y - from.y) <= TAP_SLOP_PX && to.time - from.time < TAP_MAX_MS;
 }
+
+/**
+ * How far (CSS px on the screen) a press must travel before it moves an item (E3c, B3). A press and release
+ * closer than this is never a move and never an undo step, whatever the camera did in between (a camera that
+ * re-frames under a still pointer puts another point of the cloth under it).
+ */
+export const DRAG_SLOP_PX = 4;
+
+/** Whether the pointer has gone further than `DRAG_SLOP_PX` from where it was pressed. */
+export function travelledPast(from: { x: number; y: number }, to: { x: number; y: number }, slop = DRAG_SLOP_PX): boolean {
+  return Math.hypot(to.x - from.x, to.y - from.y) > slop;
+}

@@ -28,6 +28,45 @@ export interface ImageHeader {
   alphaChannel: boolean;
   /** True for animated PNG and WebP. */
   animated: boolean;
+  /**
+   * JPEG only (E3c, B5): the EXIF Orientation tag, 1 to 8, when the file has one (phone cameras write it).
+   * `width` and `height` are the stored pixels; 5 to 8 mean the picture is shown turned a quarter, so
+   * it is seen `height` wide (`uprightSize`). Browsers show it upright.
+   */
+  orientation?: number;
+}
+
+/** The size a picture is SEEN at: its stored size, turned a quarter for EXIF orientations 5 to 8. */
+export function uprightSize(header: Pick<ImageHeader, "width" | "height" | "orientation">): { width: number; height: number } {
+  const turned = header.orientation !== undefined && header.orientation >= 5 && header.orientation <= 8;
+  return turned ? { width: header.height, height: header.width } : { width: header.width, height: header.height };
+}
+
+/**
+ * The EXIF Orientation (1 to 8) in an APP1 segment's data (which starts with the bytes of "Exif" and two zeros), or null when there is none or it
+ * cannot be read. Plain bytes, never throws.
+ */
+export function exifOrientation(segment: Uint8Array): number | null {
+  // "Exif" 0 0, then a TIFF header: byte order, 42, the first IFD's offset.
+  if (segment.length < 14 || segment[0] !== 0x45 || segment[1] !== 0x78 || segment[2] !== 0x69 || segment[3] !== 0x66 || segment[4] !== 0 || segment[5] !== 0) return null;
+  const tiff = 6;
+  const little = segment[tiff] === 0x49 && segment[tiff + 1] === 0x49;
+  if (!little && !(segment[tiff] === 0x4d && segment[tiff + 1] === 0x4d)) return null;
+  const u16 = (at: number) => (at + 2 > segment.length ? -1 : little ? segment[at]! | (segment[at + 1]! << 8) : (segment[at]! << 8) | segment[at + 1]!);
+  const u32 = (at: number) => (at + 4 > segment.length ? -1 : little ? (segment[at]! | (segment[at + 1]! << 8) | (segment[at + 2]! << 16)) + segment[at + 3]! * 0x1000000 : segment[at]! * 0x1000000 + ((segment[at + 1]! << 16) | (segment[at + 2]! << 8) | segment[at + 3]!));
+  if (u16(tiff + 2) !== 42) return null;
+  const ifd = tiff + u32(tiff + 4);
+  const count = u16(ifd);
+  if (count < 0 || count > 1000) return null;
+  for (let k = 0; k < count; k++) {
+    const entry = ifd + 2 + k * 12;
+    if (entry + 12 > segment.length) return null;
+    if (u16(entry) !== 0x0112) continue;
+    // Type SHORT (3), count 1: the value sits in the first two bytes of the value field.
+    const value = u16(entry + 8);
+    return value >= 1 && value <= 8 ? value : null;
+  }
+  return null;
 }
 
 export type ImageHeaderResult = { ok: true; header: ImageHeader } | { ok: false; error: string };
@@ -120,6 +159,7 @@ const JPEG_SOF = new Set([0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 
 
 function readJpeg(bytes: Uint8Array): ImageHeaderResult {
   let offset = 2;
+  let orientation: number | null = null;
   for (let guard = 0; guard < 10_000; guard++) {
     // Markers may be preceded by any number of 0xFF fill bytes.
     while (offset < bytes.length && bytes[offset] === 0xff && bytes[offset + 1] === 0xff) offset++;
@@ -134,12 +174,14 @@ function readJpeg(bytes: Uint8Array): ImageHeaderResult {
     if (marker === 0xd9 || marker === 0xda) break; // end of image, or start of scan without a frame header
     const length = u16be(bytes, offset + 2);
     if (length < 2) return { ok: false, error: "the JPEG file is damaged: a segment has no length" };
+    // APP1 with EXIF comes before the frame: the picture's orientation (phone photos).
+    if (marker === 0xe1 && orientation === null) orientation = exifOrientation(bytes.subarray(offset + 4, Math.min(bytes.length, offset + 2 + length)));
     if (JPEG_SOF.has(marker)) {
       if (offset + 9 > bytes.length) break;
       const height = u16be(bytes, offset + 5);
       const width = u16be(bytes, offset + 7);
       if (width === 0 || height === 0) return { ok: false, error: "the JPEG file does not state its size" };
-      return { ok: true, header: { mediaType: "image/jpeg", width, height, alphaChannel: false, animated: false } };
+      return { ok: true, header: { mediaType: "image/jpeg", width, height, alphaChannel: false, animated: false, ...(orientation !== null && orientation !== 1 ? { orientation } : {}) } };
     }
     offset += 2 + length;
   }

@@ -26,6 +26,13 @@ export interface EditorAssets {
   url: AssetUrlResolver;
   /** The file name a logo was uploaded with, when known ("Logo: crest.png"). */
   fileName?: (assetId: string) => string | null;
+  /** E3c, S2: files a design brought back refers to that are not on this device (the coach is told; the item shows it). */
+  missing?: readonly string[];
+  /** E3c, S3: what the checks found about each stored file (a box behind the logo, "Keep it"), kept with the files. */
+  notes?: () => Readonly<Record<string, LogoNote>>;
+  saveNote?: (assetId: string, note: LogoNote) => void;
+  /** E3c, S7: a file no design state in the undo and redo history refers to any more: delete it, revoke its URL. */
+  release?: (assetId: string) => void;
 }
 
 /** A colour zone or a group of shapes, as the Colours tool chooses them. */
@@ -43,6 +50,8 @@ export interface EditorApi {
   setDetent(detent: PanelDetent): void;
   /** The design as it is (not a hover preview). */
   design: DesignDocument;
+  /** The design as it is at this moment, even between two renders (an async flow adding several files). */
+  latestDesign?(): DesignDocument;
   /** Applies an edit as one undo step. False (and "That change couldn't be made.") when the edit throws. */
   commit(edit: (design: DesignDocument) => DesignDocument, label: EditLabel): boolean;
   /** A gesture (typing): begin, preview as often as needed, end: one undo step. */
@@ -83,11 +92,20 @@ export interface EditorApi {
   /** What the upload checks found about each uploaded file this session (a box behind the logo), by asset id. */
   logoNotes: Readonly<Record<string, LogoNote>>;
   setLogoNote(assetId: string, note: LogoNote): void;
+  /** E3c, S2: logo files the design refers to that are not on this device. */
+  missingAssets?: ReadonlySet<string>;
   /** Snapping to guides while placing (on by default; Alt holds it off with a mouse). */
   snapping: boolean;
   setSnapping(on: boolean): void;
   /** Logs a timing for the performance log (06-editor.md 11.3; E3 logs, E5 measures). */
   markTiming(name: string): void;
+  /**
+   * The items whose letter or outline colour the coach chose this session (E3c, B4): never recoloured when a
+   * design is applied; their readability fix keeps the letters and adds an outline. Optional for hosts' tests.
+   */
+  coachColoured?: ReadonlySet<string>;
+  /** The design as it is applied (a template, team colours): names and numbers that would be hard to read get a readable colour. */
+  readable?(design: DesignDocument): DesignDocument;
 }
 
 export const EditorContext = createContext<EditorApi | null>(null);
