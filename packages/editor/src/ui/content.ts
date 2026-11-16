@@ -153,6 +153,10 @@ export const EDITOR_WORDING = {
     removeText: "Remove", // W-ED98
     fontsLoading: "Fonts are still loading. Names may change shape slightly.", // W-ED145
     fontsFailed: "Some fonts couldn't load. Check your connection and try again.", // W-ED146
+    noPictographs: "Emoji and picture symbols can't be printed in a kit colour. Use letters, numbers and punctuation.", // NEW (E3c, S5): a field refuses them
+    hasPictographs: "This has emoji or picture symbols, which can't be printed in a kit colour.", // NEW (E3c, S5): a saved design that holds them
+    removePictographs: "Remove them", // NEW (E3c, S5)
+    textBlank: "Type some text, or remove this line.", // NEW (E3c): why an empty line of text can't be used (the reason W-ED149 lacked)
   },
   /** Logos (`logos`). The simple panel of E3a; the full flow is E3b. */
   logos: {
@@ -175,6 +179,7 @@ export const EDITOR_WORDING = {
     makeSharp: "Make it sharp", // W-ED96b
     network: "Your logo didn't upload. Check your connection and try again.", // W-ED97
     tryAgain: "Try again", // W-ED97
+    storageFull: "This device's storage is full, so your logo couldn't be kept. Free some space (or remove logos you no longer use), then try again.", // NEW (E3c, S4): with Try again
     replace: "Replace", // W-ED98
     remove: "Remove", // W-ED98
     addAnother: "Add another logo", // W-ED98
@@ -297,7 +302,7 @@ export const EDITOR_WORDING = {
     show: "Show", // W-ED161
     checkLine: "{item}: {reason}", // NEW: one line of the summary ("Logo on the left chest: may print blurry at this size.")
     checkHardToRead: "hard to read on {colour}.", // NEW (W-ED85 in the summary)
-    checks: { clipped: "part of it is cut off at the seam.", blurry: "may print blurry at this size.", box: "prints as a box with its background colour.", "hard-to-read": "hard to read." } as Record<"clipped" | "blurry" | "box" | "hard-to-read", string>, // NEW (W-ED111, W-ED96, W-ED95 in the summary)
+    checks: { clipped: "part of it is cut off at the seam.", blurry: "may print blurry at this size.", box: "prints as a box with its background colour.", "hard-to-read": "hard to read.", pictographs: "has emoji or picture symbols, which can't be printed.", missing: "its picture is missing on this device." } as Record<"clipped" | "blurry" | "box" | "hard-to-read" | "pictographs" | "missing", string>, // pictographs, missing: NEW (E3c, S5, S2) // NEW (W-ED111, W-ED96, W-ED95 in the summary)
     price: "Price", // W-ED168 (the host fills the slot)
     kitLine: "{product} · {team}", // NEW: the Done panel's line ("Jersey · Lahore Lions")
     doneOpen: "Done: the panel is open", // NEW: the top bar's Done while the Done panel is open (accessible name)

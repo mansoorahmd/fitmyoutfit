@@ -23,7 +23,7 @@ import { EditorIcon } from "./icons.js";
 import { presetsFor } from "./lettering.js";
 import { LOGO_ORDER, LOGO_SIZE_STEP, logoIsBlurry, logoSizeLimits, logoSizeWord, makeLogoSharp, nextLogoPreset, replaceLogoAsset, sharpWidth, type LogoLayer } from "./logos.js";
 import { Alert, PresetChips } from "./parts.js";
-import { uploadRefusal, uploadRefusalText } from "./upload-wording.js";
+import { isStorageFull, uploadRefusal, uploadRefusalText } from "./upload-wording.js";
 
 export { LOGO_ORDER };
 export { TextTool } from "./TextTool.js";
@@ -66,6 +66,7 @@ function useLogoUpload() {
   const api = useEditor();
   return async (file: File): Promise<Checked> => {
     let networkFailed = false;
+    let storageFull = false;
     try {
       const head = new Uint8Array(await file.slice(0, 65536).arrayBuffer());
       const result = await uploadLogo(file, {
@@ -73,21 +74,23 @@ function useLogoUpload() {
           try {
             return await api.assets.upload(request);
           } catch (error) {
-            networkFailed = true;
+            // The device's storage full (S4) is told apart from the network.
+            if (isStorageFull(error)) storageFull = true;
+            else networkFailed = true;
             throw error;
           }
         },
       });
       if (!result.ok) {
-        const kind = uploadRefusal(result.issues, { head, size: file.size, networkFailed });
+        const kind = uploadRefusal(result.issues, { head, size: file.size, networkFailed, storageFull });
         // The engine's message goes to the console for developers; the coach reads the wording.
         console.info("[editor] logo refused:", result.issues.map((i) => `${i.code}: ${i.message}`).join("; "));
-        return { ok: false, text: uploadRefusalText(api.wording, kind ?? "damaged", file.name, file.size), retry: networkFailed ? file : null };
+        return { ok: false, text: uploadRefusalText(api.wording, kind ?? "damaged", file.name, file.size), retry: networkFailed || storageFull ? file : null };
       }
       return { ok: true, asset: result.asset, issues: result.issues };
     } catch (error) {
       console.info("[editor] logo refused:", error);
-      return { ok: false, text: uploadRefusalText(api.wording, networkFailed ? "network" : "damaged", file.name, file.size), retry: networkFailed ? file : null };
+      return { ok: false, text: uploadRefusalText(api.wording, storageFull ? "storage-full" : networkFailed ? "network" : "damaged", file.name, file.size), retry: networkFailed || storageFull ? file : null };
     }
   };
 }

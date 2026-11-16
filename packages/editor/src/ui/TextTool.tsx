@@ -15,9 +15,12 @@ import { newTextLayer, nextLayerId } from "../design/new-layers.js";
 import { coloursCommonFirst, paletteColourRef } from "../design/palette.js";
 import { itemReadability, outlineColourFor } from "../design/readability.js";
 import { outlineStepOf, setOutline, setSizeStep, sizeStepOf, type OutlineStep, type SizeStep } from "../design/roles.js";
-import { TEAM_COLOUR_ROLES, type Layer } from "../design/schema.js";
+import { TEAM_COLOUR_ROLES, type DesignDocument, type Layer } from "../design/schema.js";
 import { teamColourValue } from "../design/team-colours.js";
-import { normalizeText, resolveTextDirection } from "../design/text.js";
+import { resolveTextDirection } from "../design/text.js";
+import { hasPictographs, stripPictographs } from "../design/typed-text.js";
+import { fieldCheck, fieldStep, type FieldState } from "./lettering.js";
+import { PictographAlert } from "./parts.js";
 import { fill } from "./content.js";
 import { useEditor } from "./context.js";
 import { EditorIcon } from "./icons.js";
@@ -34,12 +37,17 @@ export function TextTool() {
   const w = wording.lettering;
   const id = useId();
   const [draft, setDraft] = useState("");
+  const [draftError, setDraftError] = useState<string | null>(null);
   const texts = design.layers.filter((l): l is TextLayer => l.kind === "text" && l.role === "text");
   const font = fonts.fonts.find((f) => f.uses.includes("text"))!;
 
   const add = () => {
-    const value = normalizeText(draft.trim());
-    if (!value) return;
+    const checked = fieldCheck(wording, draft, "text");
+    if (checked.error) {
+      setDraftError(checked.error);
+      return;
+    }
+    const value = checked.value.trim();
     const preset = nextFreePreset(api.design, presetsFor(product, "text"), TEXT_ORDER);
     const layerId = nextLayerId(api.design, "text");
     const ok = api.commit((d) => addLayer(addCatalogFont(d, fonts, font.id), newTextLayer(product, { id: layerId, preset: preset?.id, pieceId: preset ? undefined : product.views.back, value, fontId: font.id, fill: teamColourValue(d, "second") }), { product }), "add-item");
@@ -57,12 +65,34 @@ export function TextTool() {
           {w.textLabel}
         </label>
         <div className="fmo-row" style={{ flexWrap: "nowrap" }}>
-          <input id={id} className="fmo-field" dir="auto" maxLength={60} value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} data-testid="text-input" />
+          <input
+            id={id}
+            className="fmo-field"
+            dir="auto"
+            maxLength={60}
+            value={draft}
+            aria-invalid={Boolean(draftError)}
+            onChange={(e) => {
+              setDraft(e.target.value);
+              const checked = fieldCheck(wording, e.target.value, "text");
+              setDraftError(checked.error === wording.lettering.noPictographs ? checked.error : null);
+            }}
+            onBlur={() => draft.trim() === "" && setDraftError(null)}
+            onKeyDown={(e) => e.key === "Enter" && add()}
+            data-testid="text-input"
+          />
           <button type="button" className="fmo-btn" style={{ minHeight: 48 }} onClick={add} disabled={draft.trim() === ""} data-testid="text-add">
             {w.addText}
           </button>
         </div>
-        <p className="fmo-muted">{w.sameOnEvery}</p>
+        {draftError ? (
+          <p className="fmo-field-error" role="alert" data-testid="text-input-error">
+            <EditorIcon name="alert" size={18} />
+            {draftError}
+          </p>
+        ) : (
+          <p className="fmo-muted">{w.sameOnEvery}</p>
+        )}
       </div>
       {texts.map((t) => (
         <TextItem key={t.id} layer={t} />
@@ -75,7 +105,8 @@ function TextItem({ layer }: { layer: TextLayer }) {
   const api = useEditor();
   const { product, wording, palette, fonts, design } = api;
   const w = wording.lettering;
-  const [draft, setDraft] = useState<string | null>(null);
+  const [field, setField] = useState<FieldState>({ draft: null, error: null });
+  const draft = field.draft;
   const selected = api.selectedId === layer.id;
   const rtl = resolveTextDirection(layer.value, layer.direction) === "rtl";
   const opts = { product };
@@ -102,15 +133,18 @@ function TextItem({ layer }: { layer: TextLayer }) {
             api.begin("text");
             api.setTyping(layer.id);
           }}
+          aria-invalid={Boolean(field.error)}
           onBlur={() => {
             api.end();
             api.setTyping(null);
-            setDraft(null);
+            setField((f) => fieldStep(f, { type: "left" }));
           }}
           onChange={(e) => {
-            setDraft(e.target.value);
-            const value = normalizeText(e.target.value);
-            if (value.trim()) api.preview((d) => updateLayer(d, layer.id, { value }, opts));
+            // Line breaks and tabs become spaces; emoji and an empty line are refused, with the reason (E3c).
+            const raw = e.target.value;
+            const checked = fieldCheck(wording, raw, "text");
+            setField((f) => fieldStep(f, { type: "typed", raw, error: checked.error }));
+            if (!checked.error) api.preview((d) => updateLayer(d, layer.id, { value: checked.value }, opts));
           }}
           data-testid={`text-value-${layer.id}`}
         />
@@ -125,6 +159,22 @@ function TextItem({ layer }: { layer: TextLayer }) {
           {w.removeText}
         </button>
       </div>
+      {field.error && (
+        <p className="fmo-field-error" role="alert" data-testid={`text-value-${layer.id}-error`}>
+          <EditorIcon name="alert" size={18} />
+          {field.error}
+        </p>
+      )}
+      {!field.error && hasPictographs(layer.value) && (
+        <PictographAlert
+          onRemove={(d: DesignDocument) => {
+            const value = stripPictographs(layer.value);
+            // A line that was only emoji goes.
+            return value ? updateLayer(d, layer.id, { value }, opts) : removeLayer(d, layer.id);
+          }}
+          testId={`pictographs-${layer.id}`}
+        />
+      )}
       <span className="fmo-label">{w.where}</span>
       <ItemWhere layer={layer} role="text" />
       <span className="fmo-label">{w.font}</span>
