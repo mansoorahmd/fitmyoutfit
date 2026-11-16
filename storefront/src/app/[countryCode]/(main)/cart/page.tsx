@@ -6,7 +6,9 @@ import { getCheckoutRules } from "@lib/data/checkout-rules"
 import { getGarmentsCollection } from "@lib/data/collections"
 import { retrieveCustomer } from "@lib/data/customer"
 import { getRegion } from "@lib/data/regions"
+import { dropStaleRush } from "@lib/data/rush"
 import { cartInOtherRegion } from "@lib/util/checkout-view"
+import { rushIsStale } from "@lib/util/rush"
 import EmptyCartMessage from "@modules/cart/components/empty-cart-message"
 import MoveCartToRegion from "@modules/cart/components/move-cart-to-region"
 import RegionMovedNotice from "@modules/cart/components/region-moved-notice"
@@ -33,7 +35,7 @@ export default async function Cart(props: {
   params: Promise<{ countryCode: string }>
 }) {
   const { countryCode } = await props.params
-  const [{ cart, failed }, customer] = await Promise.all([
+  const [{ cart: read, failed }, customer] = await Promise.all([
     retrieveCartForPage(),
     retrieveCustomer().catch(() => null),
   ])
@@ -41,6 +43,7 @@ export default async function Cart(props: {
   if (failed) {
     return <ServerError />
   }
+  let cart = read
 
   // Already an order (the answer to "Place order" was lost): its
   // confirmation, never the ordered cart as a live one (QA S1-4, D1).
@@ -72,12 +75,26 @@ export default async function Cart(props: {
     return <MoveCartToRegion countryCode={countryCode} fallback={<SkeletonCartPage />} />
   }
 
-  const [rules, options] = await Promise.all([
+  const [firstRules, options] = await Promise.all([
     getCheckoutRules(cart.id),
     listCartOptions()
       .then(({ shipping_options }) => shipping_options)
       .catch(() => null),
   ])
+
+  // A rush line the store no longer offers (the percentage became 0) is
+  // taken off before the cart is shown, and a quiet line says so; the
+  // customer never sees a charge for something not on offer (contract 9).
+  let rules = firstRules
+  let rushDropped = false
+  if (rushIsStale(rules) && (await dropStaleRush())) {
+    const fresh = await retrieveCartForPage()
+    if (fresh.cart && !fresh.cart.completed_at && fresh.cart.items?.length) {
+      cart = fresh.cart
+      rules = await getCheckoutRules(cart.id)
+      rushDropped = true
+    }
+  }
 
   const countryName =
     region?.countries?.find((c) => c.iso_2?.toLowerCase() === countryCode)?.display_name ??
@@ -98,6 +115,7 @@ export default async function Cart(props: {
         shippingOptions={options}
         countryCode={countryCode}
         isGuest={!customer}
+        rushDropped={rushDropped}
       />
     </UndoToastProvider>
   )

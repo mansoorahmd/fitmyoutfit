@@ -7,7 +7,9 @@ import { getCheckoutRules } from "@lib/data/checkout-rules"
 import { retrieveCustomer } from "@lib/data/customer"
 import { listCartShippingMethods } from "@lib/data/fulfillment"
 import { getRegion } from "@lib/data/regions"
+import { dropStaleRush } from "@lib/data/rush"
 import { cartInOtherRegion, checkoutView } from "@lib/util/checkout-view"
+import { rushIsStale } from "@lib/util/rush"
 import MoveCartToRegion from "@modules/cart/components/move-cart-to-region"
 import CompletedCartRecovery from "@modules/checkout/components/completed-cart"
 import CheckoutPage from "@modules/checkout/templates/checkout-page"
@@ -27,7 +29,8 @@ export const metadata: Metadata = {
  */
 export default async function Checkout(props: { params: Promise<{ countryCode: string }> }) {
   const { countryCode } = await props.params
-  const { cart, failed } = await retrieveCheckoutCart()
+  const { cart: read, failed } = await retrieveCheckoutCart()
+  let cart = read
 
   if (failed) {
     return <ServerError />
@@ -50,12 +53,25 @@ export default async function Checkout(props: { params: Promise<{ countryCode: s
     )
   }
 
-  const [customer, rules, shippingOptions, providerIds] = await Promise.all([
+  const [customer, firstRules, shippingOptions, providerIds] = await Promise.all([
     retrieveCustomer().catch(() => null),
     getCheckoutRules(cart.id),
     listCartShippingMethods(cart.id),
     cart.region_id ? listRegionPaymentProviders(cart.region_id) : Promise.resolve(null),
   ])
+
+  // A rush line the store no longer offers is taken off first, as on the
+  // cart page (contract 9): what is placed is what is shown.
+  let rules = firstRules
+  let rushDropped = false
+  if (rushIsStale(rules) && (await dropStaleRush())) {
+    const fresh = await retrieveCheckoutCart()
+    if (fresh.cart && !fresh.cart.completed_at && fresh.cart.items?.length) {
+      cart = fresh.cart
+      rules = await getCheckoutRules(cart.id)
+      rushDropped = true
+    }
+  }
 
   const view = checkoutView({
     cart,
@@ -64,6 +80,7 @@ export default async function Checkout(props: { params: Promise<{ countryCode: s
     providerIds,
     customer,
     countryCode,
+    rushDropped,
   })
 
   return <CheckoutPage view={view} />

@@ -10,6 +10,7 @@ import { fill } from "@lib/util/wording"
 import RegionMovedNotice from "@modules/cart/components/region-moved-notice"
 import Alert from "@modules/common/components/alert"
 import { ButtonLink } from "@modules/common/components/button"
+import { RushChoiceProvider } from "@modules/cart/components/rush-choice"
 
 import AddressStep from "../../components/address-step"
 import { focusStepOnOpen } from "../../step-memory"
@@ -60,6 +61,8 @@ const CheckoutPage = ({ view }: { view: CheckoutView }) => {
   const minimum = view.minimumBlocks ? view.minimum : null
 
   return (
+    // The delivery speed choice (step 2's delivery box) and the totals it changes share one state.
+    <RushChoiceProvider control={view.rushControl}>
     <div className={checkoutLayout.page} data-testid="checkout-page" data-step={step}>
       <p className="type-small text-brand-ink-muted" data-testid="step-label" aria-live="polite">
         {fill(checkoutContent.stepLabel, { n: stepWords.number, name: stepWords.name })}
@@ -123,6 +126,7 @@ const CheckoutPage = ({ view }: { view: CheckoutView }) => {
         </aside>
       </div>
     </div>
+    </RushChoiceProvider>
   )
 }
 

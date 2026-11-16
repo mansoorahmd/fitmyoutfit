@@ -28,6 +28,8 @@ const LIST_FIELDS = [
   // "items.quantity" and the like return no items at all (Medusa 2.22, checked
   // against the backend); the whole line is the smallest ask that works.
   "*items",
+  // the product's kind: the rush line is no piece and has no picture (contract 9)
+  "*items.product",
 ].join(",")
 
 /** One order's fields (05, 9.4): the confirmation's, the status, and whether the payment was captured. */

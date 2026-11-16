@@ -257,10 +257,13 @@ export async function choosePayment(providerId: string): Promise<ChoosePaymentRe
 export type PlaceOrderResult = Exclude<PlaceOrderOutcome, { kind: "order" }>
 
 /**
- * "Place order" (05, 6.6 to 6.8; contract 6 and 8.1). Creates the payment
- * session again when the cart lost it (any cart change drops it), then
- * completes the cart, once more on HTTP 409. Completing a cart that is
- * already an order returns that order, so pressing twice never orders twice.
+ * "Place order" (05, 6.6 to 6.8; contract 6, 8.1 and 9). Creates the
+ * payment session again when the cart lost it (any cart change drops it),
+ * checks the cart's total is `expectedTotal` (the one the page showed),
+ * then completes the cart; on the answers that mean "try again" (409, the
+ * dropped or missing payment session) it does all of it again, at most
+ * twice (placeOrderFlow). Completing a cart that is already an order
+ * returns that order, so pressing twice never orders twice.
  * On success it goes to the confirmation from here, as the starter did: the
  * cart cookie is gone by then, so the checkout must not render again.
  * Otherwise it answers with what happened.
@@ -275,7 +278,11 @@ export type PlaceOrderResult = Exclude<PlaceOrderOutcome, { kind: "order" }>
  *   alert: with the cart, it sent the customer to the cart page (D1); with
  *   the backend down, it showed the server-error block (D6).
  */
-export async function placeOrder(providerId: string, countryCode: string): Promise<PlaceOrderResult> {
+export async function placeOrder(
+  providerId: string,
+  countryCode: string,
+  expectedTotal?: number | null
+): Promise<PlaceOrderResult> {
   const cartId = await getCartId()
   if (!cartId) {
     return { kind: "cart_lost" }
@@ -285,12 +292,14 @@ export async function placeOrder(providerId: string, countryCode: string): Promi
   const left = () => Math.max(1, ends - Date.now())
 
   const outcome = await placeOrderFlow({
+    expectedTotal: typeof expectedTotal === "number" ? expectedTotal : null,
+    // answers with the cart as read (its total and whether it is an order already)
     ensureSession: () =>
       call(() =>
         within(left(), async (signal) => {
           const cart = await fetchCart(
             cartId,
-            "id,completed_at,*payment_collection,*payment_collection.payment_sessions",
+            "id,completed_at,total,currency_code,*payment_collection,*payment_collection.payment_sessions",
             signal
           )
           if (!cart.ok) throw { status: cart.status }
@@ -299,7 +308,7 @@ export async function placeOrder(providerId: string, countryCode: string): Promi
           if (sessionProviderId(cart.body) === providerId) return cart.body
           const started = await startSession(cartId, providerId, { revalidate: false })
           if (!started.ok) throw { status: started.status }
-          return started.body
+          return cart.body
         })
       ),
     complete: async () => {
@@ -323,7 +332,7 @@ export async function placeOrder(providerId: string, countryCode: string): Promi
       RedirectType.replace
     )
   }
-  if (outcome.kind === "refused") {
+  if (outcome.kind === "refused" || outcome.kind === "total_changed") {
     // the backend answered and the cart is still a cart: the page reads it again
     await revalidateCartCaches()
   }

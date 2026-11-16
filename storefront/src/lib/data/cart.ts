@@ -258,10 +258,11 @@ export async function addToCartAndConfirm({
       ...(await getAuthHeaders()),
     }
 
+    // `*items.product` brings each line's kind: the rush line is no piece (contract 9)
     const { cart: updated } = await sdk.store.cart.createLineItem(
       cart.id,
       { variant_id: variantId, quantity },
-      {},
+      { fields: "*items,*items.product" },
       headers
     )
 

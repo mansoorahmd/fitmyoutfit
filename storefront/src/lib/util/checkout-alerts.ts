@@ -6,6 +6,7 @@ import { checkoutContent } from "@content/checkout"
 import { errorContent } from "@content/errors"
 
 import { RefusalView } from "./checkout-order"
+import { convertToLocale } from "./money"
 import { fill } from "./wording"
 
 export type PlaceOrderAlertState =
@@ -25,10 +26,16 @@ export type PlaceOrderAlertState =
   | { kind: "cart_lost" }
   /** HTTP 5xx: the order may or may not exist (QA S1-4, D13). */
   | { kind: "server" }
+  /**
+   * The cart's total is not the one the page showed (contract 9: the rush
+   * price changed at that moment). Nothing was placed; the new total is
+   * shown and "Place order" places it on the next press.
+   */
+  | { kind: "total_changed"; total: number; currencyCode: string }
 
 export type PlaceOrderAlert = {
-  /** "success" only when the order is known to exist. */
-  variant: "error" | "success"
+  /** "success" only when the order is known to exist; "info" when nothing went wrong. */
+  variant: "error" | "success" | "info"
   title: string
   text?: string
   /** One action in the alert. */
@@ -143,6 +150,16 @@ export const placeOrderAlert = (state: PlaceOrderAlertState): PlaceOrderAlert =>
         text: errors.expiredText,
         action: "go_to_cart",
         hidePlaceOrder: true,
+      }
+    case "total_changed":
+      // nothing went wrong and nothing was placed: the customer sees the new total first
+      return {
+        ...base,
+        variant: "info",
+        title: errors.totalChangedTitle,
+        text: fill(errors.totalChangedText, {
+          total: convertToLocale({ amount: state.total, currency_code: state.currencyCode }),
+        }),
       }
     case "server":
       // A 5xx may come after the order was made: check before trying again.
