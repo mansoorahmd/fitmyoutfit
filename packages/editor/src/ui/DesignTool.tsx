@@ -56,7 +56,7 @@ function scratchTexture() {
 }
 
 function TemplateCard({ template, design, previous, current, onPick, images, version }: { template: Template; design: DesignDocument; previous: Template | null; current: boolean; onPick: () => void; images: AssetImageCache; version: number }) {
-  const { product, fonts, garmentView, wording } = useEditor();
+  const { product, fonts, garmentView, wording, readable } = useEditor();
   const ref = useRef<HTMLCanvasElement>(null);
   const [visible, setVisible] = useState(false);
   const drawn = useRef<string | null>(null);
@@ -87,6 +87,8 @@ function TemplateCard({ template, design, previous, current, onPick, images, ver
       let applied: DesignDocument;
       try {
         applied = applyTemplate(design, template, { product, fonts, previous });
+        // As a tap would apply it: names and numbers readable (B4).
+        if (readable) applied = readable(applied);
       } catch (error) {
         console.error("template card", template.id, error);
         return;
@@ -118,7 +120,7 @@ function TemplateCard({ template, design, previous, current, onPick, images, ver
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [visible, garmentView, product, design, template, fonts, previous, images, version]);
+  }, [visible, garmentView, product, design, template, fonts, previous, images, version, readable]);
 
   const label = current ? `${template.name}, ${wording.templates.current}` : template.name;
   return (

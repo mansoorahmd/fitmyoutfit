@@ -88,6 +88,13 @@ export interface EditorApi {
   setSnapping(on: boolean): void;
   /** Logs a timing for the performance log (06-editor.md 11.3; E3 logs, E5 measures). */
   markTiming(name: string): void;
+  /**
+   * The items whose letter or outline colour the coach chose this session (E3c, B4): never recoloured when a
+   * design is applied; their readability fix keeps the letters and adds an outline. Optional for hosts' tests.
+   */
+  coachColoured?: ReadonlySet<string>;
+  /** The design as it is applied (a template, team colours): names and numbers that would be hard to read get a readable colour. */
+  readable?(design: DesignDocument): DesignDocument;
 }
 
 export const EditorContext = createContext<EditorApi | null>(null);

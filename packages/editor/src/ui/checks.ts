@@ -33,6 +33,8 @@ export function readabilityWarnings(
   design: DesignDocument,
   palette: Pick<Palette, "colors"> | null,
   roles: readonly ItemRole[] | null = null,
+  /** Items whose colours the coach chose: their fix keeps the letters and adds an outline (B4). */
+  coachColoured: ReadonlySet<string> = new Set(),
 ): ReadabilityWarning[] {
   const out: ReadabilityWarning[] = [];
   for (const r of designReadability(product, design)) {
@@ -45,9 +47,15 @@ export function readabilityWarnings(
       same.layerIds.push(r.layerId);
       continue;
     }
-    out.push({ text, readability: r, layerIds: [r.layerId], remedy: readabilityRemedy(design, r, { palette: palette ?? undefined }) });
+    out.push({ text, readability: r, layerIds: [r.layerId], remedy: readabilityRemedy(design, r, { palette: palette ?? undefined, prefer: coachColoured.has(r.layerId) ? "outline" : "letters" }) });
   }
   return out;
+}
+
+/** The fix button's words: what it will do ("Use white letters", "Add white outline"). */
+export function remedyWords(wording: EditorWording, palette: Pick<Palette, "colors"> | null, remedy: ReadabilityRemedy): string {
+  const colour = colourName(palette, remedy.colour).toLowerCase();
+  return fill(remedy.kind === "outline" ? wording.lettering.addColourOutline : wording.lettering.useLetterColour, { colour });
 }
 
 /** What the editor knows about an uploaded file beyond the design (found by the upload checks, this session). */

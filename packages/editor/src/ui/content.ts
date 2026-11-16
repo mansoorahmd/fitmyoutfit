@@ -139,8 +139,9 @@ export const EDITOR_WORDING = {
     numberEmpty: "Enter a number to preview.", // W-ED81
     hardToRead: "{item} is hard to read on {colour}.", // W-ED85, NEW form (E3b): it names the item ("Number on the back is hard to read on Navy.")
     addOutline: "Add outline", // W-ED86
+    addColourOutline: "Add {colour} outline", // NEW (E3c): W-ED86 saying what it adds ("Add white outline")
     darkerColour: "Choose a darker colour", // W-ED86
-    useLetterColour: "Use {colour} letters", // NEW: the fix when a name crosses two colours (a sash)
+    useLetterColour: "Use {colour} letters", // NEW: the fix that changes the letters' colour ("Use white letters"; E3c: the colour in lower case)
     latinOnly: "Latin only: Arabic and Urdu use {font}", // W-ED87
     nameFont: "Font for names", // NEW
     numberFont: "Font for numbers", // NEW

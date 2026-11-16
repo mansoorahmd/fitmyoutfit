@@ -10,8 +10,8 @@ import { addCatalogFont } from "../design/font-catalog.js";
 import { updateLayer } from "../design/edit.js";
 import { coloursCommonFirst, paletteColourRef } from "../design/palette.js";
 import { contrastRatio } from "../design/colour.js";
-import { itemReadability, outlineColourFor } from "../design/readability.js";
-import { readabilityWarnings } from "./checks.js";
+import { applyReadabilityRemedy, itemReadability, outlineColourFor } from "../design/readability.js";
+import { readabilityWarnings, remedyWords } from "./checks.js";
 import { findLayers, isRoleSlotOn, outlineStepOf, placeAtPreset, setOutline, setRoleSlot, setSamplePlayer, setSizeStep, setTeamName, sizeStepOf, type LetteringStyle, type OutlineStep, type SizeStep } from "../design/roles.js";
 import { TEAM_COLOUR_ROLES, type ColorValue, type DesignDocument, type Layer, type PlacementPreset, type TeamColourRole } from "../design/schema.js";
 import { teamColourValue } from "../design/team-colours.js";
@@ -210,12 +210,13 @@ function ReadabilityWarnings({ roles }: { roles: ValueRole[] }) {
   const { design, product, palette, wording } = api;
   // Computed once per design (the panel re-renders often; this samples every colour under every item).
   const roleKey = roles.join(",");
-  const warnings = useMemo(() => readabilityWarnings(wording, product, design, palette, roleKey.split(",") as ValueRole[]), [wording, product, design, palette, roleKey]);
+  const coachColoured = api.coachColoured;
+  const warnings = useMemo(() => readabilityWarnings(wording, product, design, palette, roleKey.split(",") as ValueRole[], coachColoured), [wording, product, design, palette, roleKey, coachColoured]);
   if (warnings.length === 0) return null;
   return (
     <>
       {warnings.map(({ text, layerIds, remedy, readability: r }) => {
-        const fixLabel = remedy.kind === "outline" ? wording.lettering.addOutline : fill(wording.lettering.useLetterColour, { colour: colourName(palette, remedy.colour) });
+        const fixLabel = remedyWords(wording, palette, remedy);
         return (
           <Alert key={r.layerId} kind="warning" testId={`readability-${r.layerId}`}>
             <p>{text}</p>
@@ -223,14 +224,7 @@ function ReadabilityWarnings({ roles }: { roles: ValueRole[] }) {
               type="button"
               className="fmo-btn"
               onClick={() =>
-                api.commit(
-                  (d) =>
-                    layerIds.reduce(
-                      (acc, id) => (remedy.kind === "outline" ? setOutline(acc, id, { step: "thin", color: remedy.colour }, { product }) : updateLayer(acc, id, { fill: remedy.colour }, { product })),
-                      d,
-                    ),
-                  remedy.kind === "outline" ? "outline" : "colour",
-                )
+                api.commit((d) => applyReadabilityRemedy(d, layerIds, remedy, { product }), remedy.kind === "outline" ? "outline" : "colour")
               }
               data-testid={`readability-fix-${r.layerId}`}
             >

@@ -15,7 +15,8 @@ import type { FontCatalog } from "../design/font-catalog.js";
 import type { Palette } from "../design/palette.js";
 import type { DesignDocument, ProductDefinition } from "../design/schema.js";
 import type { Template } from "../design/template.js";
-import { fitDesignToAreas } from "../design/print-area.js";
+import { collectFitNotices, fitDesignToAreas } from "../design/print-area.js";
+import { makeReadable } from "../design/readability.js";
 import { createItemGestures, forwardGestures, type GestureEndReason, type GesturePhase, type ItemGestures } from "./item-gestures.js";
 import { layerSide } from "../design/roles.js";
 import type { EditLabel } from "../state/history.js";
@@ -171,6 +172,20 @@ function useReducedMotion(): boolean {
 
 const RECENT_KEY = "fmo-editor-recent";
 
+/** The edits that apply a design (B4): names and numbers that would be hard to read get a readable colour. */
+const APPLIES_DESIGN: ReadonlySet<EditLabel> = new Set<EditLabel>(["template", "team-colour", "swap-team-colours"]);
+
+/** The text and number items whose letters' or outline's colour differs between two designs. */
+export function colourChanges(before: DesignDocument, after: DesignDocument): string[] {
+  const was = new Map(before.layers.map((l) => [l.id, l]));
+  return after.layers.flatMap((l) => {
+    if (l.kind !== "text" && l.kind !== "number") return [];
+    const old = was.get(l.id);
+    if (!old || (old.kind !== "text" && old.kind !== "number")) return [];
+    return old.fill.hex !== l.fill.hex || old.outline?.color.hex !== l.outline?.color.hex ? [l.id] : [];
+  });
+}
+
 export function EditorShell(props: EditorShellProps) {
   const { product, palette, fonts, templates, assets } = props;
   const wording = useMemo(() => mergeWording(props.wording), [props.wording]);
@@ -266,12 +281,23 @@ export function EditorShell(props: EditorShellProps) {
     flashTimers.current.forEach(clearTimeout);
   }, []);
 
+  // The items whose colours the coach chose this session (B4: never recoloured when a design is applied).
+  const [coachColoured] = useState(() => new Set<string>());
+  const readable = useCallback((d: DesignDocument) => makeReadable(product, d, palette, { keep: coachColoured }), [product, palette, coachColoured]);
   // ---- Edits: one undo step each; an edit that throws is not applied (10.7).
   const commit = useCallback(
     (edit: (d: DesignDocument) => DesignDocument, label: EditLabel): boolean => {
       try {
         setHover(null);
-        history.commit(edit(designRef.current), label);
+        // The print-area rule may have made an item smaller to fit: never silently (B2).
+        const before = designRef.current;
+        const { value: edited, notices } = collectFitNotices(() => edit(before));
+        // A design applied (a template, the team's colours): every name and number readable (B4), except
+        // colours the coach chose; and the coach's own colour choices are remembered.
+        const value = APPLIES_DESIGN.has(label) ? makeReadable(product, edited, palette, { keep: coachColoured }) : edited;
+        if (label === "colour" || label === "outline") for (const id of colourChanges(before, value)) coachColoured.add(id);
+        history.commit(value, label);
+        if (notices.length > 0) announce(wording.selection.madeSmaller);
         return true;
       } catch (error) {
         console.error("[editor] edit refused:", error);
@@ -279,7 +305,7 @@ export function EditorShell(props: EditorShellProps) {
         return false;
       }
     },
-    [history, announce, wording],
+    [history, announce, wording, product, palette, coachColoured],
   );
   const preview = useCallback(
     (edit: (d: DesignDocument) => DesignDocument) => {
@@ -670,6 +696,8 @@ export function EditorShell(props: EditorShellProps) {
     markTiming: (name) => {
       timing.current = { name, start: performance.now() };
     },
+    coachColoured: coachColoured,
+    readable,
   };
 
   const selectOnModel = useCallback(
