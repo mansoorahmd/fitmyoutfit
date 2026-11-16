@@ -187,7 +187,7 @@ const CANCEL_LOCK_LIMIT_MS = 120 * 1000
  * cash lock (workflows/cash-collection/order-cash-lock.ts) and holds it until the response is sent,
  * so the cancel reads and changes the order's payments while no "mark cash as collected" runs on
  * the order, and a press waits until the cancel is done (QA's thirteenth review, B1). When the lock
- * is not free in time the cancel is not run: HTTP 409 with a sentence for staff.
+ * is not free in time the cancel is not run: HTTP 409 (`conflict`) with a sentence for staff.
  */
 export function holdOrderCashLockDuringCancel(
   req: MedusaRequest,
@@ -214,11 +214,12 @@ export function holdOrderCashLockDuringCancel(
         .warn(`Order cash lock of ${req.params.id}: ${(error as Error)?.message ?? error}`)
       return
     }
-    next(
-      error instanceof OrderCashLockBusy
-        ? new MedusaError(MedusaError.Types.CONFLICT, ORDER_BUSY_FOR_CANCEL_MESSAGE)
-        : error
-    )
+    if (error instanceof OrderCashLockBusy) {
+      // Answered here: Medusa's error handler replaces the message of every 409 with its own.
+      res.status(409).json({ type: MedusaError.Types.CONFLICT, message: ORDER_BUSY_FOR_CANCEL_MESSAGE })
+      return
+    }
+    next(error)
   })
 }
 

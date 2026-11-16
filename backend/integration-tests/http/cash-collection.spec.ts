@@ -14,6 +14,7 @@ import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils"
 import { seedStore } from "../../src/scripts/seed-lib/seed-store"
 import { moveLegacyCodMetadata } from "../../src/workflows/cash-collection/move-legacy-cod-metadata"
 import { insertCashCollectionRecord } from "../../src/workflows/cash-collection/record-cash-collection"
+import { withOrderCashLock } from "../../src/workflows/cash-collection/order-cash-lock"
 import moveCodMetadataToCashCollection from "../../src/migration-scripts/move-cod-metadata-to-cash-collection"
 
 jest.setTimeout(300 * 1000)
@@ -218,16 +219,160 @@ medusaIntegrationTestRunner({
             expect(kept).toHaveLength(marked.status === 200 ? 1 : 0)
             if (canceled.status === 200) {
               expect(state.order_canceled).toBe(true)
-              // Either nothing recorded on the canceled order, or recorded first and then canceled.
-              expect(["Canceled, not collected", "Collected, then canceled and refunded", "Collected, then canceled, not refunded"]).toContain(
-                state.label
-              )
+              // Either nothing recorded on the canceled order, or recorded first and then canceled
+              // and refunded: the order's cash lock lets no capture in while the cancel runs (QA's
+              // thirteenth review, B1), so no cash is left held.
+              expect(["Canceled, not collected", "Collected, then canceled and refunded"]).toContain(state.label)
+              expect(state.held_amount).toBe(0)
               expect(state.label.startsWith("Collected")).toBe(kept.length === 1)
             } else {
               expect(state.order_canceled).toBe(false)
             }
           }
           expect(Object.keys(outcomes).length).toBeGreaterThan(0)
+        })
+      })
+
+      // --- QA's thirteenth review: B1 and B3 ---
+
+      describe("a canceled order with cash still held, and the order's cash lock (QA13 B1)", () => {
+        const captureCount = async (orderId: string) =>
+          Number(
+            (
+              await sql(
+                `SELECT count(*)::int AS n FROM capture WHERE payment_id = ? AND deleted_at IS NULL`,
+                [(await paymentOf(orderId)).id]
+              )
+            )[0].n
+          )
+
+        /** What QA's races left: the cash captured, then the order (and payment) canceled, nothing refunded. */
+        async function canceledWithCashHeld(): Promise<string> {
+          const orderId = await placeCashOnDeliveryOrder()
+          expect((await captureInMedusa(orderId)).status).toBe(200)
+          await sql(`UPDATE "order" SET status = 'canceled' WHERE id = ?`, [orderId])
+          await sql(`UPDATE payment SET canceled_at = now() WHERE id = ?`, [(await paymentOf(orderId)).id])
+          return orderId
+        }
+
+        it("shows it as 'Canceled, cash still held' with the figures, and records the slip without a capture", async () => {
+          const orderId = await canceledWithCashHeld()
+          const state = await panel(orderId)
+          expect(state).toMatchObject({
+            stage: "canceled_cash_held",
+            label: "Canceled, cash still held",
+            tone: "red",
+            can_record: true,
+            capture_needed: false,
+            collected: true,
+            captured_amount: 2250,
+            refunded_amount: 0,
+            held_amount: 2250,
+            order_canceled: true,
+          })
+          expect(state.note).toContain("PKR 2,250 captured, PKR 0 refunded, PKR 2,250 still held.")
+          expect(state.note).toContain("Refund the PKR 2,250 in the order's Payments section")
+
+          const response = await record(orderId, "TCS 801")
+          expect(response.status).toBe(200)
+          expect(await captureCount(orderId)).toBe(1)
+          expect((await records(orderId)).map((r) => r.slip_reference)).toEqual(["TCS 801"])
+          expect(response.data.cash_collection).toMatchObject({
+            stage: "recorded",
+            slip_reference: "TCS 801",
+            label: "Collected, then canceled, not refunded",
+            tone: "red",
+            can_record: false,
+          })
+          // A second press is refused: already recorded.
+          expect((await record(orderId, "TCS 802")).status).toBe(400)
+        })
+
+        it("shows the part kept after a cancel that refunded only what it had seen (777 of 2,250)", async () => {
+          const orderId = await placeCashOnDeliveryOrder()
+          expect((await captureInMedusa(orderId, 777)).status).toBe(200)
+          expect((await captureInMedusa(orderId, 1473)).status).toBe(200)
+          expect((await refund(orderId, 777)).status).toBe(200)
+          await sql(`UPDATE "order" SET status = 'canceled' WHERE id = ?`, [orderId])
+          const state = await panel(orderId)
+          expect(state).toMatchObject({ stage: "canceled_cash_held", captured_amount: 2250, refunded_amount: 777, held_amount: 1473 })
+          expect(state.note).toContain("PKR 2,250 captured, PKR 777 refunded, PKR 1,473 still held.")
+          expect((await record(orderId, "TCS 803")).status).toBe(200)
+          expect(await panel(orderId)).toMatchObject({ label: "Collected, then canceled, partly refunded", slip_reference: "TCS 803" })
+        })
+
+        it("records at the insert on a canceled order only while cash is held, and never against a payment that is gone", async () => {
+          const container = getContainer()
+          const at = new Date()
+          const held = await canceledWithCashHeld()
+          expect(
+            await insertCashCollectionRecord(container, { orderId: held, paymentId: (await paymentOf(held)).id, slipReference: "H 1", collectedAt: at })
+          ).toBe("recorded")
+          const open = await placeCashOnDeliveryOrder()
+          // QA's thirteenth review, mutation B8: a payment that is not there counts as canceled.
+          expect(
+            await insertCashCollectionRecord(container, { orderId: open, paymentId: "pay_missing", slipReference: "H 2", collectedAt: at })
+          ).toBe("payment_canceled")
+          expect(await records(open)).toEqual([])
+        })
+
+        it("makes a cancel wait for a press that is capturing, so the cancel refunds what the press captured", async () => {
+          const orderId = await placeCashOnDeliveryOrder()
+          // The capture takes 1.5 s (the trigger), so the cancel arrives while it runs.
+          await sql(
+            `CREATE OR REPLACE FUNCTION s16b_slow_capture() RETURNS trigger AS $body$
+             BEGIN PERFORM pg_sleep(1.5); RETURN NEW; END $body$ LANGUAGE plpgsql`
+          )
+          await sql(`CREATE TRIGGER s16b_slow_capture BEFORE INSERT ON capture FOR EACH ROW EXECUTE FUNCTION s16b_slow_capture()`)
+          let marked: any
+          let canceled: any
+          try {
+            ;[marked, canceled] = await Promise.all([record(orderId, "TCS 804"), sleep(300).then(() => cancel(orderId))])
+          } finally {
+            await sql(`DROP TRIGGER IF EXISTS s16b_slow_capture ON capture`)
+            await sql(`DROP FUNCTION IF EXISTS s16b_slow_capture()`)
+          }
+          expect(marked.status).toBe(200)
+          expect(canceled.status).toBe(200)
+          expect(await panel(orderId)).toMatchObject({
+            label: "Collected, then canceled and refunded",
+            captured_amount: 2250,
+            refunded_amount: 2250,
+            held_amount: 0,
+            slip_reference: "TCS 804",
+          })
+        })
+
+        it("makes a press and a cancel wait while the order's cash lock is held, and answers 409 when it is held too long", async () => {
+          const container = getContainer()
+          const orderId = await placeCashOnDeliveryOrder()
+          const started = Date.now()
+          let cancelDoneAt = 0
+          let pending: Promise<any> | undefined
+          await withOrderCashLock(container, orderId, async () => {
+            pending = cancel(orderId).then((r: any) => {
+              cancelDoneAt = Date.now()
+              return r
+            })
+            await sleep(1000)
+            expect(cancelDoneAt).toBe(0)
+          })
+          expect((await pending)?.status).toBe(200)
+          expect(cancelDoneAt - started).toBeGreaterThanOrEqual(1000)
+          expect(await panel(orderId)).toMatchObject({ order_canceled: true, label: "Canceled, not collected" })
+
+          // Held for longer than a press waits: 409, nothing captured or recorded.
+          const other = await placeCashOnDeliveryOrder()
+          const press: any = await withOrderCashLock(container, other, () => record(other, "TCS 805"))
+          expect(press.status).toBe(409)
+          expect(press.data).toMatchObject({ type: "conflict" })
+          expect(press.data.message).toMatch(/^This order is being canceled, or its cash recorded, by another request/)
+          expect(await captureCount(other)).toBe(0)
+          expect(await records(other)).toEqual([])
+          const blockedCancel: any = await withOrderCashLock(container, other, () => cancel(other))
+          expect(blockedCancel.status).toBe(409)
+          expect(blockedCancel.data.message).toMatch(/^The cash for this order is being recorded at this moment/)
+          expect(await panel(other)).toMatchObject({ order_canceled: false })
         })
       })
 

@@ -121,12 +121,22 @@ export async function POST(req: AuthenticatedMedusaRequest, res: MedusaResponse)
   }
   const orderId = req.params.id
   const body = (req.body ?? {}) as { slip_reference?: unknown }
-  await forStaff(req.scope, UNEXPECTED_FAILURE_MESSAGE, () =>
-    markCashCollected(req.scope, {
-      order_id: orderId,
-      slip_reference: body.slip_reference,
-      recorded_by: actorId,
-    })
-  )
+  try {
+    await forStaff(req.scope, UNEXPECTED_FAILURE_MESSAGE, () =>
+      markCashCollected(req.scope, {
+        order_id: orderId,
+        slip_reference: body.slip_reference,
+        recorded_by: actorId,
+      })
+    )
+  } catch (error) {
+    // Answered here: Medusa's error handler replaces the message of every 409 with its own, and
+    // staff need to be told what happened.
+    if (isStaffMessage(error) && error.type === MedusaError.Types.CONFLICT) {
+      res.status(409).json({ type: error.type, message: error.message })
+      return
+    }
+    throw error
+  }
   res.json(await forStaff(req.scope, RECORDED_BUT_NOT_SHOWN_MESSAGE, () => describe(req.scope, orderId)))
 }
