@@ -195,6 +195,11 @@ export default function ProductActions({
       })
       if (!result.ok) {
         dismiss()
+        if (result.orderUrl) {
+          // the cart was already an order: open it (QA S1-4, D1)
+          router.push(result.orderUrl)
+          return
+        }
         setAddFailed(true)
         return
       }

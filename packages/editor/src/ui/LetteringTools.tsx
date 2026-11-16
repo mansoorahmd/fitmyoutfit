@@ -10,8 +10,10 @@ import { addCatalogFont } from "../design/font-catalog.js";
 import { updateLayer } from "../design/edit.js";
 import { coloursCommonFirst, paletteColourRef } from "../design/palette.js";
 import { contrastRatio } from "../design/colour.js";
-import { itemReadability, outlineColourFor } from "../design/readability.js";
-import { readabilityWarnings } from "./checks.js";
+import { applyReadabilityRemedy, itemReadability, outlineColourFor } from "../design/readability.js";
+import { readabilityWarnings, remedyWords } from "./checks.js";
+import { hasPictographs, stripPictographs } from "../design/typed-text.js";
+import { PictographAlert } from "./parts.js";
 import { findLayers, isRoleSlotOn, outlineStepOf, placeAtPreset, setOutline, setRoleSlot, setSamplePlayer, setSizeStep, setTeamName, sizeStepOf, type LetteringStyle, type OutlineStep, type SizeStep } from "../design/roles.js";
 import { TEAM_COLOUR_ROLES, type ColorValue, type DesignDocument, type Layer, type PlacementPreset, type TeamColourRole } from "../design/schema.js";
 import { teamColourValue } from "../design/team-colours.js";
@@ -20,7 +22,7 @@ import type { EditLabel } from "../state/history.js";
 import { fill, presetWords } from "./content.js";
 import { useEditor, type EditorApi } from "./context.js";
 import { EditorIcon } from "./icons.js";
-import { convertDigits, digitChoiceOf, numberErrorText, numberFieldError, playerSwitches, presetsFor, type DigitChoice } from "./lettering.js";
+import { convertDigits, digitChoiceOf, fieldCheck, fieldStep, playerSwitches, presetsFor, type DigitChoice, type FieldState } from "./lettering.js";
 import { Alert, PresetChips, Segmented, Swatch, SwitchRow } from "./parts.js";
 import { colourName } from "./stage-logic.js";
 
@@ -210,12 +212,13 @@ function ReadabilityWarnings({ roles }: { roles: ValueRole[] }) {
   const { design, product, palette, wording } = api;
   // Computed once per design (the panel re-renders often; this samples every colour under every item).
   const roleKey = roles.join(",");
-  const warnings = useMemo(() => readabilityWarnings(wording, product, design, palette, roleKey.split(",") as ValueRole[]), [wording, product, design, palette, roleKey]);
+  const coachColoured = api.coachColoured;
+  const warnings = useMemo(() => readabilityWarnings(wording, product, design, palette, roleKey.split(",") as ValueRole[], coachColoured), [wording, product, design, palette, roleKey, coachColoured]);
   if (warnings.length === 0) return null;
   return (
     <>
       {warnings.map(({ text, layerIds, remedy, readability: r }) => {
-        const fixLabel = remedy.kind === "outline" ? wording.lettering.addOutline : fill(wording.lettering.useLetterColour, { colour: colourName(palette, remedy.colour) });
+        const fixLabel = remedyWords(wording, palette, remedy);
         return (
           <Alert key={r.layerId} kind="warning" testId={`readability-${r.layerId}`}>
             <p>{text}</p>
@@ -223,14 +226,7 @@ function ReadabilityWarnings({ roles }: { roles: ValueRole[] }) {
               type="button"
               className="fmo-btn"
               onClick={() =>
-                api.commit(
-                  (d) =>
-                    layerIds.reduce(
-                      (acc, id) => (remedy.kind === "outline" ? setOutline(acc, id, { step: "thin", color: remedy.colour }, { product }) : updateLayer(acc, id, { fill: remedy.colour }, { product })),
-                      d,
-                    ),
-                  remedy.kind === "outline" ? "outline" : "colour",
-                )
+                api.commit((d) => applyReadabilityRemedy(d, layerIds, remedy, { product }), remedy.kind === "outline" ? "outline" : "colour")
               }
               data-testid={`readability-fix-${r.layerId}`}
             >
@@ -252,7 +248,6 @@ function ValueField({
   layerId,
   placeholder,
   numeric,
-  error,
   note,
   testId,
   editLabel,
@@ -264,14 +259,16 @@ function ValueField({
   layerId: string | null;
   placeholder?: string;
   numeric?: boolean;
-  error?: string | null;
   note?: string | null;
   testId: string;
   editLabel: EditLabel;
 }) {
   const api = useEditor();
   const id = useId();
-  const [draft, setDraft] = useState<string | null>(null);
+  // What is typed, and why it cannot be used (E3c): the kit keeps the last good value; leaving the field
+  // shows that value again and clears the message.
+  const [field, setField] = useState<FieldState>({ draft: null, error: null });
+  const { draft, error } = field;
   return (
     <div data-keep-typing>
       <label className="fmo-label" htmlFor={id}>
@@ -296,12 +293,14 @@ function ValueField({
         onBlur={() => {
           api.end();
           api.setTyping(null);
-          setDraft(null);
+          setField((f) => fieldStep(f, { type: "left" }));
         }}
         onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
         onChange={(e) => {
-          setDraft(e.target.value);
-          onType(e.target.value);
+          const raw = e.target.value;
+          const checked = fieldCheck(api.wording, raw, numeric ? "number" : "name");
+          setField((f) => fieldStep(f, { type: "typed", raw, error: checked.error }));
+          if (!checked.error) onType(checked.value);
         }}
         data-testid={testId}
       />
@@ -347,6 +346,7 @@ export function TeamTool() {
   return (
     <>
       <ValueField label={w.teamName} value={design.teamName} placeholder={wording.start.namePlaceholder} layerId={layers[0]?.id ?? null} onType={(v) => api.preview((d) => setTeamName(d, v))} testId="team-name" editLabel="team-name" />
+      {hasPictographs(design.teamName) && <PictographAlert onRemove={(d) => setTeamName(d, stripPictographs(d.teamName))} testId="pictographs-team-name" />}
       <div>
         <span className="fmo-label">{w.where}</span>
         <PresetChips product={product} presets={presets} current={at} words={(p) => presetWords(wording, p)} onPick={place} offLabel={w.off} onOff={off} testIdPrefix="team-where" />
@@ -362,19 +362,14 @@ export function PlayersTool() {
   const { design, product, wording, textFits } = api;
   const w = wording.lettering;
   const [fonts, setFonts] = useState<ValueRole | null>(null);
-  const [numberError, setNumberError] = useState<string | null>(null);
   const nameLayer = roleLayers(design, "player-name")[0];
   const numberLayer = roleLayers(design, "player-number")[0];
   const shrunk = textFits.some((f) => f.role === "player-name" && f.shrunk);
   const digits = digitChoiceOf(design.samplePlayer.number);
   if (fonts) return <FontList role={fonts} sample={fonts === "player-number" ? design.samplePlayer.number || w.sampleNumber : design.samplePlayer.name || w.sampleName} onBack={() => setFonts(null)} />;
 
-  const typeNumber = (value: string) => {
-    const error = numberFieldError(value);
-    setNumberError(error ? numberErrorText(wording, error) : null);
-    // The model keeps the last good number; no error ever reaches it.
-    if (!error) api.preview((d) => setSamplePlayer(d, { number: value }));
-  };
+  // The field refuses a number that breaks the rule (the model keeps the last good number).
+  const typeNumber = (value: string) => api.preview((d) => setSamplePlayer(d, { number: value }));
 
   return (
     <>
@@ -384,8 +379,9 @@ export function PlayersTool() {
       </span>
       <div className="fmo-fields" data-keep-typing>
         <ValueField label={w.playerName} value={design.samplePlayer.name} placeholder={w.sampleName} layerId={nameLayer?.id ?? null} onType={(v) => api.preview((d) => setSamplePlayer(d, { name: v }))} note={shrunk ? w.shrunk : null} testId="player-name" editLabel="player-name" />
-        <ValueField label={w.number} value={design.samplePlayer.number} placeholder={w.sampleNumber} numeric layerId={numberLayer?.id ?? null} onType={typeNumber} error={numberError} testId="player-number" editLabel="player-number" />
+        <ValueField label={w.number} value={design.samplePlayer.number} placeholder={w.sampleNumber} numeric layerId={numberLayer?.id ?? null} onType={typeNumber} testId="player-number" editLabel="player-number" />
       </div>
+      {hasPictographs(design.samplePlayer.name) && <PictographAlert onRemove={(d) => setSamplePlayer(d, { name: stripPictographs(d.samplePlayer.name) })} testId="pictographs-player-name" />}
       <section className="fmo-section" aria-label={w.onTheShirt}>
         <span className="fmo-label">{w.onTheShirt}</span>
         {playerSwitches(product, wording).map((s) => (

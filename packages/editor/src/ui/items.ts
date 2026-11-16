@@ -59,3 +59,22 @@ export function itemWordsById(wording: EditorWording, product: ProductDefinition
   const layer = design.layers.find((l) => l.id === layerId);
   return layer ? itemWords(wording, product, layer, options) : null;
 }
+
+/**
+ * An undo step's label naming what changed (E3c, 10.5): "move|Logo", "zone-colour|Body front". The part of the
+ * kit for a colour, else the item that changed (added, removed or edited); the bare key when nothing says.
+ */
+export function namedLabel(wording: EditorWording, product: ProductDefinition, label: string, before: Pick<DesignDocument, "zones" | "layers" | "shapes">, after: Pick<DesignDocument, "zones" | "layers" | "shapes">): string {
+  if (label === "zone-colour") {
+    const zone = product.zones.find((z) => JSON.stringify(before.zones[z.id]) !== JSON.stringify(after.zones[z.id]));
+    return zone ? `${label}|${zone.name}` : label;
+  }
+  if (label === "shape-colour") {
+    const shape = after.shapes.find((s) => JSON.stringify(before.shapes.find((b) => b.id === s.id)?.fill) !== JSON.stringify(s.fill));
+    return shape ? `${label}|${wording.shapeGroups[shape.group] ?? wording.shapeGroups.other}` : label;
+  }
+  const was = new Map(before.layers.map((l) => [l.id, JSON.stringify(l)]));
+  const changed = after.layers.find((l) => was.get(l.id) !== JSON.stringify(l)) ?? before.layers.find((l) => !after.layers.some((x) => x.id === l.id));
+  if (!changed) return label;
+  return `${label}|${wording.items.roles[changed.role] ?? wording.items.roles.text}`;
+}

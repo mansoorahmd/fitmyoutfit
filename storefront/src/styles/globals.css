@@ -106,7 +106,25 @@
   }
 }
 
+/*
+ * Text a customer typed (names, addresses, emails, references) wraps
+ * anywhere when a word is longer than its line, so one unbroken word never
+ * makes the page scroll sideways (QA S1-4, D11). Names and addresses are
+ * shown in <bdi> (05, 2.4); emails and other blocks take `.wrap-anywhere`.
+ * "anywhere" (not "break-word") also lets a flex or grid item shrink.
+ */
+@layer base {
+  bdi {
+    overflow-wrap: anywhere;
+  }
+}
+
 @layer utilities {
+  .wrap-anywhere {
+    overflow-wrap: anywhere;
+    min-width: 0;
+  }
+
   /* Chrome, Safari and Opera */
   .no-scrollbar::-webkit-scrollbar {
     display: none;

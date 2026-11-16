@@ -9,7 +9,7 @@
 import { addLayer, moveLayer, updateLayer, type EditOptions } from "./edit.js";
 import { nextLayerId } from "./new-layers.js";
 import { normalizeRotation, round3, scaleLayer } from "./placement.js";
-import { clampToPrintArea, maxScaleInArea, printAreaOf } from "./print-area.js";
+import { fitLayerToArea, maxScaleInArea, minItemSide, printAreaOf } from "./print-area.js";
 import type { DesignDocument, Layer, ProductDefinition } from "./schema.js";
 
 type Options = EditOptions & { product: ProductDefinition };
@@ -29,21 +29,47 @@ function find(design: DesignDocument, layerId: string): Layer {
   return layer;
 }
 
+/** The fields of a layer that the print-area rule may change (place, box, turn, font size). */
+function placed(layer: Layer): Partial<Layer> {
+  const { position, size, rotation } = layer;
+  return layer.kind === "text" || layer.kind === "number" ? { position, size, rotation, fontSize: layer.fontSize } : { position, size, rotation };
+}
+
+/** Applies `change` to the item, then the print-area rule (`fitLayerToArea`), as one update. */
+export function placeLayer(
+  design: DesignDocument,
+  layerId: string,
+  change: Partial<Pick<Layer, "position" | "size" | "rotation">> & { fontSize?: number },
+  options: Options,
+): DesignDocument {
+  const layer = find(design, layerId);
+  const fitted = fitLayerToArea(options.product, { ...layer, ...change } as Layer);
+  return updateLayer(design, layerId, placed(fitted), options);
+}
+
 /** Moves the item by (dx, dy) mm, staying inside its print area. */
 export function nudgeLayer(design: DesignDocument, layerId: string, dx: number, dy: number, options: Options): DesignDocument {
   const layer = find(design, layerId);
-  const position = clampToPrintArea(options.product, layer, { x: round3(layer.position.x + dx), y: round3(layer.position.y + dy) });
-  return updateLayer(design, layerId, { position }, options);
+  return placeLayer(design, layerId, { position: { x: round3(layer.position.x + dx), y: round3(layer.position.y + dy) } }, options);
 }
 
-/** Scales the item by `factor` about its centre, no larger than its print area allows. */
+/**
+ * The factor a resize may use: no larger than the print area allows (growing) and no smaller than the
+ * product's smallest size for the kind of item (shrinking). A shrink never grows the item, a growth never shrinks it.
+ */
+export function limitScale(product: Pick<ProductDefinition, "pieces" | "minItemSize">, layer: Layer, factor: number): number {
+  if (factor >= 1) {
+    const piece = product.pieces.find((p) => p.id === layer.pieceId);
+    return piece ? Math.min(factor, Math.max(1, maxScaleInArea(printAreaOf(piece), layer))) : factor;
+  }
+  const side = Math.min(layer.size.width, layer.size.height);
+  return side > 0 ? Math.max(factor, Math.min(1, minItemSide(product, layer.kind) / side)) : factor;
+}
+
+/** Scales the item by `factor` about its centre, no larger than its print area allows and no smaller than its kind's smallest size. */
 export function scaleLayerBy(design: DesignDocument, layerId: string, factor: number, options: Options): DesignDocument {
   const layer = find(design, layerId);
-  const piece = options.product.pieces.find((p) => p.id === layer.pieceId);
-  const limited = piece ? Math.min(factor, Math.max(1, maxScaleInArea(printAreaOf(piece), layer))) : factor;
-  const scaled = scaleLayer(layer, factor > 1 ? limited : factor);
-  const position = clampToPrintArea(options.product, { ...layer, size: scaled.size });
-  return updateLayer(design, layerId, { ...scaled, position }, options);
+  return placeLayer(design, layerId, scaleLayer(layer, limitScale(options.product, layer, factor)), options);
 }
 
 /** Turns the item by `degrees` (clockwise), or to `to` degrees; stays inside its print area. */
@@ -53,10 +79,8 @@ export function rotateLayerBy(design: DesignDocument, layerId: string, degrees: 
 }
 
 export function rotateLayerTo(design: DesignDocument, layerId: string, degrees: number, options: Options): DesignDocument {
-  const layer = find(design, layerId);
-  const rotation = normalizeRotation(degrees);
-  const position = clampToPrintArea(options.product, { ...layer, rotation });
-  return updateLayer(design, layerId, { rotation, position }, options);
+  find(design, layerId);
+  return placeLayer(design, layerId, { rotation: normalizeRotation(degrees) }, options);
 }
 
 /** "Centre on the shirt": on the piece's centre line (the print area's middle), at the same height. */
@@ -65,8 +89,7 @@ export function centreLayer(design: DesignDocument, layerId: string, options: Op
   const piece = options.product.pieces.find((p) => p.id === layer.pieceId);
   if (!piece) return design;
   const area = printAreaOf(piece);
-  const position = clampToPrintArea(options.product, layer, { x: round3(area.x + area.width / 2), y: layer.position.y });
-  return updateLayer(design, layerId, { position }, options);
+  return placeLayer(design, layerId, { position: { x: round3(area.x + area.width / 2), y: layer.position.y } }, options);
 }
 
 /** Which items may be duplicated: logos and free text (06-editor.md 4.8). Names and numbers come from the team, once each. */
@@ -79,10 +102,10 @@ export function duplicateLayer(design: DesignDocument, layerId: string, options:
   const layer = find(design, layerId);
   if (!canDuplicate(layer)) throw new RangeError(`a ${layer.role} item cannot be duplicated`);
   const id = nextLayerId(design, layer.kind === "text" ? "text" : "logo");
-  const position = clampToPrintArea(options.product, layer, { x: round3(layer.position.x + DUPLICATE_OFFSET_MM), y: round3(layer.position.y + DUPLICATE_OFFSET_MM) });
   const { preset: _preset, ...rest } = layer;
   void _preset;
-  const copy = { ...rest, id, position } as Layer;
+  const position = { x: round3(layer.position.x + DUPLICATE_OFFSET_MM), y: round3(layer.position.y + DUPLICATE_OFFSET_MM) };
+  const copy = fitLayerToArea(options.product, { ...rest, id, position } as Layer);
   const added = addLayer(design, copy, options);
   const from = added.layers.findIndex((l) => l.id === id);
   const to = added.layers.findIndex((l) => l.id === layerId) + 1;

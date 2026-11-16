@@ -25,6 +25,13 @@ const CARD_TEXTURE = 512;
  */
 const queue: Array<() => void> = [];
 let pumping = false;
+/** When the browser is idle (S1: the cards stay off the path of a tap), else on the next task. */
+function later(fn: () => void): void {
+  const idle = (globalThis as { requestIdleCallback?: (fn: () => void, options?: { timeout: number }) => void }).requestIdleCallback;
+  if (idle) idle(fn, { timeout: 3000 });
+  else setTimeout(fn, 0);
+}
+
 function scheduleCard(job: () => void): void {
   queue.push(job);
   if (pumping) return;
@@ -36,27 +43,32 @@ function scheduleCard(job: () => void): void {
       return;
     }
     next();
-    setTimeout(pump, 0);
+    later(pump);
   };
-  setTimeout(pump, 0);
+  later(pump);
 }
 
-/** One shared canvas for the cards' textures, made when first needed. */
-let scratch: { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D } | null = null;
-function scratchTexture() {
+/** The inside of the garment (seen through the neck) is drawn without prints, small (E3c). */
+const CARD_INSIDE_TEXTURE = 128;
+
+/** Shared canvases for the cards' textures (the outside, and the inside), made when first needed. */
+const scratches = new Map<number, { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D }>();
+function scratchTexture(size = CARD_TEXTURE) {
+  let scratch = scratches.get(size);
   if (!scratch) {
     const canvas = document.createElement("canvas");
-    canvas.width = CARD_TEXTURE;
-    canvas.height = CARD_TEXTURE;
+    canvas.width = size;
+    canvas.height = size;
     const ctx = canvas.getContext("2d", { willReadFrequently: true });
     if (!ctx) return null;
     scratch = { canvas, ctx };
+    scratches.set(size, scratch);
   }
   return scratch;
 }
 
 function TemplateCard({ template, design, previous, current, onPick, images, version }: { template: Template; design: DesignDocument; previous: Template | null; current: boolean; onPick: () => void; images: AssetImageCache; version: number }) {
-  const { product, fonts, garmentView, wording } = useEditor();
+  const { product, fonts, garmentView, wording, readable } = useEditor();
   const ref = useRef<HTMLCanvasElement>(null);
   const [visible, setVisible] = useState(false);
   const drawn = useRef<string | null>(null);
@@ -84,18 +96,26 @@ function TemplateCard({ template, design, previous, current, onPick, images, ver
     let cancelled = false;
     // A short wait, so typing a team name does not redraw every card on every key.
     const timer = setTimeout(() => {
-      let applied: DesignDocument;
-      try {
-        applied = applyTemplate(design, template, { product, fonts, previous });
-      } catch (error) {
-        console.error("template card", template.id, error);
-        return;
-      }
-      // The same picture as last time (after a tap, most cards do not change): nothing to draw.
-      const key = `${version}|${JSON.stringify(applied)}`;
-      if (key === drawn.current) return;
+      // Applying the template is work too: it waits for the browser to be idle, as the drawing does (S1).
       scheduleCard(() => {
+        if (cancelled) return;
+        let applied: DesignDocument;
+        try {
+          applied = applyTemplate(design, template, { product, fonts, previous });
+          // As a tap would apply it: names and numbers readable (B4).
+          if (readable) applied = readable(applied);
+        } catch (error) {
+          console.error("template card", template.id, error);
+          return;
+        }
+        // The same picture as last time (after a tap, most cards do not change): nothing to draw.
+        const key = `${version}|${JSON.stringify(applied)}`;
+        if (key === drawn.current) return;
+        // The drawing is its own idle job (S1: shorter jobs, so a tap is not kept waiting behind a card).
+        scheduleCard(() => {
+        if (cancelled) return;
         const tex = scratchTexture();
+        const insideTex = scratchTexture(CARD_INSIDE_TEXTURE);
         const ctx = canvas.getContext("2d");
         if (cancelled || !tex || !ctx) return;
         const start = performance.now();
@@ -105,6 +125,7 @@ function TemplateCard({ template, design, previous, current, onPick, images, ver
             view: garmentView,
             images: images.lookup,
             texture: { ctx: tex.ctx, size: CARD_TEXTURE, read: () => samplerFromRgba(tex.ctx.getImageData(0, 0, CARD_TEXTURE, CARD_TEXTURE).data, CARD_TEXTURE, CARD_TEXTURE) },
+            ...(insideTex ? { insideTexture: { ctx: insideTex.ctx, size: CARD_INSIDE_TEXTURE, read: () => samplerFromRgba(insideTex.ctx.getImageData(0, 0, CARD_INSIDE_TEXTURE, CARD_INSIDE_TEXTURE).data, CARD_INSIDE_TEXTURE, CARD_INSIDE_TEXTURE) } } : {}),
           });
           ctx.putImageData(out, 0, 0);
           drawn.current = key;
@@ -112,13 +133,14 @@ function TemplateCard({ template, design, previous, current, onPick, images, ver
         } catch (error) {
           console.error("template card", template.id, error);
         }
+        });
       });
-    }, 120);
+    }, 400);
     return () => {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [visible, garmentView, product, design, template, fonts, previous, images, version]);
+  }, [visible, garmentView, product, design, template, fonts, previous, images, version, readable]);
 
   const label = current ? `${template.name}, ${wording.templates.current}` : template.name;
   return (

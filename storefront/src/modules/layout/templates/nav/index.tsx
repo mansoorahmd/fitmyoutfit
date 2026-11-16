@@ -33,7 +33,7 @@ export default async function Nav({ countryCode }: { countryCode: string }) {
   const regionChoices = toRegionChoices(regions)
 
   return (
-    <div className="sticky top-0 inset-x-0 z-50">
+    <div className="sticky top-0 inset-x-0 z-50 print:hidden">
       <header className="bg-brand-inverse text-brand-on-inverse">
         <nav
           aria-label="Main"
@@ -89,7 +89,7 @@ export default async function Nav({ countryCode }: { countryCode: string }) {
               {navigationContent.accountLink.label}
             </LocalizedClientLink>
             <Suspense fallback={<CartLink count={0} />}>
-              <CartButton />
+              <CartButton countryCode={countryCode} />
             </Suspense>
           </div>
         </nav>

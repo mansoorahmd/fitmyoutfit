@@ -139,8 +139,9 @@ export const EDITOR_WORDING = {
     numberEmpty: "Enter a number to preview.", // W-ED81
     hardToRead: "{item} is hard to read on {colour}.", // W-ED85, NEW form (E3b): it names the item ("Number on the back is hard to read on Navy.")
     addOutline: "Add outline", // W-ED86
+    addColourOutline: "Add {colour} outline", // NEW (E3c): W-ED86 saying what it adds ("Add white outline")
     darkerColour: "Choose a darker colour", // W-ED86
-    useLetterColour: "Use {colour} letters", // NEW: the fix when a name crosses two colours (a sash)
+    useLetterColour: "Use {colour} letters", // NEW: the fix that changes the letters' colour ("Use white letters"; E3c: the colour in lower case)
     latinOnly: "Latin only: Arabic and Urdu use {font}", // W-ED87
     nameFont: "Font for names", // NEW
     numberFont: "Font for numbers", // NEW
@@ -152,6 +153,10 @@ export const EDITOR_WORDING = {
     removeText: "Remove", // W-ED98
     fontsLoading: "Fonts are still loading. Names may change shape slightly.", // W-ED145
     fontsFailed: "Some fonts couldn't load. Check your connection and try again.", // W-ED146
+    noPictographs: "Emoji and picture symbols can't be printed in a kit colour. Use letters, numbers and punctuation.", // NEW (E3c, S5): a field refuses them
+    hasPictographs: "This has emoji or picture symbols, which can't be printed in a kit colour.", // NEW (E3c, S5): a saved design that holds them
+    removePictographs: "Remove them", // NEW (E3c, S5)
+    textBlank: "Type some text, or remove this line.", // NEW (E3c): why an empty line of text can't be used (the reason W-ED149 lacked)
   },
   /** Logos (`logos`). The simple panel of E3a; the full flow is E3b. */
   logos: {
@@ -174,6 +179,11 @@ export const EDITOR_WORDING = {
     makeSharp: "Make it sharp", // W-ED96b
     network: "Your logo didn't upload. Check your connection and try again.", // W-ED97
     tryAgain: "Try again", // W-ED97
+    missingFile: "A logo in this design isn't on this device any more. Add it again, or remove it.", // NEW (E3c, S2): said when a saved design opens
+    missingCard: "This logo's file isn't on this device any more.", // NEW (E3c, S2): on the logo's card
+    addAgain: "Add it again", // NEW (E3c, S2)
+    tooMany: "A kit can carry up to {count} logos. Remove one to add another.", // NEW (E3c): several files dropped at once, beyond the limit
+    storageFull: "This device's storage is full, so your logo couldn't be kept. Free some space (or remove logos you no longer use), then try again.", // NEW (E3c, S4): with Try again
     replace: "Replace", // W-ED98
     remove: "Remove", // W-ED98
     addAnother: "Add another logo", // W-ED98
@@ -202,6 +212,7 @@ export const EDITOR_WORDING = {
     clipped: "Part of this is cut off at the seam.", // W-ED111
     moveIn: "Move it in", // W-ED111b
     tooBigToFit: "Make it smaller so it fits on the shirt.", // NEW: when no place fits ("Move it in" cannot help)
+    madeSmaller: "Made smaller so it fits where it prints.", // NEW (E3c): the print-area rule had to shrink the item (a turn, a place, a size)
     turnToEdit: "Turn to edit", // W-ED112
     fineTune: "Fine-tune", // W-ED113
     bigger: "Bigger", // W-ED114
@@ -295,7 +306,7 @@ export const EDITOR_WORDING = {
     show: "Show", // W-ED161
     checkLine: "{item}: {reason}", // NEW: one line of the summary ("Logo on the left chest: may print blurry at this size.")
     checkHardToRead: "hard to read on {colour}.", // NEW (W-ED85 in the summary)
-    checks: { clipped: "part of it is cut off at the seam.", blurry: "may print blurry at this size.", box: "prints as a box with its background colour.", "hard-to-read": "hard to read." } as Record<"clipped" | "blurry" | "box" | "hard-to-read", string>, // NEW (W-ED111, W-ED96, W-ED95 in the summary)
+    checks: { clipped: "part of it is cut off at the seam.", blurry: "may print blurry at this size.", box: "prints as a box with its background colour.", "hard-to-read": "hard to read.", pictographs: "has emoji or picture symbols, which can't be printed.", missing: "its picture is missing on this device." } as Record<"clipped" | "blurry" | "box" | "hard-to-read" | "pictographs" | "missing", string>, // pictographs, missing: NEW (E3c, S5, S2) // NEW (W-ED111, W-ED96, W-ED95 in the summary)
     price: "Price", // W-ED168 (the host fills the slot)
     kitLine: "{product} · {team}", // NEW: the Done panel's line ("Jersey · Lahore Lions")
     doneOpen: "Done: the panel is open", // NEW: the top bar's Done while the Done panel is open (accessible name)
@@ -313,6 +324,7 @@ export const EDITOR_WORDING = {
     "player-number": "Number",
     "add-item": "Added item",
     "remove-item": "Removed item",
+    "replace-logo": "Logo replaced", // NEW (E3c, 10.5)
     move: "Position",
     resize: "Size",
     rotate: "Turn",
@@ -328,6 +340,27 @@ export const EDITOR_WORDING = {
     direction: "Direction",
     fallback: "Change",
   } satisfies Record<EditLabel | "fallback", string>,
+  /**
+   * The same, naming what changed (E3c, 10.5: "Undone: Body colour", "Logo position"), NEW: {item} is the part
+   * of the kit or the item ("Body front", "Logo", "Team name"). A key not listed uses `changes`.
+   */
+  changesOf: {
+    "zone-colour": "{item} colour",
+    "shape-colour": "{item} colour",
+    "add-item": "{item} added",
+    "remove-item": "{item} removed",
+    move: "{item} position",
+    resize: "{item} size",
+    rotate: "{item} turn",
+    order: "{item} order",
+    placement: "{item} position",
+    text: "{item} text",
+    font: "{item} font",
+    colour: "{item} colour",
+    outline: "{item} outline",
+    size: "{item} size",
+    align: "{item} alignment",
+  } as Record<string, string>,
   /**
    * The "Where" chips: words for the products' placement presets, by preset id.
    * A preset not listed shows the product's own name for it.
@@ -400,7 +433,11 @@ export function fill(template: string, values: Record<string, string | number>):
 
 /** The words for an undo step's label key ("zone-colour" → "Colour"); never the key itself. */
 export function changeWords(wording: EditorWording, label: string | null | undefined): string {
-  return (label && (wording.changes as Record<string, string>)[label]) || wording.changes.fallback;
+  // A label may name what changed: "move|Logo" (E3c, 10.5).
+  const [key, subject] = (label ?? "").split("|");
+  const named = key && subject ? wording.changesOf[key] : undefined;
+  if (named) return fill(named, { item: subject! });
+  return (key && (wording.changes as Record<string, string>)[key]) || wording.changes.fallback;
 }
 
 /** The words for a placement preset: the wording's, else the product's own name for it. */

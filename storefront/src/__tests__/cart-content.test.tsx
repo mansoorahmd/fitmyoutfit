@@ -5,10 +5,14 @@ import { describe, expect, it, vi } from "vitest"
 
 vi.mock("next/navigation", () => ({ useParams: () => ({ countryCode: "pk" }) }))
 
+import { accountContent } from "@content/account"
 import { cartContent } from "@content/cart"
 import { checkoutContent } from "@content/checkout"
+import { orderContent } from "@content/order"
 import { productContent } from "@content/product"
 import CartLink, { cartLinkLabel } from "@modules/layout/components/cart-link"
+
+import { ACCOUNT_FILES } from "./account-files"
 
 const src = path.resolve(__dirname, "..")
 const read = (file: string) => fs.readFileSync(path.join(src, file), "utf8")
@@ -46,11 +50,33 @@ const COMPONENTS = [
   "modules/products/components/size-chart/index.tsx",
   "modules/products/components/size-chart/size-chart-table.tsx",
   "modules/products/components/size-chart/unit-switch.tsx",
+  // S1-4: the checkout and the order confirmation
+  "app/[countryCode]/(checkout)/layout.tsx",
+  "app/[countryCode]/(checkout)/checkout/page.tsx",
+  "app/[countryCode]/(main)/order/[id]/confirmed/page.tsx",
+  "app/[countryCode]/(main)/order/[id]/confirmed/not-found.tsx",
+  "modules/cart/components/move-cart-to-region/index.tsx",
+  "modules/checkout/components/address-step/index.tsx",
+  "modules/checkout/components/address-summary/index.tsx",
+  "modules/checkout/components/delivery-block/index.tsx",
+  "modules/checkout/components/order-check/index.tsx",
+  "modules/checkout/components/order-summary/index.tsx",
+  "modules/checkout/components/payment-choice/index.tsx",
+  "modules/checkout/components/payment-step/index.tsx",
+  "modules/checkout/components/summary-lines/index.tsx",
+  "modules/checkout/templates/checkout-page/index.tsx",
+  "modules/checkout/templates/checkout-skeleton/index.tsx",
+  "modules/common/components/check-field/index.tsx",
+  "modules/common/components/radio-card/index.tsx",
+  "modules/common/components/text-field/index.tsx",
+  "modules/order/templates/order-completed-template.tsx",
+  // S1-5: sign-in, create account and the account area
+  ...ACCOUNT_FILES,
 ]
 
 describe("M1 wording", () => {
   it("is marked as draft wording", () => {
-    for (const file of ["content/cart.ts", "content/checkout.ts", "content/errors.ts"]) {
+    for (const file of ["content/cart.ts", "content/checkout.ts", "content/errors.ts", "content/order.ts", "content/account.ts"]) {
       expect(read(file).startsWith("// DRAFT WORDING."), file).toBe(true)
     }
   })
@@ -94,6 +120,8 @@ describe("M1 wording", () => {
     const sentences = [
       ...strings(cartContent),
       ...strings(checkoutContent),
+      ...strings(orderContent),
+      ...strings(accountContent),
       ...strings(productContent.sizeChart),
     ].filter((s) => s.length > 6 && !s.startsWith("/"))
     for (const file of COMPONENTS) {

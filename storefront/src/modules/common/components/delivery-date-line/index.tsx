@@ -10,14 +10,21 @@ import LineIcon from "@modules/home/components/line-icon"
  * 05-m1-pages.md, 2.6). The date is the backend's (checkout-rules), as
  * "YYYY-MM-DD". Without a readable date the line is left out, never
  * replaced by a guess. `loading` shows a 220 × 20 grey bar for the date.
+ *
+ * `note` false: a placed order's kept date (the confirmation and order
+ * history). The note W-D2 says the date counts from today, which is only
+ * true before the order is placed (QA S1-4, D2); the cart and checkout
+ * keep it.
  */
 const DeliveryDateLine = ({
   date,
   loading = false,
+  note = true,
   className,
 }: {
   date: string | null | undefined
   loading?: boolean
+  note?: boolean
   className?: string
 }) => {
   const shown = date ? formatDeliveryDate(date) : null
@@ -39,9 +46,11 @@ const DeliveryDateLine = ({
             {fill(checkoutContent.delivery.deliveredBy, { date: shown! })}
           </p>
         )}
-        <p className="type-small text-brand-ink-muted">
-          {checkoutContent.delivery.note}
-        </p>
+        {note && (
+          <p className="type-small text-brand-ink-muted" data-testid="delivery-date-note">
+            {checkoutContent.delivery.note}
+          </p>
+        )}
       </div>
     </div>
   )

@@ -425,6 +425,60 @@
         ],
         "additionalProperties": false
       }
+    },
+    "minItemSize": {
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "number": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "logo": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "clipart": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        }
+      },
+      "required": [
+        "text",
+        "number",
+        "logo",
+        "clipart"
+      ],
+      "additionalProperties": false
+    },
+    "placementOrder": {
+      "type": "object",
+      "properties": {
+        "logo": {
+          "maxItems": 100,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+          }
+        },
+        "text": {
+          "maxItems": 100,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+          }
+        }
+      },
+      "required": [
+        "logo",
+        "text"
+      ],
+      "additionalProperties": false
     }
   },
   "required": [

@@ -135,22 +135,17 @@ export const cartShowsTaxNote = (
 ): boolean => showsTaxNote(cart.region)
 
 /**
- * Where "Go to checkout" leads. The current checkout still has a separate
- * delivery step, so a cart with an address but no shipping method goes
- * there; the two-step checkout (05, 6.1) replaces this with address or
- * payment.
+ * Where "Go to checkout" leads (05, 6.1): step 1, contact and address,
+ * until the cart has an email, a delivery address and its delivery method;
+ * then step 2, delivery and payment. The checkout opens step 1 itself when
+ * the address it holds isn't complete.
  */
 export const checkoutHref = (
   cart: Pick<HttpTypes.StoreCart, "email" | "shipping_address" | "shipping_methods">
-): string => {
-  if (!cart.shipping_address?.address_1 || !cart.email) {
-    return "/checkout?step=address"
-  }
-  if (!cart.shipping_methods?.length) {
-    return "/checkout?step=delivery"
-  }
-  return "/checkout?step=payment"
-}
+): string =>
+  cart.shipping_address?.address_1 && cart.email && cart.shipping_methods?.length
+    ? "/checkout?step=payment"
+    : "/checkout?step=address"
 
 /** Export regions see the minimum and the duty-paid line; Pakistan does not. */
 export const isExportRegion = (countryCode: string | undefined): boolean =>

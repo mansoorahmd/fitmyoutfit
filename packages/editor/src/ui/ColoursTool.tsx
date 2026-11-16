@@ -5,7 +5,7 @@
  * "Match a colour code", which shows both colours and applies only the
  * palette's.
  */
-import { useId, useState } from "react";
+import { memo, useCallback, useEffect, useId, useRef, useState } from "react";
 import { coloursByFamily, findPaletteColour, paletteColourRef, type PaletteColour } from "../design/palette.js";
 import { setZoneColor } from "../design/edit.js";
 import { TEAM_COLOUR_ROLES, type ColorValue, type DesignDocument, type ProductDefinition, type TeamColourRole } from "../design/schema.js";
@@ -33,6 +33,11 @@ export function colourEdit(target: ColourTarget, colour: { role: TeamColourRole 
   };
 }
 
+/** A palette colour's swatch, memoised (S1): it re-renders only when its own state changes. */
+const PaletteSwatch = memo(function PaletteSwatch({ colour, label, selected, prefix, onPick, onPreview }: { colour: PaletteColour; label: string; selected: boolean; prefix: string; onPick: (c: PaletteColour) => void; onPreview: (c: PaletteColour, on: boolean) => void }) {
+  return <Swatch hex={colour.hex} label={label} selected={selected} onPick={() => onPick(colour)} onPreview={(on) => onPreview(colour, on)} testId={`swatch-${prefix}-${colour.id}`} />;
+});
+
 export function ColoursTool() {
   const api = useEditor();
   const { design, product, palette, wording, colourTarget, detent, layout } = api;
@@ -59,9 +64,16 @@ export function ColoursTool() {
     const selected = current?.teamColor === role;
     return <Swatch key={role} hex={c.hex} label={selected ? fill(w.selected, { colour: name }) : name} selected={selected} onPick={() => apply({ role }, c.id)} onPreview={preview({ role })} testId={`swatch-team-${role}`} />;
   });
+  // Stable handlers (S1): a tap re-renders only the two palette swatches whose "selected" changed.
+  const handlers = useRef({ apply, preview });
+  useEffect(() => {
+    handlers.current = { apply, preview };
+  });
+  const pickPalette = useCallback((c: PaletteColour) => handlers.current.apply({ value: paletteColourRef(c) }, c.id), []);
+  const previewPalette = useCallback((c: PaletteColour, on: boolean) => handlers.current.preview({ value: paletteColourRef(c) })(on), []);
   const paletteSwatch = (c: PaletteColour, prefix: string) => {
     const selected = current?.id === c.id && !current.teamColor;
-    return <Swatch key={`${prefix}-${c.id}`} hex={c.hex} label={selected ? fill(w.selected, { colour: c.name }) : c.name} selected={selected} onPick={() => apply({ value: paletteColourRef(c) }, c.id)} onPreview={preview({ value: paletteColourRef(c) })} testId={`swatch-${prefix}-${c.id}`} />;
+    return <PaletteSwatch key={`${prefix}-${c.id}`} colour={c} label={selected ? fill(w.selected, { colour: c.name }) : c.name} selected={selected} prefix={prefix} onPick={pickPalette} onPreview={previewPalette} />;
   };
   const recent = api.recentColours.map((id) => findPaletteColour(palette, id)).filter((c): c is PaletteColour => Boolean(c));
 

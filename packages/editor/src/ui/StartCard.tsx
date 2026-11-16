@@ -12,6 +12,7 @@ import { fill } from "./content.js";
 import { useEditor } from "./context.js";
 import { EditorIcon } from "./icons.js";
 import { Swatch } from "./parts.js";
+import { fieldCheck } from "./lettering.js";
 
 /** The team colours from the colours picked so far: Main, Second, Accent in the order picked. */
 export function teamColoursFromPicks(design: DesignDocument, picks: readonly PaletteColour[]): DesignDocument {
@@ -30,6 +31,7 @@ export function StartCard({ onClose }: { onClose: (seeDesigns: boolean) => void 
   const [picks, setPicks] = useState<PaletteColour[]>([]);
   const [all, setAll] = useState(false);
   const [name, setName] = useState<string | null>(null);
+  const [nameError, setNameError] = useState<string | null>(null);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose(false);
@@ -122,17 +124,28 @@ export function StartCard({ onClose }: { onClose: (seeDesigns: boolean) => void 
                 placeholder={w.namePlaceholder}
                 value={name ?? design.teamName}
                 onFocus={() => api.begin("team-name")}
+                aria-invalid={Boolean(nameError)}
                 onBlur={() => {
                   api.end();
                   setName(null);
+                  setNameError(null);
                 }}
                 onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
                 onChange={(e) => {
                   setName(e.target.value);
-                  api.preview((d) => setTeamName(d, e.target.value));
+                  // Emoji refused, tabs and line breaks made spaces (E3c): the kit keeps the last good name.
+                  const checked = fieldCheck(wording, e.target.value, "name");
+                  setNameError(checked.error);
+                  if (!checked.error) api.preview((d) => setTeamName(d, checked.value));
                 }}
                 data-testid="start-team-name"
               />
+              {nameError && (
+                <p className="fmo-field-error" role="alert" data-testid="start-team-name-error">
+                  <EditorIcon name="alert" size={18} />
+                  {nameError}
+                </p>
+              )}
             </div>
           </div>
           <button type="button" className="fmo-btn fmo-btn-block" onClick={() => onClose(true)} data-testid="see-designs">

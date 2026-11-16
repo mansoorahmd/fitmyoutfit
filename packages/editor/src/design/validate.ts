@@ -490,6 +490,11 @@ function checkPlacements(product: ProductDefinition): ValidationError[] {
     const duplicateRoles = preset.roles.filter((role, k) => preset.roles.indexOf(role) !== k);
     if (duplicateRoles.length > 0) errors.push(makeError(`${at}.roles`, `lists ${duplicateRoles.join(", ")} twice`));
   });
+  for (const kind of ["logo", "text"] as const) {
+    product.placementOrder?.[kind].forEach((presetId, i) => {
+      if (!ids.has(presetId)) errors.push(makeError(`placementOrder.${kind}[${i}]`, `"${presetId}" is not one of the product's placement presets`));
+    });
+  }
   return errors;
 }
 

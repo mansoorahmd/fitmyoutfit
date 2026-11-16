@@ -9,7 +9,17 @@ import { DEFAULT_UPLOAD_LIMITS, type UploadIssue, type UploadLimits } from "../d
 import { fill, type EditorWording } from "./content.js";
 
 /** What went wrong with an upload, for the coach. */
-export type UploadRefusal = "wrong-type" | "svg" | "damaged" | "too-big" | "too-small" | "too-large" | "animated" | "network";
+export type UploadRefusal = "wrong-type" | "svg" | "damaged" | "too-big" | "too-small" | "too-large" | "animated" | "network" | "storage-full";
+
+/**
+ * Whether the host's upload failed because the device's storage is full (E3c, S4): the browser's quota error
+ * (a DOMException named QuotaExceededError, Firefox's NS_ERROR_DOM_QUOTA_REACHED), or a message that says so.
+ */
+export function isStorageFull(error: unknown): boolean {
+  const name = typeof error === "object" && error !== null ? String((error as { name?: unknown }).name ?? "") : "";
+  const message = error instanceof Error ? error.message : String(error);
+  return /QuotaExceeded|NS_ERROR_DOM_QUOTA/i.test(name) || /quota|storage (is )?full|no space/i.test(message);
+}
 
 export interface UploadContext {
   /** The first bytes of the file (a few hundred are enough), to tell an SVG from other files and read the size in pixels. */
@@ -18,11 +28,14 @@ export interface UploadContext {
   size: number;
   /** The host's upload failed (the network), not the checks. */
   networkFailed?: boolean;
+  /** The host's upload failed because the device's storage is full (S4). */
+  storageFull?: boolean;
   limits?: UploadLimits;
 }
 
 /** The kind of refusal from the checks' errors and the file. Null when nothing was refused. */
 export function uploadRefusal(issues: readonly UploadIssue[], context: UploadContext): UploadRefusal | null {
+  if (context.storageFull) return "storage-full";
   if (context.networkFailed) return "network";
   const errors = issues.filter((i) => i.severity === "error");
   if (errors.length === 0) return null;
@@ -72,6 +85,8 @@ export function uploadRefusalText(wording: EditorWording, refusal: UploadRefusal
       return fill(l.animated, { file });
     case "network":
       return l.network;
+    case "storage-full":
+      return l.storageFull;
   }
 }
 

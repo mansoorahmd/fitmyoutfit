@@ -41,6 +41,7 @@ import { checkJerseyNumber } from "./jersey-number.js";
 import { roleValue, type ValueRole } from "./edit.js";
 import { addCatalogFont, type FontCatalog } from "./font-catalog.js";
 import { nextLayerId } from "./new-layers.js";
+import { fitDesignToAreas } from "./print-area.js";
 import { OUTLINE_STEPS, SIZE_STEPS, newRoleLayer, outlineStepOf, sizeStepOf, type LetteringStyle, type OutlineStep, type SizeStep } from "./roles.js";
 import { flattenPath, parseSvgPath, shapesOverlap } from "./svg-path.js";
 import { teamColourValue } from "./team-colours.js";
@@ -255,6 +256,17 @@ function styleFor(
   return style;
 }
 
+/** `validateTemplate`, remembered per template object, product and catalogue (S1: a template is applied on every tap and card). */
+const validated = new WeakMap<object, { product: ProductDefinition; fonts: FontCatalog; result: ReturnType<typeof validateTemplate> }>();
+function validatedTemplate(template: Template, product: ProductDefinition, fonts: FontCatalog): ReturnType<typeof validateTemplate> {
+  if (typeof template !== "object" || template === null) return validateTemplate(template, { product, fonts });
+  const hit = validated.get(template);
+  if (hit && hit.product === product && hit.fonts === fonts) return hit.result;
+  const result = validateTemplate(template, { product, fonts });
+  validated.set(template, { product, fonts, result });
+  return result;
+}
+
 /**
  * The design with a template applied (see the module comment for what is
  * kept and what changes). Throws a DesignError when the template does not fit
@@ -262,7 +274,7 @@ function styleFor(
  */
 export function applyTemplate(design: DesignDocument, template: Template, options: ApplyTemplateOptions): DesignDocument {
   const { product, fonts } = options;
-  const checked = validateTemplate(template, { product, fonts });
+  const checked = validatedTemplate(template, product, fonts);
   if (!checked.ok) throw new DesignError(`Cannot apply template "${(template as { id?: unknown }).id}"`, checked.errors);
   if (design.product.id !== product.id) throw new DesignError(`Cannot apply template: the design is for "${design.product.id}", the product given is "${product.id}"`);
   const fallback = template.accentFallback ?? "second";
@@ -341,7 +353,8 @@ export function applyTemplate(design: DesignDocument, template: Template, option
     takenIds.add(shapeId);
     shapes.push({ id: shapeId, kind: "shape", group: shape.group, pieceId: shape.pieceId, path: shape.path, fill: resolveTemplateColour(next, shape.fill, fallback), locked: true });
   }
-  const result: DesignDocument = { ...next, shapes, layers };
+  // Every item inside its print area (the print-area rule; a logo kept from the last design included).
+  const result: DesignDocument = fitDesignToAreas(product, { ...next, shapes, layers });
   const valid = validateDesign(result, { product });
   if (!valid.ok) throw new DesignError(`Applying template "${template.id}" would give an invalid design`, valid.errors);
   return valid.value;

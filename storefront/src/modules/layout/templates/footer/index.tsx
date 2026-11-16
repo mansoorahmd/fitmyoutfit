@@ -41,7 +41,14 @@ const LinkColumn = ({
  * columns from 768 px), then the header's region selector and the
  * copyright. Only pages that exist are linked.
  */
-export default async function Footer({ countryCode }: { countryCode: string }) {
+export default async function Footer({
+  countryCode,
+  signedIn = false,
+}: {
+  countryCode: string
+  /** A signed-in customer sees "Your account", never "Sign in". */
+  signedIn?: boolean
+}) {
   const [regions, garments] = await Promise.all([
     listRegions().catch(() => []),
     listGarmentLinks(countryCode),
@@ -56,7 +63,7 @@ export default async function Footer({ countryCode }: { countryCode: string }) {
 
   return (
     <footer
-      className="bg-brand-inverse text-brand-on-inverse"
+      className="bg-brand-inverse text-brand-on-inverse print:hidden"
       data-testid="footer"
     >
       <div className="content-container flex flex-col gap-10 py-12 xl:py-16">
@@ -81,7 +88,13 @@ export default async function Footer({ countryCode }: { countryCode: string }) {
           />
           <LinkColumn
             heading={account.heading}
-            links={account.links}
+            links={
+              signedIn
+                ? account.links.map((link) =>
+                    link.href === account.signedInLink.href ? account.signedInLink : link
+                  )
+                : account.links
+            }
             testId="footer-account"
           />
         </div>

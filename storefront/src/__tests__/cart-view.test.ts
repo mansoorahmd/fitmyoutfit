@@ -126,11 +126,12 @@ describe("deliveryRow", () => {
 })
 
 describe("checkoutHref", () => {
-  it("goes to the address step until the address and email are saved", () => {
+  it("goes to step 1 until the address, email and delivery method are saved, then to step 2", () => {
     expect(checkoutHref(cartFixture())).toBe("/checkout?step=address")
+    // the two-step checkout has no delivery step (05, 6.1)
     expect(
       checkoutHref(cartFixture({ email: "a@b.c", shipping_address: { address_1: "1 St" } }))
-    ).toBe("/checkout?step=delivery")
+    ).toBe("/checkout?step=address")
     expect(
       checkoutHref(
         cartFixture({
