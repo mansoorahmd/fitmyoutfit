@@ -263,29 +263,61 @@ describe("planProductRepair", () => {
     ])
   })
 
-  it("never prices the rush add-on, but gives its variant the empty price set a clean run has", () => {
+  it("gives the rush add-on its placeholder price of 0 in each currency it lacks, never changing a price", () => {
+    const zeros = currencies.map((currency_code) => ({ amount: 0, currency_code }))
     const rush: ExistingSeededProduct = {
       id: "prod_r",
       handle: "rush-add-on",
       options: [],
-      variants: [{ id: "var_r", title: "Rush Production", price_set: { id: "pset_r", prices: [] } }],
+      variants: [
+        {
+          id: "var_r",
+          title: "Rush Production",
+          price_set: {
+            id: "pset_r",
+            prices: currencies.map((currency_code, i) => ({ id: `price_${i}`, currency_code, rules_count: 0 })),
+          },
+        },
+      ],
       sales_channels: [{ id: "sc_1" }],
       shipping_profile: { id: "sp_1" },
     }
-    // As a clean run leaves it: an empty price set, so nothing to do.
+    // As a clean run leaves it: a price in every currency, so nothing to do.
     expect(describeRepair(planProductRepair(rush, seedFor("rush-add-on"), ctx))).toEqual([])
 
-    // Without a price set (the admin's price editor could not add prices later): create one, empty.
+    // As a store seeded before the rush charge existed leaves it: an empty price set. The
+    // placeholder prices are added (a rush line can only be put in a cart with them).
+    const seededBefore = {
+      ...rush,
+      variants: [{ id: "var_r", title: "Rush Production", price_set: { id: "pset_r", prices: [] } }],
+    }
+    const before = planProductRepair(seededBefore, seedFor("rush-add-on"), ctx)
+    expect(before.prices).toEqual([
+      { variantId: "var_r", label: "Rush Production", priceSetId: "pset_r", prices: zeros, partial: false },
+    ])
+    expect(describeRepair(before)).toEqual(["rush-add-on: prices"])
+
+    // Without a price set: one is created, with the placeholder prices.
     const withoutSet = { ...rush, variants: [{ id: "var_r", title: "Rush Production", price_set: null }] }
     const repair = planProductRepair(withoutSet, seedFor("rush-add-on"), ctx)
     expect(repair.prices).toEqual([
-      { variantId: "var_r", label: "Rush Production", priceSetId: null, prices: [], partial: false },
+      { variantId: "var_r", label: "Rush Production", priceSetId: null, prices: zeros, partial: false },
     ])
-    expect(describeRepair(repair)).toEqual(["rush-add-on: price set"])
 
-    // An empty price set stays empty: the rush add-on has no price in any currency on purpose.
-    const empty = planProductRepair(rush, seedFor("rush-add-on"), ctx)
-    expect(empty.prices).toEqual([])
+    // A price an admin set in one currency is kept; only the missing currencies get the 0.
+    const oneSet = {
+      ...rush,
+      variants: [
+        {
+          id: "var_r",
+          title: "Rush Production",
+          price_set: { id: "pset_r", prices: [{ id: "price_pkr", currency_code: "pkr", rules_count: 0 }] },
+        },
+      ],
+    }
+    const partial = planProductRepair(oneSet, seedFor("rush-add-on"), ctx)
+    expect(partial.prices[0].prices).toEqual(zeros.filter((p) => p.currency_code !== "pkr"))
+    expect(partial.prices[0].partial).toBe(true)
   })
 
   it("creates the seed variants for a product left with none (interrupted before variants)", () => {

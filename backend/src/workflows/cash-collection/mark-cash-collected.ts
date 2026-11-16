@@ -13,10 +13,20 @@
  *    fully captured succeeds without a new capture, so a press that checked just before another
  *    press's capture went through still reaches step 3.) A press whose capture fails stops here.
  * 3. The record: one insert into our own table (modules/cash-collection), which allows one record
- *    per order. Of several presses exactly one inserts; the others are told it is already
- *    recorded. If the insert fails, the capture of step 2 is a finished run and stays exactly as
+ *    per order, made only if the order is still not canceled and the payment neither canceled nor
+ *    refunded, checked under the rows' locks in the same transaction (./record-cash-collection.ts).
+ *    Of several presses exactly one inserts; the others are told it is already recorded. If the
+ *    order was canceled or the payment refunded at the same moment, nothing is recorded and staff
+ *    are told so. If the insert fails, the capture of step 2 is a finished run and stays exactly as
  *    Medusa left it (payment, capture and the order's payment transaction): the order is then
  *    "captured without slip", and staff record the reference again without a second capture.
+ *
+ * All three run under the order's cash lock (./order-cash-lock.ts), which Medusa's order cancel
+ * route takes too: a cancel and a press on one order never interleave (QA's thirteenth review,
+ * B1). A press that waited too long for it is answered HTTP 409 with nothing done.
+ *
+ * On a canceled order whose cash is still held ("Canceled, cash still held"), step 1 decides no
+ * capture, and step 3 records the slip as the paper trail of that cash.
  *
  * Not a Medusa workflow on purpose: a workflow would undo the capture's order transaction when
  * the record fails, while the capture itself stays (QA's eighth review, N1).
@@ -29,14 +39,17 @@ import type { MedusaContainer } from "@medusajs/framework/types"
 import { ContainerRegistrationKeys, MedusaError } from "@medusajs/framework/utils"
 import { capturePaymentWorkflow } from "@medusajs/medusa/core-flows"
 import {
-  captureFailureMessage,
+  captureFailure,
   decideCashCollection,
+  ORDER_BUSY_FOR_RECORD_MESSAGE,
+  ORDER_NOT_FOUND_MESSAGE,
   RECORD_FAILURE_MESSAGE,
+  recordedNothingMessage,
   refusalMessage,
 } from "../../lib/rules/cash-collection"
-import { CASH_COLLECTION_MODULE } from "../../modules/cash-collection/constants"
-import type CashCollectionModuleService from "../../modules/cash-collection/service"
-import { loadCashCollection, readCashCollectionRecord } from "./load-cash-collection"
+import { loadCashCollection } from "./load-cash-collection"
+import { OrderCashLockBusy, withOrderCashLock } from "./order-cash-lock"
+import { insertCashCollectionRecord } from "./record-cash-collection"
 import { staffError } from "./staff-error"
 
 export type MarkCashCollectedInput = {
@@ -53,11 +66,25 @@ function logFailure(container: MedusaContainer, what: string, orderId: string, e
     .error(`Cash collection, order ${orderId}: ${what}: ${(error as Error)?.message ?? error}`)
 }
 
-/** Captures, records, and returns nothing: the caller reads the new state. Throws staffError. */
+/**
+ * Captures, records, and returns nothing: the caller reads the new state. Throws staffError. The
+ * whole press holds the order's cash lock.
+ */
 export async function markCashCollected(
   container: MedusaContainer,
   input: MarkCashCollectedInput
 ): Promise<void> {
+  try {
+    await withOrderCashLock(container, input.order_id, () => markUnderLock(container, input))
+  } catch (error) {
+    if (error instanceof OrderCashLockBusy) {
+      throw staffError(MedusaError.Types.CONFLICT, ORDER_BUSY_FOR_RECORD_MESSAGE)
+    }
+    throw error
+  }
+}
+
+async function markUnderLock(container: MedusaContainer, input: MarkCashCollectedInput): Promise<void> {
   const orderId = input.order_id
 
   // 1. The check.
@@ -74,7 +101,7 @@ export async function markCashCollected(
 
   // 2. The capture, as its own finished run.
   if (decision.capture !== "none") {
-    const amount = decision.capture === "remainder" ? loaded.remainingOf(decision.paymentId) : undefined
+    const amount = decision.capture === "remainder" ? decision.amount : undefined
     const { errors } = await capturePaymentWorkflow(container).run({
       input: {
         payment_id: decision.paymentId,
@@ -85,30 +112,41 @@ export async function markCashCollected(
     })
     if (errors?.length) {
       logFailure(container, "the capture failed", orderId, errors[0]?.error)
-      const after = await loadCashCollection(container, orderId)
-      const lostToAnotherPress =
-        after.state.stage === "recorded" || after.state.stage === "captured_without_slip"
+      // A refusal (400) when the order's state now explains the failure (another press, a cancel
+      // or a refund at the same moment), an error (500) only when nothing does (QA's thirteenth
+      // review, B3).
+      const failure = captureFailure((await loadCashCollection(container, orderId)).state)
       throw staffError(
-        lostToAnotherPress ? MedusaError.Types.NOT_ALLOWED : MedusaError.Types.UNEXPECTED_STATE,
-        captureFailureMessage(after.state)
+        failure.kind === "not_allowed" ? MedusaError.Types.NOT_ALLOWED : MedusaError.Types.UNEXPECTED_STATE,
+        failure.message
       )
     }
   }
 
-  // 3. The record: one row per order, guaranteed by the database.
-  const service = container.resolve<CashCollectionModuleService>(CASH_COLLECTION_MODULE)
+  // 3. The record: one row per order, guaranteed by the database, and only while the order and the
+  // payment still allow it.
+  let outcome: Awaited<ReturnType<typeof insertCashCollectionRecord>>
   try {
-    await service.createCashCollections({
-      order_id: orderId,
-      slip_reference: decision.slipReference,
-      collected_at: new Date(),
+    outcome = await insertCashCollectionRecord(container, {
+      orderId,
+      paymentId: decision.paymentId,
+      slipReference: decision.slipReference,
+      collectedAt: new Date(),
     })
   } catch (error) {
-    if (await readCashCollectionRecord(container, orderId).catch(() => null)) {
-      // Another press recorded it first (the unique index refused this one).
-      throw staffError(MedusaError.Types.NOT_ALLOWED, refusalMessage("already_recorded"))
-    }
     logFailure(container, "the payment is captured but the record could not be saved", orderId, error)
     throw staffError(MedusaError.Types.UNEXPECTED_STATE, RECORD_FAILURE_MESSAGE)
   }
+  if (outcome === "recorded") {
+    return
+  }
+  if (outcome === "order_not_found") {
+    throw staffError(MedusaError.Types.NOT_FOUND, ORDER_NOT_FOUND_MESSAGE)
+  }
+  if (outcome === "already_recorded") {
+    // Another press recorded it first (the unique index let only one insert through).
+    throw staffError(MedusaError.Types.NOT_ALLOWED, refusalMessage("already_recorded"))
+  }
+  // Canceled or refunded at the same moment as this press: nothing recorded.
+  throw staffError(MedusaError.Types.NOT_ALLOWED, recordedNothingMessage(outcome))
 }

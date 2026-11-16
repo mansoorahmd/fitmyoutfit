@@ -189,6 +189,22 @@ medusaIntegrationTestRunner({
         }
       }
 
+      /**
+       * Waits until the order-placed subscriber has written the server's promise. An order made from
+       * a cart that carried a promise has one from the start (Medusa copies the cart's metadata), so
+       * metadataOncePlaced alone can return before the subscriber replaced it.
+       */
+      async function serverPromiseOncePlaced(orderId: string, expected: unknown, timeoutMs = 10000) {
+        const until = Date.now() + timeoutMs
+        for (;;) {
+          const metadata = await orderMetadata(getContainer(), orderId)
+          if (JSON.stringify(metadata?.delivery_promise) === JSON.stringify(expected) || Date.now() > until) {
+            return metadata
+          }
+          await sleep(50)
+        }
+      }
+
       async function sql(statement: string, bindings: unknown[] = []) {
         const knex = getContainer().resolve(ContainerRegistrationKeys.PG_CONNECTION) as any
         return (await knex.raw(statement, bindings)).rows as any[]
@@ -429,9 +445,11 @@ medusaIntegrationTestRunner({
             based_on: date,
             standard: { days: 15, date: addCalendarDays(date, 15) },
             rush: { days: 10, date: addCalendarDays(date, 10) },
-            // Section 8: which date applies; "standard" until the rush charge exists.
+            // Section 8: which date applies; "rush" only when the cart holds the rush line.
             applies: "standard",
           },
+          // Section 9: 3 jerseys (66.00) and a T-shirt (14.00) at 20%; the fit kit is not charged.
+          rush: { available: true, in_cart: false, percentage: 20, amount: 16, currency_code: "gbp" },
         })
 
         const pakistan = await createCart("pk", [{ handle: "t-shirt", size: "M", quantity: 1 }])
@@ -725,7 +743,7 @@ medusaIntegrationTestRunner({
             cart.id,
           ])
           const orderId = (await complete(cart.id)).data.order.id
-          await metadataOncePlaced(orderId)
+          await serverPromiseOncePlaced(orderId, promisedToday())
           await rewriteOrder(orderId, { metadata: { delivery_promise: forged } })
           const previous = await setStoreMetadata(container, { delivery_days_standard: "" })
           try {
@@ -1119,15 +1137,23 @@ medusaIntegrationTestRunner({
             collected_at: null,
             amount: 2250,
             captured_amount: 0,
+            refunded_amount: 0,
+            held_amount: 0,
+            order_canceled: false,
             captured_by: null,
             captured_by_email: null,
             captured_at: null,
+            label: "Not collected",
+            tone: "orange",
+            note: null,
+            capture_mismatch: null,
+            capture_warning: null,
           })
           expect((await payments(container, orderId)).payments[0].captured_at).toBeNull()
 
           const blank = await record(orderId, "  ")
           expect(blank.status).toBe(400)
-          expect(blank.data).toMatchObject({ type: "invalid_data", message: "Enter the slip reference from the courier's slip." })
+          expect(blank.data).toMatchObject({ type: "invalid_data", message: expect.stringContaining("Enter the reference from the courier's slip.") })
 
           const startedAt = Date.now()
           const marked = await record(orderId, " TCS  778812 ")

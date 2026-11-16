@@ -486,6 +486,7 @@ describe("production secrets", () => {
   // URL with no host, a ?host= parameter over the visible host).
   it.each([
     ["an empty host", "postgres://store:real-password@/medusa", "no_host"],
+    ["an empty host with a port (QA's tenth review, M5)", "postgres://store:real-password@:5433/medusa", "no_host"],
     ["no authority at all", "postgres:///medusa", "no_host"],
     ["an empty host after Medusa's rewrite", "postgres://store:real-password@/medusa?ssl_mode=disable", "no_host"],
     ["a percent-encoded socket path as host", "postgres://store:real-password@%2Fvar%2Frun%2Fpostgresql/medusa", "no_host"],

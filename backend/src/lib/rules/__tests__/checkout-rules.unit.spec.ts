@@ -9,13 +9,13 @@ const storeSettings = {
 
 function input(overrides: Partial<CheckoutRulesInput> = {}): CheckoutRulesInput {
   return {
-    lines: [{ quantity: 4, kind: "garment" }],
+    lines: [{ quantity: 4, kind: "garment", unitPrice: 14 }],
     region: { name: "United Kingdom", countryCodes: ["gb"], metadata: { min_garment_quantity: 10 } },
     currencyCode: "gbp",
+    currencyDigits: 2,
     total: 56,
     storeSettings,
     baseDate: "2026-11-11",
-    deliverySpeed: "standard",
     ...overrides,
   }
 }
@@ -38,13 +38,79 @@ describe("evaluateCheckoutRules", () => {
           rush: { days: 10, date: "2026-11-21" },
           applies: "standard",
         },
+        rush: { available: true, in_cart: false, percentage: 20, amount: 11.2, currency_code: "gbp" },
       },
     })
   })
 
-  it("passes on which delivery date applies", () => {
-    const rush = evaluateCheckoutRules(input({ deliverySpeed: "rush" }))
-    expect(rush.ok && rush.value.delivery_promise.applies).toBe("rush")
+  it("says the rush date applies when the cart holds the rush line, and standard otherwise", () => {
+    const withRush = evaluateCheckoutRules(
+      input({
+        lines: [
+          { quantity: 4, kind: "garment", unitPrice: 14 },
+          { quantity: 1, kind: "rush_add_on", unitPrice: 11.2 },
+        ],
+      })
+    )
+    expect(withRush.ok && withRush.value.delivery_promise.applies).toBe("rush")
+    expect(withRush.ok && withRush.value.rush).toEqual({
+      available: true,
+      in_cart: true,
+      percentage: 20,
+      amount: 11.2,
+      currency_code: "gbp",
+    })
+    const fitKitOnly = evaluateCheckoutRules(input({ lines: [{ quantity: 1, kind: "fit_kit", unitPrice: 30 }] }))
+    expect(fitKitOnly.ok && fitKitOnly.value.delivery_promise.applies).toBe("standard")
+  })
+
+  it("gives the contract's figures: PKR 2,000 at 20% is 400, GBP 220.00 at 20% is 44.00", () => {
+    const pkr = evaluateCheckoutRules(
+      input({
+        lines: [{ quantity: 1, kind: "garment", unitPrice: 2000 }],
+        region: { name: "Pakistan", countryCodes: ["pk"], metadata: { min_garment_quantity: 1 } },
+        currencyCode: "pkr",
+        currencyDigits: 0,
+        total: 2250,
+      })
+    )
+    expect(pkr.ok && pkr.value.rush).toEqual({
+      available: true,
+      in_cart: false,
+      percentage: 20,
+      amount: 400,
+      currency_code: "pkr",
+    })
+    const gbp = evaluateCheckoutRules(input({ lines: [{ quantity: 10, kind: "jersey?", unitPrice: 22 }] }))
+    expect(gbp.ok && gbp.value.rush.amount).toBe(44)
+  })
+
+  it("offers no rush, at 0, for a cart without a garment line or with a percentage of 0", () => {
+    const fitKitOnly = evaluateCheckoutRules(input({ lines: [{ quantity: 1, kind: "fit_kit", unitPrice: 30 }] }))
+    expect(fitKitOnly.ok && fitKitOnly.value.rush).toMatchObject({ available: false, amount: 0 })
+    const off = evaluateCheckoutRules(input({ storeSettings: { ...storeSettings, rush_percentage: 0 } }))
+    expect(off.ok && off.value.rush).toMatchObject({ available: false, amount: 0, percentage: 0 })
+  })
+
+  it("does not count the rush line toward the minimum", () => {
+    const result = evaluateCheckoutRules(
+      input({
+        lines: [
+          { quantity: 9, kind: "garment", unitPrice: 22 },
+          { quantity: 1, kind: "rush_add_on", unitPrice: 39.6 },
+        ],
+      })
+    )
+    expect(result.ok && result.value.minimum_quantity).toEqual({ required: 10, counted: 9, ok: false })
+  })
+
+  it("names a missing or invalid rush_percentage like any other setting", () => {
+    const { rush_percentage: _left, ...withoutRush } = storeSettings
+    void _left
+    const missing = evaluateCheckoutRules(input({ storeSettings: withoutRush }))
+    expect(!missing.ok && missing.error).toContain("rush_percentage is not set")
+    const invalid = evaluateCheckoutRules(input({ storeSettings: { ...storeSettings, rush_percentage: "lots" } }))
+    expect(!invalid.ok && invalid.error).toContain('rush_percentage must be a number from 0 to 100, got "lots"')
   })
 
   it("counts a product with no kind towards the minimum (QA defect D1)", () => {
@@ -68,6 +134,7 @@ describe("evaluateCheckoutRules", () => {
         lines: [{ quantity: 1, kind: "garment" }],
         region: { name: "Pakistan", countryCodes: ["pk"], metadata: { min_garment_quantity: 1 } },
         currencyCode: "pkr",
+        currencyDigits: 0,
         total: 2250,
       })
     )
@@ -83,7 +150,12 @@ describe("evaluateCheckoutRules", () => {
   it("reads settings written as strings by the admin's metadata editor", () => {
     const result = evaluateCheckoutRules(
       input({
-        storeSettings: { cod_max_total: "5000", delivery_days_standard: "12", delivery_days_rush: "7" },
+        storeSettings: {
+          rush_percentage: "20",
+          cod_max_total: "5000",
+          delivery_days_standard: "12",
+          delivery_days_rush: "7",
+        },
         region: { name: "Pakistan", countryCodes: ["pk"], metadata: { min_garment_quantity: "1" } },
         currencyCode: "pkr",
         total: 6000,

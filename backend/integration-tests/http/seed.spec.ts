@@ -383,25 +383,32 @@ medusaIntegrationTestRunner({
         expect(garments.products.map((p: any) => p.handle)).toEqual(["jersey", "t-shirt", "jacket"])
       })
 
-      it("gives rush-add-on a variant with no fixed price, still listed by the store API", async () => {
+      it("gives rush-add-on one variant with the placeholder price 0 in every currency (the server prices the line)", async () => {
         const { data: regionsRes } = await api.get("/store/regions", { headers })
         for (const region of regionsRes.regions) {
           const { data } = await api.get(
             `/store/products?handle=rush-add-on&region_id=${region.id}` +
-              `&fields=handle,*variants,*variants.calculated_price`,
+              `&fields=handle,collection_id,*variants,*variants.calculated_price`,
             { headers }
           )
           expect(data.products).toHaveLength(1)
+          // Outside the garments collection, as before: the storefront's listings leave it out.
+          expect(data.products[0].collection_id).toBeNull()
           expect(data.products[0].variants).toHaveLength(1)
-          expect(data.products[0].variants[0].calculated_price ?? null).toBeNull()
+          expect(data.products[0].variants[0].calculated_price.calculated_amount).toBe(0)
+          expect(data.products[0].variants[0].calculated_price.currency_code).toBe(region.currency_code)
         }
         const query = getContainer().resolve(ContainerRegistrationKeys.QUERY)
         const { data: rows } = await query.graph({
           entity: "product_variant",
-          fields: ["sku", "prices.id"],
+          fields: ["sku", "manage_inventory", "prices.amount", "prices.currency_code"],
           filters: { sku: "RUSH" },
         })
-        expect((rows as any[])[0].prices ?? []).toHaveLength(0)
+        const rush = (rows as any[])[0]
+        expect(rush.manage_inventory).toBe(false)
+        expect(
+          rush.prices.map((p: any) => [p.currency_code, Number(p.amount)]).sort()
+        ).toEqual([["aed", 0], ["gbp", 0], ["pkr", 0], ["usd", 0]])
       })
 
       it("sets each product's placeholder image URLs from the seed data, first as the thumbnail", async () => {
@@ -697,7 +704,7 @@ medusaIntegrationTestRunner({
         expect(third.repaired).toEqual([])
       })
 
-      it("gives the rush variant back the empty price set a clean run gives it", async () => {
+      it("gives the rush variant back its price set, with the placeholder prices a clean run gives it", async () => {
         const container = getContainer()
         const query = container.resolve(ContainerRegistrationKeys.QUERY)
         const link = container.resolve(ContainerRegistrationKeys.LINK)
@@ -715,7 +722,27 @@ medusaIntegrationTestRunner({
 
         const rerun = await seedStore(container, adminOptions)
         expect(await snapshot(container)).toEqual(clean)
-        expect(rerun.repaired).toEqual(["rush-add-on: price set"])
+        expect(rerun.repaired).toEqual(["rush-add-on: prices"])
+      })
+
+      it("gives the rush variant of a store seeded before the rush charge its placeholder prices, once", async () => {
+        const container = getContainer()
+        // A store seeded with the code before S1-6: the rush variant's price set is empty.
+        const { data } = await container.resolve(ContainerRegistrationKeys.QUERY).graph({
+          entity: "product_variant",
+          fields: ["price_set.id"],
+          filters: { sku: "RUSH" },
+        })
+        const pricing = container.resolve(Modules.PRICING)
+        const priceSetId = (data as any[])[0].price_set.id
+        const prices = await pricing.listPrices({ price_set_id: [priceSetId] })
+        expect(prices).toHaveLength(4)
+        await pricing.removePrices(prices.map((p) => p.id))
+        const rerun = await seedStore(container, adminOptions)
+        expect(rerun.repaired).toEqual(["rush-add-on: prices"])
+        expect(await snapshot(container)).toEqual(clean)
+        const third = await seedStore(container, adminOptions)
+        expect(third.repaired).toEqual([])
       })
 
       it("repairs a product an interrupted run left without variants or links", async () => {

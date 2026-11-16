@@ -73,8 +73,12 @@ export type ProductSeed = {
   sku_prefix: string
   /**
    * True: the product has a fixed price per unit in every supported currency (prices.ts).
-   * False: it has no fixed prices at all and must have no row in prices.ts. The rush add-on is
-   * like this: its charge is a percentage of the order (settings.ts), worked out in Sprint 1.
+   * False: the server prices its cart line, and it must have no row in prices.ts. The rush add-on
+   * is like this: its charge is a percentage of the garments (settings.ts,
+   * lib/rules/rush-charge.ts). Its variant still gets a placeholder price of 0 in every supported
+   * currency, because Medusa puts a variant in a cart, and reprices a cart moved to another
+   * region, only when the variant has a price in the cart's currency; the server then sets the
+   * line's real price in the same step. The 0 is never charged.
    */
   has_fixed_prices: boolean
   /**

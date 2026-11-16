@@ -7,6 +7,7 @@
  * in M2). A real capacity calendar comes later.
  */
 import type { DeliveryDays } from "../settings/delivery-days"
+import { isRushKind } from "./rush-charge"
 
 /** The company works from Lahore: "today" for the promise is today there. */
 export const DELIVERY_TIME_ZONE = "Asia/Karachi"
@@ -44,13 +45,13 @@ export type PromisedDelivery = {
 }
 
 /**
- * Which delivery date applies to a cart, and to the order it becomes. The one place that answers
- * it: the checkout-rules route, the completion check and the promise kept on the order all call
- * this. Always "standard" for now; the rush charge (a later M1 task, S1-6) answers it here, from
- * the cart's or the order's lines, and changes nothing else.
+ * Which delivery date applies to a cart, and to the order it becomes: "rush" when one of its lines
+ * is the rush product (`metadata.kind` `rush_add_on`; a cart holds rush or it does not, there is
+ * no other flag), else "standard". The one place that answers it: the checkout-rules route and the
+ * promise kept on the order both call this, with the kinds of the cart's or the order's lines.
  */
-export function appliedDeliverySpeed(): DeliverySpeed {
-  return "standard"
+export function appliedDeliverySpeed(lineKinds: readonly unknown[]): DeliverySpeed {
+  return lineKinds.some(isRushKind) ? "rush" : "standard"
 }
 
 /** The calendar date (YYYY-MM-DD) that `instant` falls on in `timeZone`. */
@@ -89,7 +90,7 @@ export function addCalendarDays(date: string, days: number): string {
 
 /**
  * Both dates, and which one applies. `applies` is the caller's answer to "does this cart pay for
- * rush?"; until the rush charge exists (a later M1 task) the caller always passes "standard".
+ * rush?" (appliedDeliverySpeed).
  */
 export function deliveryPromise(
   baseDate: string,

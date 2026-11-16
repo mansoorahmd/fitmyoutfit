@@ -2,8 +2,8 @@
  * The rush production setting: a percentage, read from a plain settings object (in the running
  * store, the Store's `metadata`). Plain TypeScript, no Medusa imports.
  *
- * This only reads and validates the setting. Working out the rush charge and adding it to a
- * cart is Sprint 1.
+ * This only reads and validates the setting. The charge itself is lib/rules/rush-charge.ts; a
+ * percentage of 0 means rush is not offered.
  */
 
 /** Key of the setting in the Store's metadata. */
