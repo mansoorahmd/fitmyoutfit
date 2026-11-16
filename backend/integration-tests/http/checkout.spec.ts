@@ -189,6 +189,22 @@ medusaIntegrationTestRunner({
         }
       }
 
+      /**
+       * Waits until the order-placed subscriber has written the server's promise. An order made from
+       * a cart that carried a promise has one from the start (Medusa copies the cart's metadata), so
+       * metadataOncePlaced alone can return before the subscriber replaced it.
+       */
+      async function serverPromiseOncePlaced(orderId: string, expected: unknown, timeoutMs = 10000) {
+        const until = Date.now() + timeoutMs
+        for (;;) {
+          const metadata = await orderMetadata(getContainer(), orderId)
+          if (JSON.stringify(metadata?.delivery_promise) === JSON.stringify(expected) || Date.now() > until) {
+            return metadata
+          }
+          await sleep(50)
+        }
+      }
+
       async function sql(statement: string, bindings: unknown[] = []) {
         const knex = getContainer().resolve(ContainerRegistrationKeys.PG_CONNECTION) as any
         return (await knex.raw(statement, bindings)).rows as any[]
@@ -727,7 +743,7 @@ medusaIntegrationTestRunner({
             cart.id,
           ])
           const orderId = (await complete(cart.id)).data.order.id
-          await metadataOncePlaced(orderId)
+          await serverPromiseOncePlaced(orderId, promisedToday())
           await rewriteOrder(orderId, { metadata: { delivery_promise: forged } })
           const previous = await setStoreMetadata(container, { delivery_days_standard: "" })
           try {
@@ -1122,6 +1138,7 @@ medusaIntegrationTestRunner({
             amount: 2250,
             captured_amount: 0,
             refunded_amount: 0,
+            held_amount: 0,
             order_canceled: false,
             captured_by: null,
             captured_by_email: null,
