@@ -285,7 +285,9 @@ const RushChoice = ({
         >
           <DateLine date={control.rushDate} />
           <span className="block" data-testid="speed-rush-note">
-            {fill(words.note, { percentage: control.percentage })}
+            {control.percentage === null
+              ? words.noteNoPercentage
+              : fill(words.note, { percentage: control.percentage })}
           </span>
         </RadioCard>
       </div>
