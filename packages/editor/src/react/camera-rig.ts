@@ -82,6 +82,8 @@ export class CameraRig {
   /** E3d (R24): the target's offset from the garment's centre (world units), and what it aims at. */
   private aim: V3 = ZERO;
   private item: V3 | null = null;
+  /** E3e: the aim follows a moved item in steps (see `followAim`). */
+  private glide = false;
   private pointerY: number | null = null;
   /** E3d (4.6): the closest the camera may come while an item is selected (its box and handles stay in view). */
   private itemMin = 0;
@@ -215,6 +217,8 @@ export class CameraRig {
     const next: V3 | null = world === null ? null : [world[0] - this.center[0], world[1] - this.center[1], world[2] - this.center[2]];
     if (next === null ? this.item === null : this.item !== null && near(next, this.item, 1e-6)) return;
     const released = next === null && this.item !== null;
+    // An item that moved while it stayed selected (a drag or a resize that has ended): the aim glides after it.
+    if (next !== null && this.item !== null) this.glide = true;
     this.item = next;
     if (next === null) this.itemMin = 0;
     if (next !== null) this.pointerY = null;
@@ -300,8 +304,15 @@ export class CameraRig {
   private followAim(): void {
     const orbit = this.orbit();
     const want = this.aimAt(orbit.distance);
-    if (near(want, this.aim, 1e-5)) return;
-    this.aim = want;
+    if (near(want, this.aim, 1e-5)) {
+      this.glide = false;
+      return;
+    }
+    if (this.glide) {
+      // E3e: a third of the way each frame, so the view settles after a drag instead of jumping.
+      const step: V3 = [this.aim[0] + (want[0] - this.aim[0]) * 0.35, this.aim[1] + (want[1] - this.aim[1]) * 0.35, this.aim[2] + (want[2] - this.aim[2]) * 0.35];
+      this.aim = near(want, step, 1e-4) ? want : step;
+    } else this.aim = want;
     this.place(orbit, this.offset);
     this.invalidate();
   }

@@ -157,3 +157,23 @@ describe("the selected item's zoom limit (4.6)", () => {
     expect(rig.minDistance()).toBeCloseTo(framing.minDistance, 9);
   });
 });
+
+describe("an item that moves while it is selected (E3e)", () => {
+  it("the aim glides after it over several frames instead of jumping, and ends on it", () => {
+    const { rig, run, target } = setup();
+    rig.setItem([CENTER[0], CENTER[1] + 0.05, CENTER[2]]);
+    for (let k = 0; k < 6; k++) {
+      rig.zoom("in");
+      run();
+    }
+    const before = target()[1];
+    rig.setItem([CENTER[0], CENTER[1] + 0.2, CENTER[2]]);
+    run(16);
+    const first = target()[1];
+    run(1000);
+    const end = target()[1];
+    expect(end).toBeGreaterThan(before + 0.03);
+    expect(first).toBeGreaterThan(before);
+    expect(first).toBeLessThan(end - 0.005);
+  });
+});
