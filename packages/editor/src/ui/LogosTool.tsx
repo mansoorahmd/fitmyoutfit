@@ -8,7 +8,7 @@
  * transparent background (Keep it), and "May print blurry at this size" with
  * Make it sharp, recomputed live as the logo is resized.
  */
-import { useId, useRef, useState } from "react";
+import { useId, useRef, useState, memo } from "react";
 import { addLayer, removeLayer } from "../design/edit.js";
 import { scaleLayerBy } from "../design/item-edits.js";
 import { newLogoLayer, nextLayerId } from "../design/new-layers.js";
@@ -86,7 +86,7 @@ function useLogoUpload() {
   };
 }
 
-export function LogosTool() {
+function LogosToolView() {
   const api = useEditor();
   const { design, product, wording } = api;
   const w = wording.logos;
@@ -270,7 +270,8 @@ function LogoCard({ logo, onReplace }: { logo: LogoLayer; onReplace: () => void 
     if (api.commit((d) => removeLayer(d, logo.id), "remove-item") && selected) api.select(null);
   };
   // R14: a logo not selected is one 56 px row (picture, name, place, a badge when it needs a look); a tap opens it.
-  if (!selected) {
+  // A logo whose file is missing stays open: "Add it again" must be in view (E3c, S2).
+  if (!selected && !missing) {
     const where = itemWhere(wording, product, logo).where;
     return (
       <div className="fmo-item fmo-item-row" data-testid={`logo-${logo.id}`} data-selected={false} data-missing={missing}>
@@ -369,3 +370,6 @@ function LogoCard({ logo, onReplace }: { logo: LogoLayer; onReplace: () => void 
     </div>
   );
 }
+
+/** E3d (speed): re-renders only when its props or the editor's data change. */
+export const LogosTool = memo(LogosToolView);

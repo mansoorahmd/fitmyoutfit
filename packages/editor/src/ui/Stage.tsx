@@ -133,6 +133,7 @@ export function Stage({ canvasRef, ...props }: StageProps) {
   // The width of "On this kit" (an icon on a narrow stage, words on a wider one): the top band leaves it room.
   const kitPlace = useRef<HTMLDivElement>(null);
   const [kitWidth, setKitWidth] = useState(44);
+  const hasKit = Boolean(props.kitButton);
   // "On this kit" in stage coordinates: the turn handle keeps off it (4.5).
   const [kitBox, setKitBox] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
   useEffect(() => {
@@ -158,7 +159,9 @@ export function Stage({ canvasRef, ...props }: StageProps) {
     const observer = new ResizeObserver(measure);
     observer.observe(el);
     return () => observer.disconnect();
-  }, [props.kitButton]);
+    // Measured again when the button comes or goes, the layout changes or the side panel moves; a ResizeObserver
+    // catches the rest (speed: the button is a new element on every render, it must not re-measure each time).
+  }, [hasKit, layout, insets.right]);
   return (
     <div className="fmo-stage" data-tone={props.tone} data-testid="stage" style={props.credit && mode === "3d" ? ({ "--fmo-credit-room": `${CREDIT_ROOM}px` } as React.CSSProperties) : undefined} onPointerDownCapture={props.onStagePointerDown}>
       <div className="fmo-stage-deep" />

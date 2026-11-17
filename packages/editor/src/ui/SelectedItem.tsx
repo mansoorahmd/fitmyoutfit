@@ -6,7 +6,7 @@
  * to do everything without dragging (WCAG 2.5.7). On a phone the bar sits on
  * the stage and never over the item; on a desktop it heads the panel.
  */
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, memo } from "react";
 import { removeLayer } from "../design/edit.js";
 import { KEY_NUDGE_LARGE_MM, KEY_NUDGE_MM, NUDGE_MM, SIZE_STEP, TURN_STEP, bringForward, canDuplicate, centreLayer, duplicateLayer, nudgeLayer, rotateLayerBy, rotateLayerTo, scaleLayerBy, sendBack } from "../design/item-edits.js";
 import { isClipped, moveInside } from "../design/print-area.js";
@@ -31,7 +31,7 @@ function useSelectedLayer(): Layer | null {
 }
 
 /** The bar's buttons, for the stage (phone) and the panel (desktop). */
-export function ContextBar({ variant }: { variant: "stage" | "panel" }) {
+function ContextBarView({ variant }: { variant: "stage" | "panel" }) {
   const api = useEditor();
   const { product, wording, assets } = api;
   const layer = useSelectedLayer();
@@ -148,7 +148,7 @@ export function StageContextBar({ bus, top, bottomInset, endInset = 0 }: { bus: 
  * under its name and actions (above Fine-tune), where the coach is looking: hard to read, a logo that prints as a
  * box, a logo that may print blurry. The tools then leave this item's warning out of their own lists.
  */
-export function SelectedWarnings() {
+function SelectedWarningsView() {
   const api = useEditor();
   const layer = useSelectedLayer();
   const { design, product, palette, wording } = api;
@@ -212,7 +212,7 @@ export function SelectedWarnings() {
 }
 
 /** "Part of this is cut off at the seam." with Move it in, when the selected item crosses its piece's outline. */
-export function ClippedNote() {
+function ClippedNoteView() {
   const api = useEditor();
   const layer = useSelectedLayer();
   // Once per position, size and turn (the search for a place that fits is not free).
@@ -240,7 +240,7 @@ export function ClippedNote() {
 }
 
 /** Fine-tune: closed by default; every step one undo step. Millimetres and degrees only on desktop, as secondary text. */
-export function FineTune() {
+function FineTuneView() {
   const api = useEditor();
   const layer = useSelectedLayer();
   const [open, setOpen] = useState(false);
@@ -367,3 +367,15 @@ export function keyEdit(key: string, shift: boolean): { kind: "nudge"; dx: numbe
       return null;
   }
 }
+
+/** E3d (speed): re-renders only when its props or the editor's data change. */
+export const ContextBar = memo(ContextBarView);
+
+/** E3d (speed): re-renders only when its props or the editor's data change. */
+export const SelectedWarnings = memo(SelectedWarningsView);
+
+/** E3d (speed): re-renders only when its props or the editor's data change. */
+export const ClippedNote = memo(ClippedNoteView);
+
+/** E3d (speed): re-renders only when its props or the editor's data change. */
+export const FineTune = memo(FineTuneView);

@@ -4,7 +4,7 @@
  * crest and sample player. Tap to try: one undo step; the team colours, team
  * name, logos and the coach's own choices stay.
  */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, memo } from "react";
 import { applyTemplate, type Template } from "../design/template.js";
 import type { DesignDocument } from "../design/schema.js";
 import { samplerFromRgba } from "../texture/garment-view.js";
@@ -158,7 +158,7 @@ function TemplateCard({ template, design, previous, current, onPick, images, ver
   );
 }
 
-export function DesignTool() {
+function DesignToolView() {
   const api = useEditor();
   const { templates, design, product, fonts, wording, layout, detent, assets } = api;
   const previous = templates.find((t) => t.id === design.template?.id) ?? null;
@@ -189,3 +189,6 @@ export function DesignTool() {
     </>
   );
 }
+
+/** E3d (speed): re-renders only when its props or the editor's data change. */
+export const DesignTool = memo(DesignToolView);

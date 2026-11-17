@@ -5,7 +5,7 @@
  * (font, colour, outline, size). A readability warning with a one-tap fix
  * appears when letters are hard to read on the kit.
  */
-import { useId, useState, type ReactNode, useMemo } from "react";
+import { useId, useState, type ReactNode, useMemo, memo } from "react";
 import { addCatalogFont } from "../design/font-catalog.js";
 import { updateLayer } from "../design/edit.js";
 import { coloursCommonFirst, paletteColourRef } from "../design/palette.js";
@@ -318,7 +318,7 @@ function ValueField({
   );
 }
 
-export function TeamTool() {
+function TeamToolView() {
   const api = useEditor();
   const { design, product, wording } = api;
   const w = wording.lettering;
@@ -355,7 +355,7 @@ export function TeamTool() {
   );
 }
 
-export function PlayersTool() {
+function PlayersToolView() {
   const api = useEditor();
   const { design, product, wording, textFits } = api;
   const w = wording.lettering;
@@ -421,3 +421,9 @@ export function PlayersTool() {
     </>
   );
 }
+
+/** E3d (speed): re-renders only when its props or the editor's data change. */
+export const TeamTool = memo(TeamToolView);
+
+/** E3d (speed): re-renders only when its props or the editor's data change. */
+export const PlayersTool = memo(PlayersToolView);

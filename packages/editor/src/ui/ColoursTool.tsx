@@ -38,7 +38,7 @@ const PaletteSwatch = memo(function PaletteSwatch({ colour, label, selected, pre
   return <Swatch hex={colour.hex} label={label} selected={selected} onPick={() => onPick(colour)} onPreview={(on) => onPreview(colour, on)} testId={`swatch-${prefix}-${colour.id}`} />;
 });
 
-export function ColoursTool() {
+function ColoursToolView() {
   const api = useEditor();
   const { design, product, palette, wording, colourTarget, detent, layout } = api;
   const w = wording.colours;
@@ -293,3 +293,6 @@ function ColourCodeMatch({ onUse }: { onUse: (value: ColorValue, colourId: strin
     </section>
   );
 }
+
+/** E3d (speed): re-renders only when its props or the editor's data change. */
+export const ColoursTool = memo(ColoursToolView);

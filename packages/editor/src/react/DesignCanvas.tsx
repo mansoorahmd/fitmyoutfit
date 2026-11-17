@@ -563,7 +563,8 @@ function ModelView({
   // Every item's box (E3d), when the interface asks for it: only when the camera or the design changed.
   useFrame(({ camera: cam }) => {
     const report = boxesOut.current;
-    if (!report) return;
+    // During a gesture only the selected item moves (its box has its own path): the others' boxes stand (speed).
+    if (!report || gestureNow.current) return;
     const { design: fromProps, product: p, viewSize: vs } = selectionInputs.current;
     const d = previewDesign.current ?? fromProps;
     cam.updateMatrixWorld();

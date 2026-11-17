@@ -10,7 +10,7 @@
  * `onDesignChange` reports every change (the demo saves on the device with
  * `createAutosave`), and `saveState` says how that went.
  */
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
+import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import type { FontCatalog } from "../design/font-catalog.js";
 import type { Palette } from "../design/palette.js";
 import type { DesignDocument, ProductDefinition } from "../design/schema.js";
@@ -193,6 +193,23 @@ export function colourChanges(before: DesignDocument, after: DesignDocument): st
     if (!old || (old.kind !== "text" && old.kind !== "number")) return [];
     return old.fill.hex !== l.fill.hex || old.outline?.color.hex !== l.outline?.color.hex ? [l.id] : [];
   });
+}
+
+/** The editor API's functions (E3d, speed): stable for the shell's life, each calling the latest one. */
+const HANDLER_KEYS = ["latestDesign", "commit", "begin", "preview", "end", "hoverPreview", "showSide", "focusOn", "announce", "chooseColourTarget", "useColour", "setTyping", "openTool", "select", "setLogoNote", "setSnapping", "markTiming", "setDetent"] as const;
+type HandlerKey = (typeof HANDLER_KEYS)[number];
+type ApiHandlers = Required<Pick<EditorApi, HandlerKey>>;
+/** Stable functions that call the latest implementations given to `set` (set after every render of the shell). */
+export function createHandlers(): { handlers: ApiHandlers; set: (next: ApiHandlers) => void } {
+  let current: ApiHandlers | null = null;
+  const out: Record<string, unknown> = {};
+  for (const key of HANDLER_KEYS) out[key] = (...args: unknown[]) => (current?.[key] as ((...a: unknown[]) => unknown) | undefined)?.(...args);
+  return {
+    handlers: out as unknown as ApiHandlers,
+    set: (next) => {
+      current = next;
+    },
+  };
 }
 
 export function EditorShell(props: EditorShellProps) {
@@ -709,79 +726,93 @@ export function EditorShell(props: EditorShellProps) {
   // The Done panel covers the stage's right side (desktop, landscape) or its lower part (phone): the garment is framed in the rest.
   const insets = doneOpen ? (layout === "compact" ? { ...baseInsets, bottom: doneHeight > 0 ? doneHeight - LAYOUT_SIZES.compact.dock : heights.expanded } : { ...baseInsets, right: layout === "wide" ? 400 : LAYOUT_SIZES.short.panel }) : baseInsets;
 
-  const api: EditorApi = {
-    product,
-    palette,
-    fonts,
-    templates: templates as Template[],
-    wording,
-    assets,
-    layout,
-    detent,
-    setDetent,
-    // While a drag, resize or turn goes on, the tools see the design as it was when it started (5.3: the
-    // stage is what must stay quick; the panel catches up on release).
-    design: frozenDesign ?? design,
-    latestDesign: () => designRef.current,
-    commit,
-    begin: (label) => history.begin(label),
-    preview,
-    end: () => history.end(),
-    hoverPreview: (edit) => {
-      try {
-        setHover(edit ? edit(designRef.current) : null);
-      } catch {
-        setHover(null);
-      }
-    },
-    textFits,
-    fontsLoading,
-    fontsFailed,
-    garmentView,
-    showSide,
-    focusOn,
-    announce,
-    colourTarget,
-    chooseColourTarget,
-    recentColours,
-    useColour: (id) =>
-      setRecentColours((list) => {
-        const next = [id, ...list.filter((x) => x !== id)].slice(0, 8);
-        writeLocal(RECENT_KEY, JSON.stringify(next));
-        return next;
-      }),
-    setTyping,
-    openTool,
-    reducedMotion,
-    selectedId,
-    select: (layerId, options = {}) => {
-      setSelectedId(layerId);
-      const layer = layerId ? designRef.current.layers.find((l) => l.id === layerId) : undefined;
-      if (!layer) return;
-      if (options.openTool) {
-        const next = toolForLayer(layer);
-        if (tools.includes(next)) openTool(next, detent === "expanded" ? "normal" : detent, { turn: false });
-      }
-      if (options.turn) {
-        const side = layerSide(product, layer);
-        // Only when the item faces away: the camera never moves for what the coach already sees (6.3).
-        if (side && side !== canvas.current?.getSide()) canvas.current?.focusOn(layer.id);
-      }
-    },
-    logoNotes,
-    setLogoNote: (assetId, note) => {
-      setLogoNotes((all) => ({ ...all, [assetId]: { ...all[assetId], ...note } }));
-      assets.saveNote?.(assetId, note);
-    },
-    missingAssets,
-    snapping: snapOn,
-    setSnapping: setSnapOn,
-    markTiming: (name) => {
-      timing.current = { name, start: performance.now() };
-    },
-    coachColoured: coachColoured,
-    readable,
+  // E3d (speed): the tools' shared state is a new object only when its data changes. Its functions are stable
+  // wrappers that call the latest implementation (set after every render), so a render of the shell for anything
+  // else (the camera, a status line, a hover, the panel's size) no longer re-renders every tool; with the tools
+  // memoised, a tool re-renders when its own data changes.
+  const impl: ApiHandlers = {
+      setDetent,
+      latestDesign: () => designRef.current,
+      commit,
+      begin: (label) => history.begin(label),
+      preview,
+      end: () => history.end(),
+      hoverPreview: (edit) => {
+        try {
+          setHover(edit ? edit(designRef.current) : null);
+        } catch {
+          setHover(null);
+        }
+      },
+      showSide,
+      focusOn,
+      announce,
+      chooseColourTarget,
+      useColour: (id) =>
+        setRecentColours((list) => {
+          const next = [id, ...list.filter((x) => x !== id)].slice(0, 8);
+          writeLocal(RECENT_KEY, JSON.stringify(next));
+          return next;
+        }),
+      setTyping,
+      openTool,
+      select: (layerId, options = {}) => {
+        setSelectedId(layerId);
+        const layer = layerId ? designRef.current.layers.find((l) => l.id === layerId) : undefined;
+        if (!layer) return;
+        if (options.openTool) {
+          const next = toolForLayer(layer);
+          if (tools.includes(next)) openTool(next, detent === "expanded" ? "normal" : detent, { turn: false });
+        }
+        if (options.turn) {
+          const side = layerSide(product, layer);
+          // Only when the item faces away: the camera never moves for what the coach already sees (6.3).
+          if (side && side !== canvas.current?.getSide()) canvas.current?.focusOn(layer.id);
+        }
+      },
+      setLogoNote: (assetId, note) => {
+        setLogoNotes((all) => ({ ...all, [assetId]: { ...all[assetId], ...note } }));
+        assets.saveNote?.(assetId, note);
+      },
+      setSnapping: setSnapOn,
+      markTiming: (name) => {
+        timing.current = { name, start: performance.now() };
+      },
   };
+  const [latest] = useState(createHandlers);
+  useLayoutEffect(() => latest.set(impl));
+  const handlers = latest.handlers;
+  // While a drag, resize or turn goes on, the tools see the design as it was when it started (5.3: the stage is
+  // what must stay quick; the panel catches up on release).
+  const apiDesign = frozenDesign ?? design;
+  const api: EditorApi = useMemo(
+    () => ({
+      ...handlers,
+      product,
+      palette,
+      fonts,
+      templates: templates as Template[],
+      wording,
+      assets,
+      layout,
+      detent,
+      design: apiDesign,
+      textFits,
+      fontsLoading,
+      fontsFailed,
+      garmentView,
+      colourTarget,
+      recentColours,
+      reducedMotion,
+      selectedId,
+      logoNotes,
+      missingAssets,
+      snapping: snapOn,
+      coachColoured,
+      readable,
+    }),
+    [handlers, product, palette, fonts, templates, wording, assets, layout, detent, apiDesign, textFits, fontsLoading, fontsFailed, garmentView, colourTarget, recentColours, reducedMotion, selectedId, logoNotes, missingAssets, snapOn, coachColoured, readable],
+  );
 
   const selectOnModel = useCallback(
     (layerId: string | null) => {
@@ -912,7 +943,9 @@ export function EditorShell(props: EditorShellProps) {
   const selectedLayer = selectedId ? (design.layers.find((l) => l.id === selectedId) ?? null) : null;
   const toolDesign = frozenDesign ?? design;
   // R15, D2: every item with an open warning and its words (a badge on the model while the item is not selected).
-  const warnings = useMemo(() => warningNames(wording, product, toolDesign, { notes: logoNotes, palette, missingAssets }), [wording, product, toolDesign, logoNotes, palette, missingAssets]);
+  // Deferred (speed): the readability pass runs after a tap has painted, never in its way.
+  const warningsDesign = useDeferredValue(toolDesign);
+  const warnings = useMemo(() => warningNames(wording, product, warningsDesign, { notes: logoNotes, palette, missingAssets }), [wording, product, warningsDesign, logoNotes, palette, missingAssets]);
   const kitInPanel = kitOpen && layout !== "wide" && !startCard;
   const kitPanel = kitInPanel ? (
     <ToolPanel

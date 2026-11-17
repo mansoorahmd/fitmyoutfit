@@ -8,7 +8,7 @@
  * size, and alignment as Start, Centre and End, whose icons turn round for
  * right-to-left text.
  */
-import { useId, useState } from "react";
+import { useId, useState, memo } from "react";
 import { addCatalogFont } from "../design/font-catalog.js";
 import { addLayer, removeLayer, updateLayer } from "../design/edit.js";
 import { newTextLayer, nextLayerId } from "../design/new-layers.js";
@@ -32,7 +32,7 @@ import { colourName } from "./stage-logic.js";
 
 type TextLayer = Extract<Layer, { kind: "text" }>;
 
-export function TextTool() {
+function TextToolView() {
   const api = useEditor();
   const { design, product, wording, fonts } = api;
   const w = wording.lettering;
@@ -248,3 +248,6 @@ function TextItem({ layer }: { layer: TextLayer }) {
     </div>
   );
 }
+
+/** E3d (speed): re-renders only when its props or the editor's data change. */
+export const TextTool = memo(TextToolView);

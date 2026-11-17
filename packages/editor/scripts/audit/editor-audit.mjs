@@ -34,7 +34,7 @@ mkdirSync(OUT, { recursive: true });
 
 /** 4.6: the garment's share of the free stage, painted magenta for one frame and read back. */
 async function framing(page, tag) {
-  await page.eval(`(() => { const st = document.createElement('style'); st.id = 'audit-frame'; st.textContent = '.fmo-stage{background:#ff00ff !important}.fmo-stage-deep,.fmo-stage-shadow,.fmo-stage-top,.fmo-view,.fmo-credit,.fmo-kit-place,.fmo-overlay,.fmo-context-place{visibility:hidden !important}'; document.head.appendChild(st); })()`);
+  await page.eval(`(() => { const st = document.createElement('style'); st.id = 'audit-frame'; st.textContent = '.fmo-stage{background:#ff00ff !important}.fmo-stage-deep,.fmo-stage-shadow,.fmo-stage-top,.fmo-view,.fmo-credit,.fmo-kit-place,.fmo-overlay,.fmo-context-place,.fmo-start,.fmo-panel{visibility:hidden !important}'; document.head.appendChild(st); })()`);
   await sleep(300);
   const file = await page.screenshot(join(OUT, `frame-${tag}.png`));
   await page.eval(`document.getElementById('audit-frame')?.remove()`);
