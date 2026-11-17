@@ -10,7 +10,7 @@
  * `onDesignChange` reports every change (the demo saves on the device with
  * `createAutosave`), and `saveState` says how that went.
  */
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
+import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import type { FontCatalog } from "../design/font-catalog.js";
 import type { Palette } from "../design/palette.js";
 import type { DesignDocument, ProductDefinition } from "../design/schema.js";
@@ -38,7 +38,7 @@ import { EditorContext, type ColourTarget, type EditorApi, type EditorAssets, ty
 import { CARD_HEIGHT, CARD_WIDTH, DesignTool } from "./DesignTool.js";
 import { PlayersTool, TeamTool } from "./LetteringTools.js";
 import { LogosTool, TextTool } from "./LogosTool.js";
-import { LAYOUT_SIZES, START_CARD_STAGE_MIN, chooseLayout, panelHeights, saveStateWords, stageInsets, type PanelDetent } from "./layout.js";
+import { LAYOUT_SIZES, START_CARD_STAGE_MIN, chooseLayout, panelHeights, saveStateWords, sheetUnderDone, stageInsets, viewControlsFor, type PanelDetent } from "./layout.js";
 import { ConfirmDialog } from "./parts.js";
 import { Stage, type StageLoad } from "./Stage.js";
 import { StartCard } from "./StartCard.js";
@@ -47,12 +47,13 @@ import { EDITOR_CSS } from "./styles.js";
 import { TOOL_ORDER, ToolPanel, ToolTabs } from "./ToolPanel.js";
 import { TopBar } from "./TopBar.js";
 import { hasWebGL2, readLocal, writeLocal } from "./webgl.js";
-import { toolForLayer } from "./selection.js";
+import { markBody, markRow, refreshFinish } from "./finish.js";
+import { HINT_MS, hintEnds, hintShows, modelTapAction, toolForLayer } from "./selection.js";
 import { namedLabel } from "./items.js";
 import { KitButton, OnThisKit } from "./OnThisKit.js";
 import { DonePanel } from "./DonePanel.js";
-import { itemChecks, type LogoNote } from "./checks.js";
-import { ClippedNote, ContextBar, FineTune, keyEdit } from "./SelectedItem.js";
+import { warningNames, type LogoNote } from "./checks.js";
+import { ClippedNote, ContextBar, FineTune, SelectedWarnings, keyEdit } from "./SelectedItem.js";
 import { nudgeLayer, rotateLayerBy, scaleLayerBy } from "../design/item-edits.js";
 import { removeLayer } from "../design/edit.js";
 
@@ -194,12 +195,49 @@ export function colourChanges(before: DesignDocument, after: DesignDocument): st
   });
 }
 
+/** The editor API's functions (E3d, speed): stable for the shell's life, each calling the latest one. */
+const HANDLER_KEYS = ["latestDesign", "commit", "begin", "preview", "end", "hoverPreview", "showSide", "focusOn", "announce", "chooseColourTarget", "useColour", "setTyping", "openTool", "select", "setLogoNote", "setSnapping", "markTiming", "setDetent"] as const;
+type HandlerKey = (typeof HANDLER_KEYS)[number];
+type ApiHandlers = Required<Pick<EditorApi, HandlerKey>>;
+/** Stable functions that call the latest implementations given to `set` (set after every render of the shell). */
+export function createHandlers(): { handlers: ApiHandlers; set: (next: ApiHandlers) => void } {
+  let current: ApiHandlers | null = null;
+  const out: Record<string, unknown> = {};
+  for (const key of HANDLER_KEYS) out[key] = (...args: unknown[]) => (current?.[key] as ((...a: unknown[]) => unknown) | undefined)?.(...args);
+  return {
+    handlers: out as unknown as ApiHandlers,
+    set: (next) => {
+      current = next;
+    },
+  };
+}
+
 export function EditorShell(props: EditorShellProps) {
   const { product, palette, fonts, templates, assets } = props;
   const wording = useMemo(() => mergeWording(props.wording), [props.wording]);
   const root = useRef<HTMLDivElement>(null);
   const size = useElementSize(root);
   const layout = chooseLayout(size.width || 390, size.height || 844);
+  // E3d (R3, R4): the panel body's gutter and the sideways rows' end fade, after every render and on scroll.
+  useEffect(() => {
+    if (root.current) refreshFinish(root.current);
+  });
+  useEffect(() => {
+    const el = root.current;
+    if (!el) return;
+    const onScroll = (event: Event) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.classList?.contains("fmo-scroll-row")) markRow(target);
+      else if (target?.classList?.contains("fmo-panel-body")) markBody(target);
+    };
+    const onResize = () => refreshFinish(el);
+    el.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onResize);
+    return () => {
+      el.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onResize);
+    };
+  }, []);
   const reducedMotion = useReducedMotion();
   // A design brought back (or upgraded) gets the print-area rule once: every item inside its area.
   const history = useDesignHistory(() => fitDesignToAreas(props.product, props.initialDesign));
@@ -257,6 +295,10 @@ export function EditorShell(props: EditorShellProps) {
   const [kitOpen, setKitOpen] = useState(false);
   // The Done panel (9.2).
   const [doneOpen, setDoneOpen] = useState(false);
+  /** R38: the tool panel open when the Done panel opened on a phone (it comes back when the Done panel closes). */
+  const beforeDone = useRef<{ tool: ToolId; detent: PanelDetent } | null>(null);
+  /** R37: the Done panel's height on a phone (its content's), for the stage's framing. */
+  const [doneHeight, setDoneHeight] = useState(0);
   // What the upload checks found about each file this session (a logo without a transparent background), by asset id.
   // Kept with the files by the host when it can (S3), so "prints as a box" survives a reload.
   const [logoNotes, setLogoNotes] = useState<Record<string, LogoNote>>(() => ({ ...(props.assets.notes?.() ?? {}) }));
@@ -646,12 +688,29 @@ export function EditorShell(props: EditorShellProps) {
 
   // ---- The one hint, once per design (7.4; E3b): after the start card, in its own band above the garment,
   // gone at the first press on the stage (a drag or a tap).
+  // E3d (R26): it also goes at the first selection, the first tool change or after 8 s, and never shows with the
+  // contextual bar or the status line (one row, 4.7).
   const [hintSeen, setHintSeen] = useState(() => !(props.showHint ?? props.showStartCard ?? false));
   const touchDevice = typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia("(pointer: coarse)").matches;
-  const hint = load.ready && !hintSeen && !startCard && !doneOpen && mode === "3d" ? (touchDevice ? wording.selection.hint : wording.selection.hintPointer) : null;
+  const hintPending = load.ready && !hintSeen && !startCard && !doneOpen && mode === "3d";
+  const hint = hintShows({ pending: hintPending, selected: Boolean(selectedId), status: Boolean(status) }) ? (touchDevice ? wording.selection.hint : wording.selection.hintPointer) : null;
   const dismissHint = () => {
     if (!hintSeen) setHintSeen(true);
   };
+  const hintTool = useRef<{ tool: ToolId | null } | null>(null);
+  useEffect(() => {
+    if (!hintPending) {
+      hintTool.current = null;
+      return;
+    }
+    hintTool.current ??= { tool: activeTool };
+    if (hintEnds({ selected: Boolean(selectedId), toolAtShow: hintTool.current.tool, tool: activeTool })) {
+      setHintSeen(true);
+      return;
+    }
+    const timer = setTimeout(() => setHintSeen(true), HINT_MS);
+    return () => clearTimeout(timer);
+  }, [hintPending, selectedId, activeTool]);
 
   // ---- The stage's description in words, debounced (11.2).
   const [description, setDescription] = useState("");
@@ -665,81 +724,95 @@ export function EditorShell(props: EditorShellProps) {
   const stageWidth = layout === "wide" ? editorWidth - LAYOUT_SIZES.wide.rail - LAYOUT_SIZES.wide.panel : layout === "short" ? editorWidth - LAYOUT_SIZES.short.rail - (panelOpen || startCard ? LAYOUT_SIZES.short.panel : 0) : editorWidth;
   const baseInsets = stageInsets(layout, { open: panelOpen || startCard || (kitOpen && layout !== "wide"), height: panelSize.height, width: panelSize.width });
   // The Done panel covers the stage's right side (desktop, landscape) or its lower part (phone): the garment is framed in the rest.
-  const insets = doneOpen ? (layout === "compact" ? { ...baseInsets, bottom: heights.expanded } : { ...baseInsets, right: layout === "wide" ? 400 : LAYOUT_SIZES.short.panel }) : baseInsets;
+  const insets = doneOpen ? (layout === "compact" ? { ...baseInsets, bottom: doneHeight > 0 ? doneHeight - LAYOUT_SIZES.compact.dock : heights.expanded } : { ...baseInsets, right: layout === "wide" ? 400 : LAYOUT_SIZES.short.panel }) : baseInsets;
 
-  const api: EditorApi = {
-    product,
-    palette,
-    fonts,
-    templates: templates as Template[],
-    wording,
-    assets,
-    layout,
-    detent,
-    setDetent,
-    // While a drag, resize or turn goes on, the tools see the design as it was when it started (5.3: the
-    // stage is what must stay quick; the panel catches up on release).
-    design: frozenDesign ?? design,
-    latestDesign: () => designRef.current,
-    commit,
-    begin: (label) => history.begin(label),
-    preview,
-    end: () => history.end(),
-    hoverPreview: (edit) => {
-      try {
-        setHover(edit ? edit(designRef.current) : null);
-      } catch {
-        setHover(null);
-      }
-    },
-    textFits,
-    fontsLoading,
-    fontsFailed,
-    garmentView,
-    showSide,
-    focusOn,
-    announce,
-    colourTarget,
-    chooseColourTarget,
-    recentColours,
-    useColour: (id) =>
-      setRecentColours((list) => {
-        const next = [id, ...list.filter((x) => x !== id)].slice(0, 8);
-        writeLocal(RECENT_KEY, JSON.stringify(next));
-        return next;
-      }),
-    setTyping,
-    openTool,
-    reducedMotion,
-    selectedId,
-    select: (layerId, options = {}) => {
-      setSelectedId(layerId);
-      const layer = layerId ? designRef.current.layers.find((l) => l.id === layerId) : undefined;
-      if (!layer) return;
-      if (options.openTool) {
-        const next = toolForLayer(layer);
-        if (tools.includes(next)) openTool(next, detent === "expanded" ? "normal" : detent, { turn: false });
-      }
-      if (options.turn) {
-        const side = layerSide(product, layer);
-        // Only when the item faces away: the camera never moves for what the coach already sees (6.3).
-        if (side && side !== canvas.current?.getSide()) canvas.current?.focusOn(layer.id);
-      }
-    },
-    logoNotes,
-    setLogoNote: (assetId, note) => {
-      setLogoNotes((all) => ({ ...all, [assetId]: { ...all[assetId], ...note } }));
-      assets.saveNote?.(assetId, note);
-    },
-    missingAssets,
-    snapping: snapOn,
-    setSnapping: setSnapOn,
-    markTiming: (name) => {
-      timing.current = { name, start: performance.now() };
-    },
-    coachColoured: coachColoured,
-    readable,
+  // E3d (speed): the tools' shared state is a new object only when its data changes. Its functions are stable
+  // wrappers that call the latest implementation (set after every render), so a render of the shell for anything
+  // else (the camera, a status line, a hover, the panel's size) no longer re-renders every tool; with the tools
+  // memoised, a tool re-renders when its own data changes.
+  const impl: ApiHandlers = {
+      setDetent,
+      latestDesign: () => designRef.current,
+      commit,
+      begin: (label) => history.begin(label),
+      preview,
+      end: () => history.end(),
+      hoverPreview: (edit) => {
+        try {
+          setHover(edit ? edit(designRef.current) : null);
+        } catch {
+          setHover(null);
+        }
+      },
+      showSide,
+      focusOn,
+      announce,
+      chooseColourTarget,
+      useColour: (id) =>
+        setRecentColours((list) => {
+          const next = [id, ...list.filter((x) => x !== id)].slice(0, 8);
+          writeLocal(RECENT_KEY, JSON.stringify(next));
+          return next;
+        }),
+      setTyping,
+      openTool,
+      select: (layerId, options = {}) => {
+        setSelectedId(layerId);
+        const layer = layerId ? designRef.current.layers.find((l) => l.id === layerId) : undefined;
+        if (!layer) return;
+        if (options.openTool) {
+          const next = toolForLayer(layer);
+          if (tools.includes(next)) openTool(next, detent === "expanded" ? "normal" : detent, { turn: false });
+        }
+        if (options.turn) {
+          const side = layerSide(product, layer);
+          // Only when the item faces away: the camera never moves for what the coach already sees (6.3).
+          if (side && side !== canvas.current?.getSide()) canvas.current?.focusOn(layer.id);
+        }
+      },
+      setLogoNote: (assetId, note) => {
+        setLogoNotes((all) => ({ ...all, [assetId]: { ...all[assetId], ...note } }));
+        assets.saveNote?.(assetId, note);
+      },
+      setSnapping: setSnapOn,
+      markTiming: (name) => {
+        timing.current = { name, start: performance.now() };
+      },
   };
+  const [latest] = useState(createHandlers);
+  useLayoutEffect(() => latest.set(impl));
+  const handlers = latest.handlers;
+  // While a drag, resize or turn goes on, the tools see the design as it was when it started (5.3: the stage is
+  // what must stay quick; the panel catches up on release).
+  const apiDesign = frozenDesign ?? design;
+  const api: EditorApi = useMemo(
+    () => ({
+      ...handlers,
+      product,
+      palette,
+      fonts,
+      templates: templates as Template[],
+      wording,
+      assets,
+      layout,
+      detent,
+      design: apiDesign,
+      textFits,
+      fontsLoading,
+      fontsFailed,
+      garmentView,
+      colourTarget,
+      recentColours,
+      reducedMotion,
+      selectedId,
+      logoNotes,
+      missingAssets,
+      snapping: snapOn,
+      coachColoured,
+      readable,
+    }),
+    [handlers, product, palette, fonts, templates, wording, assets, layout, detent, apiDesign, textFits, fontsLoading, fontsFailed, garmentView, colourTarget, recentColours, reducedMotion, selectedId, logoNotes, missingAssets, snapOn, coachColoured, readable],
+  );
 
   const selectOnModel = useCallback(
     (layerId: string | null) => {
@@ -747,9 +820,10 @@ export function EditorShell(props: EditorShellProps) {
       if (layerId === selectedId) return;
       setSelectedId(layerId);
       const layer = layerId ? designRef.current.layers.find((l) => l.id === layerId) : undefined;
-      if (!layer || startCard) return;
-      const next = toolForLayer(layer);
-      if (next !== activeTool && tools.includes(next)) openTool(next, detent === "expanded" ? "normal" : detent, { turn: false });
+      // R1: the first tap on an item while the start card is open closes it as "Skip" and opens the item's tool.
+      const action = modelTapAction({ startCard, itemTool: layer ? toolForLayer(layer) : null, activeTool: startCard ? null : activeTool, tools });
+      if (action.closeStartCard) setStartCard(false);
+      if (action.openTool) openTool(action.openTool, detent === "expanded" ? "normal" : detent, { turn: false });
     },
     [selectedId, setSelectedId, startCard, activeTool, tools, openTool, detent],
   );
@@ -868,10 +942,10 @@ export function EditorShell(props: EditorShellProps) {
   const fontsNote = fontsLoading ? wording.lettering.fontsLoading : null;
   const selectedLayer = selectedId ? (design.layers.find((l) => l.id === selectedId) ?? null) : null;
   const toolDesign = frozenDesign ?? design;
-  const selectionWarn = useMemo(() => {
-    const layer = selectedId ? toolDesign.layers.find((l) => l.id === selectedId) : undefined;
-    return layer ? itemChecks(product, toolDesign, layer, { notes: logoNotes, missingAssets }).length > 0 : false;
-  }, [selectedId, toolDesign, product, logoNotes, missingAssets]);
+  // R15, D2: every item with an open warning and its words (a badge on the model while the item is not selected).
+  // Deferred (speed): the readability pass runs after a tap has painted, never in its way.
+  const warningsDesign = useDeferredValue(toolDesign);
+  const warnings = useMemo(() => warningNames(wording, product, warningsDesign, { notes: logoNotes, palette, missingAssets }), [wording, product, warningsDesign, logoNotes, palette, missingAssets]);
   const kitInPanel = kitOpen && layout !== "wide" && !startCard;
   const kitPanel = kitInPanel ? (
     <ToolPanel
@@ -912,6 +986,7 @@ export function EditorShell(props: EditorShellProps) {
         {selectedLayer && layout === "wide" && <ContextBar variant="panel" />}
         {selectedLayer && toolForLayer(selectedLayer) === activeTool && (
           <div className="fmo-stack" data-testid="selected-item-section">
+            <SelectedWarnings />
             <ClippedNote />
             <FineTune />
           </div>
@@ -947,6 +1022,7 @@ export function EditorShell(props: EditorShellProps) {
         data-layout={layout}
         data-typing={typing}
         data-detent={panelOpen ? detent : "closed"}
+        data-start={startCard}
         data-reduced-motion={reducedMotion}
         data-selected={selectedId ?? ""}
         role="application"
@@ -972,6 +1048,10 @@ export function EditorShell(props: EditorShellProps) {
             // The Done panel lets go of the selected item (E3c minor): no handles behind it.
             setSelectedId(null);
             setKitOpen(false);
+            // R38, 4.10: one sheet at a time on a phone: the tool panel closes under the Done panel, and comes back
+            // (with its height) when the Done panel closes.
+            beforeDone.current = sheetUnderDone({ layout, panelOpen, tool: activeTool, detent });
+            if (beforeDone.current) setTool(null);
             setDoneOpen(true);
           }}
           doneOpen={doneOpen}
@@ -1013,6 +1093,8 @@ export function EditorShell(props: EditorShellProps) {
               fonts: props.fontSet,
               reducedMotion,
               selectedLayerId: selectedId,
+              // R22, 4.6: a selected item is zoomed in on until its box is this long on screen.
+              selectionMinPx: layout === "wide" ? 160 : 120,
               onSelectLayer: selectOnModel,
               dragOnlySelected: "touch",
               outlineSelected: false,
@@ -1078,7 +1160,8 @@ export function EditorShell(props: EditorShellProps) {
             onTurnTo={() => selectedId && canvas.current?.focusOn(selectedId)}
             handlesHidden={typing || doneOpen}
             contextBar={Boolean(selectedLayer) && layout !== "wide" && !typing && mode === "3d" && !doneOpen}
-            selectionWarn={selectionWarn}
+            warnings={warnings}
+            onSelectItem={(layerId) => api.select(layerId, { openTool: true })}
             kitButton={
               startCard || doneOpen || (Boolean(selectedLayer) && layout !== "wide" && !typing && mode === "3d") || (layout === "compact" && typing) ? null : (
                 <KitButton count={design.layers.length} compact={(size.width || 390) < 480} open={kitOpen} onClick={() => setKitOpen((o) => !o)} />
@@ -1092,7 +1175,7 @@ export function EditorShell(props: EditorShellProps) {
                 </div>
               ) : null
             }
-            viewControls={layout === "compact" && typing ? "none" : layout === "compact" && panelOpen && detent === "expanded" ? "reset-only" : "full"}
+            viewControls={viewControlsFor({ layout, typing, panelOpen, detent, startCard, stageHeight: (size.height || 844) - LAYOUT_SIZES.compact.topBar - (startCard ? panelSize.height : 0) })}
           />
           {layout !== "wide" && (start ?? panel)}
         </div>
@@ -1103,7 +1186,16 @@ export function EditorShell(props: EditorShellProps) {
           price={props.slots?.price}
           primaryAction={props.slots?.primaryAction}
           share={props.slots?.share}
-          onClose={() => setDoneOpen(false)}
+          onClose={() => {
+            setDoneOpen(false);
+            const back = beforeDone.current;
+            beforeDone.current = null;
+            if (back) {
+              setTool(back.tool);
+              setDetent(back.detent);
+            }
+          }}
+          onSize={setDoneHeight}
           onSaveAndGoBack={() => {
             setDoneOpen(false);
             props.onDone?.(designRef.current);
@@ -1132,12 +1224,12 @@ export function EditorShell(props: EditorShellProps) {
           testId="leave-dialog"
           actions={
             <>
-              <button type="button" className="fmo-btn" onClick={() => setLeaving(false)}>
+              <button type="button" className="fmo-btn" onClick={() => setLeaving(false)} data-dialog-focus>
                 {wording.frame.stay}
               </button>
               <button
                 type="button"
-                className="fmo-btn fmo-btn-text"
+                className="fmo-btn fmo-btn-text fmo-btn-pad"
                 onClick={() => {
                   setLeaving(false);
                   props.onClose?.();

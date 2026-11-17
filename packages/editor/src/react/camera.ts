@@ -18,8 +18,8 @@ export interface OrbitLimits {
   maxPolarAngle: number;
 }
 
-/** Closest zoom as a share of the fitting distance. */
-export const MIN_ZOOM_FACTOR = 0.45;
+/** Closest zoom as a share of the fitting distance (E3d: 0.35, so a number selected on a small phone reaches 120 px, R22). */
+export const MIN_ZOOM_FACTOR = 0.35;
 /** Furthest zoom as a multiple of the fitting distance. */
 export const MAX_ZOOM_FACTOR = 1.6;
 
@@ -94,10 +94,8 @@ export function frameInFreeArea(size: readonly [number, number, number], fovDegr
   const fh = Math.max(1, H - top - bottom);
   // The free area sees a narrower angle than the canvas: tan scales with its share of the canvas height.
   const t = Math.tan((fovDegrees * Math.PI) / 360);
-  const halfV = Math.atan((t * fh) / H);
-  const halfH = Math.atan((t * fw) / H);
   const radius = 0.5 * Math.hypot(size[0], size[1], size[2]);
-  const fit = radius / Math.sin(Math.min(halfV, halfH));
+  const fit = garmentFitDistance(size, (t * fh) / H, (t * fw) / H);
   const base = orbitLimits(size, fovDegrees, W / H);
   return {
     ...base,
@@ -107,6 +105,32 @@ export function frameInFreeArea(size: readonly [number, number, number], fovDegr
     offset: { x: W / 2 - (left + fw / 2), y: H / 2 - (top + fh / 2) },
     free: { x: left, y: top, width: fw, height: fh },
   };
+}
+
+/**
+ * The stage's framing rule (E3d, 07-editor-review 4.6, R22, R23): at rest the garment's own height fills
+ * about 77% of the free area's height (75 to 80% wide, 72 to 80% compact: one value meets both), within the
+ * width limits below. Fitting the bounding sphere instead left a third of the stage empty. `FRAME_FILL` is the
+ * share of the model's bounding box; the garment as drawn (seen a little from above, its hem and collar inside
+ * the box) measures about 1.02 of it: 0.77 gives 0.78 to 0.79 measured (magenta method, six sizes, both models;
+ * the free area without the credit, hint or bar and view rows). On an upright phone with nothing open the width
+ * binds first: the jersey reaches 0.74, the T-shirt (wider sleeves) 0.63.
+ */
+export const FRAME_FILL = 0.77;
+/** The garment's width seen from the front, at most this share of the free width (a phone held upright). */
+export const FRAME_FILL_WIDTH = 0.94;
+/** Turned any way (the box's diagonal seen from above), it never reaches the free area's sides. */
+export const FRAME_FILL_TURNED = 0.99;
+
+/** The camera distance for that rule, from the tangents of the free area's half angles (vertical, horizontal). */
+export function garmentFitDistance(size: readonly [number, number, number], tanHalfV: number, tanHalfH: number, fill = FRAME_FILL): number {
+  const [w, h, d] = size;
+  const tv = Math.max(1e-6, tanHalfV);
+  const th = Math.max(1e-6, tanHalfH);
+  const byHeight = (0.5 * h) / (fill * tv);
+  const byWidth = (0.5 * w) / (FRAME_FILL_WIDTH * th);
+  const byTurn = (0.5 * Math.hypot(w, d)) / (FRAME_FILL_TURNED * th);
+  return Math.max(byHeight, byWidth, byTurn);
 }
 
 function clamp(value: number, min: number, max: number): number {

@@ -6,8 +6,12 @@ import {
   canZoom,
   easeInOut,
   easeOut,
+  FRAME_FILL,
+  FRAME_FILL_TURNED,
+  FRAME_FILL_WIDTH,
   focusOffsetY,
   frameInFreeArea,
+  garmentFitDistance,
   mayMoveCamera,
   orbitLimits,
   orbitOf,
@@ -22,9 +26,10 @@ const JERSEY: [number, number, number] = [0.75, 0.73, 0.3];
 const deg = (d: number) => (d * Math.PI) / 180;
 
 describe("framing in the free area (viewInsets)", () => {
-  it("without insets: the same fit as orbitLimits, no offset", () => {
+  it("without insets: the framing rule's distance (closer than the bounding sphere's fit), no offset", () => {
     const f = frameInFreeArea(JERSEY, 35, { width: 390, height: 668 });
-    expect(f.fit).toBeCloseTo(orbitLimits(JERSEY, 35, 390 / 668).fit, 9);
+    expect(f.fit).toBeCloseTo(garmentFitDistance(JERSEY, Math.tan(deg(17.5)), (Math.tan(deg(17.5)) * 390) / 668), 9);
+    expect(f.fit).toBeLessThan(orbitLimits(JERSEY, 35, 390 / 668).fit);
     expect(f.offset).toEqual({ x: 0, y: 0 });
     expect(f.free).toEqual({ x: 0, y: 0, width: 390, height: 668 });
   });
@@ -36,13 +41,39 @@ describe("framing in the free area (viewInsets)", () => {
     expect(open.offset).toEqual({ x: 0, y: 86 });
     expect(open.free.height).toBe(348);
     expect(open.fit).toBeGreaterThan(full.fit);
-    // The garment's bounding sphere fits the free area: its angular size equals the free area's narrower angle.
+    // E3d (4.6): the garment's height fills FRAME_FILL of the free height, unless its width binds first.
     const t = Math.tan(deg(17.5));
-    const radius = 0.5 * Math.hypot(...JERSEY);
-    const halfFree = Math.min(Math.atan((t * 348) / 520), Math.atan((t * 360) / 520));
-    expect(Math.asin(radius / open.fit)).toBeCloseTo(halfFree, 9);
+    const tanV = (t * 348) / 520;
+    const tanH = (t * 360) / 520;
+    const heightShare = (0.5 * JERSEY[1]) / (open.fit * tanV);
+    const widthShare = (0.5 * JERSEY[0]) / (open.fit * tanH);
+    const turnedShare = (0.5 * Math.hypot(JERSEY[0], JERSEY[2])) / (open.fit * tanH);
+    expect(heightShare).toBeLessThanOrEqual(FRAME_FILL + 1e-9);
+    expect(widthShare).toBeLessThanOrEqual(FRAME_FILL_WIDTH + 1e-9);
+    expect(turnedShare).toBeLessThanOrEqual(FRAME_FILL_TURNED + 1e-9);
+    expect(Math.max(heightShare / FRAME_FILL, widthShare / FRAME_FILL_WIDTH, turnedShare / FRAME_FILL_TURNED)).toBeCloseTo(1, 9);
     expect(open.minDistance).toBeLessThan(open.fit);
     expect(open.maxDistance).toBeGreaterThan(open.fit);
+  });
+
+  it("E3d (R22, R23): on a desktop stage the height binds: the garment fills FRAME_FILL of it, not the sphere's ~0.6", () => {
+    const f = frameInFreeArea(JERSEY, 35, { width: 918, height: 704 }, { top: 68, right: 0, bottom: 60, left: 0 });
+    const tanV = (Math.tan(deg(17.5)) * f.free.height) / 704;
+    expect((0.5 * JERSEY[1]) / (f.fit * tanV)).toBeCloseTo(FRAME_FILL, 9);
+    const sphere = 0.5 * Math.hypot(...JERSEY);
+    expect((0.5 * JERSEY[1]) / ((sphere / Math.sin(Math.atan(tanV))) * tanV)).toBeLessThan(0.65);
+  });
+
+  it("E3d: an upright phone binds on the width, and a turned garment never reaches the sides", () => {
+    const f = frameInFreeArea(JERSEY, 35, { width: 390, height: 788 }, { top: 68, right: 0, bottom: 60, left: 0 });
+    const tanH = (Math.tan(deg(17.5)) * 390) / 788;
+    const tanV = (Math.tan(deg(17.5)) * f.free.height) / 788;
+    const width = (0.5 * JERSEY[0]) / (f.fit * tanH);
+    const turned = (0.5 * Math.hypot(JERSEY[0], JERSEY[2])) / (f.fit * tanH);
+    expect(width).toBeLessThanOrEqual(FRAME_FILL_WIDTH + 1e-9);
+    expect(turned).toBeLessThanOrEqual(FRAME_FILL_TURNED + 1e-9);
+    expect(Math.max(width / FRAME_FILL_WIDTH, turned / FRAME_FILL_TURNED)).toBeCloseTo(1, 9);
+    expect((0.5 * JERSEY[1]) / (f.fit * tanV)).toBeLessThan(FRAME_FILL);
   });
 
   it("a side panel on the right (short layout): the garment moves left", () => {

@@ -38,7 +38,7 @@ const PaletteSwatch = memo(function PaletteSwatch({ colour, label, selected, pre
   return <Swatch hex={colour.hex} label={label} selected={selected} onPick={() => onPick(colour)} onPreview={(on) => onPreview(colour, on)} testId={`swatch-${prefix}-${colour.id}`} />;
 });
 
-export function ColoursTool() {
+function ColoursToolView() {
   const api = useEditor();
   const { design, product, palette, wording, colourTarget, detent, layout } = api;
   const w = wording.colours;
@@ -132,8 +132,10 @@ export function ColoursTool() {
             <span className="fmo-label">{w.teamColours}</span>
             <div className="fmo-row">
               <div className="fmo-swatches">{teamSwatches}</div>
-              <button type="button" className="fmo-btn fmo-btn-text" onClick={() => api.commit(swapTeamColors, "swap-team-colours")} data-testid="swap-team" aria-label={w.swap} title={w.swap}>
+              {/* R21: a chip with its word, not a bare icon. */}
+              <button type="button" className="fmo-chip" onClick={() => api.commit(swapTeamColors, "swap-team-colours")} data-testid="swap-team" aria-label={w.swap} title={w.swap}>
                 <EditorIcon name="swap" size={20} />
+                {w.swapShort}
               </button>
               <button type="button" className="fmo-btn fmo-btn-text" onClick={() => setView("team")} data-testid="edit-team">
                 {w.editTeam}
@@ -214,13 +216,19 @@ function TeamColoursEditor({ role, onRole, onBack }: { role: TeamColourRole; onR
 
 /** "Match a colour code" (4.3): the field, both colours, the match line, "Use …". */
 function ColourCodeMatch({ onUse }: { onUse: (value: ColorValue, colourId: string) => void }) {
-  const { palette, wording } = useEditor();
+  const { palette, wording, reducedMotion } = useEditor();
   const w = wording.colours;
   const [raw, setRaw] = useState("");
   const [finished, setFinished] = useState(false);
   const id = useId();
   const state = colourCodeState(palette, raw, finished);
   const invalid = state.kind === "invalid";
+  // R20: a result that appears below the fold is brought into view (instantly with reduced motion).
+  const result = useRef<HTMLDivElement>(null);
+  const matched = state.kind === "match" ? state.colour.id + state.requested : null;
+  useEffect(() => {
+    if (matched) result.current?.scrollIntoView?.({ block: "nearest", behavior: reducedMotion ? "auto" : "smooth" });
+  }, [matched, reducedMotion]);
   return (
     <section className="fmo-section" aria-label={w.matchCode} data-testid="colour-code">
       <label className="fmo-label" htmlFor={`${id}-code`}>
@@ -259,7 +267,7 @@ function ColourCodeMatch({ onUse }: { onUse: (value: ColorValue, colourId: strin
         </p>
       )}
       {state.kind === "match" && (
-        <div className="fmo-match" data-testid="colour-code-result">
+        <div className="fmo-match" ref={result} data-testid="colour-code-result">
           <div className="fmo-match-col">
             <span>{w.youEntered}</span>
             <span className="fmo-match-chip" style={{ background: state.requested }} />
@@ -285,3 +293,6 @@ function ColourCodeMatch({ onUse }: { onUse: (value: ColorValue, colourId: strin
     </section>
   );
 }
+
+/** E3d (speed): re-renders only when its props or the editor's data change. */
+export const ColoursTool = memo(ColoursToolView);
