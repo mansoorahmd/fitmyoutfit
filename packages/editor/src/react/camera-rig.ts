@@ -148,6 +148,8 @@ export class CameraRig {
     if (t >= 1) {
       this.anim = null;
       this.report();
+      // One frame more: what waits for the camera to stand still (the zoom's checks) runs with `animating` false.
+      this.invalidate();
     } else this.invalidate();
   }
 
@@ -274,6 +276,25 @@ export class CameraRig {
     this.zoomFactor = distance / f.fit;
     this.itemZoom = { restore, factor: this.zoomFactor };
     this.moveTo({ ...from, distance }, this.targetOffset(), CAMERA_REFRAME_MS * 1.5, easeOut);
+  }
+
+  /**
+   * E3e: the camera's own zoom on a small item left it (or its handles) outside the free stage (an item high on the
+   * garment cannot be brought to the middle of it): back off by `factor` (above 1), never past the rest framing. Only
+   * a zoom the camera made itself; one the coach made is theirs.
+   */
+  backOffFromItem(factor: number): void {
+    const f = this.config?.framing;
+    const held = this.itemZoom;
+    if (!f || !held || !(factor > 1)) return;
+    const from = this.anim ? this.anim.to : this.orbit();
+    // Only while the camera is where its own zoom put it (a zoom by hand, by wheel or pinch, is the coach's).
+    if (Math.abs(from.distance - f.fit * held.factor) > 0.02 * f.fit) return;
+    const distance = Math.min(f.fit, from.distance * factor);
+    if (distance <= from.distance + 1e-6) return;
+    this.zoomFactor = distance / f.fit;
+    this.itemZoom = { restore: held.restore, factor: this.zoomFactor };
+    this.moveTo({ ...from, distance }, this.targetOffset(), CAMERA_REFRAME_MS, easeOut);
   }
 
   private releaseItemZoom(): void {

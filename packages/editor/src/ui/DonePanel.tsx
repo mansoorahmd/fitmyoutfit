@@ -15,6 +15,7 @@
  * bottom at the panel's expanded height; on a desktop it is 400 px wide on the
  * right, over the stage's right side.
  */
+import { focusForInput } from "./pointer-focus.js";
 import { useEffect, useMemo, useRef, type ReactNode } from "react";
 import type { DesignDocument } from "../design/schema.js";
 import { designChecks, type DesignCheck } from "./checks.js";
@@ -57,7 +58,9 @@ export function DonePanel(props: DonePanelProps) {
       if (typeof dialog.showModal === "function") dialog.showModal();
       else dialog.setAttribute("open", "");
       // showModal() puts the focus on the first control (the close button): the main action keeps it (11.2).
-      dialog.querySelector<HTMLElement>("[data-done-focus], .fmo-primary")?.focus({ preventScroll: true });
+      // E3e: the ring only for a keyboard (after a mouse or a finger the button is focused without it).
+      const main = dialog.querySelector<HTMLElement>("[data-done-focus], .fmo-primary");
+      if (main) focusForInput(main);
     } else if (!props.open && dialog.open) dialog.close();
   }, [props.open]);
   // R37: the sheet's real height, for the stage (the garment is framed above it).
@@ -130,7 +133,7 @@ export function DonePanel(props: DonePanelProps) {
           )}
           {primary ?? (
             <>
-              <button type="button" className="fmo-primary" onClick={props.onSaveAndGoBack} data-testid="done-save-and-go-back" data-done-focus autoFocus>
+              <button type="button" className="fmo-primary" onClick={props.onSaveAndGoBack} data-testid="done-save-and-go-back" data-done-focus>
                 {w.saveAndGoBack}
               </button>
               <p className="fmo-muted" data-testid="done-team-orders">

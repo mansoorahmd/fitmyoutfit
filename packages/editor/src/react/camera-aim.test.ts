@@ -6,7 +6,7 @@ import { PerspectiveCamera } from "three";
 import { describe, expect, it } from "vitest";
 import { CameraRig, aimFor, aimVectorFor } from "./camera-rig";
 import { frameInFreeArea, orbitOf } from "./camera";
-import { itemFitDistance, itemLongSide } from "./DesignCanvas";
+import { itemFitDistance, itemLongSide, itemOverflowFactor } from "./DesignCanvas";
 
 const SIZE: [number, number, number] = [0.75, 0.73, 0.3];
 const CENTER: [number, number, number] = [0, 1.1, 0];
@@ -199,6 +199,75 @@ describe("frames asked for by the aim (E3e, speed)", () => {
     }
     asked = 0;
     rig.setItem([CENTER[0], CENTER[1] + 0.2, CENTER[2]]);
+    expect(asked).toBeGreaterThan(0);
+  });
+});
+
+describe("an item the zoom left outside the free stage (E3e)", () => {
+  // The free stage on a phone: 390 wide, from y 128 to 552 (the bar's room above is not part of it).
+  const free = { x: 0, y: 128, width: 390, height: 424 };
+  const box = (top: number, bottom: number, left = 100, right = 200) => [
+    { x: left, y: top },
+    { x: right, y: top },
+    { x: right, y: bottom },
+    { x: left, y: bottom },
+  ];
+  it("1 for a box inside, with room for its handles", () => {
+    expect(itemOverflowFactor(box(200, 400), free)).toBe(1);
+  });
+  it("a box high on the garment, reaching under the bar's room, must come back in proportion", () => {
+    // Its top is 77 px above the free stage's top edge: 128 - 77 = 51; the centre is 340; 340 - 51 = 289 over (212 - 45) room.
+    expect(itemOverflowFactor(box(51, 300), free)).toBeCloseTo((340 - 51) / (212 - 45), 6);
+    expect(itemOverflowFactor(box(51, 300), free)).toBeGreaterThan(1.7);
+  });
+  it("a box too low, or too far to the side, counts as well", () => {
+    expect(itemOverflowFactor(box(400, 600), free)).toBeGreaterThan(1);
+    expect(itemOverflowFactor(box(250, 330, 300, 390), free)).toBeGreaterThan(1);
+  });
+  it("the rig backs off a zoom it made, never past the rest framing, and leaves the coach's own zoom", () => {
+    const { rig, run, distance, framing } = setup();
+    const rest = distance();
+    rig.setItem(CENTER);
+    rig.zoomToItem(40, 160);
+    run();
+    const zoomed = distance();
+    expect(zoomed).toBeLessThan(rest);
+    rig.backOffFromItem(1.5);
+    run();
+    expect(distance()).toBeGreaterThan(zoomed + 1e-6);
+    rig.backOffFromItem(50);
+    run();
+    expect(distance()).toBeCloseTo(framing.fit, 6);
+    const other = setup();
+    other.rig.zoom("in");
+    other.run();
+    const theirs = other.distance();
+    other.rig.backOffFromItem(2);
+    other.run();
+    expect(other.distance()).toBeCloseTo(theirs, 6);
+  });
+});
+
+describe("the frame after a camera move (E3e)", () => {
+  it("one more frame is asked for when the move ends, so what waits for the camera to stand still can run", () => {
+    let asked = 0;
+    const camera = new PerspectiveCamera(35, 360 / 520, 0.05, 50);
+    let now = 0;
+    const rig = new CameraRig(camera, () => asked++, () => now);
+    const framing = frameInFreeArea(SIZE, 35, { width: 360, height: 520 });
+    rig.update({}, CENTER, SIZE, { framing, viewport: { width: 360, height: 520 }, reducedMotion: false, fovDegrees: 35, onTarget: () => undefined, onChange: () => undefined });
+    rig.zoom("in");
+    for (let t = 0; t < 2000 && rig.animating; t += 16) {
+      now += 16;
+      rig.frame();
+    }
+    expect(rig.animating).toBe(false);
+    // The last frame of a move (its end) asks once more.
+    rig.zoom("in");
+    asked = 0;
+    now += 5000;
+    rig.frame();
+    expect(rig.animating).toBe(false);
     expect(asked).toBeGreaterThan(0);
   });
 });

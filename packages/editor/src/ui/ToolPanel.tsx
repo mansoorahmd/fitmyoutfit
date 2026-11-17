@@ -6,10 +6,11 @@
  * short a 320 px side panel, on wide a 360 px panel that is always open.
  * One panel at a time; further choices open inside it.
  */
-import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import type { EditorWording } from "./content.js";
 import type { ToolId } from "./context.js";
 import { EditorIcon, type IconName } from "./icons.js";
+import { rowBoxes, snapDelta } from "./finish.js";
 import type { EditorLayout, PanelDetent } from "./layout.js";
 
 export const TOOL_ORDER: readonly ToolId[] = ["design", "colours", "team", "players", "logos", "text"];
@@ -84,6 +85,9 @@ export function ToolPanel(props: ToolPanelProps) {
   const [natural, setNatural] = useState(0);
   const [drag, setDrag] = useState<{ start: number; startHeight: number; height: number } | null>(null);
   const compact = layout === "compact";
+  const body = useRef<HTMLDivElement>(null);
+  /** E3e (R39): px the resting height grows (or gives up) so that the panel ends on a whole row; 0 when nothing is cut. */
+  const [snap, setSnap] = useState(0);
   const onSize = useRef(props.onSize);
   useEffect(() => {
     onSize.current = props.onSize;
@@ -109,6 +113,38 @@ export function ToolPanel(props: ToolPanelProps) {
     observer.observe(el);
     return () => observer.disconnect();
   }, [tool]);
+  // The foot of the panel on a whole row (R39): measured at the nominal height for the detent, with the content
+  // scrolled to its top; a few corrections at most per state (the scrollbar may come or go with the height).
+  const nominal = detent === "expanded" ? heights.expanded : heights.normal;
+  const snapKey = `${tool}|${detent}|${nominal}|${props.title ?? ""}`;
+  const corrections = useRef({ key: "", n: 0 });
+  useLayoutEffect(() => {
+    const b = body.current;
+    const panel = ref.current;
+    if (!compact || !b || !panel || props.typing) {
+      setSnap(0);
+      return;
+    }
+    if (corrections.current.key !== snapKey) corrections.current = { key: snapKey, n: 0 };
+    const measure = () => {
+      if (corrections.current.n >= 4) return;
+      const top = b.getBoundingClientRect().top - panel.getBoundingClientRect().top;
+      const cut = nominal - top;
+      const content = inner.current?.scrollHeight ?? 0;
+      // Everything fits: nothing is cut.
+      const next = content + 16 <= cut ? 0 : snapDelta(cut, rowBoxes(b));
+      setSnap((old) => {
+        if (Math.abs(old - next) < 1) return old;
+        corrections.current.n++;
+        return next;
+      });
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined" || !inner.current) return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(inner.current);
+    return () => observer.disconnect();
+  }, [compact, snapKey, nominal, props.typing]);
   // Chrome round the content: the grab strip, the header, the body's padding.
   const fitsNormal = natural > 0 && natural + 24 + 48 + 16 <= heights.normal;
   // Changing tools keeps an expanded panel expanded only when the new tool has more to show (3.3).
@@ -122,8 +158,8 @@ export function ToolPanel(props: ToolPanelProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tool, fitsNormal]);
 
-  const height = compact ? (drag ? drag.height : detent === "expanded" ? heights.expanded : undefined) : undefined;
-  const maxHeight = compact && detent !== "expanded" && !drag ? heights.normal : undefined;
+  const height = compact ? (drag ? drag.height : detent === "expanded" ? heights.expanded + snap : undefined) : undefined;
+  const maxHeight = compact && detent !== "expanded" && !drag ? heights.normal + snap : undefined;
 
   const endDrag = (y: number) => {
     if (!drag) return;
@@ -182,7 +218,7 @@ export function ToolPanel(props: ToolPanelProps) {
         )}
       </div>
       {help && !props.title && <p className="fmo-help">{wording.help[tool]}</p>}
-      <div className="fmo-panel-body">
+      <div ref={body} className="fmo-panel-body">
         <div ref={inner} className="fmo-panel-inner fmo-stack">
           {props.children}
         </div>

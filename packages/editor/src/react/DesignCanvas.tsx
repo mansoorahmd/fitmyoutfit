@@ -427,6 +427,25 @@ export function itemFitDistance(corners: readonly { x: number; y: number }[], di
   return distance * Math.max(h / roomH, w / roomW);
 }
 
+/**
+ * E3e: by what factor the camera must come back for an item's box and its handles to lie inside the free stage
+ * (`free`: its rectangle in canvas px, which leaves out the credit line, the contextual bar and the view buttons). 1
+ * when they do. 25 px round the box (outset and handles); 45 px above it, where the turn handle stands. The box
+ * seen from further away shrinks towards the middle of the free stage in proportion.
+ */
+export function itemOverflowFactor(corners: readonly { x: number; y: number }[], free: { x: number; y: number; width: number; height: number }): number {
+  const cx = free.x + free.width / 2;
+  const cy = free.y + free.height / 2;
+  const up = Math.min(...corners.map((c) => c.y));
+  const down = Math.max(...corners.map((c) => c.y));
+  const left = Math.min(...corners.map((c) => c.x));
+  const right = Math.max(...corners.map((c) => c.x));
+  const room = { up: free.height / 2 - 45, down: free.height / 2 - 25, side: (free.width - 50 - 70) / 2 };
+  const ratios = [(cy - up) / room.up, (down - cy) / room.down, (cx - left) / room.side, (right - cx) / room.side];
+  const worst = Math.max(...ratios);
+  return Number.isFinite(worst) && worst > 1 ? worst : 1;
+}
+
 /** The longer side of an item's box on the screen (its edges' lengths, CSS px). */
 export function itemLongSide(corners: readonly { x: number; y: number }[]): number {
   let longest = 0;
@@ -636,6 +655,12 @@ function ModelView({
     if (zoomedFor.current !== layer.id && on.facing && !rig.animating && pointersDown.current.size === 0 && !gestureNow.current) {
       zoomedFor.current = layer.id;
       if (minPx) rig.zoomToItem(itemLongSide(on.corners), minPx, rig.distance() - toItem);
+    }
+    // E3e: the zoom the camera made on a small item left it outside the free stage (high on the garment, under the
+    // credit line or where the bar goes): back off (it stops by itself at the rest framing).
+    if (zoomedFor.current === layer.id && on.facing && !rig.animating && pointersDown.current.size === 0 && !gestureNow.current) {
+      const need = itemOverflowFactor(on.corners, framingNow.current.free);
+      if (need > 1.03) rig.backOffFromItem(need);
     }
     // The lines (print area, guides) move only with the camera or when they change: projected again only then (S1).
     const linesKey = JSON.stringify([cam.matrixWorld.elements, cam.projectionMatrix.elements, g, vs.width, vs.height]);

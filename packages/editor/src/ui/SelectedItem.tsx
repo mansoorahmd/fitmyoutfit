@@ -21,7 +21,7 @@ import { fill } from "./content.js";
 import { useEditor } from "./context.js";
 import { HANDLE_HIT, type Bus } from "./handles.js";
 import { EditorIcon, type IconName } from "./icons.js";
-import { itemWords } from "./items.js";
+import { itemWords, panelHeaderName } from "./items.js";
 import { Alert, SwitchRow } from "./parts.js";
 import { CONTEXT_BAR_HEIGHT, contextBarPlacement, itemScreenBox, toolForLayer } from "./selection.js";
 
@@ -57,7 +57,7 @@ function ContextBarView({ variant }: { variant: "stage" | "panel" }) {
   return (
     <div className={`fmo-context fmo-context-${variant}`} role="toolbar" aria-label={fill(w.actionsFor, { item: words.name })} data-testid={`context-bar-${variant}`}>
       <span className="fmo-context-name fmo-bdi" dir="auto">
-        {words.name}
+        {panelHeaderName(words, layer, variant)}
       </span>
       <button type="button" className="fmo-context-btn" onClick={() => api.commit((d) => removeLayer(d, layer.id), "remove-item") && api.select(null)} data-testid="context-delete">
         <EditorIcon name="trash" size={20} />

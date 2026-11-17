@@ -87,6 +87,8 @@ export const EDITOR_CSS = /* css */ `
 .fmo-editor :focus-visible { outline: 2px solid var(--fmo-focus); outline-offset: 2px; }
 /* R16, 4.9: inside a scrolling panel the ring is drawn inside the control (never clipped) and follows its radius. */
 .fmo-panel-body :focus-visible, .fmo-done-inner :focus-visible, .fmo-kit-popover :focus-visible { outline-offset: -2px; }
+/* E3e: a button focused in code after a mouse or a finger (the Done panel's main action) shows no ring until a key is pressed. */
+.fmo-editor [data-pointer-focus]:focus-visible, .fmo-done-panel [data-pointer-focus]:focus-visible { outline: none; }
 .fmo-alert:focus-visible, .fmo-alert:focus { outline-offset: -2px; border-radius: var(--fmo-radius-card); }
 [tabindex="-1"]:focus { outline: none; }
 .fmo-topbar :focus-visible { outline: 2px solid #fff; box-shadow: 0 0 0 4px var(--fmo-focus); }
@@ -317,8 +319,8 @@ export const EDITOR_CSS = /* css */ `
   :is(.fmo-panel-body, .fmo-kit-popover, .fmo-done-checks)::-webkit-scrollbar-track, :is(.fmo-panel-body, .fmo-kit-popover, .fmo-done-checks)::-webkit-scrollbar-button { background: transparent; display: none; }
 }
 @supports not selector(::-webkit-scrollbar) { :is(.fmo-panel-body, .fmo-kit-popover, .fmo-done-checks) { scrollbar-width: thin; scrollbar-color: var(--fmo-border-strong) transparent; } }
-/* R39: on a phone a panel whose content goes on below fades over its last 16 px (a cut line reads as "more"). */
-.fmo-editor[data-layout="compact"] .fmo-panel-body[data-more-below="true"] { -webkit-mask-image: linear-gradient(to top, transparent 0, #000 16px); mask-image: linear-gradient(to top, transparent 0, #000 16px); }
+/* R39: on a phone a panel whose content goes on below fades over its last 28 px (a cut line reads as "more"). */
+.fmo-editor[data-layout="compact"] .fmo-panel-body[data-more-below="true"] { -webkit-mask-image: linear-gradient(to top, transparent 0, #000 28px); mask-image: linear-gradient(to top, transparent 0, #000 28px); }
 .fmo-editor[data-layout="compact"] .fmo-panel[data-typing="true"] .fmo-panel-inner > :not([data-keep-typing]) { display: none; }
 .fmo-editor[data-layout="compact"] .fmo-panel[data-typing="true"] .fmo-fields > :not(:focus-within) { display: none; }
 .fmo-editor[data-layout="compact"] .fmo-panel[data-typing="true"] .fmo-fields { grid-template-columns: 1fr; }
@@ -354,7 +356,8 @@ export const EDITOR_CSS = /* css */ `
 .fmo-scroll-row > * { flex: none; }
 .fmo-scroll-row[data-more="true"] { -webkit-mask-image: linear-gradient(to left, transparent 0, #000 24px); mask-image: linear-gradient(to left, transparent 0, #000 24px); }
 .fmo-editor:is([data-layout="wide"], [data-layout="short"]) .fmo-scroll-row, .fmo-done-panel .fmo-scroll-row { flex-wrap: wrap; overflow: visible; padding: 0; margin-inline: 0; -webkit-mask-image: none; mask-image: none; }
-.fmo-divider { width: 1px; align-self: stretch; background: var(--fmo-border); margin: 4px 2px; }
+/* E3e: the line between two groups of swatches takes no room of its own: the gap stays 8 px on both sides. */
+.fmo-divider { width: 1px; align-self: stretch; background: var(--fmo-border); margin: 4px -4.5px; }
 .fmo-group-label { font: var(--fmo-type-small); color: var(--fmo-ink-muted); white-space: nowrap; }
 .fmo-field { display: block; width: 100%; height: 48px; padding: 0 12px; border: 1px solid var(--fmo-border-strong); border-radius: var(--fmo-radius-control); background: var(--fmo-surface); color: var(--fmo-ink); font: 400 16px/1.2 var(--fmo-font-body); }
 .fmo-field[aria-invalid="true"] { border-color: var(--fmo-error); border-width: 2px; }
@@ -421,7 +424,8 @@ export const EDITOR_CSS = /* css */ `
 .fmo-swatch { position: relative; width: 44px; height: 44px; flex: none; padding: 0; border: 0; border-radius: 8px; cursor: pointer; box-shadow: inset 0 0 0 1px var(--fmo-border-strong); transition: transform 100ms ease-out; }
 .fmo-swatch:active { transform: scale(0.92); }
 .fmo-swatch:hover { box-shadow: inset 0 0 0 1px var(--fmo-border-strong), 0 0 0 1px var(--fmo-border-strong); }
-.fmo-swatch[aria-pressed="true"] { box-shadow: inset 0 0 0 1px rgb(11 21 48 / 0.3), 0 0 0 2px #fff, 0 0 0 4px var(--fmo-ink); }
+/* E3e: the selected swatch is marked inside its own box (never outside it), so the box and the gaps stay as they were. */
+.fmo-swatch[aria-pressed="true"] { box-shadow: inset 0 0 0 2px var(--fmo-ink), inset 0 0 0 4px #fff, inset 0 0 0 5px rgb(11 21 48 / 0.3); }
 .fmo-swatch .fmo-check { position: absolute; inset: 0; margin: auto; }
 .fmo-swatch-empty { background: repeating-linear-gradient(45deg, var(--fmo-surface-alt) 0 6px, var(--fmo-surface) 6px 12px); box-shadow: inset 0 0 0 1px var(--fmo-border-strong); }
 .fmo-family + .fmo-family { margin-top: 16px; }
