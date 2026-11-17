@@ -174,3 +174,12 @@ describe("E3d (R26): the one hint", () => {
     expect(HINT_MS).toBe(8000);
   });
 });
+
+describe("E3d (R39): a phone panel with more below fades at its foot", () => {
+  it("only while there is more below", async () => {
+    const { bodyHasMoreBelow } = await import("./finish");
+    expect(bodyHasMoreBelow({ scrollTop: 0, scrollHeight: 400, clientHeight: 163 })).toBe(true);
+    expect(bodyHasMoreBelow({ scrollTop: 237, scrollHeight: 400, clientHeight: 163 })).toBe(false);
+    expect(bodyHasMoreBelow({ scrollTop: 0, scrollHeight: 160, clientHeight: 163 })).toBe(false);
+  });
+});

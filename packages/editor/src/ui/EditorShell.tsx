@@ -47,7 +47,7 @@ import { EDITOR_CSS } from "./styles.js";
 import { TOOL_ORDER, ToolPanel, ToolTabs } from "./ToolPanel.js";
 import { TopBar } from "./TopBar.js";
 import { hasWebGL2, readLocal, writeLocal } from "./webgl.js";
-import { markRow, refreshFinish } from "./finish.js";
+import { markBody, markRow, refreshFinish } from "./finish.js";
 import { HINT_MS, hintEnds, hintShows, modelTapAction, toolForLayer } from "./selection.js";
 import { namedLabel } from "./items.js";
 import { KitButton, OnThisKit } from "./OnThisKit.js";
@@ -211,6 +211,7 @@ export function EditorShell(props: EditorShellProps) {
     const onScroll = (event: Event) => {
       const target = event.target as HTMLElement | null;
       if (target?.classList?.contains("fmo-scroll-row")) markRow(target);
+      else if (target?.classList?.contains("fmo-panel-body")) markBody(target);
     };
     const onResize = () => refreshFinish(el);
     el.addEventListener("scroll", onScroll, true);

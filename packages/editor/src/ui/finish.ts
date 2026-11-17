@@ -20,6 +20,16 @@ export function gutterWidth(el: { offsetWidth: number; clientWidth: number }, bo
   return Math.max(0, Math.min(max, el.offsetWidth - el.clientWidth - borders));
 }
 
+/** Whether a panel body has more below what shows (R39: its bottom edge fades then). */
+export function bodyHasMoreBelow(body: { scrollTop: number; scrollHeight: number; clientHeight: number }): boolean {
+  return body.scrollHeight - body.clientHeight - Math.abs(body.scrollTop) > 1;
+}
+
+export function markBody(body: HTMLElement): void {
+  const more = String(bodyHasMoreBelow(body));
+  if (body.dataset.moreBelow !== more) body.dataset.moreBelow = more;
+}
+
 export function markRow(row: HTMLElement): void {
   const more = String(rowHasMore(row));
   if (row.dataset.more !== more) row.dataset.more = more;
@@ -30,6 +40,7 @@ export function refreshFinish(root: HTMLElement): void {
   for (const row of root.querySelectorAll<HTMLElement>(".fmo-scroll-row")) markRow(row);
   const body = root.querySelector<HTMLElement>(".fmo-panel-body");
   if (!body) return;
+  markBody(body);
   const g = `${gutterWidth(body)}px`;
   if (root.style.getPropertyValue("--fmo-gutter") !== g) root.style.setProperty("--fmo-gutter", g);
 }

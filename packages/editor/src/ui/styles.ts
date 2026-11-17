@@ -314,6 +314,8 @@ export const EDITOR_CSS = /* css */ `
   :is(.fmo-panel-body, .fmo-kit-popover, .fmo-done-checks)::-webkit-scrollbar-track, :is(.fmo-panel-body, .fmo-kit-popover, .fmo-done-checks)::-webkit-scrollbar-button { background: transparent; display: none; }
 }
 @supports not selector(::-webkit-scrollbar) { :is(.fmo-panel-body, .fmo-kit-popover, .fmo-done-checks) { scrollbar-width: thin; scrollbar-color: var(--fmo-border-strong) transparent; } }
+/* R39: on a phone a panel whose content goes on below fades over its last 16 px (a cut line reads as "more"). */
+.fmo-editor[data-layout="compact"] .fmo-panel-body[data-more-below="true"] { -webkit-mask-image: linear-gradient(to top, transparent 0, #000 16px); mask-image: linear-gradient(to top, transparent 0, #000 16px); }
 .fmo-editor[data-layout="compact"] .fmo-panel[data-typing="true"] .fmo-panel-inner > :not([data-keep-typing]) { display: none; }
 .fmo-editor[data-layout="compact"] .fmo-panel[data-typing="true"] .fmo-fields > :not(:focus-within) { display: none; }
 .fmo-editor[data-layout="compact"] .fmo-panel[data-typing="true"] .fmo-fields { grid-template-columns: 1fr; }
