@@ -116,6 +116,7 @@ const ResetPasswordForm = ({ email }: { email: string | null }) => {
       <h1 className="type-h1 uppercase text-brand-ink" data-testid="reset-title">
         {words.title}
       </h1>
+      {/* No input has a `name`: a submit before the page's script has loaded would otherwise put the password and the email in the address */}
       <form noValidate onSubmit={submit} className="flex flex-col gap-6" data-testid="reset-form">
         <div className="flex flex-col gap-4">
           <div className="flex min-w-0 flex-col gap-1">
@@ -126,7 +127,6 @@ const ResetPasswordForm = ({ email }: { email: string | null }) => {
             {/* so a password manager files the new password under this email; not for people */}
             <input
               type="text"
-              name="username"
               autoComplete="username"
               value={email}
               readOnly
@@ -137,7 +137,6 @@ const ResetPasswordForm = ({ email }: { email: string | null }) => {
           </div>
           <PasswordField
             id="reset-password"
-            name="password"
             ref={field}
             label={words.passwordLabel}
             hint={fill(accountContent.auth.fields.passwordHint, { min: MIN_PASSWORD_LENGTH })}

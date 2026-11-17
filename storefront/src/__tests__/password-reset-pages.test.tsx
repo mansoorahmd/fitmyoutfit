@@ -94,6 +94,12 @@ describe("the forgot-password page", () => {
     expect(screen.queryByTestId("forgot-requested")).toBeNull()
   })
 
+  it("has no named input, so a submit before the script loads puts no email in the address", () => {
+    const { container } = render(<ForgotPasswordTemplate />)
+    expect(container.querySelectorAll("form input").length).toBeGreaterThan(0)
+    expect(container.querySelectorAll("form input[name]")).toHaveLength(0)
+  })
+
   it("is prefilled with the email carried over from sign-in, once", async () => {
     window.sessionStorage.setItem("fmo.forgot-email", "ali@example.com")
     render(<ForgotPasswordTemplate />)
@@ -293,6 +299,12 @@ describe("the page a reset link opens", () => {
     type("New password", "a-good-password")
     await press("reset-submit")
     expect(screen.getByText("Use at least 8 characters")).toBeInTheDocument()
+  })
+
+  it("has no named input, so a submit before the script loads puts no password or email in the address", () => {
+    const { container } = render(<ResetPasswordTemplate email="ali@example.com" />)
+    expect(container.querySelectorAll("form input").length).toBeGreaterThan(0)
+    expect(container.querySelectorAll("form input[name]")).toHaveLength(0)
   })
 
   it("holds no token: the component is given the email and nothing else", () => {

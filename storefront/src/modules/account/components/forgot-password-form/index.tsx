@@ -71,10 +71,10 @@ const ForgotPasswordForm = () => {
   }
 
   return (
+    // No input has a `name`: a submit before the page's script has loaded would otherwise put the email in the address
     <form noValidate onSubmit={submit} className="flex flex-col gap-6" data-testid="forgot-form">
       <TextField
         id="forgot-email"
-        name="email"
         label={accountContent.auth.fields.email}
         type="email"
         autoComplete="email"
