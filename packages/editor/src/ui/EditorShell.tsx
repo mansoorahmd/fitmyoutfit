@@ -48,7 +48,7 @@ import { TOOL_ORDER, ToolPanel, ToolTabs } from "./ToolPanel.js";
 import { TopBar } from "./TopBar.js";
 import { hasWebGL2, readLocal, writeLocal } from "./webgl.js";
 import { markRow, refreshFinish } from "./finish.js";
-import { modelTapAction, toolForLayer } from "./selection.js";
+import { HINT_MS, hintEnds, hintShows, modelTapAction, toolForLayer } from "./selection.js";
 import { namedLabel } from "./items.js";
 import { KitButton, OnThisKit } from "./OnThisKit.js";
 import { DonePanel } from "./DonePanel.js";
@@ -666,12 +666,29 @@ export function EditorShell(props: EditorShellProps) {
 
   // ---- The one hint, once per design (7.4; E3b): after the start card, in its own band above the garment,
   // gone at the first press on the stage (a drag or a tap).
+  // E3d (R26): it also goes at the first selection, the first tool change or after 8 s, and never shows with the
+  // contextual bar or the status line (one row, 4.7).
   const [hintSeen, setHintSeen] = useState(() => !(props.showHint ?? props.showStartCard ?? false));
   const touchDevice = typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia("(pointer: coarse)").matches;
-  const hint = load.ready && !hintSeen && !startCard && !doneOpen && mode === "3d" ? (touchDevice ? wording.selection.hint : wording.selection.hintPointer) : null;
+  const hintPending = load.ready && !hintSeen && !startCard && !doneOpen && mode === "3d";
+  const hint = hintShows({ pending: hintPending, selected: Boolean(selectedId), status: Boolean(status) }) ? (touchDevice ? wording.selection.hint : wording.selection.hintPointer) : null;
   const dismissHint = () => {
     if (!hintSeen) setHintSeen(true);
   };
+  const hintTool = useRef<{ tool: ToolId | null } | null>(null);
+  useEffect(() => {
+    if (!hintPending) {
+      hintTool.current = null;
+      return;
+    }
+    hintTool.current ??= { tool: activeTool };
+    if (hintEnds({ selected: Boolean(selectedId), toolAtShow: hintTool.current.tool, tool: activeTool })) {
+      setHintSeen(true);
+      return;
+    }
+    const timer = setTimeout(() => setHintSeen(true), HINT_MS);
+    return () => clearTimeout(timer);
+  }, [hintPending, selectedId, activeTool]);
 
   // ---- The stage's description in words, debounced (11.2).
   const [description, setDescription] = useState("");
@@ -1033,6 +1050,8 @@ export function EditorShell(props: EditorShellProps) {
               fonts: props.fontSet,
               reducedMotion,
               selectedLayerId: selectedId,
+              // R22, 4.6: a selected item is zoomed in on until its box is this long on screen.
+              selectionMinPx: layout === "wide" ? 160 : 120,
               onSelectLayer: selectOnModel,
               dragOnlySelected: "touch",
               outlineSelected: false,

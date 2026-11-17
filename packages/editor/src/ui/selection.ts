@@ -9,6 +9,21 @@ import type { ToolId } from "./context.js";
 /** The contextual bar's height on a phone (06-editor.md 5.2). */
 export const CONTEXT_BAR_HEIGHT = 48;
 
+/**
+ * The one hint ("Drag to turn. Tap something to change it.", 7.4; E3d, R26): how long it may stay, and when it
+ * shows. It goes for good at the first press on the stage, the first selection, the first tool change, or after
+ * `HINT_MS`; it never shares the top row with the contextual bar, the status line or "Turn to edit" (4.7).
+ */
+export const HINT_MS = 8000;
+export function hintShows(input: { pending: boolean; selected: boolean; status: boolean }): boolean {
+  return input.pending && !input.selected && !input.status;
+}
+
+/** Whether something the coach did ends the hint: a selection, or a tool other than the one open when it showed. */
+export function hintEnds(input: { selected: boolean; toolAtShow: string | null; tool: string | null }): boolean {
+  return input.selected || input.tool !== input.toolAtShow;
+}
+
 export interface Box {
   x: number;
   y: number;

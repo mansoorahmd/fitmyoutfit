@@ -156,3 +156,21 @@ describe("E3d (R5): the view buttons over a phone's stage", () => {
     expect(viewControlsFor({ ...base, layout: "wide", stageHeight: 100 })).toBe("full");
   });
 });
+
+describe("E3d (R26): the one hint", () => {
+  it("never shows with the contextual bar (a selection) or the status line", async () => {
+    const { hintShows } = await import("./selection");
+    expect(hintShows({ pending: true, selected: false, status: false })).toBe(true);
+    expect(hintShows({ pending: true, selected: true, status: false })).toBe(false);
+    expect(hintShows({ pending: true, selected: false, status: true })).toBe(false);
+    expect(hintShows({ pending: false, selected: false, status: false })).toBe(false);
+  });
+  it("ends at the first selection or the first tool change; 8 s at most", async () => {
+    const { HINT_MS, hintEnds } = await import("./selection");
+    expect(hintEnds({ selected: true, toolAtShow: "colours", tool: "colours" })).toBe(true);
+    expect(hintEnds({ selected: false, toolAtShow: "colours", tool: "players" })).toBe(true);
+    expect(hintEnds({ selected: false, toolAtShow: null, tool: "players" })).toBe(true);
+    expect(hintEnds({ selected: false, toolAtShow: "colours", tool: "colours" })).toBe(false);
+    expect(HINT_MS).toBe(8000);
+  });
+});

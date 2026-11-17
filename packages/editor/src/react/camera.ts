@@ -18,8 +18,8 @@ export interface OrbitLimits {
   maxPolarAngle: number;
 }
 
-/** Closest zoom as a share of the fitting distance. */
-export const MIN_ZOOM_FACTOR = 0.45;
+/** Closest zoom as a share of the fitting distance (E3d: 0.35, so a number selected on a small phone reaches 120 px, R22). */
+export const MIN_ZOOM_FACTOR = 0.35;
 /** Furthest zoom as a multiple of the fitting distance. */
 export const MAX_ZOOM_FACTOR = 1.6;
 
