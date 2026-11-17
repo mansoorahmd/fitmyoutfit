@@ -124,7 +124,7 @@ describe("initial values, order and the overview's address", () => {
   it("with no address marked as the default, the most recently added is the default (S1-11)", () => {
     const a = { id: "a", created_at: "2026-11-01", is_default_shipping: false }
     const c = { id: "c", created_at: "2026-10-01", is_default_shipping: null }
-    const d = { id: "d", created_at: "2026-11-05" }
+    const d: { id: string; created_at: string; is_default_shipping?: boolean | null } = { id: "d", created_at: "2026-11-05" }
     expect(overviewAddress([a, c])?.id).toBe("a")
     expect(overviewAddress([a, c])?.is_default_shipping).toBe(true)
     expect(sortAddresses([a, c, d]).map((x) => [x.id, !!x.is_default_shipping])).toEqual([
