@@ -114,6 +114,10 @@ describe("the Delivery speed control on the cart page", () => {
     // the amount never breaks or flips
     expect(screen.getByTestId("speed-rush-amount")).toHaveAttribute("dir", "ltr")
     expect(screen.getByTestId("speed-rush-amount")).toHaveClass("whitespace-nowrap")
+    // a narrow card wraps before the date, never inside it
+    const dates = screen.getAllByTestId("speed-date-value")
+    expect(dates.map((d) => d.textContent)).toEqual(["Wednesday 2 December", "Friday 27 November"])
+    dates.forEach((d) => expect(d).toHaveClass("whitespace-nowrap"))
   })
 
   it("heads the summary column: after the lines on a phone, before the totals", () => {

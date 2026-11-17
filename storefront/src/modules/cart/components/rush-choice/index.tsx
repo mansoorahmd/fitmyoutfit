@@ -2,13 +2,13 @@
 
 import { clx } from "@medusajs/ui"
 import { useRouter } from "next/navigation"
-import React, { createContext, useCallback, useContext, useEffect, useId, useRef, useState } from "react"
+import React, { Fragment, createContext, useCallback, useContext, useEffect, useId, useRef, useState } from "react"
 
 import { cartContent } from "@content/cart"
 import { chooseRush } from "@lib/data/rush"
 import { formatDeliveryDate } from "@lib/util/calendar-date"
 import { DeliverySpeed, RushControlView } from "@lib/util/rush"
-import { fill } from "@lib/util/wording"
+import { fill, fillParts } from "@lib/util/wording"
 import Amount from "@modules/common/components/amount"
 import FieldError from "@modules/common/components/field-error"
 import RadioCard from "@modules/common/components/radio-card"
@@ -169,11 +169,24 @@ const CardTitle = ({ label, price }: { label: string; price: React.ReactNode }) 
   </span>
 )
 
+/**
+ * "Delivered by Wednesday 2 December", the date itself never broken: on a
+ * narrow card (360 px, inside checkout's delivery box) the line wraps
+ * before the date, not inside it.
+ */
 const DateLine = ({ date }: { date: string | null }) => {
   const shown = date ? formatDeliveryDate(date) : null
   return shown ? (
     <span className="block text-brand-ink" data-testid="speed-date">
-      {fill(words.deliveredBy, { date: shown })}
+      {fillParts(words.deliveredBy, {
+        date: (
+          <span className="whitespace-nowrap" data-testid="speed-date-value">
+            {shown}
+          </span>
+        ),
+      }).map((part, i) => (
+        <Fragment key={i}>{part}</Fragment>
+      ))}
     </span>
   ) : null
 }
