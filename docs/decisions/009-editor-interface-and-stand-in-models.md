@@ -66,6 +66,20 @@ Choices taken while building the engine, kept because later work depends on them
 - **During a gesture the model uses a half-size texture** and returns to full quality on release; the tool panel shows the design as it was when the gesture started.
 - **The Done panel is a native modal dialog** with host slots (`primaryAction`, share); nothing about the proof is shown until E5.
 
+## Added 17 Nov, after the designer's review and the finish round (task E3d)
+
+The founder used the editor and found "alignment inconsistencies and bad user experience". The designer reviewed it ([07-editor-review.md](../design/07-editor-review.md)) and the coordinator took its four decisions as recommended:
+
+- **The start card** has one left edge, with the step number inline. While it is open, the first tap or click on an item closes the card and opens that item's tool with the item selected; turning and zooming do not close it.
+- **A selected item's warning** shows at the top of its panel with its fix; the badge on the model is hidden for the selected item, and on other items it is a button with a name that selects the item.
+- **Desktop item actions** stay in the panel, as one row.
+- **The demo page loads the interface fonts** (Barlow Condensed and Inter, SIL OFL 1.1, dev dependencies of the editor package). The package still loads none: its host provides them.
+- **The selection box** is four straight lines set out from the item, with the handles on its corners and the turn handle placed where it covers no other item.
+- **Selecting an item zooms onto it** until it is large enough to work on, and zooming stops while its box still fits the free stage.
+- **An item drawn over another** gets a check ("covers the …") with a one-tap fix that moves it to the nearest free place or makes it smaller.
+- **The review's section 4 rules are tests:** unit tests on the stylesheet and read-only page audits in `packages/editor/scripts/audit/`, to be run before an editor round is accepted.
+- **Known and open:** the demo bundle is over its 450 KB budget (469.7 KB gzipped); speed after this round was not shown and is measured by QA; the specification `06-editor.md` gets these rules at the designer's next revision.
+
 ## Alternatives rejected
 
 - **One large E3:** too big to review in one step, and the founder would wait longer to see anything.

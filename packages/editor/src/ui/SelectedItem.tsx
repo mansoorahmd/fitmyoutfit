@@ -6,10 +6,14 @@
  * to do everything without dragging (WCAG 2.5.7). On a phone the bar sits on
  * the stage and never over the item; on a desktop it heads the panel.
  */
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, memo } from "react";
 import { removeLayer } from "../design/edit.js";
 import { KEY_NUDGE_LARGE_MM, KEY_NUDGE_MM, NUDGE_MM, SIZE_STEP, TURN_STEP, bringForward, canDuplicate, centreLayer, duplicateLayer, nudgeLayer, rotateLayerBy, rotateLayerTo, scaleLayerBy, sendBack } from "../design/item-edits.js";
 import { isClipped, moveInside } from "../design/print-area.js";
+import { applyReadabilityRemedy } from "../design/readability.js";
+import { readabilityWarnings, remedyWords } from "./checks.js";
+import { logoIsBlurry, makeLogoSharp, sharpWidth } from "./logos.js";
+import { coveredItem, moveClear } from "./overlap.js";
 import type { DesignDocument, Layer } from "../design/schema.js";
 import type { EditLabel } from "../state/history.js";
 import type { SelectionGeometry } from "../react/DesignCanvas.js";
@@ -27,7 +31,7 @@ function useSelectedLayer(): Layer | null {
 }
 
 /** The bar's buttons, for the stage (phone) and the panel (desktop). */
-export function ContextBar({ variant }: { variant: "stage" | "panel" }) {
+function ContextBarView({ variant }: { variant: "stage" | "panel" }) {
   const api = useEditor();
   const { product, wording, assets } = api;
   const layer = useSelectedLayer();
@@ -124,7 +128,7 @@ export function ContextBar({ variant }: { variant: "stage" | "panel" }) {
  * bottom of the free area when the item reaches into the top band (the
  * placement rule in selection.ts).
  */
-export function StageContextBar({ bus, top, bottomInset }: { bus: Bus<SelectionGeometry | null>; top: number; bottomInset: number }) {
+export function StageContextBar({ bus, top, bottomInset, endInset = 0 }: { bus: Bus<SelectionGeometry | null>; top: number; bottomInset: number; endInset?: number }) {
   const geometry = useSyncExternalStore(bus.subscribe, bus.get, bus.get);
   const api = useEditor();
   if (!api.selectedId) return null;
@@ -132,14 +136,83 @@ export function StageContextBar({ bus, top, bottomInset }: { bus: Bus<SelectionG
   const freeBottom = (geometry?.height ?? 0) - bottomInset;
   const place = geometry ? contextBarPlacement({ top, freeBottom, item }) : "top";
   return (
-    <div className="fmo-context-place" style={place === "top" ? { top } : { top: freeBottom - CONTEXT_BAR_HEIGHT }} data-place={place} data-testid="context-bar-place">
+    // E3d (R27): centred in the free stage, never under a side panel (landscape): its end stops 8 px before it.
+    <div className="fmo-context-place" style={{ ...(place === "top" ? { top } : { top: freeBottom - CONTEXT_BAR_HEIGHT }), insetInlineEnd: endInset + 8 }} data-place={place} data-testid="context-bar-place">
       <ContextBar variant="stage" />
     </div>
   );
 }
 
+/**
+ * E3d (07-editor-review R15, D2): the selected item's warnings, each with its one-tap fix, at the top of its panel
+ * under its name and actions (above Fine-tune), where the coach is looking: hard to read, a logo that prints as a
+ * box, a logo that may print blurry. The tools then leave this item's warning out of their own lists.
+ */
+function SelectedWarningsView() {
+  const api = useEditor();
+  const layer = useSelectedLayer();
+  const { design, product, palette, wording } = api;
+  const readability = useMemo(() => (layer && (layer.kind === "text" || layer.kind === "number") ? readabilityWarnings(wording, product, design, palette, null, api.coachColoured).find((w) => w.layerIds.includes(layer.id)) ?? null : null), [layer, wording, product, design, palette, api.coachColoured]);
+  if (!layer) return null;
+  const lw = wording.logos;
+  const logo = layer.kind === "logo" ? layer : null;
+  const note = logo ? api.logoNotes[logo.asset.assetId] : undefined;
+  const box = Boolean(logo && note?.box && !note.kept);
+  const blurry = Boolean(logo && logoIsBlurry(logo));
+  // E3d (left over): it lies over another item; the fix moves it clear (or makes it smaller).
+  const covered = coveredItem(design, layer);
+  if (!readability && !box && !blurry && !covered) return null;
+  return (
+    <div className="fmo-stack" data-testid="selected-warnings">
+      {covered && (
+        <Alert kind="warning" testId={`covers-${layer.id}`}>
+          <p>{fill(wording.selection.covers, { item: itemWords(wording, product, covered).kind.toLowerCase() })}</p>
+          <button
+            type="button"
+            className="fmo-btn"
+            onClick={() => api.commit((d) => moveClear(d, layer.id, product) ?? d, "move")}
+            data-testid={`move-clear-${layer.id}`}
+          >
+            {wording.selection.moveClear}
+          </button>
+        </Alert>
+      )}
+      {readability && (
+        <Alert kind="warning" testId={`readability-${readability.readability.layerId}`}>
+          <p>{readability.text}</p>
+          <button
+            type="button"
+            className="fmo-btn"
+            onClick={() => api.commit((d) => applyReadabilityRemedy(d, readability.layerIds, readability.remedy, { product }), readability.remedy.kind === "outline" ? "outline" : "colour")}
+            data-testid={`readability-fix-${readability.readability.layerId}`}
+          >
+            {remedyWords(wording, palette, readability.remedy)}
+          </button>
+        </Alert>
+      )}
+      {logo && box && (
+        <Alert kind="warning" testId={`logo-box-${logo.id}`}>
+          <p>{lw.noTransparency}</p>
+          <p className="fmo-muted">{lw.designHelp}</p>
+          <button type="button" className="fmo-btn" onClick={() => api.setLogoNote(logo.asset.assetId, { kept: true })} data-testid={`keep-${logo.id}`}>
+            {lw.keepIt}
+          </button>
+        </Alert>
+      )}
+      {logo && blurry && (
+        <Alert kind="warning" testId={`logo-blurry-${logo.id}`}>
+          <p>{fill(lw.blurry, { size: fill(lw.sharpSize, { cm: sharpWidth(logo).cm }) })}</p>
+          <button type="button" className="fmo-btn" onClick={() => api.commit((d) => makeLogoSharp(d, logo.id, { product }), "resize")} data-testid={`make-sharp-${logo.id}`}>
+            {lw.makeSharp}
+          </button>
+        </Alert>
+      )}
+    </div>
+  );
+}
+
 /** "Part of this is cut off at the seam." with Move it in, when the selected item crosses its piece's outline. */
-export function ClippedNote() {
+function ClippedNoteView() {
   const api = useEditor();
   const layer = useSelectedLayer();
   // Once per position, size and turn (the search for a place that fits is not free).
@@ -167,7 +240,7 @@ export function ClippedNote() {
 }
 
 /** Fine-tune: closed by default; every step one undo step. Millimetres and degrees only on desktop, as secondary text. */
-export function FineTune() {
+function FineTuneView() {
   const api = useEditor();
   const layer = useSelectedLayer();
   const [open, setOpen] = useState(false);
@@ -294,3 +367,15 @@ export function keyEdit(key: string, shift: boolean): { kind: "nudge"; dx: numbe
       return null;
   }
 }
+
+/** E3d (speed): re-renders only when its props or the editor's data change. */
+export const ContextBar = memo(ContextBarView);
+
+/** E3d (speed): re-renders only when its props or the editor's data change. */
+export const SelectedWarnings = memo(SelectedWarningsView);
+
+/** E3d (speed): re-renders only when its props or the editor's data change. */
+export const ClippedNote = memo(ClippedNoteView);
+
+/** E3d (speed): re-renders only when its props or the editor's data change. */
+export const FineTune = memo(FineTuneView);

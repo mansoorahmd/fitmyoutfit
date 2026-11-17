@@ -102,9 +102,14 @@ describe("the top bar and the tabs", () => {
 });
 
 describe("the tools", () => {
-  it("Start card: two steps, the slots, See designs (not red), Skip", () => {
+  it("Start card: two steps, See designs (not red), Skip with the reassurance in one line", () => {
     const html = inTool(<StartCard onClose={() => undefined} />);
-    for (const words of [W.start.colours, W.start.name, W.start.seeDesigns, W.start.skip]) expect(text(html)).toContain(words);
+    for (const words of [W.start.colours, W.start.name, W.start.seeDesigns, W.start.skipLater]) expect(text(html)).toContain(words);
+    // E3d (R2, D1): each step number sits inline in its label row (one left edge), no gutter column.
+    expect(html.match(/class="fmo-step-label"[^>]*><span class="fmo-step-n"/g)).toHaveLength(2);
+    expect(html).not.toContain("fmo-start-step");
+    // R5, R7: no separate row of Main / Second / Accent slots; the order is on the swatches.
+    expect(html).not.toContain("start-slot-");
     expect(html).toContain(`placeholder="${W.start.namePlaceholder}"`);
     expect(html).toContain('dir="auto"');
     expect(html).not.toContain("fmo-done");

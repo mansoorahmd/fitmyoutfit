@@ -197,7 +197,7 @@ export function FlatView({ product, design, assetUrl, captionFront, captionBack,
     }
     if (!flatLayout) return;
     const scaled = { ...flatLayout.product, pieces: flatLayout.product.pieces.map((p) => ({ ...p, uv: { x: p.uv.x, y: (p.uv.y * flatLayout.size + CAPTION) / flatLayout.size, width: p.uv.width, height: p.uv.height } })) };
-    drawPatternTexture(ctx, scaled, design, { size: flatLayout.size * dpr, mode: "flat", images: images.lookup, selectedLayerId });
+    drawPatternTexture(ctx, scaled, design, { size: flatLayout.size * dpr, mode: "flat", images: images.lookup, selectedLayerId, pixelRatio: dpr });
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     for (const place of flatLayout.places) {
       const caption = place.pieceId === product.views.front ? captionFront : place.pieceId === product.views.back ? captionBack : null;

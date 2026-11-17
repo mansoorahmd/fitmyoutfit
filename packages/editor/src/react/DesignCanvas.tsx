@@ -92,6 +92,17 @@ export interface SelectionGeometry extends ItemOnScreen {
   height: number;
 }
 
+/**
+ * Every item on the screen (E3d): its projected corners and centre, and whether it faces the camera. The
+ * interface keeps the turn handle off other items (R33) and draws a warning badge on unselected items (R15).
+ */
+export interface ItemBox {
+  layerId: string;
+  corners: ScreenPoint[];
+  centre: ScreenPoint;
+  facing: boolean;
+}
+
 /** Which side of the garment the camera looks at. "left" is the wearer's left. */
 export type CameraSide = "front" | "back" | "left" | "right";
 
@@ -180,6 +191,17 @@ export interface DesignCanvasProps {
    * model's UV lookup is built once, the first time it is needed.
    */
   onSelectionGeometry?: (geometry: SelectionGeometry | null) => void;
+  /**
+   * E3d: called with every item's box on the screen (no outline) whenever the camera or the design changed. Given
+   * this, the UV lookup is built once the model is ready, whether or not anything is selected.
+   */
+  onItemBoxes?: (boxes: ItemBox[]) => void;
+  /**
+   * E3d (R22, 07-editor-review 4.6): when an item is selected and its box on the screen is shorter than this on its
+   * longer side (CSS px), the camera zooms in on it until it is (or to the zoom limit); letting it go zooms back.
+   * Zooming in by hand then aims at the selected item (R24). Off when not given.
+   */
+  selectionMinPx?: number;
   /** Lines to draw over the model with the selection (snapping guides, the print area), projected along the cloth. */
   guides?: readonly PieceGuide[];
   /**
@@ -387,6 +409,35 @@ function usePatternSurface(requestedSize: number | undefined, options: { mipmaps
   return surface;
 }
 
+/**
+ * E3d (07-editor-review 4.6): the closest camera distance at which an item's box on the screen, outset and with
+ * its handles, still fits the free stage: 25 px round it (the 8 px outset, half a 14 px handle, and 10 px for the
+ * box being off its centre in perspective, measured at the founder's window), and across,
+ * room for the turn handle on its stem at the end side (where it goes when the height is short, selection-box.ts).
+ * `corners`: its box now, seen from `distance`; it grows as 1 / distance. 0 when the free stage is too small.
+ */
+export function itemFitDistance(corners: readonly { x: number; y: number }[], distance: number, free: { width: number; height: number }): number {
+  const xs = corners.map((c) => c.x);
+  const ys = corners.map((c) => c.y);
+  const w = Math.max(...xs) - Math.min(...xs);
+  const h = Math.max(...ys) - Math.min(...ys);
+  const roomH = free.height - 2 * 25;
+  const roomW = free.width - 2 * 25 - 70;
+  if (roomH <= 0 || roomW <= 0 || !(distance > 0)) return 0;
+  return distance * Math.max(h / roomH, w / roomW);
+}
+
+/** The longer side of an item's box on the screen (its edges' lengths, CSS px). */
+export function itemLongSide(corners: readonly { x: number; y: number }[]): number {
+  let longest = 0;
+  for (let k = 0; k < corners.length; k++) {
+    const a = corners[k]!;
+    const b = corners[(k + 1) % corners.length]!;
+    longest = Math.max(longest, Math.hypot(b.x - a.x, b.y - a.y));
+  }
+  return longest;
+}
+
 /** The latest value, for event handlers that must not be re-attached on every render. */
 function useLatest<T>(value: T) {
   const ref = useRef(value);
@@ -413,6 +464,8 @@ function ModelView({
   dragOnlySelected = "touch",
   outlineSelected = true,
   onSelectionGeometry,
+  onItemBoxes,
+  selectionMinPx,
   guides,
   gesture = false,
   draftQuality = "auto",
@@ -436,6 +489,9 @@ function ModelView({
   const camera = useThree((state) => state.camera) as PerspectiveCamera;
   const gl = useThree((state) => state.gl);
   const controls = useThree((state) => state.controls) as unknown as { enabled: boolean; update(): void } | null;
+  const getState = useThree((state) => state.get);
+  /** Pointers down on the stage now (the camera never zooms by itself under a finger, 6.3). */
+  const pointersDown = useRef(new Set<number>());
   const invalidate = useThree((state) => state.invalidate);
   const viewSize = useThree((state) => state.size);
   const surface = usePatternSurface(textureSize);
@@ -460,6 +516,8 @@ function ModelView({
       reducedMotion,
       fovDegrees: FOV,
       onChange: (info) => callbacks.current.onCameraChange?.(info),
+      // R24: the orbit controls turn round the point the camera aims at.
+      onTarget: (t) => (getState().controls as unknown as { target?: { set(x: number, y: number, z: number): void } } | null)?.target?.set(t[0], t[1], t[2]),
     });
   });
   useFrame(() => rig.frame());
@@ -467,7 +525,7 @@ function ModelView({
   useFrame(() => draft.frame(performance.now()));
 
   // The layer and design the commands need, read when a command runs.
-  const latest = useLatest({ design, product, onSelectLayer, onLayerDrag, touchSlopMm, controls, pickZones, onZoneTap, selectedLayerId, dragOnlySelected });
+  const latest = useLatest({ design, product, onSelectLayer, onLayerDrag, touchSlopMm, controls, pickZones, onZoneTap, selectedLayerId, dragOnlySelected, free: framing.free });
 
   // The selected item on the screen (N9): the UV lookup is built once per model, the first time something is
   // selected; then the box is projected in the frame loop, only while something is selected (the canvas renders
@@ -475,15 +533,56 @@ function ModelView({
   const lookup = useRef<{ model: PreparedModel; lookup: SurfaceLookup } | null>(null);
   const lastProjected = useRef<SelectionGeometry | null>(null);
   const geometryOut = useLatest(onSelectionGeometry);
+  const boxesOut = useLatest(onItemBoxes);
+  const lastBoxes = useRef<string>("");
   const lastGeometry = useRef<string>("");
   const previewDesign = useRef<DesignDocument | null>(null);
   const projectedLines = useRef<{ key: string; lines: SelectionGeometry["guides"] } | null>(null);
   const previewHandler = useRef<DesignCanvasHandle["preview"]>(() => undefined);
-  const selectionInputs = useLatest({ design, product, selectedLayerId, guides, viewSize });
+  const selectionInputs = useLatest({ design, product, selectedLayerId, guides, viewSize, selectionMinPx });
+  const framingNow = useLatest(framing);
+  /** The selected item's closest zoom (4.6), for the orbit controls' own limit (wheel, pinch). */
+  const [itemMin, setItemMin] = useState(0);
+  /** The item the camera last considered zooming in on (R22): once per selection. */
+  const zoomedFor = useRef<string | null>(null);
   useEffect(() => {
     lastGeometry.current = "";
     invalidate();
   }, [selectedLayerId, guides, invalidate]);
+  const surfaceLookup = (p: ProductDefinition): SurfaceLookup | null => {
+    if (lookup.current?.model !== prepared) {
+      try {
+        lookup.current = { model: prepared, lookup: buildSurfaceLookup(extractGarmentMeshes(prepared.scene, p)) };
+      } catch (error) {
+        console.error("[editor] the model's UV lookup:", error);
+        return null;
+      }
+    }
+    return lookup.current.lookup;
+  };
+  // Every item's box (E3d), when the interface asks for it: only when the camera or the design changed.
+  useFrame(({ camera: cam }) => {
+    const report = boxesOut.current;
+    // During a gesture only the selected item moves (its box has its own path): the others' boxes stand (speed).
+    if (!report || gestureNow.current) return;
+    const { design: fromProps, product: p, viewSize: vs } = selectionInputs.current;
+    const d = previewDesign.current ?? fromProps;
+    cam.updateMatrixWorld();
+    const key = JSON.stringify([cam.matrixWorld.elements, cam.projectionMatrix.elements, vs.width, vs.height, d.layers.map((l) => [l.id, l.pieceId, l.position, l.size, l.rotation])]);
+    if (key === lastBoxes.current) return;
+    lastBoxes.current = key;
+    const surface = surfaceLookup(p);
+    if (!surface) return;
+    const viewProjection = cam.projectionMatrix.clone().multiply(cam.matrixWorldInverse).elements;
+    const screen = { viewProjection, position: cam.position.toArray() as [number, number, number], width: vs.width, height: vs.height };
+    const boxes: ItemBox[] = [];
+    for (const layer of d.layers) {
+      const piece = p.pieces.find((x) => x.id === layer.pieceId);
+      const on = piece ? projectItem(surface, piece, layer, screen, { outline: false }) : null;
+      if (on) boxes.push({ layerId: layer.id, corners: on.corners, centre: on.centre, facing: on.facing });
+    }
+    report(boxes);
+  });
   useFrame(({ camera: cam }) => {
     const report = geometryOut.current;
     if (!report) return;
@@ -492,6 +591,9 @@ function ModelView({
     const layer = id ? d.layers.find((l) => l.id === id) : undefined;
     const piece = layer ? p.pieces.find((x) => x.id === layer.pieceId) : undefined;
     if (!layer || !piece) {
+      zoomedFor.current = null;
+      rig.setItem(null);
+      setItemMin((old) => (old === 0 ? old : 0));
       if (lastGeometry.current !== "none") {
         lastGeometry.current = "none";
         lastProjected.current = null;
@@ -503,16 +605,11 @@ function ModelView({
     const key = JSON.stringify([cam.matrixWorld.elements, cam.projectionMatrix.elements, layer.position, layer.size, layer.rotation, layer.pieceId, g, vs.width, vs.height]);
     if (key === lastGeometry.current) return;
     lastGeometry.current = key;
-    if (lookup.current?.model !== prepared) {
-      try {
-        lookup.current = { model: prepared, lookup: buildSurfaceLookup(extractGarmentMeshes(prepared.scene, p)) };
-      } catch (error) {
-        console.error("[editor] the model's UV lookup:", error);
-        report(null);
-        return;
-      }
+    const surface = surfaceLookup(p);
+    if (!surface) {
+      report(null);
+      return;
     }
-    const surface = lookup.current.lookup;
     const viewProjection = cam.projectionMatrix.clone().multiply(cam.matrixWorldInverse).elements;
     const screen = { viewProjection, position: cam.position.toArray() as [number, number, number], width: vs.width, height: vs.height };
     const on = projectItem(surface, piece, layer, screen);
@@ -520,6 +617,24 @@ function ModelView({
       lastProjected.current = null;
       report(null);
       return;
+    }
+    // R24: zooming in aims at the selected item. R22: a small item is zoomed in on once, when nothing is pressed.
+    rig.setItem(on.centreWorld);
+    // 4.6: the closest zoom keeps the item, its outset box and its handles inside the free stage.
+    // The box grows as the camera nears the item; the rig's distances are to the point it turns round (nearer or
+    // farther by the same amount), so the limit is moved by the difference.
+    const toItem = cam.position.distanceTo(new Vector3(...on.centreWorld));
+    const fits = itemFitDistance(on.corners, toItem, framingNow.current.free);
+    // Never further than the rest framing: selecting an item never pushes the camera back past it.
+    const limit = fits > 0 ? Math.min(framingNow.current.fit, Math.max(0, fits + (rig.distance() - toItem))) : 0;
+    rig.setItemLimit(limit);
+    // The orbit controls' own limit (wheel, pinch) follows, but not during a gesture (no re-render per frame).
+    if (!gestureNow.current) setItemMin((old) => (Math.abs(old - limit) > 0.01 * Math.max(old, limit) ? limit : old));
+    const minPx = selectionInputs.current.selectionMinPx;
+    // Only once it faces the camera and no camera move runs (a selection from a list turns the garment first).
+    if (zoomedFor.current !== layer.id && on.facing && !rig.animating && pointersDown.current.size === 0 && !gestureNow.current) {
+      zoomedFor.current = layer.id;
+      if (minPx) rig.zoomToItem(itemLongSide(on.corners), minPx, rig.distance() - toItem);
     }
     // The lines (print area, guides) move only with the camera or when they change: projected again only then (S1).
     const linesKey = JSON.stringify([cam.matrixWorld.elements, cam.projectionMatrix.elements, g, vs.width, vs.height]);
@@ -710,7 +825,8 @@ function ModelView({
     const raycaster = new Raycaster();
     const ndc = new Vector2();
     const meshes = [...prepared.pieceMeshes.keys()];
-    const down = new Set<number>();
+    const down = pointersDown.current;
+    down.clear();
     let drag: {
       pointerId: number;
       state: LayerDrag;
@@ -833,6 +949,8 @@ function ModelView({
 
     const finish = (event: PointerEvent, phase: "end" | "cancel") => {
       down.delete(event.pointerId);
+      // Anything waiting for the pointer to lift (R22's zoom on a small item) gets a frame.
+      if (down.size === 0) invalidate();
       if (tap && event.pointerId === tap.pointerId) {
         const t = tap;
         tap = null;
@@ -935,19 +1053,28 @@ function ModelView({
       emit("start", layer.position);
     };
 
+    // R24: without a selection the wheel zooms towards the height under the pointer (the controls do the zoom).
+    const onWheel = (event: WheelEvent) => {
+      if (latest.current.selectedLayerId) return;
+      const r = canvas.getBoundingClientRect();
+      const free = latest.current.free;
+      rig.aimAtPointer((event.clientY - r.top - free.y) / Math.max(1, free.height));
+    };
+    host.addEventListener("wheel", onWheel, { capture: true, passive: true });
     host.addEventListener("pointerdown", onDown, { capture: true });
     window.addEventListener("pointerup", onUp, { capture: true });
     window.addEventListener("pointercancel", onCancel, { capture: true });
     return () => {
       if (bvhTimer !== null) clearTimeout(bvhTimer);
       if (bvhIdle !== null) (globalThis as { cancelIdleCallback?: (id: number) => void }).cancelIdleCallback?.(bvhIdle);
+      host.removeEventListener("wheel", onWheel, { capture: true });
       host.removeEventListener("pointerdown", onDown, { capture: true });
       window.removeEventListener("pointerup", onUp, { capture: true });
       window.removeEventListener("pointercancel", onCancel, { capture: true });
       window.removeEventListener("pointermove", onMove);
       if (drag?.frame != null) cancelAnimationFrame(drag.frame);
     };
-  }, [gl, camera, prepared, latest, lastProjected]);
+  }, [gl, camera, prepared, latest, lastProjected, rig, invalidate]);
 
   // Dispose of the cloned materials when the model goes away.
   useEffect(() => {
@@ -973,7 +1100,7 @@ function ModelView({
         makeDefault
         target={center}
         enablePan={false}
-        minDistance={framing.minDistance}
+        minDistance={Math.min(framing.maxDistance, Math.max(framing.minDistance, selectedLayerId ? itemMin : 0))}
         maxDistance={framing.maxDistance}
         minPolarAngle={framing.minPolarAngle}
         maxPolarAngle={framing.maxPolarAngle}

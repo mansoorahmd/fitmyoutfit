@@ -8,7 +8,7 @@
  * size, and alignment as Start, Centre and End, whose icons turn round for
  * right-to-left text.
  */
-import { useId, useState } from "react";
+import { useId, useState, memo } from "react";
 import { addCatalogFont } from "../design/font-catalog.js";
 import { addLayer, removeLayer, updateLayer } from "../design/edit.js";
 import { newTextLayer, nextLayerId } from "../design/new-layers.js";
@@ -19,7 +19,7 @@ import { TEAM_COLOUR_ROLES, type DesignDocument, type Layer } from "../design/sc
 import { teamColourValue } from "../design/team-colours.js";
 import { resolveTextDirection } from "../design/text.js";
 import { hasPictographs, stripPictographs } from "../design/typed-text.js";
-import { fieldCheck, fieldStep, type FieldState } from "./lettering.js";
+import { commonColoursAfterTeam, fieldCheck, fieldStep, fontDisplayName, type FieldState } from "./lettering.js";
 import { PictographAlert } from "./parts.js";
 import { fill } from "./content.js";
 import { useEditor } from "./context.js";
@@ -32,7 +32,7 @@ import { colourName } from "./stage-logic.js";
 
 type TextLayer = Extract<Layer, { kind: "text" }>;
 
-export function TextTool() {
+function TextToolView() {
   const api = useEditor();
   const { design, product, wording, fonts } = api;
   const w = wording.lettering;
@@ -187,7 +187,7 @@ function TextItem({ layer }: { layer: TextLayer }) {
             role="radio"
             aria-checked={layer.fontId === f.id}
             className="fmo-chip fmo-font-chip"
-            title={f.name}
+            title={fontDisplayName(f)}
             onClick={() => api.commit((d) => updateLayer(addCatalogFont(d, fonts, f.id), layer.id, { fontId: f.id }, opts), "font")}
             data-testid={`text-font-${layer.id}-${f.id}`}
           >
@@ -206,9 +206,7 @@ function TextItem({ layer }: { layer: TextLayer }) {
           return <Swatch key={r} hex={c.hex} label={on ? fill(wording.colours.selected, { colour: name }) : name} selected={on} onPick={() => api.commit((d) => updateLayer(d, layer.id, { fill: teamColourValue(d, r) }, opts), "colour")} testId={`text-fill-${layer.id}-team-${r}`} />;
         })}
         <span className="fmo-divider" />
-        {coloursCommonFirst(palette)
-          .slice(0, 8)
-          .map((c) => {
+        {commonColoursAfterTeam(coloursCommonFirst(palette), design.teamColors, 8).map((c) => {
             const on = layer.fill.id === c.id && !layer.fill.teamColor;
             return <Swatch key={c.id} hex={c.hex} label={on ? fill(wording.colours.selected, { colour: c.name }) : c.name} selected={on} onPick={() => api.commit((d) => updateLayer(d, layer.id, { fill: paletteColourRef(c) }, opts), "colour")} testId={`text-fill-${layer.id}-${c.id}`} />;
           })}
@@ -250,3 +248,6 @@ function TextItem({ layer }: { layer: TextLayer }) {
     </div>
   );
 }
+
+/** E3d (speed): re-renders only when its props or the editor's data change. */
+export const TextTool = memo(TextToolView);

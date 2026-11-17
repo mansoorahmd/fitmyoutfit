@@ -5,6 +5,13 @@ import { createRoot } from "react-dom/client";
 import "@fontsource/oswald/700.css";
 import "@fontsource/graduate/400.css";
 import "@fontsource/noto-sans-arabic/700.css";
+// The store's interface faces (E3d, D4): the host provides them, not the package (decision 009). Latin only,
+// the weights the editor's stylesheet uses.
+import "@fontsource/barlow-condensed/latin-700.css";
+import "@fontsource/inter/latin-400.css";
+import "@fontsource/inter/latin-500.css";
+import "@fontsource/inter/latin-600.css";
+import "@fontsource/inter/latin-700.css";
 import {
   DeviceDesignStore,
   DoneNotice,
