@@ -13,7 +13,7 @@ Decided 10 Nov 2026. These decisions answer the open questions in [SYNTHESIS.md]
 | Quality check | Personalized team orders go through our hub in Lahore. Plain bulk is checked at the factory, with photos |
 | Remake guarantee | Written: a free replacement for our errors, in the customer's hands within 7 days |
 | 3D editor | Build our own now |
-| Who pays on team orders | The organizer pays. The team link collects names, numbers and sizes, not payments |
+| Who pays on team orders | The organizer pays. The organizer enters every player's name, number and size in the editor, in one team list. No player link at launch; it may come later (changed by the founder on 17 Nov 2026; before, a team link collected names, numbers and sizes) |
 | Deposit | 50% at proof approval, 50% before shipping |
 | Design help | Free for teams |
 | Fit kits | Refundable deposit |
