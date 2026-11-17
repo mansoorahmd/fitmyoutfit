@@ -468,6 +468,11 @@ export const EDITOR_CSS = /* css */ `
 .fmo-item-head { display: flex; align-items: center; gap: 12px; }
 .fmo-item > .fmo-label + *, .fmo-item > .fmo-section-title + * { margin-top: 0; }
 .fmo-item-head img { width: 40px; height: 40px; object-fit: contain; border-radius: 4px; background: var(--fmo-surface-alt); }
+/* R14: a logo not selected: one 56 px row. */
+.fmo-item-row { padding: 0; }
+.fmo-item-row > .fmo-item-pick { min-height: 56px; gap: 12px; }
+.fmo-item-row img { width: 40px; height: 40px; flex: none; object-fit: contain; border-radius: 4px; background: var(--fmo-surface-alt); }
+.fmo-item-row .fmo-kit-words { flex: 1 1 auto; }
 .fmo-item-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: var(--fmo-type-label); }
 .fmo-spinner { width: 24px; height: 24px; border-radius: 50%; border: 3px solid var(--fmo-border); border-top-color: var(--fmo-ink); animation: fmo-spin 0.8s linear infinite; }
 @keyframes fmo-spin { to { transform: rotate(360deg); } }

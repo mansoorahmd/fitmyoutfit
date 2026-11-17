@@ -95,6 +95,7 @@ export const EDITOR_WORDING = {
     all: "All colours", // W-ED44
     editTeam: "Edit team colours", // W-ED45
     swap: "Swap main and second", // W-ED46
+    swapShort: "Swap", // NEW (E3d, R21): the swap chip's visible word (its accessible name stays "Swap main and second")
     tapKit: "Tap the kit to choose a part.", // W-ED47
     matchCode: "Match a colour code", // W-ED48
     codeLabel: "Enter a colour code, like #1F4E9C", // W-ED49

@@ -22,7 +22,7 @@ import type { EditLabel } from "../state/history.js";
 import { fill, presetWords } from "./content.js";
 import { useEditor, type EditorApi } from "./context.js";
 import { EditorIcon } from "./icons.js";
-import { convertDigits, digitChoiceOf, fieldCheck, fieldStep, fontDisplayName, playerSwitches, presetsFor, type DigitChoice, type FieldState } from "./lettering.js";
+import { commonColoursAfterTeam, convertDigits, digitChoiceOf, fieldCheck, fieldStep, fontDisplayName, playerSwitches, presetsFor, type DigitChoice, type FieldState } from "./lettering.js";
 import { Alert, PresetChips, Segmented, Swatch, SwitchRow } from "./parts.js";
 import { colourName } from "./stage-logic.js";
 
@@ -105,9 +105,7 @@ function StyleControls({ roles, fontRoles, onFonts }: { roles: ValueRole[]; font
         <div className="fmo-scroll-row">
           {roleSwatches(layer.fill, (r) => commit((d, l) => updateLayer(d, l.id, { fill: teamColourValue(d, r) }, { product }), "colour"), `fill-${roles[0]}`)}
           <span className="fmo-divider" />
-          {coloursCommonFirst(palette)
-            .slice(0, 8)
-            .map((c) => {
+          {commonColoursAfterTeam(coloursCommonFirst(palette), design.teamColors, 8).map((c) => {
               const selected = layer.fill.id === c.id && !layer.fill.teamColor;
               return <Swatch key={c.id} hex={c.hex} label={selected ? fill(wording.colours.selected, { colour: c.name }) : c.name} selected={selected} onPick={() => commit((d, l) => updateLayer(d, l.id, { fill: paletteColourRef(c) }, { product }), "colour")} testId={`fill-${roles[0]}-${c.id}`} />;
             })}
@@ -133,9 +131,7 @@ function StyleControls({ roles, fontRoles, onFonts }: { roles: ValueRole[]; font
           <div className="fmo-swatches">
             {roleSwatches(outlineRole ? { ...layer.outline.color } : undefined, (r) => commit((d, l) => setOutline(d, l.id, { step: outlineStepOf(l) ?? "thin", color: teamColourValue(d, r) }, { product }), "outline"), `outline-${roles[0]}`)}
             <span className="fmo-divider" />
-            {coloursCommonFirst(palette)
-              .slice(0, 6)
-              .map((c) => {
+            {commonColoursAfterTeam(coloursCommonFirst(palette), design.teamColors, 6).map((c) => {
                 const selected = !outlineRole && layer.outline?.color.id === c.id;
                 return <Swatch key={c.id} hex={c.hex} label={selected ? fill(wording.colours.selected, { colour: c.name }) : c.name} selected={selected} onPick={() => commit((d, l) => setOutline(d, l.id, { step: outlineStepOf(l) ?? "thin", color: paletteColourRef(c) }, { product }), "outline")} testId={`outline-${roles[0]}-${c.id}`} />;
               })}

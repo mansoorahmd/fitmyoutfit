@@ -120,6 +120,15 @@ export function playerSwitches(product: ProductDefinition, wording: EditorWordin
 }
 
 /**
+ * The common colours offered after the team colours in a colour row (E3d, R18): without the team's own colours,
+ * which sit before the divider already. `count` of them at most.
+ */
+export function commonColoursAfterTeam<C extends { id: string }>(common: readonly C[], teamColours: Readonly<Record<string, { id: string } | null | undefined>>, count: number): C[] {
+  const team = new Set(Object.values(teamColours).flatMap((c) => (c ? [c.id] : [])));
+  return common.filter((c) => !team.has(c.id)).slice(0, count);
+}
+
+/**
  * The name a coach sees for a font (E3d, R19): the family's own name ("Oswald", "Graduate"), never the
  * catalogue's notes for us ("Oswald Bold (names)").
  */

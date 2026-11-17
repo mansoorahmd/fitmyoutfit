@@ -139,6 +139,8 @@ export function ConfirmDialog({ open, title, body, actions, onCancel, testId }: 
     if (open && !dialog.open) {
       if (typeof dialog.showModal === "function") dialog.showModal();
       else dialog.setAttribute("open", "");
+      // E3d (R40, 4.11): showModal() focuses the first button; the safe action (marked) keeps the focus.
+      dialog.querySelector<HTMLElement>("[data-dialog-focus]")?.focus();
     } else if (!open && dialog.open) dialog.close();
   }, [open]);
   return (

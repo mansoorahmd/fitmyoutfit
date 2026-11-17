@@ -21,6 +21,7 @@ import { fill, presetWords } from "./content.js";
 import { useEditor } from "./context.js";
 import { EditorIcon } from "./icons.js";
 import { presetsFor } from "./lettering.js";
+import { itemWhere } from "./items.js";
 import { LOGO_SIZE_STEP, countLogos, logoIsBlurry, logoLimit, logoSizeLimits, logoSizeWord, makeLogoSharp, nextPreset, replaceLogoAsset, sharpWidth, type LogoLayer } from "./logos.js";
 import { Alert, PresetChips } from "./parts.js";
 import { isStorageFull, uploadRefusal, uploadRefusalText } from "./upload-wording.js";
@@ -177,6 +178,38 @@ export function LogosTool() {
           )}
         </Alert>
       )}
+      {/* R14: "Add a logo" first, under the title; then the logos (only the selected one's card open). */}
+      {busy ? (
+        <div className="fmo-drop" role="status" aria-live="polite" data-testid="logo-checking">
+          <span className="fmo-spinner" aria-hidden="true" />
+          <strong>{w.checking}</strong>
+        </div>
+      ) : (
+        <button
+          type="button"
+          className="fmo-drop"
+          data-over={over}
+          onClick={() => input.current?.click()}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setOver(true);
+          }}
+          onDragLeave={() => setOver(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setOver(false);
+            void pick(e.dataTransfer.files);
+          }}
+          data-testid="logo-add"
+        >
+          <EditorIcon name={logos.length === 0 ? "logos" : "plus"} size={28} />
+          <span>
+            <strong>{logos.length === 0 ? w.add : w.addAnother}</strong>
+            <span>{w.formats}</span>
+            {pointer && <span>{w.drop}</span>}
+          </span>
+        </button>
+      )}
       {logos.map((logo) => (
         <LogoCard
           key={logo.id}
@@ -213,37 +246,6 @@ export function LogosTool() {
         }}
         data-testid="logo-replace-file"
       />
-      {busy ? (
-        <div className="fmo-drop" role="status" aria-live="polite" data-testid="logo-checking">
-          <span className="fmo-spinner" aria-hidden="true" />
-          <strong>{w.checking}</strong>
-        </div>
-      ) : (
-        <button
-          type="button"
-          className="fmo-drop"
-          data-over={over}
-          onClick={() => input.current?.click()}
-          onDragOver={(e) => {
-            e.preventDefault();
-            setOver(true);
-          }}
-          onDragLeave={() => setOver(false)}
-          onDrop={(e) => {
-            e.preventDefault();
-            setOver(false);
-            void pick(e.dataTransfer.files);
-          }}
-          data-testid="logo-add"
-        >
-          <EditorIcon name={logos.length === 0 ? "logos" : "plus"} size={28} />
-          <span>
-            <strong>{logos.length === 0 ? w.add : w.addAnother}</strong>
-            <span>{w.formats}</span>
-            {pointer && <span>{w.drop}</span>}
-          </span>
-        </button>
-      )}
       {logos.length === 0 && <p className="fmo-muted">{w.designHelp}</p>}
       <p className="fmo-muted">{w.rights}</p>
     </>
@@ -267,6 +269,29 @@ function LogoCard({ logo, onReplace }: { logo: LogoLayer; onReplace: () => void 
   const remove = () => {
     if (api.commit((d) => removeLayer(d, logo.id), "remove-item") && selected) api.select(null);
   };
+  // R14: a logo not selected is one 56 px row (picture, name, place, a badge when it needs a look); a tap opens it.
+  if (!selected) {
+    const where = itemWhere(wording, product, logo).where;
+    return (
+      <div className="fmo-item fmo-item-row" data-testid={`logo-${logo.id}`} data-selected={false} data-missing={missing}>
+        <button type="button" className="fmo-item-pick" aria-label={fill(w.selectName, { file: name })} aria-expanded={false} onClick={() => api.select(logo.id, { turn: true })} data-testid={`select-${logo.id}`}>
+          {url ? <img src={url} alt="" /> : <EditorIcon name="logos" />}
+          <span className="fmo-kit-words">
+            <span className="fmo-item-name fmo-bdi" dir="auto">
+              {fill(w.logoName, { file: name })}
+            </span>
+            <span className="fmo-muted">{where}</span>
+          </span>
+          {(missing || blurry || (note?.box && !note.kept)) && (
+            <span className="fmo-badge" aria-hidden="true">
+              <EditorIcon name="alert" size={16} />
+            </span>
+          )}
+          <EditorIcon name="chevronDown" size={20} />
+        </button>
+      </div>
+    );
+  }
   return (
     <div className="fmo-item" data-testid={`logo-${logo.id}`} data-selected={selected} data-missing={missing}>
       <div className="fmo-item-head">

@@ -1190,7 +1190,7 @@ export function EditorShell(props: EditorShellProps) {
           testId="leave-dialog"
           actions={
             <>
-              <button type="button" className="fmo-btn" onClick={() => setLeaving(false)}>
+              <button type="button" className="fmo-btn" onClick={() => setLeaving(false)} data-dialog-focus>
                 {wording.frame.stay}
               </button>
               <button

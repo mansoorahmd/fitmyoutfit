@@ -19,7 +19,7 @@ import { TEAM_COLOUR_ROLES, type DesignDocument, type Layer } from "../design/sc
 import { teamColourValue } from "../design/team-colours.js";
 import { resolveTextDirection } from "../design/text.js";
 import { hasPictographs, stripPictographs } from "../design/typed-text.js";
-import { fieldCheck, fieldStep, fontDisplayName, type FieldState } from "./lettering.js";
+import { commonColoursAfterTeam, fieldCheck, fieldStep, fontDisplayName, type FieldState } from "./lettering.js";
 import { PictographAlert } from "./parts.js";
 import { fill } from "./content.js";
 import { useEditor } from "./context.js";
@@ -206,9 +206,7 @@ function TextItem({ layer }: { layer: TextLayer }) {
           return <Swatch key={r} hex={c.hex} label={on ? fill(wording.colours.selected, { colour: name }) : name} selected={on} onPick={() => api.commit((d) => updateLayer(d, layer.id, { fill: teamColourValue(d, r) }, opts), "colour")} testId={`text-fill-${layer.id}-team-${r}`} />;
         })}
         <span className="fmo-divider" />
-        {coloursCommonFirst(palette)
-          .slice(0, 8)
-          .map((c) => {
+        {commonColoursAfterTeam(coloursCommonFirst(palette), design.teamColors, 8).map((c) => {
             const on = layer.fill.id === c.id && !layer.fill.teamColor;
             return <Swatch key={c.id} hex={c.hex} label={on ? fill(wording.colours.selected, { colour: c.name }) : c.name} selected={on} onPick={() => api.commit((d) => updateLayer(d, layer.id, { fill: paletteColourRef(c) }, opts), "colour")} testId={`text-fill-${layer.id}-${c.id}`} />;
           })}
