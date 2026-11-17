@@ -30,6 +30,21 @@ export function isLocalNodeEnv(nodeEnv: string | undefined | null): boolean {
   return LOCAL_NODE_ENVS.includes(normalizeNodeEnv(nodeEnv))
 }
 
+/**
+ * The NODE_ENV values, trimmed and compared exactly (case counts), under which a credential such
+ * as a password-reset link may be written to the log (email-delivery.ts). Narrower than
+ * LOCAL_NODE_ENVS on purpose (QA's fifteenth review, S5): unset, blank, `Development`, `staging`
+ * and anything else are the safe side. `medusa develop` sets `development` itself
+ * (@medusajs/medusa 2.22.6, commands/develop.js), Jest sets `test` when NODE_ENV is unset, and
+ * `medusa start` sets `production` when it is unset.
+ */
+export const LINK_LOGGING_NODE_ENVS: readonly string[] = ["development", "test"]
+
+/** True only when NODE_ENV, trimmed, is exactly `development` or `test`. */
+export function isExactlyDevelopmentOrTest(nodeEnv: string | undefined | null): boolean {
+  return LINK_LOGGING_NODE_ENVS.includes((nodeEnv ?? "").trim())
+}
+
 /** How NODE_ENV is shown in messages: its raw value, or "(unset)". */
 export function describeNodeEnv(nodeEnv: string | undefined | null): string {
   return nodeEnv === undefined || nodeEnv === null || nodeEnv.trim() === ""
