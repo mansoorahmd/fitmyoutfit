@@ -59,10 +59,24 @@ export async function launch({ port, profileDir, gpu = true, args = [] }) {
       else resolve(data.result);
     }
   };
+  // Every call answers within 60 s or fails (a page that reloads mid-call must not hang the audit).
   const send = (method, params = {}, sessionId) =>
     new Promise((resolve, reject) => {
       const msgId = ++id;
-      pending.set(msgId, { resolve, reject });
+      const timer = setTimeout(() => {
+        pending.delete(msgId);
+        reject(new Error(`${method}: no answer in 60 s`));
+      }, 60000);
+      pending.set(msgId, {
+        resolve: (v) => {
+          clearTimeout(timer);
+          resolve(v);
+        },
+        reject: (e) => {
+          clearTimeout(timer);
+          reject(e);
+        },
+      });
       ws.send(JSON.stringify({ id: msgId, method, params, sessionId }));
     });
   return {

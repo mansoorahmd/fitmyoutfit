@@ -261,7 +261,8 @@ export class CameraRig {
     const f = this.config?.framing;
     if (!f || longPx <= 0 || longPx >= minPx || this.focus) return;
     const from = this.anim ? this.anim.to : this.orbit();
-    const distance = Math.max(this.minDistance(), ((from.distance - nearer) * longPx) / minPx);
+    // 3% past the minimum: perspective on a turned piece leaves the box a pixel or two short otherwise.
+    const distance = Math.max(this.minDistance(), ((from.distance - nearer) * longPx) / (minPx * 1.03));
     if (distance >= from.distance - 1e-6) return;
     const restore = this.itemZoom?.restore ?? this.zoomFactor;
     this.zoomFactor = distance / f.fit;

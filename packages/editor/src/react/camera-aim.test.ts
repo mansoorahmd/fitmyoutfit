@@ -97,7 +97,7 @@ describe("zooming in on a small selected item (R22)", () => {
     rig.setItem(CENTER);
     rig.zoomToItem(60, 120);
     run();
-    expect(distance()).toBeCloseTo(Math.max(framing.minDistance, before / 2), 6);
+    expect(distance()).toBeCloseTo(Math.max(framing.minDistance, before / 2 / 1.03), 6);
     rig.setItem(null);
     run();
     expect(distance()).toBeCloseTo(before, 6);

@@ -76,6 +76,9 @@ describe("4.1 panel grid", () => {
     expect(body(".fmo-panel-head")).toContain("max-width: calc(560px + 2 * var(--fmo-panel-pad))");
     expect(body(".fmo-panel-inner")).toContain("max-width: 560px");
   });
+  it("a field beside a text button shares its row (the button never ends past the content's edge)", () => {
+    expect(EDITOR_CSS).toContain(".fmo-item-head > .fmo-field { flex: 1 1 auto; min-width: 0; width: auto; }");
+  });
   it("the body's scrollbar gutter is stable and comes out of the end padding (content ends at -16 in every tool)", () => {
     const body = all.find(([s]) => s === ".fmo-panel-body")![1];
     expect(body).toContain("scrollbar-gutter: stable");

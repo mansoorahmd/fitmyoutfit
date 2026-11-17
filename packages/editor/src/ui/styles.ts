@@ -471,6 +471,8 @@ export const EDITOR_CSS = /* css */ `
 .fmo-item { padding: 12px 0; border-bottom: 1px solid var(--fmo-border); }
 .fmo-item > * + * { margin-top: 8px; }
 .fmo-item-head { display: flex; align-items: center; gap: 12px; }
+/* E3d: a field beside a text button shares the row (it never pushes the button past the content's edge, 4.1). */
+.fmo-item-head > .fmo-field { flex: 1 1 auto; min-width: 0; width: auto; }
 .fmo-item > .fmo-label + *, .fmo-item > .fmo-section-title + * { margin-top: 0; }
 .fmo-item-head img { width: 40px; height: 40px; object-fit: contain; border-radius: 4px; background: var(--fmo-surface-alt); }
 /* R14: a logo not selected: one 56 px row. */
