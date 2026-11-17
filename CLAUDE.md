@@ -9,7 +9,7 @@ Our own online store where teams and clubs design custom jerseys, T-shirts and j
 - First segment: teams and clubs. Individuals buy single pieces in Pakistan only. Companies, events and small brands come later.
 - Markets: Pakistan, UK, UAE and US, all at launch. Export orders have a minimum quantity, to be set from real duty-paid quotes.
 - Company and payments: we already have a UAE company, used for card and PayPal payments. Still to confirm: Stripe and PayPal eligibility, and whether it can act as importer of record. In Pakistan we take JazzCash, Easypaisa and cards, with cash on delivery below a set limit.
-- Team orders: the organizer pays a 50% deposit at proof approval and the 50% balance before shipping. Players add name, number and size through a shared link and don't pay. The organizer signs a one-page roster proof.
+- Team orders: the organizer pays a 50% deposit at proof approval and the 50% balance before shipping. The organizer enters every player's name, number and size in the editor, in one team list; players don't pay, and there is no player link at launch (founder, 17 Nov 2026; it may come later). The organizer signs a one-page roster proof.
 - Promises: delivery 15 days from proof approval, or 10 days with paid rush. A free replacement within 7 days for our errors. Free design help for teams. Fit kits as a refundable deposit.
 - Shipping: export orders go as one duty-paid (DDP) box to the organizer, with each jersey bagged and labelled.
 - Production: designs aren't locked to one factory. Personalized team orders get a quality and color check at our hub in Lahore. Plain bulk is checked at the factory, with photos.
