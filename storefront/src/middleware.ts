@@ -2,6 +2,8 @@ import { HttpTypes } from "@medusajs/types"
 import { NextRequest, NextResponse } from "next/server"
 import { urlHasCountryCode as hasCountryCode } from "@lib/util/url-country"
 import { chooseVisitorCountry } from "@lib/util/visitor-country"
+import { NOTICE_COOKIE, noticePath, noticeToClear } from "@lib/util/password-notice"
+import { endsWithResetPage, resetLinkRedirect, resetSecret, withoutResetParams } from "@lib/util/reset-cookie"
 
 const BACKEND_URL = process.env.MEDUSA_BACKEND_URL
 const PUBLISHABLE_API_KEY = process.env.NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY
@@ -107,9 +109,62 @@ export async function middleware(request: NextRequest) {
 
   const urlHasCountryCode = hasCountryCode(request.nextUrl.pathname, countryCode)
 
+  // A password-reset link (contract m1-password-reset, section 3): the token
+  // and email in its address go into a sealed, http-only cookie scoped to the
+  // page, and the browser is sent to the same page without a query, so no
+  // token stays in the address bar, the history or a Referer. The country
+  // code counts in any letter case, and the backend's link (no country) is
+  // sealed for the visitor's country in the same step, so no redirect holds
+  // the token either.
+  if (endsWithResetPage(request.nextUrl.pathname)) {
+    const reset = await resetLinkRedirect(
+      request.nextUrl.pathname,
+      request.nextUrl.search,
+      () => resetSecret(),
+      Date.now(),
+      { has: (code) => regionMap.has(code), fallback: countryCode }
+    )
+    if (reset) {
+      const sealed = NextResponse.redirect(new URL(reset.location, request.nextUrl.origin), 303)
+      sealed.cookies.set(reset.cookie.name, reset.cookie.value, {
+        path: reset.cookie.path,
+        maxAge: reset.cookie.maxAge,
+        httpOnly: true,
+        sameSite: "lax", // sent on the redirect that follows a click from an email, which "strict" would withhold
+        secure: process.env.NODE_ENV === "production",
+      })
+      if (!cacheIdCookie) {
+        sealed.cookies.set("_medusa_cache_id", cacheId, { maxAge: 60 * 60 * 24 })
+      }
+      sealed.headers.set("Referrer-Policy", "no-referrer")
+      sealed.headers.set("Cache-Control", "no-store")
+      return sealed
+    }
+    // Any other path of that shape (an unknown country, a longer path, static-looking): no page is
+    // answered and no redirect is made with a token or email in the address. They are dropped.
+    const clean = withoutResetParams(request.nextUrl.search)
+    if (clean !== request.nextUrl.search) {
+      const dropped = NextResponse.redirect(`${request.nextUrl.origin}${request.nextUrl.pathname}${clean}`, 303)
+      dropped.headers.set("Referrer-Policy", "no-referrer")
+      dropped.headers.set("Cache-Control", "no-store")
+      return dropped
+    }
+  }
+
   // if one of the country codes is in the url and the cache id is set, return next
   if (urlHasCountryCode && cacheIdCookie) {
-    return NextResponse.next()
+    // the sign-in page's "password changed" flag is used up by the load that shows it
+    const flagCountry = noticeToClear({
+      pathname: request.nextUrl.pathname,
+      search: request.nextUrl.search,
+      hasFlag: request.cookies.has(NOTICE_COOKIE),
+      header: (name) => request.headers.get(name),
+    })
+    const next = NextResponse.next()
+    if (flagCountry) {
+      next.cookies.set(NOTICE_COOKIE, "", { path: noticePath(flagCountry), maxAge: 0, httpOnly: true, sameSite: "lax" })
+    }
+    return next
   }
 
   // if one of the country codes is in the url and the cache id is not set, set the cache id and redirect

@@ -12,9 +12,10 @@ export const metadata: Metadata = {
 
 /**
  * Profile (docs/design/05-m1-pages.md, 9.6): the name and the phone can be
- * changed; the email is shown read-only. No password row: Medusa's store
- * API can't change a password without the reset flow (a later task). No
- * billing address: addresses live on their own page.
+ * changed; the email is shown read-only. The Password row asks for a reset
+ * link to the account's email (Medusa's store API can't change a password
+ * without the reset flow). No billing address: addresses live on their own
+ * page.
  */
 export default async function ProfilePage(props: { params: Promise<{ countryCode: string }> }) {
   const { countryCode } = await props.params

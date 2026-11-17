@@ -20,6 +20,7 @@ import {
   validateSignIn,
 } from "@lib/util/account-auth"
 import { FIELD_MAX } from "@lib/util/checkout-address"
+import { carryEmail } from "@lib/util/password-reset"
 import { fill } from "@lib/util/wording"
 import Alert from "@modules/common/components/alert"
 import { Button } from "@modules/common/components/button"
@@ -228,7 +229,12 @@ const AuthForm = ({
           data-testid="field-password"
           after={
             !creating && words.forgotPassword.show ? (
-              <LocalizedClientLink href={words.forgotPassword.href} className={LINK} data-testid="forgot-password">
+              <LocalizedClientLink
+                href={words.forgotPassword.href}
+                className={LINK}
+                onClick={() => carryEmail(values.email)}
+                data-testid="forgot-password"
+              >
                 {words.forgotPassword.label}
               </LocalizedClientLink>
             ) : undefined

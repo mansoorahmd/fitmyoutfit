@@ -5,11 +5,14 @@ import React, { useEffect, useRef, useState } from "react"
 
 import { accountContent } from "@content/account"
 import { SaveResult, updateCustomerName, updateCustomerPhone } from "@lib/data/customer"
+import { ProfileLinkResult, requestPasswordResetForMe } from "@lib/data/password-reset"
 import { authHref } from "@lib/util/account-auth"
 import { ProfileValues, afterProfileSave, validateName, validatePhone } from "@lib/util/account-profile"
 import { ProfileRow, ProfileRowKey, profileRows } from "@lib/util/account-rows"
 import { FIELD_MAX } from "@lib/util/checkout-address"
+import { RESET_LINK_MINUTES } from "@lib/util/password-reset"
 import { fill } from "@lib/util/wording"
+import Alert from "@modules/common/components/alert"
 import { Button } from "@modules/common/components/button"
 import FieldError from "@modules/common/components/field-error"
 import { TextField } from "@modules/common/components/text-field"
@@ -59,6 +62,8 @@ const ProfileRows = ({
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState<number | null>(null)
   const busy = useRef(false)
+  const linkBusy = useRef(false)
+  const [link, setLink] = useState<"idle" | "asking" | "requested" | "failed">("idle")
   const editButtons = useRef<Partial<Record<ProfileRowKey, HTMLButtonElement | null>>>({})
   const firstField = useRef<HTMLInputElement | null>(null)
   const returnFocus = useRef<ProfileRowKey | null>(null)
@@ -131,6 +136,29 @@ const ProfileRows = ({
     setFailed(key)
   }
 
+  /**
+   * The Password row's button: asks for a reset link to the account's own
+   * email (no old password needed). Pressing it again while a request runs
+   * does nothing, so a double press sends one request.
+   */
+  const askForLink = async () => {
+    if (linkBusy.current) return
+    linkBusy.current = true
+    setLink("asking")
+    let result: ProfileLinkResult
+    try {
+      result = await requestPasswordResetForMe()
+    } catch {
+      result = { kind: "failed" }
+    }
+    linkBusy.current = false
+    if (result.kind === "signed_out") {
+      router.push(`/${countryCode}${authHref("signin", { next: "/account/profile" })}`)
+      return
+    }
+    setLink(result.kind === "requested" ? "requested" : "failed")
+  }
+
   const field = (
     key: keyof Draft,
     label: string,
@@ -172,6 +200,18 @@ const ProfileRows = ({
                     </p>
                   )}
                 </div>
+                {row.key === "password" && (
+                  <button
+                    type="button"
+                    onClick={askForLink}
+                    aria-label={words.password.buttonLabel}
+                    aria-busy={link === "asking" || undefined}
+                    className={TEXT_BUTTON}
+                    data-testid="profile-password-link"
+                  >
+                    {link === "asking" ? words.password.requesting : words.password.button}
+                  </button>
+                )}
                 {row.editable && !open && (
                   <button
                     ref={(el) => {
@@ -187,6 +227,19 @@ const ProfileRows = ({
                   </button>
                 )}
               </div>
+              {row.key === "password" && link === "requested" && (
+                <Alert
+                  variant="success"
+                  announce
+                  title={<span className="wrap-anywhere">{fill(words.password.requestedTitle, { email })}</span>}
+                  data-testid="profile-password-requested"
+                >
+                  {fill(words.password.requestedBody, { minutes: RESET_LINK_MINUTES })}
+                </Alert>
+              )}
+              {row.key === "password" && link === "failed" && (
+                <Alert variant="error" announce title={words.password.failed} data-testid="profile-password-failed" />
+              )}
               {open && (
                 <div>
                   <form noValidate onSubmit={(e) => save(row.key, e)} className="flex flex-col gap-4">

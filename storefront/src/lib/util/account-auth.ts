@@ -27,14 +27,22 @@ export const authView = (param: unknown): AuthView => (param === "create" ? "cre
  */
 export const authHref = (
   view: AuthView,
-  { next, email }: { next?: string | null; email?: string | null } = {}
+  { next, email, notice }: { next?: string | null; email?: string | null; notice?: AuthNotice | null } = {}
 ): string => {
   const params = new URLSearchParams()
   params.set("view", view)
   if (next) params.set("next", next)
   if (email) params.set("email", email)
+  if (notice) params.set("notice", notice)
   return `/account?${params.toString()}`
 }
+
+/** A one-time message on the sign-in view, from `?notice=`. */
+export type AuthNotice = "password-changed"
+
+/** The notice a URL asks for: only the known one, only on the sign-in view; anything else is none. */
+export const authNotice = (param: unknown, view: AuthView): AuthNotice | null =>
+  view === "signin" && param === "password-changed" ? "password-changed" : null
 
 /** A query value as one string: the first of several, "" for none. */
 export const queryValue = (value: string | string[] | undefined): string =>
@@ -109,13 +117,23 @@ export const validateCreate = (values: CreateValues, countryCode: string): Creat
     if (long) errors.phone = long
     else if (!isPhone(values.phone)) errors.phone = fill(e.phoneInvalid, { example: phoneExample(countryCode) })
   }
-  if (values.password.length < MIN_PASSWORD_LENGTH) {
-    errors.password = fill(words.errors.passwordShort, { min: MIN_PASSWORD_LENGTH })
-  } else if (!values.password.trim()) {
-    // eight spaces met the length rule (QA S1-4c, m4)
-    errors.password = words.errors.passwordSpaces
-  }
+  const password = newPasswordError(values.password)
+  if (password) errors.password = password
   return errors
+}
+
+/**
+ * The rule for a new password, on create account and on the reset page: at
+ * least MIN_PASSWORD_LENGTH characters, not only spaces. Medusa accepts any
+ * password, so the storefront is the only place the rule is kept.
+ */
+export const newPasswordError = (password: string): string | undefined => {
+  if (typeof password !== "string" || password.length < MIN_PASSWORD_LENGTH) {
+    return fill(words.errors.passwordShort, { min: MIN_PASSWORD_LENGTH })
+  }
+  // eight spaces met the length rule (QA S1-4c, m4)
+  if (!password.trim()) return words.errors.passwordSpaces
+  return undefined
 }
 
 /**

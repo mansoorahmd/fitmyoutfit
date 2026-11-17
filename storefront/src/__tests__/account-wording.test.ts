@@ -82,8 +82,26 @@ describe("account wording is data (AC 8)", () => {
     expect([a.profile.saved, a.profile.saveFailed]).toEqual(["Saved", "We couldn't save this. Try again."])
   })
 
-  it("keeps the password reset link off until reset exists", () => {
-    expect(accountContent.auth.forgotPassword.show).toBe(false)
+  it("has the password reset link on, leading to the forgot-password page", () => {
+    expect(accountContent.auth.forgotPassword.show).toBe(true)
+    expect(accountContent.auth.forgotPassword.href).toBe("/account/forgot-password")
+  })
+
+  it("says a reset link is 'on its way' and never that an email was sent (production sends nothing yet)", () => {
+    const reset = strings([accountContent.forgot, accountContent.reset, accountContent.profile.password]).join(" | ")
+    expect(reset).toMatch(/on its way/)
+    expect(reset).not.toMatch(/(sent|send|sending|emailed|we'll email|check your (inbox|email))/i)
+    expect(reset).not.toMatch(/we('ve| have) (sent|emailed)/i)
+  })
+
+  it("takes the link's life as {minutes}, written nowhere in a sentence", () => {
+    for (const text of [
+      accountContent.forgot.requestedBody,
+      accountContent.reset.goneBody,
+      accountContent.profile.password.requestedBody,
+    ]) {
+      expect(text).toContain("{minutes}")
+    }
   })
 
   it("promises no email and no linking of earlier guest orders", () => {
