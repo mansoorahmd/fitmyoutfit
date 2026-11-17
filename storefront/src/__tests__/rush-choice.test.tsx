@@ -329,6 +329,21 @@ describe("the Delivery speed control on the cart page", () => {
     expect(radios().standard.checked).toBe(true)
   })
 
+  it("the same for the Rush card when the cart holds rush and Standard could not be saved", async () => {
+    rush.answer = async () => ({ ok: false, kind: "server" })
+    render(page(rushCart(), rulesPkRushInCart))
+    await act(async () => {
+      fireEvent.click(radios().standard)
+    })
+    expect(screen.getByTestId("speed-error")).toBeInTheDocument()
+    expect(radios().rush.checked).toBe(true)
+    await act(async () => {
+      fireEvent.click(radios().rush)
+    })
+    expect(screen.queryByTestId("speed-error")).toBeNull()
+    expect(rush.calls).toEqual([false])
+  })
+
   it("a choice asked for from elsewhere on the page (the hint's button) that is chosen already sends nothing", async () => {
     const control = rushControlView(parseCheckoutRules(rulesPkRushOffered), "pkr")
     const Ask = () => {
