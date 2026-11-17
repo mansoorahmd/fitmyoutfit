@@ -17,7 +17,16 @@ export async function launch({ port, profileDir, gpu = true, args = [] }) {
   } catch (e) {
     if (String(e.message).includes("already in use")) throw e;
   }
-  rmSync(profileDir, { recursive: true, force: true });
+  // A Chrome that just closed may hold its profile's lock for a moment (Windows): try again for up to 10 s.
+  for (let k = 0; ; k++) {
+    try {
+      rmSync(profileDir, { recursive: true, force: true });
+      break;
+    } catch (error) {
+      if (k >= 20) throw error;
+      await sleep(500);
+    }
+  }
   mkdirSync(profileDir, { recursive: true });
   const proc = spawn(
     process.env.CHROME ?? DEFAULT_CHROME,
@@ -89,7 +98,8 @@ export async function launch({ port, profileDir, gpu = true, args = [] }) {
         // gone already
       }
       ws.close();
-      await sleep(300);
+      // Wait (up to 5 s) for Chrome to exit, so the next launch finds its profile free.
+      await Promise.race([new Promise((resolve) => (proc.exitCode !== null ? resolve() : proc.once("exit", resolve))), sleep(5000)]);
       try {
         proc.kill();
       } catch {
