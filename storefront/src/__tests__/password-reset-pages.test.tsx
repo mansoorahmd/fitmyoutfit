@@ -191,6 +191,30 @@ describe("the forgot-password page", () => {
     await act(async () => g.open())
     expect(screen.getByTestId("forgot-requested")).toBeInTheDocument()
   })
+
+  it("ignores a submit of the form itself while the first request runs (the busy guard, not only the disabled button)", async () => {
+    // The loading button is disabled, so clicking it proves nothing: the form is submitted
+    // directly (Enter in the field, or a script), which only the guard in submit() stops.
+    const g = gate()
+    calls.requestGate = g.promise
+    render(<ForgotPasswordTemplate />)
+    type("Email", "ali@example.com")
+    await press("forgot-submit")
+    expect(calls.request).toHaveLength(1)
+    await act(async () => {
+      fireEvent.submit(screen.getByTestId("forgot-form"))
+      fireEvent.submit(screen.getByTestId("forgot-form"))
+    })
+    expect(calls.request).toHaveLength(1)
+    await act(async () => g.open())
+    expect(screen.getByTestId("forgot-requested")).toBeInTheDocument()
+    // once the first one is done, the form works again
+    calls.requestGate = null
+    await act(async () => {
+      fireEvent.submit(screen.getByTestId("forgot-form"))
+    })
+    expect(calls.request).toHaveLength(2)
+  })
 })
 
 describe("the page a reset link opens", () => {
