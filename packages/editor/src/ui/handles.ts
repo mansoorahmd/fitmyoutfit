@@ -35,11 +35,13 @@ export function createBus<T>(initial: T): Bus<T> {
 }
 
 /** How much a corner drag scales the item: the pointer's distance from the centre now over at the start. */
-export function resizeFactor(centre: Pt, start: Pt, now: Pt): number {
+export function resizeFactor(centre: Pt, start: Pt, now: Pt, outset = 0): number {
   const d0 = Math.hypot(start.x - centre.x, start.y - centre.y);
   const d1 = Math.hypot(now.x - centre.x, now.y - centre.y);
-  if (d0 < 1) return 1;
-  return Math.max(0.05, d1 / d0);
+  // E3d (R32): the handle sits `outset` px beyond the item's corner; the item's corner follows the pointer.
+  const o = Math.max(0, Math.min(outset, d0 - 1));
+  if (d0 - o < 1) return 1;
+  return Math.max(0.05, (d1 - o) / (d0 - o));
 }
 
 /**

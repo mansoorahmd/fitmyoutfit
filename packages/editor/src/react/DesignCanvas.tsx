@@ -92,6 +92,17 @@ export interface SelectionGeometry extends ItemOnScreen {
   height: number;
 }
 
+/**
+ * Every item on the screen (E3d): its projected corners and centre, and whether it faces the camera. The
+ * interface keeps the turn handle off other items (R33) and draws a warning badge on unselected items (R15).
+ */
+export interface ItemBox {
+  layerId: string;
+  corners: ScreenPoint[];
+  centre: ScreenPoint;
+  facing: boolean;
+}
+
 /** Which side of the garment the camera looks at. "left" is the wearer's left. */
 export type CameraSide = "front" | "back" | "left" | "right";
 
@@ -180,6 +191,11 @@ export interface DesignCanvasProps {
    * model's UV lookup is built once, the first time it is needed.
    */
   onSelectionGeometry?: (geometry: SelectionGeometry | null) => void;
+  /**
+   * E3d: called with every item's box on the screen (no outline) whenever the camera or the design changed. Given
+   * this, the UV lookup is built once the model is ready, whether or not anything is selected.
+   */
+  onItemBoxes?: (boxes: ItemBox[]) => void;
   /** Lines to draw over the model with the selection (snapping guides, the print area), projected along the cloth. */
   guides?: readonly PieceGuide[];
   /**
@@ -413,6 +429,7 @@ function ModelView({
   dragOnlySelected = "touch",
   outlineSelected = true,
   onSelectionGeometry,
+  onItemBoxes,
   guides,
   gesture = false,
   draftQuality = "auto",
@@ -475,6 +492,8 @@ function ModelView({
   const lookup = useRef<{ model: PreparedModel; lookup: SurfaceLookup } | null>(null);
   const lastProjected = useRef<SelectionGeometry | null>(null);
   const geometryOut = useLatest(onSelectionGeometry);
+  const boxesOut = useLatest(onItemBoxes);
+  const lastBoxes = useRef<string>("");
   const lastGeometry = useRef<string>("");
   const previewDesign = useRef<DesignDocument | null>(null);
   const projectedLines = useRef<{ key: string; lines: SelectionGeometry["guides"] } | null>(null);
@@ -484,6 +503,39 @@ function ModelView({
     lastGeometry.current = "";
     invalidate();
   }, [selectedLayerId, guides, invalidate]);
+  const surfaceLookup = (p: ProductDefinition): SurfaceLookup | null => {
+    if (lookup.current?.model !== prepared) {
+      try {
+        lookup.current = { model: prepared, lookup: buildSurfaceLookup(extractGarmentMeshes(prepared.scene, p)) };
+      } catch (error) {
+        console.error("[editor] the model's UV lookup:", error);
+        return null;
+      }
+    }
+    return lookup.current.lookup;
+  };
+  // Every item's box (E3d), when the interface asks for it: only when the camera or the design changed.
+  useFrame(({ camera: cam }) => {
+    const report = boxesOut.current;
+    if (!report) return;
+    const { design: fromProps, product: p, viewSize: vs } = selectionInputs.current;
+    const d = previewDesign.current ?? fromProps;
+    cam.updateMatrixWorld();
+    const key = JSON.stringify([cam.matrixWorld.elements, cam.projectionMatrix.elements, vs.width, vs.height, d.layers.map((l) => [l.id, l.pieceId, l.position, l.size, l.rotation])]);
+    if (key === lastBoxes.current) return;
+    lastBoxes.current = key;
+    const surface = surfaceLookup(p);
+    if (!surface) return;
+    const viewProjection = cam.projectionMatrix.clone().multiply(cam.matrixWorldInverse).elements;
+    const screen = { viewProjection, position: cam.position.toArray() as [number, number, number], width: vs.width, height: vs.height };
+    const boxes: ItemBox[] = [];
+    for (const layer of d.layers) {
+      const piece = p.pieces.find((x) => x.id === layer.pieceId);
+      const on = piece ? projectItem(surface, piece, layer, screen, { outline: false }) : null;
+      if (on) boxes.push({ layerId: layer.id, corners: on.corners, centre: on.centre, facing: on.facing });
+    }
+    report(boxes);
+  });
   useFrame(({ camera: cam }) => {
     const report = geometryOut.current;
     if (!report) return;
@@ -503,16 +555,11 @@ function ModelView({
     const key = JSON.stringify([cam.matrixWorld.elements, cam.projectionMatrix.elements, layer.position, layer.size, layer.rotation, layer.pieceId, g, vs.width, vs.height]);
     if (key === lastGeometry.current) return;
     lastGeometry.current = key;
-    if (lookup.current?.model !== prepared) {
-      try {
-        lookup.current = { model: prepared, lookup: buildSurfaceLookup(extractGarmentMeshes(prepared.scene, p)) };
-      } catch (error) {
-        console.error("[editor] the model's UV lookup:", error);
-        report(null);
-        return;
-      }
+    const surface = surfaceLookup(p);
+    if (!surface) {
+      report(null);
+      return;
     }
-    const surface = lookup.current.lookup;
     const viewProjection = cam.projectionMatrix.clone().multiply(cam.matrixWorldInverse).elements;
     const screen = { viewProjection, position: cam.position.toArray() as [number, number, number], width: vs.width, height: vs.height };
     const on = projectItem(surface, piece, layer, screen);

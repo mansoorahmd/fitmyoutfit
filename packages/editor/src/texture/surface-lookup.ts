@@ -197,6 +197,8 @@ export type PointSource = "surface" | "plane";
 
 export interface ItemOnScreen {
   centre: ScreenPoint;
+  /** The centre on the cloth, in the model's world (E3d: the camera aims its zoom at it, R24). */
+  centreWorld: Vec3;
   /** Clockwise from the item's top left (as `layerCorners`). */
   corners: ScreenPoint[];
   cornerSources: PointSource[];
@@ -274,7 +276,7 @@ export function projectItem(
   piece: PatternPiece,
   layer: Pick<Layer, "position" | "size" | "rotation">,
   camera: ScreenCamera,
-  options: { stemPx?: number } = {},
+  options: { stemPx?: number; outline?: boolean } = {},
 ): ItemOnScreen | null {
   const base = centreSurface(lookup, piece, layer);
   if (!base) return null;
@@ -292,7 +294,7 @@ export function projectItem(
     cornerSources.push(w.source);
   }
   const outline: ScreenPoint[] = [];
-  for (let e = 0; e < 4; e++) {
+  for (let e = 0; e < (options.outline === false ? 0 : 4); e++) {
     const a = cornersMm[e]!;
     const b = cornersMm[(e + 1) % 4]!;
     for (let k = 0; k < EDGE_SAMPLES; k++) {
@@ -320,7 +322,7 @@ export function projectItem(
   const sy = screenDirection(camera, base.surface, piece, "y");
   const mirrored = sx.x * sy.y - sx.y * sy.x < 0;
   const pxPerMm = Math.hypot(sx.x, sx.y);
-  return { centre, corners, cornerSources, outline, top, turn, angle, facing: angle <= FACING_LIMIT_DEGREES, mirrored, pxPerMm };
+  return { centre, centreWorld: base.surface.position, corners, cornerSources, outline, top, turn, angle, facing: angle <= FACING_LIMIT_DEGREES, mirrored, pxPerMm };
 }
 
 /** Screen px moved for 1 mm along the piece's x (or y) at a surface point. */
