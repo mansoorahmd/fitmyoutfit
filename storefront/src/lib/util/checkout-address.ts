@@ -133,6 +133,7 @@ export const asciiDigits = (value: string): string =>
  */
 const UK_OUTSIDE_DELIVERY = [
   /^BFPO\d{1,4}$/, // British Forces Post Office
+  /^BF1\d[A-Z]{2}$/, // the BF1 district, British Forces' postcode ("BF1 4FB"; S1-11)
   /^(ASCN|BBND|BIQQ|FIQQ|PCRN|SIQQ|STHL|TDCU|TKCA)1ZZ$/, // Ascension, BIOT, Antarctic, Falklands, Pitcairn, South Georgia, St Helena, Tristan da Cunha, Turks and Caicos
   /^GX111AA$/, // Gibraltar
   /^AI-?\d{4}$/, // Anguilla
@@ -498,6 +499,8 @@ export const addressLines = (
     // Pakistan, the UK and the UAE: the city with its postal code, then the province or emirate
     cityLine = [address.city, address.postal_code].filter((p) => !blank(p)).join(" ")
     provinceLine = subdivisionName(address.country_code, address.province) ?? ""
+    // "Dubai" in Dubai (S1-11): a city and an emirate with the same name show once
+    if (provinceLine.trim().toLowerCase() === (address.city ?? "").trim().toLowerCase()) provinceLine = ""
   }
   return [
     name,

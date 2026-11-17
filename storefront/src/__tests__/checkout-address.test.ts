@@ -312,7 +312,7 @@ describe("what the cart receives", () => {
 
     it("BFPO and overseas-territory postcodes are refused in words, not with the format's message", () => {
       const OUTSIDE = "We deliver to addresses in the United Kingdom only, not to BFPO or overseas territory addresses."
-      for (const typed of ["BFPO 1234", "bfpo 57", "FIQQ 1ZZ", "STHL 1ZZ", "ASCN 1ZZ", "TDCU 1ZZ", "BIQQ 1ZZ", "SIQQ 1ZZ", "BBND 1ZZ", "PCRN 1ZZ", "TKCA 1ZZ", "GX11 1AA", "KY1-1001", "VG1110", "MSR 1110", "AI-2640"]) {
+      for (const typed of ["BFPO 1234", "bfpo 57", "FIQQ 1ZZ", "STHL 1ZZ", "ASCN 1ZZ", "TDCU 1ZZ", "BIQQ 1ZZ", "SIQQ 1ZZ", "BBND 1ZZ", "PCRN 1ZZ", "TKCA 1ZZ", "GX11 1AA", "KY1-1001", "VG1110", "MSR 1110", "AI-2640", "BF1 4FB", "bf14fb", "BF1 0AA"]) {
         const values = form("gb", { phone: "07700 900123" })
         values.shipping.postal_code = typed
         expect(validateAddressForm(values, ["gb"])["shipping.postal_code"], typed).toBe(OUTSIDE)
@@ -456,7 +456,14 @@ describe("address lines", () => {
     ).toEqual(["Ali Raza", "12 Mall Road", "Lahore 54000", "Punjab", "Pakistan"])
     expect(
       addressLines({ ...base, country_code: "ae", address_1: "Villa 3, Street 12", city: "Dubai", province: "ae-du", postal_code: "" }, "United Arab Emirates")
-    ).toEqual(["Ali Raza", "Villa 3, Street 12", "Dubai", "Dubai", "United Arab Emirates"])
+    ).toEqual(["Ali Raza", "Villa 3, Street 12", "Dubai", "United Arab Emirates"])
+    // a different city keeps its emirate line, and the match ignores case and spaces (S1-11)
+    expect(
+      addressLines({ ...base, country_code: "ae", address_1: "Villa 3", city: "Jumeirah", province: "ae-du", postal_code: "" }, "United Arab Emirates")
+    ).toEqual(["Ali Raza", "Villa 3", "Jumeirah", "Dubai", "United Arab Emirates"])
+    expect(
+      addressLines({ ...base, country_code: "ae", address_1: "Villa 3", city: " dubai ", province: "ae-du", postal_code: "" }, "United Arab Emirates")
+    ).toEqual(["Ali Raza", "Villa 3", " dubai".trim(), "United Arab Emirates"])
   })
 
   it("shows a province typed in the admin as it was stored", () => {
