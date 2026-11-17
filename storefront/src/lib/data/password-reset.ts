@@ -15,6 +15,7 @@ import {
   validateNewPassword,
 } from "@lib/util/password-reset"
 import { RESET_COOKIE, openReset, resetSecret } from "@lib/util/reset-cookie"
+import { NOTICE_COOKIE, NOTICE_MAX_AGE, noticePath } from "@lib/util/password-notice"
 import { cleanEmail } from "@lib/util/reset-link"
 
 import { customerState } from "./customer"
@@ -144,5 +145,15 @@ export async function resetPassword(values: { password: string; email: string },
   )
   if (outcome === "failed") return { kind: "failed" }
   await clearLink(countryCode)
+  if (outcome === "changed") {
+    // the sign-in page's "password changed" notice shows only while this flag is there (lib/util/password-notice.ts)
+    jar.set(NOTICE_COOKIE, "1", {
+      path: noticePath(countryCode),
+      maxAge: NOTICE_MAX_AGE,
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+    })
+  }
   return outcome === "changed" ? { kind: "changed", href: afterResetPath(countryCode, link.email) } : { kind: "gone" }
 }

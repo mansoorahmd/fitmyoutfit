@@ -80,6 +80,25 @@ export const sealReset = async (link: ResetLink, secret: string, now: number = D
   return `${VERSION}.${toBase64Url(iv)}.${toBase64Url(new Uint8Array(sealed))}`
 }
 
+/** The two parts of a sealed cookie value (the iv and the sealed bytes, both base64url), or null when it is not shaped like one. */
+export const sealedParts = (value: unknown): { iv: string; sealed: string } | null => {
+  if (typeof value !== "string") return null
+  const [version, iv, sealed, ...rest] = value.split(".")
+  return version === VERSION && iv && sealed && rest.length === 0 ? { iv, sealed } : null
+}
+
+/** The additional authenticated data every sealed value is bound to. */
+export const SEALED_AAD = AAD
+
+/** The link inside an opened cookie's plain text: null when it is malformed or has expired. */
+export const linkFromPlain = (plain: string, now: number): ResetLink | null => {
+  const data = JSON.parse(plain) as { t?: unknown; e?: unknown; x?: unknown }
+  const token = cleanToken(data.t)
+  const email = cleanEmail(data.e)
+  if (!token || !email || typeof data.x !== "number" || data.x <= now) return null
+  return { token, email }
+}
+
 /** Opens what sealReset made: the link, or null when it is missing, altered, sealed with another secret, expired or malformed. Never throws. */
 export const openReset = async (
   value: string | undefined | null,
@@ -87,19 +106,14 @@ export const openReset = async (
   now: number = Date.now()
 ): Promise<ResetLink | null> => {
   try {
-    if (typeof value !== "string") return null
-    const [version, iv, sealed, ...rest] = value.split(".")
-    if (version !== VERSION || !iv || !sealed || rest.length > 0) return null
+    const parts = sealedParts(value)
+    if (!parts) return null
     const plain = await crypto.subtle.decrypt(
-      { name: "AES-GCM", iv: fromBase64Url(iv), additionalData: encoder.encode(AAD) },
+      { name: "AES-GCM", iv: fromBase64Url(parts.iv), additionalData: encoder.encode(AAD) },
       await key(secret, "decrypt"),
-      fromBase64Url(sealed)
+      fromBase64Url(parts.sealed)
     )
-    const data = JSON.parse(decoder.decode(plain)) as { t?: unknown; e?: unknown; x?: unknown }
-    const token = cleanToken(data.t)
-    const email = cleanEmail(data.e)
-    if (!token || !email || typeof data.x !== "number" || data.x <= now) return null
-    return { token, email }
+    return linkFromPlain(decoder.decode(plain), now)
   } catch {
     return null
   }

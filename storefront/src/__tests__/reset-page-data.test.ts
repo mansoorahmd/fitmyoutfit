@@ -8,7 +8,7 @@ vi.mock("next/headers", () => ({
 }))
 
 import ResetPasswordPage from "../app/[countryCode]/(main)/account/reset-password/page"
-import { openedResetEmail } from "@lib/data/reset-email"
+import { emailInResetCookie, openedResetEmail } from "@lib/data/reset-email"
 import { sealReset, resetSecret } from "@lib/util/reset-cookie"
 
 const TOKEN = "eyJhbGciOiJIUzI1NiJ9.eyJlbnRpdHlfaWQiOiJhQGIuY28ifQ.c2lnbmF0dXJl"
@@ -33,6 +33,22 @@ describe("what the reset page's server code holds", () => {
     expect(email).toBe("ali@example.com")
     expect(typeof email).toBe("string")
     expect(JSON.stringify(email)).not.toContain(TOKEN)
+  })
+
+  it("opens exactly what sealReset seals, with the same refusals as openReset (other secret, altered, expired, malformed)", async () => {
+    const secret = resetSecret()
+    const now = Date.now()
+    const sealed = await sealReset({ token: TOKEN, email: "ali@example.com" }, secret, now)
+    expect(emailInResetCookie(sealed, secret, now)).toBe("ali@example.com")
+    expect(emailInResetCookie(sealed, `${secret}x`, now)).toBeNull()
+    expect(emailInResetCookie(sealed, secret, now + 16 * 60 * 1000)).toBeNull()
+    const [v, iv, body] = sealed.split(".")
+    expect(emailInResetCookie(`${v}.${iv}.${body.slice(0, -2)}${body.endsWith("AA") ? "BB" : "AA"}`, secret, now)).toBeNull()
+    expect(emailInResetCookie(`v2.${iv}.${body}`, secret, now)).toBeNull()
+    expect(emailInResetCookie(`${sealed}.extra`, secret, now)).toBeNull()
+    for (const junk of ["", "x", "v1..", "v1.a.b", "v1.AAAA.BBBB", undefined, TOKEN]) {
+      expect(emailInResetCookie(junk as string, secret, now), String(junk)).toBeNull()
+    }
   })
 
   it("gives null when there is no usable link: no cookie, an altered one, an expired one", async () => {

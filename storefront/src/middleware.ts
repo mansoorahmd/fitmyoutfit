@@ -2,6 +2,7 @@ import { HttpTypes } from "@medusajs/types"
 import { NextRequest, NextResponse } from "next/server"
 import { urlHasCountryCode as hasCountryCode } from "@lib/util/url-country"
 import { chooseVisitorCountry } from "@lib/util/visitor-country"
+import { NOTICE_COOKIE, noticePath, noticeToClear } from "@lib/util/password-notice"
 import { endsWithResetPage, resetLinkRedirect, resetSecret, withoutResetParams } from "@lib/util/reset-cookie"
 
 const BACKEND_URL = process.env.MEDUSA_BACKEND_URL
@@ -152,7 +153,18 @@ export async function middleware(request: NextRequest) {
 
   // if one of the country codes is in the url and the cache id is set, return next
   if (urlHasCountryCode && cacheIdCookie) {
-    return NextResponse.next()
+    // the sign-in page's "password changed" flag is used up by the load that shows it
+    const flagCountry = noticeToClear({
+      pathname: request.nextUrl.pathname,
+      search: request.nextUrl.search,
+      hasFlag: request.cookies.has(NOTICE_COOKIE),
+      header: (name) => request.headers.get(name),
+    })
+    const next = NextResponse.next()
+    if (flagCountry) {
+      next.cookies.set(NOTICE_COOKIE, "", { path: noticePath(flagCountry), maxAge: 0, httpOnly: true, sameSite: "lax" })
+    }
+    return next
   }
 
   // if one of the country codes is in the url and the cache id is not set, set the cache id and redirect

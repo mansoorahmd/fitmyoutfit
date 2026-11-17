@@ -153,6 +153,28 @@ describe("the middleware and a reset link's address", () => {
   })
 })
 
+describe("the sign-in page's password-changed flag (M3)", () => {
+  const NOTICE = "/pk/account?view=signin&email=a%40b.co&notice=password-changed"
+  const load = (cookie: string, headers: Record<string, string> = {}, path = NOTICE) =>
+    middleware(new NextRequest(`http://localhost:8009${path}`, { headers: { cookie, ...headers } }))
+
+  it("clears the flag on the load that shows the notice, on the account path, and lets the page through", async () => {
+    const response = await load("_medusa_cache_id=abc; fmo_pw_notice=1")
+    expect(response.status).toBe(200)
+    const setCookie = response.headers.get("set-cookie") as string
+    expect(setCookie).toMatch(/fmo_pw_notice=;/)
+    expect(setCookie).toMatch(/Max-Age=0/i)
+    expect(setCookie).toMatch(/Path=\/pk\/account/i)
+  })
+
+  it("leaves it alone without the flag, with no notice in the query, on a prefetch or a client-side fetch", async () => {
+    expect((await load("_medusa_cache_id=abc")).headers.get("set-cookie")).toBeNull()
+    expect((await load("_medusa_cache_id=abc; fmo_pw_notice=1", {}, "/pk/account?view=signin")).headers.get("set-cookie")).toBeNull()
+    expect((await load("_medusa_cache_id=abc; fmo_pw_notice=1", { "next-router-prefetch": "1" })).headers.get("set-cookie")).toBeNull()
+    expect((await load("_medusa_cache_id=abc; fmo_pw_notice=1", { rsc: "1" })).headers.get("set-cookie")).toBeNull()
+  })
+})
+
 describe("the headers of the pages a link touches (next.config.js)", () => {
   it("sends no Referer and keeps no copy, for the page with and without a country", async () => {
     // loaded here, after the environment is set: the config checks the variables when it loads

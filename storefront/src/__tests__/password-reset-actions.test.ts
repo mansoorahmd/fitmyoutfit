@@ -129,7 +129,7 @@ describe("resetPassword (the page a link opens)", () => {
     await putLink()
     await resetPassword({ password: "a-good-password", email: "ali@example.com" }, "gb")
     expect(state.jar.has(RESET_COOKIE)).toBe(false)
-    expect(state.set.at(-1)).toMatchObject({ name: RESET_COOKIE, value: "", options: { path: "/gb/account/reset-password", maxAge: 0 } })
+    expect(state.set.find((c) => c.name === RESET_COOKIE)).toMatchObject({ name: RESET_COOKIE, value: "", options: { path: "/gb/account/reset-password", maxAge: 0 } })
   })
 
   it("an expired, used or wrong link (401) is gone, and its cookie is cleared", async () => {
@@ -195,6 +195,27 @@ describe("resetPassword (the page a link opens)", () => {
   it("a dead cookie is still 'gone' (and cleared) whatever email the form sent", async () => {
     expect(await resetPassword({ password: "a-good-password", email: "ali@example.com" }, "pk")).toEqual({ kind: "gone" })
     expect(state.fetches).toHaveLength(0)
+  })
+
+  it("M3: sets the short-lived, http-only flag for the sign-in notice when, and only when, the password was changed", async () => {
+    await putLink()
+    await resetPassword({ password: "a-good-password", email: "ali@example.com" }, "gb")
+    const flag = state.set.find((c) => c.name === "fmo_pw_notice")
+    expect(flag).toMatchObject({ value: "1", options: { path: "/gb/account", httpOnly: true, sameSite: "lax" } })
+    expect(Number(flag?.options.maxAge)).toBeGreaterThan(0)
+    expect(Number(flag?.options.maxAge)).toBeLessThanOrEqual(300)
+    expect(JSON.stringify(flag)).not.toContain(TOKEN)
+  })
+
+  it("M3: sets no flag for a refused password, a dead link, an out-of-date page or a failed save", async () => {
+    await putLink()
+    await resetPassword({ password: "short", email: "ali@example.com" }, "pk")
+    await resetPassword({ password: "a-good-password", email: "bob@example.com" }, "pk")
+    state.answer = () => new Response(null, { status: 502 })
+    await resetPassword({ password: "a-good-password", email: "ali@example.com" }, "pk")
+    state.answer = () => new Response(null, { status: 401 })
+    await resetPassword({ password: "a-good-password", email: "ali@example.com" }, "pk")
+    expect(state.set.filter((c) => c.name === "fmo_pw_notice")).toEqual([])
   })
 
   it("refuses a country code that is not two letters", async () => {
