@@ -105,7 +105,35 @@ export const openReset = async (
   }
 }
 
-const RESET_PATH = /^\/([a-z]{2})\/account\/reset-password\/?$/
+/** The reset page under a country: "/pk/account/reset-password", in any letter case, with or without a trailing slash. */
+const RESET_PATH = /^\/([a-z]{2})\/account\/reset-password\/?$/i
+/** The same page with no country, which is how the backend's link is written. */
+const RESET_PATH_NO_COUNTRY = /^\/account\/reset-password\/?$/i
+/** Any path of that shape, whatever comes before it: no page and no redirect may carry a token under it. */
+const RESET_SHAPE = /\/account\/reset-password\/?$/i
+
+/** True when the path ends in /account/reset-password (any case, any prefix). */
+export const endsWithResetPage = (pathname: string): boolean => RESET_SHAPE.test(pathname)
+
+/**
+ * The query without its `token` and `email` values (any letter case of the
+ * names), the rest kept; "" when nothing is left. For a path of the reset
+ * page's shape that the link's rule does not seal (an unknown country, a
+ * longer path): the browser is redirected without the credentials.
+ */
+export const withoutResetParams = (search: string): string => {
+  const params = new URLSearchParams(search)
+  let changed = false
+  for (const name of Array.from(new Set(Array.from(params.keys())))) {
+    if (name.toLowerCase() === "token" || name.toLowerCase() === "email") {
+      params.delete(name)
+      changed = true
+    }
+  }
+  if (!changed) return search
+  const rest = params.toString()
+  return rest ? `?${rest}` : ""
+}
 
 export type ResetRedirect = {
   /** The same page without a query: where the browser is sent. */
@@ -122,7 +150,10 @@ export type ResetRedirect = {
  * The middleware's rule for the reset page: a request for the page with a
  * query (the link's address) is answered by a redirect to the page without
  * one; the token and email go into the sealed cookie, scoped to the page's
- * path. Anything else (another path, or no query at all) is left alone: null.
+ * path. The country code counts in any letter case and is written in lower
+ * case. The page with no country (the backend's link) is sealed for
+ * `fallbackCountry`, the visitor's country, so no redirect ever carries the
+ * token. Anything else (another path, or no query at all) is left alone: null.
  * A link missing its token or email, or with a malformed one, clears the cookie.
  */
 export const resetLinkRedirect = async (
@@ -130,14 +161,23 @@ export const resetLinkRedirect = async (
   search: string,
   /** The secret, or a function that gives it: asked for only when a cookie is sealed, so a missing secret never breaks other pages. */
   secret: string | (() => string),
-  now: number = Date.now()
+  now: number = Date.now(),
+  /**
+   * `has`: whether a country code (lower case) is one the store sells to; a
+   * path with another one is not sealed. `fallback`: the country to use for
+   * a path with none (leave out to leave such a path alone). Default: every
+   * two-letter code is accepted.
+   */
+  countries: { has: (code: string) => boolean; fallback?: string } = { has: () => true }
 ): Promise<ResetRedirect | null> => {
+  if (!search || search === "?") return null
   const match = RESET_PATH.exec(pathname)
-  if (!match || !search || search === "?") return null
+  const country = match ? match[1].toLowerCase() : RESET_PATH_NO_COUNTRY.test(pathname) ? countries.fallback : undefined
+  if (!country || !/^[a-z]{2}$/.test(country) || !countries.has(country)) return null
   const params = new URLSearchParams(search)
   const token = cleanToken(params.get("token"))
   const email = cleanEmail(params.get("email"))
-  const path = `/${match[1]}/account/reset-password`
+  const path = `/${country}/account/reset-password`
   if (!token || !email) return { location: path, cookie: { name: RESET_COOKIE, value: "", path, maxAge: 0 } }
   return {
     location: path,

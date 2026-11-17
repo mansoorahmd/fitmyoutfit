@@ -52,10 +52,82 @@ describe("the middleware and a reset link's address", () => {
     expect(await openReset(value, resetSecret())).toEqual({ token: TOKEN, email: "ali@example.com" })
   })
 
-  it("a link with no country first goes to its country with the query kept (the existing rule), then is sealed", async () => {
-    const response = await visit(`/account/reset-password?token=${TOKEN}&email=a%40b.co`)
-    expect(response.status).toBe(307)
-    expect(response.headers.get("location")).toBe(`http://localhost:8009/pk/account/reset-password?token=${TOKEN}&email=a%40b.co`)
+  it("the backend's link has no country: it is sealed for the visitor's country in the same step, so no redirect holds the token", async () => {
+    for (const [headers, country] of [
+      [{}, "pk"],
+      [{ "cf-ipcountry": "GB" }, "gb"],
+    ] as const) {
+      const response = await middleware(
+        new NextRequest(`http://localhost:8009/account/reset-password?token=${TOKEN}&email=a%40b.co`, {
+          headers: { cookie: "_medusa_cache_id=abc", ...headers },
+        })
+      )
+      expect(response.status, country).toBe(303)
+      const location = response.headers.get("location") as string
+      expect(new URL(location).pathname).toBe(`/${country}/account/reset-password`)
+      expect(location).not.toContain("?")
+      expect(location).not.toContain(TOKEN)
+      const setCookie = response.headers.get("set-cookie") as string
+      expect(setCookie).toMatch(new RegExp(`Path=/${country}/account/reset-password`, "i"))
+      const value = new RegExp(`${RESET_COOKIE}=([^;]+)`).exec(setCookie)?.[1]
+      expect(await openReset(value, resetSecret())).toEqual({ token: TOKEN, email: "a@b.co" })
+    }
+  })
+
+  it("M1: a country code in capitals is the same country: sealed, redirected to the lower-case page, the cookie on the lower-case path", async () => {
+    for (const path of [`/PK/account/reset-password?token=${TOKEN}&email=a%40b.co`, `/Pk/account/reset-password/?token=${TOKEN}&email=a%40b.co`]) {
+      const response = await visit(path)
+      expect(response.status, path).toBe(303)
+      const location = response.headers.get("location") as string
+      expect(new URL(location).pathname, path).toBe("/pk/account/reset-password")
+      expect(location).not.toContain("token")
+      const setCookie = response.headers.get("set-cookie") as string
+      expect(setCookie).toMatch(/Path=\/pk\/account\/reset-password(;|$)/i)
+      const value = new RegExp(`${RESET_COOKIE}=([^;]+)`).exec(setCookie)?.[1]
+      expect(await openReset(value, resetSecret())).toEqual({ token: TOKEN, email: "a@b.co" })
+    }
+  })
+
+  it("M1: an unknown country is not sealed for, and no redirect carries the token or email (other query values stay)", async () => {
+    const response = await visit(`/zz/account/reset-password?token=${TOKEN}&email=a%40b.co&utm=x`)
+    expect(response.status).toBe(303)
+    const location = response.headers.get("location") as string
+    expect(new URL(location).pathname).toBe("/zz/account/reset-password")
+    expect(new URL(location).search).toBe("?utm=x")
+    expect(location).not.toContain(TOKEN)
+    expect(response.headers.get("set-cookie")).toBeNull()
+    // the next request (no token left) goes on to the visitor's country as any page does, with no credential in it
+    const next = await visit(new URL(location).pathname + new URL(location).search)
+    expect(next.status).toBe(307)
+    expect(next.headers.get("location") as string).not.toMatch(/token|email|a%40b/)
+  })
+
+  it("M1: no page is answered and no redirect made with a token under a path ending in /account/reset-password", async () => {
+    const paths = [
+      `/zz/account/reset-password?token=${TOKEN}`,
+      `/pk/x/account/reset-password?token=${TOKEN}`,
+      `/pk/account/account/reset-password?email=a%40b.co&token=${TOKEN}`,
+      `/ACCOUNT/RESET-PASSWORD?token=${TOKEN}`,
+      `/a.b/account/reset-password?token=${TOKEN}`,
+      `/gb/account/reset-password/?token=${TOKEN}`,
+      `/zz/account/reset-password?TOKEN=${TOKEN}&Email=a%40b.co`,
+      `/pkx/account/reset-password?token=${TOKEN}`,
+    ]
+    for (const path of paths) {
+      const response = await visit(path)
+      const location = response.headers.get("location") ?? ""
+      expect(location, path).not.toContain(TOKEN)
+      expect(location, path).not.toMatch(/token=|email=/i)
+      // an answered page (no redirect) has no query to hold one
+      if (response.status < 300 || response.status >= 400) expect(new URL(`http://x${path}`).search, path).toBe("")
+    }
+  })
+
+  it("M1: other pages keep their query, and an empty query on the reset page is left alone", async () => {
+    for (const path of [`/pk/account/forgot-password?token=${TOKEN}`, `/pk/account/reset-password-x?token=${TOKEN}`, "/pk/account/reset-password?"]) {
+      const response = await visit(path)
+      expect(response.status, path).toBe(200)
+    }
   })
 
   it("a link missing its token clears the cookie and redirects to the clean page", async () => {

@@ -19,7 +19,9 @@ import {
   RESET_COOKIE,
   RESET_COOKIE_MAX_AGE,
   openReset,
+  endsWithResetPage,
   resetLinkRedirect,
+  withoutResetParams,
   resetSecret,
   sealReset,
 } from "@lib/util/reset-cookie"
@@ -198,6 +200,39 @@ describe("the middleware's rule for the link's address", () => {
     expect(result?.cookie).toMatchObject({ name: RESET_COOKIE, path: "/gb/account/reset-password", maxAge: 900 })
     expect(result?.cookie.value).not.toContain(TOKEN)
     expect(await openReset(result?.cookie.value, SECRET, NOW)).toEqual({ token: TOKEN, email: "ali@example.com" })
+  })
+
+  it("takes the country code in any letter case, writes it in lower case, and seals only for a country the store sells to", async () => {
+    const q = query({ token: TOKEN, email: "a@b.co" })
+    const result = await resetLinkRedirect("/GB/account/reset-password/", q, SECRET, NOW)
+    expect(result?.location).toBe("/gb/account/reset-password")
+    expect(result?.cookie.path).toBe("/gb/account/reset-password")
+    const sells = { has: (code: string) => code === "gb" }
+    expect((await resetLinkRedirect("/Gb/account/reset-password", q, SECRET, NOW, sells))?.location).toBe("/gb/account/reset-password")
+    expect(await resetLinkRedirect("/zz/account/reset-password", q, SECRET, NOW, sells)).toBeNull()
+  })
+
+  it("seals the page with no country for the fallback country, and leaves it alone when there is none", async () => {
+    const q = query({ token: TOKEN, email: "a@b.co" })
+    const sells = { has: (code: string) => code === "pk", fallback: "pk" }
+    const result = await resetLinkRedirect("/account/reset-password", q, SECRET, NOW, sells)
+    expect(result?.location).toBe("/pk/account/reset-password")
+    expect(await openReset(result?.cookie.value, SECRET, NOW)).toEqual({ token: TOKEN, email: "a@b.co" })
+    expect(await resetLinkRedirect("/account/reset-password", q, SECRET, NOW, { has: () => true })).toBeNull()
+    expect(await resetLinkRedirect("/account/reset-password", q, SECRET, NOW, { has: () => false, fallback: "zz" })).toBeNull()
+  })
+
+  it("names the reset page's shape, and drops token and email from a query and nothing else", () => {
+    for (const path of ["/pk/account/reset-password", "/zz/account/reset-password/", "/ACCOUNT/Reset-Password", "/a/b/account/reset-password"]) {
+      expect(endsWithResetPage(path), path).toBe(true)
+    }
+    for (const path of ["/pk/account", "/pk/account/reset-password/x", "/pk/account/reset-password-x", "/pk/account/forgot-password"]) {
+      expect(endsWithResetPage(path), path).toBe(false)
+    }
+    expect(withoutResetParams(`?token=${TOKEN}&email=a%40b.co`)).toBe("")
+    expect(withoutResetParams(`?utm=x&token=${TOKEN}&Email=a%40b.co&TOKEN=y&k=v`)).toBe("?utm=x&k=v")
+    expect(withoutResetParams("?utm=x")).toBe("?utm=x")
+    expect(withoutResetParams("")).toBe("")
   })
 
   it("leaves other paths and a request with no query alone", async () => {
