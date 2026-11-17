@@ -45,6 +45,8 @@ vi.mock("next/image", () => ({
 import { accountOrderView } from "@lib/util/account-orders"
 import { parseCheckoutRules } from "@lib/util/checkout-rules"
 import { orderConfirmationView } from "@lib/util/order-confirmation"
+import { rushControlView } from "@lib/util/rush"
+import { RushChoiceProvider, useRushChoice } from "@modules/cart/components/rush-choice"
 import AccountOrderTemplate from "@modules/account/templates/account-order-template"
 import { UndoToastProvider } from "@modules/cart/components/undo-toast/provider"
 import CartTemplate from "@modules/cart/templates"
@@ -186,6 +188,28 @@ describe("the Delivery speed control on the cart page", () => {
     expect(radios().rush.checked).toBe(true)
     expect(screen.queryByTestId("speed-error")).toBeNull()
     expect(screen.getByTestId("speed-announcement")).toHaveTextContent("Rush chosen.")
+  })
+
+  it("a choice asked for from elsewhere on the page (the hint's button) that is chosen already sends nothing", async () => {
+    const control = rushControlView(parseCheckoutRules(rulesPkRushOffered), "pkr")
+    const Ask = () => {
+      const state = useRushChoice()
+      return (
+        <button type="button" onClick={() => state?.choose("standard")}>
+          ask
+        </button>
+      )
+    }
+    render(
+      <RushChoiceProvider control={control}>
+        <Ask />
+      </RushChoiceProvider>
+    )
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "ask" }))
+    })
+    expect(rush.calls).toEqual([])
+    expect(nav.refreshed).toBe(0)
   })
 
   it("Standard from rush: DELETE, never a call for the card already chosen", async () => {
