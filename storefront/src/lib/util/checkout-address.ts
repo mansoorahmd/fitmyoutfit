@@ -543,16 +543,25 @@ export const sameAddress = (a: AddressLike | null | undefined, b: AddressLike | 
 export const shouldSaveToAccount = (saved: AddressLike[] | null, address: AddressLike): boolean =>
   !saved || !saved.some((a) => sameAddress(a, address))
 
-/** A customer's saved addresses in this region, the default one first. */
+/**
+ * A customer's saved addresses in this region, the default one first, then
+ * the most recently added: with none marked as the default the checkout
+ * still offers (and selects) one, the newest (S1-11).
+ */
 export const savedAddressesInRegion = <
-  T extends AddressLike & { id: string; is_default_shipping?: boolean | null }
+  T extends AddressLike & { id: string; is_default_shipping?: boolean | null; created_at?: string | Date | null }
 >(
   addresses: T[] | null | undefined,
   countryCodes: string[]
-): T[] =>
-  (addresses ?? [])
+): T[] => {
+  const addedAt = (a: T) => new Date(a.created_at ?? 0).getTime() || 0
+  return (addresses ?? [])
     .filter((a) => !!a.country_code && countryCodes.includes(a.country_code.toLowerCase()))
-    .sort((a, b) => Number(!!b.is_default_shipping) - Number(!!a.is_default_shipping))
+    .sort(
+      (a, b) =>
+        Number(!!b.is_default_shipping) - Number(!!a.is_default_shipping) || addedAt(b) - addedAt(a)
+    )
+}
 
 /**
  * The fields of a saved address put into the form, with its own phone

@@ -483,6 +483,19 @@ describe("saved addresses", () => {
     expect(savedAddressesInRegion(saved, ["pk"]).map((a) => a.id)).toEqual(["a3", "a1"])
   })
 
+  it("with none marked as the default, the most recently added comes first (S1-11)", () => {
+    const list = [
+      { ...saved[0], id: "x1", is_default_shipping: false, created_at: "2026-10-01T00:00:00Z" },
+      { ...saved[0], id: "x2", is_default_shipping: null, created_at: "2026-11-09T00:00:00Z" },
+      { ...saved[0], id: "x3", is_default_shipping: false, created_at: "2026-10-20T00:00:00Z" },
+    ]
+    expect(savedAddressesInRegion(list, ["pk"]).map((a) => a.id)).toEqual(["x2", "x3", "x1"])
+    // a marked default still comes first
+    expect(
+      savedAddressesInRegion([...list, { ...saved[0], id: "x4", is_default_shipping: true, created_at: "2026-01-01T00:00:00Z" }], ["pk"])[0].id
+    ).toBe("x4")
+  })
+
   it("fill the form with the chosen address's own phone (QA S1-4, D14)", () => {
     const empty = form("pk", { phone: "" })
     expect(withSavedAddress(empty, saved[2]).phone).toBe("0321 7654321")
