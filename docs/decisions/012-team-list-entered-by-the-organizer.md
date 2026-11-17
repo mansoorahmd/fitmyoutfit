@@ -27,3 +27,28 @@ Unchanged: the organizer pays (50% deposit at proof approval, 50% before shippin
 - A player link, if it comes back, is an addition: a token on the team order and a page that edits one line. Nothing in this decision blocks it.
 - The specification [docs/design/06-editor.md](../design/06-editor.md) says the roster entry is outside the editor (its section on what the editor does not do) and the research note [docs/design/01-research.md](../design/01-research.md) describes the link flow. The designer corrects both and specifies the team list step before E4 is built.
 - [dev-plan.md](../../dev-plan.md) M2, M3 and E4 and [plan.md](../../plan.md) were updated on the same day with the founder's go-ahead.
+
+## Added 17 Nov, after the designer's specification ([08-team-list.md](../design/08-team-list.md))
+
+The designer specified the step and marked ten decisions for the coordinator. All are taken as recommended:
+
+1. **The Players tab is the team list.** The name and number style move one level down ("Style"). Not a separate step after Done, not a full-screen sheet.
+2. **One undo history** for the design and the list.
+3. **The list's columns follow what the design prints.** When only the number prints, the name stays as an optional field that is not printed. When neither prints, the list is one stepper per size.
+4. **Spare shirts are in the first version:** "No name on this shirt" and "No number on this shirt" per line.
+5. **Two shirts for one player are in the first version,** as a count per line (same size). Two sizes for one player waits.
+6. **A goalkeeper or coach kit in another colour is not in the first version:** it is a second design and a second team order.
+7. **Limits, all kept as data, not in code:** 100 lines per list; 1 to 10 of one shirt per line; a name may shrink to 75% of the style's size before it counts as too long; the server uses a fixed 18-character limit until it can measure fonts. The 75% figure is a placeholder until the factories say what prints well.
+8. **The reader for pasted lists and CSV files lives in the shared roster-rules module,** so the server reads a list the same way as the editor.
+9. **The M2 models get the fields this needs** (a count and the two flags on a roster entry; which fields the design prints on the team order). dev-plan.md is updated.
+10. **"0" and "00" are the same number,** as the jersey number rule already says.
+
+The designer's five questions for the founder are answered here as working placeholders by the coordinator, to be confirmed with the other parked business inputs when the whole project works:
+
+- Every piece counts towards the export minimum, spares and second shirts included.
+- Latin names print in capitals by default, with an "As typed" choice (a small engine addition in E4).
+- Spare and second shirts cost the same per piece as any other.
+- No goalkeeper or coach kit in another colour in the same order at launch.
+- A name too long for the back: the organizer is asked to shorten it; no design-help offer at that point.
+
+Still to follow: the storefront's home page and [03-direction.md](../design/03-direction.md) described the old link flow; the direction has a dated note, and the home page's wording changes in the storefront clean-up task.

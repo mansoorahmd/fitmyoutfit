@@ -11,6 +11,8 @@ type RadioCardProps = {
   value: string
   checked: boolean
   onSelect: (value: string) => void
+  /** Pressed while already checked (a radio sends no change then); only where the page wants to know. */
+  onReselect?: (value: string) => void
   title: React.ReactNode
   children?: React.ReactNode
   /** Shown, still focusable, but can't be chosen (cash on delivery over the limit). */
@@ -40,6 +42,7 @@ const RadioCard = ({
   value,
   checked,
   onSelect,
+  onReselect,
   title,
   children,
   inactive = false,
@@ -79,6 +82,9 @@ const RadioCard = ({
         aria-describedby={describedBy}
         onChange={() => {
           if (!ignore) onSelect(value)
+        }}
+        onClick={() => {
+          if (checked && !ignore) onReselect?.(value)
         }}
         className="peer sr-only"
       />

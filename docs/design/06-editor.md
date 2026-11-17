@@ -2,6 +2,10 @@
 
 12 Nov 2026 · storefront-designer · Task E-UX.
 
+**History**
+- **12 Nov 2026:** first version (task E-UX).
+- **17 Nov 2026:** revised. (1) The founder changed the ordering flow ([decision 012](../decisions/012-team-list-entered-by-the-organizer.md)): players no longer add their own details through a link; the organizer enters every player's name, number and size in a team list inside the editor. The summary, sections 0, 1.1, 1.7, 3.2, 3.5, 4.5, 7.3, 8, 9, 10.3, 13, 14, 15 and 16 now say so and point to [08-team-list.md](08-team-list.md), which specifies the list. The read-only share link for a **design** stays. (2) The rules of the review [07-editor-review.md](07-editor-review.md) section 4 and the corrections of its section 5 are added where they belong (0 MO4; 3.1, 3.3, 3.5; 4's rules for every tool; 4.5, 4.6, 4.8; 5.2; 6.1 and the new 6.4 and 6.5; 7.2, 7.4; 9.2, 9.3; 10.3; 11.2; 12.2 and the new 12.3; 15.3 items 24 to 30), with the four decisions taken after the review (the start card's one left edge and its closing rule; a selected item's warning at the top of its panel; desktop item actions in the panel; the demo page loads the interface fonts) and what the finish round added (the selection box's drawing rule, zooming onto the selected item, the "covers the …" check; decision 009, "Added 17 Nov"). Changed passages say "(rev. 17 Nov)".
+
 This file specifies the interface of the 3D design editor (`packages/editor`), for phone and desktop. It follows direction A, "Matchday" ([03-direction.md](03-direction.md)) and the shared parts in [05-m1-pages.md](05-m1-pages.md) sections 2 and 10, so the editor feels like the same store. E3 is built to it. Nothing here adds a price, a time, a guarantee or a minimum: places that need one say **copy from founders**, and every new sentence is a draft, collected in [section 14](#14-draft-wording-founders-to-confirm).
 
 **How to read this file.** Section 0 says what "easier, more dynamic, more modern" mean, as checks. Section 1 is the research. Section 2 is the editor today. Sections 3 to 11 are the design, from the layout down to the states. Sections 12 and 13 are the look and the components. Section 14 is the wording, section 15 the build order with the E3 checklist and what the engine must add, section 16 the open questions, section 17 the sources.
@@ -15,7 +19,7 @@ Contents:
 5. [Direct manipulation on the model](#5-direct-manipulation-on-the-model)
 6. [View controls and the camera](#6-view-controls-and-the-camera)
 7. [First run and guidance](#7-first-run-and-guidance)
-8. [Roster preview (E4) and proof (E5)](#8-roster-preview-e4-and-proof-e5)
+8. [Team list and roster preview (E4) and proof (E5)](#8-team-list-and-roster-preview-e4-and-proof-e5)
 9. [Saving, sharing, price and "Add to team order"](#9-saving-sharing-price-and-add-to-team-order)
 10. [States and errors](#10-states-and-errors)
 11. [Right-to-left text, accessibility and performance](#11-right-to-left-text-accessibility-and-performance)
@@ -35,7 +39,7 @@ Contents:
 **What I recommend.**
 - **Phone first.** On a phone the garment fills the screen. Six tools sit in a bar at the bottom: Design, Colours, Team, Players, Logos, Text. A tool opens as a short panel from the bottom, and the garment moves up so it is never hidden. On a computer the same six tools sit in a column on the left, with their panel beside it.
 - **Start from the team, not from a blank shirt.** The first screen asks for two things: the team's colours and the team name. Every design in the gallery then shows in those colours with that name, and trying one is a single tap on the 3D model. The name, logo and colours stay when you switch designs.
-- **Names and numbers are not text boxes.** The coach chooses a style (font, colour, outline) and where they go (back, front, sleeve). The values come from each player. Until the roster preview exists (E4), the coach previews with one sample player.
+- **Names and numbers are not text boxes.** The coach chooses a style (font, colour, outline) and where they go (back, front, sleeve). The values come from the team list the organizer enters in the editor's Players tab (E4, [08-team-list.md](08-team-list.md)); until the list has a line, the coach previews with one sample player. (rev. 17 Nov)
 - **Work on the model.** Tap something to select it, drag to move it, use corner handles to resize and turn it, and it snaps to the centre line and the usual print positions. The camera turns by itself to the part you are editing: to the back for numbers, to the sleeve for a sleeve logo.
 - **Light grey stage, navy frame.** The store's navy header carries over, the stage behind the shirt is a light studio grey that darkens slightly for white kits, and there is one red button: "Done".
 
@@ -43,7 +47,7 @@ Contents:
 1. Split E3 into two steps (layout, templates and colours first; then handles and logos), as I recommend, or build it as one.
 2. Patterns and gradients: not in E3. Templates can carry simple stripes, hoops and sashes in E3. A pattern library and gradients come later, and only for printed (sublimated) products. Or bring them forward.
 3. Logo background removal: not in E3. Offer the free design help instead (wording from you), and test a "remove plain background" tool later.
-4. What the editor shows before team orders and accounts exist: a design saved on the phone itself, and a "Done" button that returns to the product page. No share link yet.
+4. What the editor shows before team orders and accounts exist: a design (and, since 17 Nov, its team list) saved on the phone itself, and a "Done" button that returns to the product page. No share link yet.
 
 ---
 
@@ -59,7 +63,7 @@ The founder asked for an editor that is "more easy and dynamic and modern" than 
 | EZ2 | A first-time coach gets from opening the editor to a kit with team colours, team name, a logo and a sample player's name and number in **under 2 minutes**, without help | Timed user test, 5 coaches, median | Plan's success line; NN/g: users skip tutorials (1.6) |
 | EZ3 | No control asks for millimetres, degrees, "layer", "piece", "zone", "direction" or a HEX code by default | Read every label in section 14 | Today's demo does (section 2) |
 | EZ4 | Any main task is at most 3 taps from the editor's resting state (change a colour: Colours, zone, swatch) | Count taps per task in section 4 | Opinion |
-| EZ5 | Names and numbers are set once as a style, never typed per shirt in the editor | Section 4.5 | Spized prints the "Text" field "unchanged on every jersey" and keeps players in a separate list (1.1) |
+| EZ5 | Names and numbers are set once as a style; each player's values are typed only in the team list, never as text boxes on the kit (rev. 17 Nov) | Sections 4.5 and 8; 08-team-list | Spized prints the "Text" field "unchanged on every jersey" and keeps players in a separate list (1.1) |
 
 ### More dynamic
 
@@ -78,7 +82,7 @@ The founder asked for an editor that is "more easy and dynamic and modern" than 
 | MO1 | Direct manipulation on the model: select, move, resize and turn with handles; snapping to the centre line and print positions with a visible guide | Screen recording at 390 and 1366 px | Spized shows guide lines while placing (1.1); NN/g on direct manipulation (1.6) |
 | MO2 | Contextual tools: only the tool in use is open; options belong to the selected thing | Screenshots | Opinion |
 | MO3 | Motion is 150 to 300 ms, never decorative, and turned off with reduced motion | CSS review, `prefers-reduced-motion` test | NN/g, MDN (1.6) |
-| MO4 | The garment keeps at least **45% of the screen height** on a phone in portrait whenever a tool is at its normal height | Screenshot measurement at 360 × 640 | Opinion |
+| MO4 | **The garment's own box** fills 72 to 80% of the height of the free stage on a phone at rest (75 to 80% on wide layouts), and a selected item is at least 120 px on its longer side on a phone (160 px wide) (rev. 17 Nov: the old wording, "45% of the screen height", was read as the stage's height, 07-editor-review 5.11) | Magenta measurement of the garment's box at 360 × 640 and 390 × 844 (section 6.4) | Opinion, then measured in 07-editor-review R22 |
 | MO5 | It looks like our store: navy frame, Barlow Condensed headings, Inter controls, one red button | Side-by-side screenshot with the product page | 03-direction |
 
 ---
@@ -123,7 +127,7 @@ All sources were opened on **12 Nov 2026** with a web-fetch tool, which returns 
 - Standard print positions first, free placement second. Keep.
 - Outlines for names and numbers, because a navy number on a dark kit can't be read. Keep (section 4.5).
 - Guide lines while placing, and a mirror for the second sleeve. Keep (section 5).
-- A per-player preview, sharing by WhatsApp, and a designer check. Keep the idea; our roster flow is different (players fill in their own details).
+- A per-player preview, sharing by WhatsApp, and a designer check. Keep the idea. Our team list is different: the organizer enters every player in the editor, beside the live shirt; there is no player link at launch (rev. 17 Nov, decision 012; [08-team-list.md](08-team-list.md) section 1 compares how Spized, owayo and others take the list).
 - Many templates. We will have about 10 at launch (dev-plan input), so ours must work harder: shown in the team's colours.
 
 **What is clumsy, or a failure to avoid:**
@@ -194,9 +198,9 @@ All sources were opened on **12 Nov 2026** with a web-fetch tool, which returns 
 | --- | --- | --- |
 | 1 | The full editor on a phone, designed phone first | **Evidence:** Spized sends phones to the desktop (1.1) |
 | 2 | The team's colours and name first; every template shown in them, tried on the model with one tap | **Opinion.** Spized's order is design, then colours (1.1) |
-| 3 | Names and numbers as a style plus positions; players fill in the values | **Evidence** that Spized separates fixed text from the team list (1.1); the toggles are opinion |
+| 3 | Names and numbers as a style plus positions; the organizer fills in each player's values in the team list, seen on the shirt line by line (rev. 17 Nov) | **Evidence** that Spized separates fixed text from the team list and takes the list in the cart (1.1; 08-team-list 1.1); the toggles are opinion |
 | 4 | A HEX code is accepted and snapped to the nearest print-tested colour, with both colours shown | **Evidence:** Spized refuses HEX and takes Pantone by email (1.1) |
-| 5 | The player switcher on the stage, always one tap away (E4) | **Evidence** that Spized's preview sits behind "Edit" and opens after saving (1.1) |
+| 5 | The team list beside the live shirt, and the player switcher on the stage, always one tap away (E4, 08-team-list) | **Evidence** that Spized's preview sits behind "Edit" and opens after saving (1.1) |
 | 6 | The camera turns to what you edit | **Opinion** |
 | 7 | One red button, "Done"; no countdowns or promotions inside the editor | **Evidence** of Spized's countdown (1.1); direction A |
 | 8 | A warning when a name or number is hard to read on its background, with a one-tap "Add outline" | **Evidence** that Spized documents outlines for this (1.1); the automatic check is opinion |
@@ -245,6 +249,8 @@ The editor picks its layout from the visible area (`visualViewport`), not the de
 | **Short** | height < 500 px and width > height (phone in landscape) | Rail: six tabs down the right edge | Side panel, 320 px, sliding in left of the rail |
 | **Wide** | width ≥ 1024 px and height ≥ 500 px | Rail: six tabs down the left edge | Panel, 360 px, beside the rail, always open |
 
+**Sizes to check (rev. 17 Nov):** compact at 360 × 640 and 390 × 844, tablet 820 × 1180, short 844 × 390, and wide at **1366 × 600** (the smallest wide size: the founder's own window is about 1420 × 612 CSS px at a scale of 1.35, 07-editor-review section 2), 1366 × 768 and 1920 × 1000. The framing rule (6.4) must hold at 1366 × 600.
+
 **Why tools at the bottom on phones:** a coach holds the phone in one hand; the bottom is where the thumb is (opinion). **Why one panel at a time:** NN/g found stacked sheets confuse people (1.6). **Why the panel is non-modal:** the garment stays live under it; every change is seen at once (DY4, DY5).
 
 **On the store's routes.** On phones the editor opens full screen on its own route, as 03-direction already says. The store header and footer are not shown inside the editor; the editor's top bar replaces them. On desktop the same full-window route is used (the product page's "Design in 3D" opens it), because the editor needs the width.
@@ -258,7 +264,7 @@ In the order a coach uses them. One icon and one word each. They are tabs (`role
 | 1 | **Design** | Templates | 4.1 |
 | 2 | **Colours** | Colour zones, team colours, palette, colour code | 4.3 |
 | 3 | **Team** | The team name: where and in what style | 4.5 |
-| 4 | **Players** | Player name and number: style, positions, sample player; the roster preview in E4 | 4.5 |
+| 4 | **Players** | The team list (E4, [08-team-list.md](08-team-list.md)); one level down, "Style": the name and number positions, style and the sample player (rev. 17 Nov) | 4.5, 8 |
 | 5 | **Logos** | Crest and sponsor logos | 4.6 |
 | 6 | **Text** | Other text: a motto, a sponsor name, a hashtag | 4.7 |
 
@@ -343,6 +349,9 @@ COMPACT, panel expanded (dragged up, or "Show all")     360 x 640
 - **Expanded:** up to 60% of the visible height, always leaving the stage at least 160 px. Reached by dragging the handle up, or "Show all" / "Show more" in the header (dragging is never the only way: WCAG 2.5.7).
 - Changing tools keeps the current detent if the new tool has content for it, otherwise it goes back to normal.
 - **One panel at a time.** Anything that needs a further choice (a font list, a colour code) opens **inside** the same panel, with a "‹ Back" row at the top, never as a second sheet.
+- **One sheet at a time, the Done panel included (rev. 17 Nov, 07-editor-review 4.10).** Opening Done closes the tool panel (detent closed); closing Done brings back the tool and its detent. Test: never two visible sheets.
+- **Normal height shows whole rows (rev. 17 Nov, R39).** The panel body ends after its last complete row, with a 16 px fade at its bottom edge while it scrolls; no line of text is cut in half at the dock.
+- **The Players tab's team list** opens at the expanded height, because it needs the room (08-team-list 3.2). (rev. 17 Nov)
 
 **The garment is never hidden (DY4).** The 3D canvas always fills the area between the top bar and the dock. When the panel opens, the editor tells the camera how much is covered (`viewInsets.bottom`) and the camera frames the garment in the free area above it, over 200 ms ease-out (instant with reduced motion). The canvas is not resized while the panel moves (resizing every frame would reallocate the drawing buffer); it is re-framed once the panel settles.
 
@@ -366,7 +375,7 @@ COMPACT, typing the team name, keyboard open            360 x ~380 visible
 |                   phone keyboard                           |
 ```
 
-**768 px (tablet, portrait).** The same compact layout. The dock's tabs are 96 px wide, centred in a 600 px group; the panel is full width with its content limited to 560 px and centred; the stage is about 70% of the height with a tool open. In landscape, a tablet (1024 × 768) uses the wide layout.
+**768 px (tablet, portrait).** The same compact layout. The dock's tabs are 96 px wide, centred in a 600 px group; the panel is full width with its content limited to 560 px and centred, **and the panel's header (title, "?", close) sits in the same centred 560 px column** (rev. 17 Nov, 07-editor-review 5.6 and R9); the stage is about 70% of the height with a tool open. In landscape, a tablet (1024 × 768) uses the wide layout.
 
 ### 3.4 Short layout (phone in landscape)
 
@@ -417,11 +426,13 @@ WIDE, Players open, an item selected                                       1366 
   88 px rail · 360 px panel · stage 918 px
 ```
 
+*(rev. 17 Nov) The panel in this drawing is the Players tool as first specified. With the team list, the Players tab opens on the list (480 px wide, [08-team-list.md](08-team-list.md) 3.4), and the content drawn here is its "Style" view; "Preview as" shows there only while the list is empty. The drawing still shows the wide layout correctly.*
+
 - **Top bar, 64 px, `inverse` (navy):** wordmark and garment name on the left (the wordmark links nowhere inside the editor; leaving is the close action, 3.6); undo and redo with their words; the save state; then, on the right, Share (secondary, on navy: white outline), the price (host slot, section 9), and **Done** (the one red button).
 - **Rail, 88 px:** six tabs, 72 px tall, a 24 px icon over a 14 px label. The active tab: `surface-alt` fill, 3 px `ink` bar on its start edge, label semibold, `aria-selected`.
-- **Panel, 360 px:** always open in the wide layout (there is room). Its title in Barlow Condensed (`h3`); content scrolls inside it; the stage never scrolls.
-- **Stage:** the rest. The player chip (E4) at the top centre; "On this kit" at the top right; view buttons at the bottom centre; zoom at the bottom right.
-- **1280 × 720** (the smallest desktop we design for): the same; the stage is 832 × 656.
+- **Panel, 360 px:** always open in the wide layout (there is room). Its title in Barlow Condensed (`panel-title`, 12.3); content scrolls inside it with a thin bar and a stable gutter (12.3, rule 4.8 of the review); the stage never scrolls. **In the Players tab's team list the panel is 480 px wide** (08-team-list 3.4). (rev. 17 Nov)
+- **Stage:** the rest. The player chip (E4) at the top centre of the free stage; "On this kit" at the top right; view buttons at the bottom centre of the free stage; zoom at the bottom right. What may sit where is ruled in 6.5.
+- **1280 × 720:** the same; the stage is 832 × 656. **1366 × 600** is the smallest wide size checked (3.1): the panel scrolls, the stage is 918 × 536. (rev. 17 Nov)
 
 ### 3.6 Top bar contents and leaving
 
@@ -438,7 +449,9 @@ WIDE, Players open, an item selected                                       1366 
 Rules for every tool:
 - **No Apply buttons.** Every choice shows on the model at once and is one undo step.
 - **Units:** sizes are words or relative (Small, Medium, Large; Bigger, Smaller). Millimetres appear only in the fine-tune panel, on desktop, as secondary text.
-- **Each tool's panel header:** title (Barlow Condensed 20/26 uppercase), a "?" button that opens one short tip for that tool inside the panel (a pull revelation, 1.6), and the close or collapse button.
+- **Each tool's panel header:** title (`panel-title`: Barlow Condensed 20/26 uppercase, may wrap to two lines, never cut, R6), a "?" button that opens one short tip for that tool inside the panel (a pull revelation, 1.6), and the close or collapse button. The header's icon buttons keep a 44 px hit area with their icon's edge on the content edge (12.3). (rev. 17 Nov)
+- **A selected item's warning leads its panel (rev. 17 Nov, decision D2 of the review, R15).** When the selected item has a warning (hard to read, blurry, no transparent background, cut at a seam, covers another item), the warning and its one-tap fix sit at the top of the panel, directly under the item's name and actions, above everything else, in the warning alert style. It must be inside the visible panel without scrolling at 1366 × 768 and 390 × 844.
+- **Desktop item actions stay in the panel (rev. 17 Nov, decision D3, R13):** on wide layouts the selected item's actions (Delete, Duplicate, More, Done) are one row at the top of its panel, icon over label, no border, 44 px tall, each at least 64 px wide, under the item's name in `section-title`.
 - **The camera** turns to the side the tool works on when the tool opens (6.3).
 
 ### 4.1 Design (templates)
@@ -535,8 +548,8 @@ To a coach these are three different things, not three text boxes. The interface
 | Role | Same on every shirt? | Where its value comes from | Tool |
 | --- | --- | --- | --- |
 | **Team name** | Yes | Typed once by the coach | Team |
-| **Player name** | No | Each player (the roster, E4); a sample in E3 | Players |
-| **Number** | No | Each player (the roster, E4); a sample in E3 | Players |
+| **Player name** | No | The team list the organizer enters (E4, 08-team-list); a sample while the list is empty | Players |
+| **Number** | No | The team list the organizer enters (E4, 08-team-list); a sample while the list is empty | Players |
 
 Each item on the kit carries its role (N1). Templates place the role slots; the coach never "adds a text box" for a name or number.
 
@@ -546,17 +559,17 @@ Each item on the kit carries its role (N1). Templates place the role slots; the 
 - **Style:** font (a list showing the team name in each font, 4.5.1), colour (team colours first), outline (None / Thin / Thick), size (Small / Medium / Large).
 - The camera turns to the front (or the back for "Above the number").
 
-**Players tool:**
-- A line: "Each player's name and number come from your team list." (W-ED71, **P**: it describes the team-order flow; founders to confirm).
-- **Preview as:** a sample player: name field (`dir="auto"`) and number field (`inputmode="numeric"`, 2 characters wide). Prefilled with a sample (W-ED72b). This sample is editor data, not part of the order.
+**Players tool (rev. 17 Nov):** the tab opens on **the team list**, specified in [08-team-list.md](08-team-list.md): one line per player (name, number, size), typed or pasted, each line shown on the shirt as it is chosen, with the checks beside the line. Everything below is the tab's **"Style"** view, one level down ("Style ›" in the list's toolbar, "‹ Back" to return), set once for the whole team:
+- A line: "Each player's name and number come from your team list." (W-ED71, **P**: it describes the team-order flow; founders to confirm). It now describes the list in this same tab.
+- **Preview as:** a sample player: name field (`dir="auto"`) and number field (`inputmode="numeric"`, 2 characters wide). Prefilled with a sample (W-ED72b). This sample is editor data, not part of the order. **Shown only while the team list is empty;** once the list has a line, the shirt shows the chosen line instead (08-team-list 7.3).
 - **On the shirt** (switches, 44 px rows): "Name on back" (on), "Number on back" (on), "Number on front" (off), "Number on sleeve" (off, only if the product has sleeve placements). Each switch adds or removes the role slot at its preset position.
 - **Style:** font for the name, font for the number (or one "lettering set" that pairs them, when the font catalogue has sets; opinion: offer sets first, "Change fonts separately" second), colour, outline, size.
-- **Digits:** "0–9" or "٠–٩" (the founder's two systems; the number rule also accepts Urdu-form digits, which the sample field accepts as typed).
+- **Digits:** "0–9" or "٠–٩" (the founder's two systems; the number rule also accepts Urdu-form digits, which the sample field accepts as typed). With a team list, numbers print as typed in each line, and this control becomes "Show all numbers as 0–9 / ٠–٩", converting every line in one undo step (08-team-list 7.4). (rev. 17 Nov)
 - The camera turns to the back.
 
-**Readability check (DY5, evidence 1.1):** when a name, number or team name sits on a zone whose colour gives less than **3:1** contrast with the text colour (the WCAG non-text ratio as a stand-in for "readable from the stands"; opinion), the style section shows an inline warning with the alert icon: "Hard to read on Navy." and a button "Add outline" that adds a Thin outline in the team colour with the highest contrast. Not blocking. (N15.)
+**Readability check (DY5, evidence 1.1):** when a name, number or team name sits on a zone whose colour gives less than **3:1** contrast with the text colour (the WCAG non-text ratio as a stand-in for "readable from the stands"; opinion), an inline warning with the alert icon says "Hard to read on Navy." with a button "Add outline" that adds a Thin outline in the team colour with the highest contrast. Not blocking. (N15.) **Where (rev. 17 Nov, R15, D2):** while the item is selected the warning sits at the top of its panel (4, "A selected item's warning leads its panel"); otherwise in the style section. The rule as built (decision 009): letters must stand out on every colour under the item's box; an outline rescues the item only when the letters stand out on none of those colours and the outline on all of them.
 
-**Long names:** when the sample name is wider than its box, the engine already shrinks it evenly. The panel says "Long names get smaller to fit." under the field, only while that is happening (N12). The real maximum per font is E4.
+**Long names:** when a name is wider than its box, the engine shrinks it evenly. The Style view says "Long names get smaller to fit." under the sample field, only while that is happening (N12). **The real maximum (rev. 17 Nov):** a name may shrink down to the smallest allowed size (placeholder 75% of the style's size, from the factories later); beyond that the team list marks the line "Too long for the back" (08-team-list 6.1). The rule lives in the shared roster-rules module.
 
 **Number errors** (from `checkJerseyNumber`, reworded for coaches): 3 digits or more: "Use 1 or 2 digits, from 0 to 99." Mixed digits: "Use one kind of digits, not both." Empty: the field keeps the last valid number on the model and says "Enter a number to preview." No error stays on the model.
 
@@ -613,6 +626,7 @@ Three choices (None, Thin, Thick), a segmented control, and an outline colour (t
 - **No transparent background:** "No transparent background: it will print as a box with its background colour." The model shows exactly that. Two actions: "Keep it" (dismisses the warning for this logo) and the design-help link (**copy from founders**). No automatic background removal in E3 (1.5 and Q-B2).
 - **Low resolution at this size:** recomputed live while resizing (the check needs the design data only). "May print blurry at this size. Sharp up to {size}." plus **"Make it sharp"**, which shrinks it to the largest sharp size (one undo step). The item on the model and its row in "On this kit" get a warning badge.
 - Warnings use the warning colour (12.2), the alert icon and words; never colour alone.
+- **Where they show (rev. 17 Nov, R15, D2):** while the logo is selected, its warnings and their fixes lead the panel (section 4, rules for every tool); after an upload with two warnings, both are in view on a phone at the normal height. The badge on the model is not drawn for the selected item; on unselected items it is a `button` named "Needs a look: {warning}" (for example "Needs a look: hard to read on White"), with a `title`, never `aria-hidden`; a click or tap on it selects the item.
 
 **SVG:** refused with W-ED94f, which says what to do instead.
 
@@ -645,6 +659,8 @@ Coaches don't think in layers (T4). The list says what is on the shirt.
 - The selected item shows its handles (section 5) and its tool opens.
 - **Esc**, tapping empty stage, or "Done" in the contextual bar deselects.
 - Selection is not part of undo history (as today).
+- **Focus on selection (rev. 17 Nov, R16):** a selection made with the pointer leaves the keyboard focus where it was; a selection from "On this kit" moves focus to the panel's title (`tabindex="-1"`, no visible ring). Focus never jumps to "Fine-tune".
+- **Selecting zooms onto the item (rev. 17 Nov, finish round, decision 009):** see 6.4.
 
 ### 4.9 Room for decoration methods
 
@@ -692,20 +708,30 @@ None of this is in E3 beyond the header line; the data shape is (N5).
 ```
 
 - **Drawn as an overlay above the canvas** (SVG), not into the texture, so dragging a handle doesn't need a repaint to show the handle. The engine projects the item's four corners from the pattern piece to the screen (N9) after every camera move and every change.
+- **The selection box drawing rule (rev. 17 Nov, 07-editor-review 4.5, R31 to R34; built in the finish round, decision 009):**
+  - **Four straight lines** between the four projected corners, **outset 8 px** in screen space (each corner moved 8 px away from the centre along its diagonal); never a polyline along the cloth. The two-tone line stays (1.5 px `ink` over 3.5 px white).
+  - **At least 44 × 44 px** on screen: a smaller item gets a 44 px box around its centre.
+  - **Corner handles on the outset corners;** the turn handle on a 24 px stem from the middle of the top edge, **moved below the bottom edge** when its 44 px hit circle would touch another item's box or the stage's top row, and to the end side's middle when that is blocked too. The stem follows.
+  - **No badge on the selected item;** its warning is at the top of its panel (section 4).
+  - **The overlay is clipped to the free stage** (below the top row, above the view row, 6.5).
+  - Handles' hit areas may overlap the box, never each other, another item or a stage control.
+  - *Test:* the box line has exactly 4 points; no handle square intersects the item's projected box, another item's box or a stage control.
 - **Corner handles scale evenly** (text and logos keep their proportions). There are no side handles: names and numbers never stretch.
 - **When the item faces away** from the camera (more than about 75° from the view direction), the handles hide and a chip at the top of the stage says "Turn to edit" (W-ED112), which turns the camera to it.
 - **Snapping during move** (shown as a 1 px `focus`-blue dashed guide drawn editor-only into the texture, like today's selection outline, so it follows the curve):
   - the vertical centre line of the piece;
   - the centre of each position preset (left chest, centre chest, back number…);
   - the horizontal centre line of another item on the same piece (name above number).
-  - Snap distance: 6 mm on the garment or 8 screen px, whichever is larger; snapping is released by moving past it. Holding Alt (mouse) disables it.
+  - Snap distance: 6 mm on the garment or 8 screen px, whichever is larger; snapping is released by moving past it. Holding Alt (mouse) disables it; on touch, a switch in Fine-tune does (decision 009).
   - Turning snaps at 0°, ±15°, ±45°, ±90°.
+  - **Guides (rev. 17 Nov, R35):** only the guide that is snapping now is drawn, never every candidate, and it is **not drawn inside the moved item's box** (the line breaks 4 px before the box), so the coach can read the name while placing it.
 - **Limits:** each piece has a print area (N6). The item's box stops at its edge; while dragging, the print area shows as a dashed outline on the piece. Today's rule keeps only the item's **centre** in the piece's box, so part of an item can disappear past a seam; with print areas the whole box stays in.
 - **Clipped at a seam:** if an item is still cut by the piece's outline (a large logo near a curved edge), the item gets a warning badge and "Part of this is cut off at the seam." (W-ED111) with "Move it in" (moves it to the nearest position where it fits). Spized advises against graphics over seams (1.1).
+- **Drawn over another item (rev. 17 Nov, finish round, decision 009):** when an item's box overlaps another item's box on the same piece (a number grown over the name), it gets a warning, "This covers the {other item}." (W-ED111c, for example "This covers the player name."; as built), with a one-tap fix, "Move it clear" (W-ED111d), that moves it to the nearest free place or, if there is none, makes it smaller until it fits. Like every warning it never blocks, and while the item is selected it leads the panel.
 
 **Contextual bar** (for the selected item):
-- **Compact:** a 48 px row at the **top of the stage**, under the top bar: the item's name ("Logo: crest.png"), then icon buttons with labels: Delete, Duplicate (logos and text), More (opens the item's "⋯" menu), Done (deselect). Never over the item or its handles (1.4); the camera keeps the selected item in the free area under the bar. While it shows, it **replaces** the stage's top row (the "On this kit" button and, in E4, the player chip); they come back on deselect.
-- **Wide:** the same actions at the top of the panel, under its title.
+- **Compact:** a 48 px row at the **top of the stage**, under the top bar: the item's name ("Logo: crest.png"), then icon buttons with labels: Delete, Duplicate (logos and text), More (opens the item's "⋯" menu), Done (deselect). Never over the item or its handles (1.4); the camera keeps the selected item in the free area under the bar. While it shows, it **replaces** the stage's top row (the "On this kit" button and, in E4, the player chip); they come back on deselect. It is **centred in the free stage**: in the short layout its end edge stops at the side panel's width + 8 px (the same `viewInsets.right` the camera uses), and if it doesn't fit, the item's name is cut first, never "Done" (rev. 17 Nov, R27).
+- **Wide:** the same actions at the top of the panel, under the item's name, as **one row** of icon-over-label buttons (decision D3 of the review, section 4's rules). (rev. 17 Nov)
 
 **Fine-tune (the non-dragging way, WCAG 2.5.7):** in the selected item's tool, a "Fine-tune" disclosure (closed by default) holds: Size − / + (10%), Turn ↺ / ↻ (15°), Straighten, Move ← → ↑ ↓ (2 mm; long-press repeats), "Centre on the shirt". On desktop each value also shows in millimetres or degrees as secondary text, for organisers who know what they want (opinion).
 
@@ -727,7 +753,8 @@ Today every move repaints and re-uploads a 2048 px texture; on a mid-range phone
 - **Side buttons:** "Front", "Back", "Left", "Right": a segmented control with words, 44 px tall, at the bottom left of the stage on compact (each about 64 px wide; at 360 px the group is 4 × 64 = 256 px), bottom centre on wide. The current side is pressed (`aria-pressed`, `ink` fill, white label). When the coach has turned the garment freely, none is pressed.
 - **Zoom:** + and − (44 × 44, a vertical pair at the bottom right of the stage, on every layout: WCAG 2.5.1 needs a single-pointer way to zoom, 1.6). Steps of 1.25×, within the engine's limits; at a limit the button is inactive with `aria-disabled`.
 - **Reset view** (`o`, 44 × 44, under the zoom pair): back to the front at the fitting distance.
-- **Style:** `surface` at 92% opacity with a 1 px `border` line and `radius-control`, so they read as buttons on any stage tone; icons and labels `ink`.
+- **Style (rev. 17 Nov, corrected; 07-editor-review 5.2 and R25):** the floating-control look of 6.5, shared by every control on the stage: fill `surface` at 96%, a 1 px line `rgb(11 21 48 / 0.24)`, shadow `0 1px 3px rgb(11 21 48 / 0.12)`; each keeps its shape (segmented and square buttons `radius-control`, chips and bars as pills); icons and labels `ink`. (The first version said `surface` at 92% with a 1 px `border` line: that line is 1.06:1 against the stage, too faint.)
+- **Hover (pointer only, R17):** a solid `surface` fill; hover never looks like pressed.
 
 ### 6.2 Free rotation and its limits
 
@@ -748,8 +775,32 @@ The camera moves only **in answer to the coach's own action**, never on a timer:
 
 - **Duration:** 350 ms ease-in-out for a turn (a "big movement", 1.6); 200 ms for re-framing. **Reduced motion:** cuts, no animation.
 - **Never** while a finger or the mouse is down on the stage, and not within 1.5 s after the coach turned the garment by hand (they are looking at something; opinion).
-- **Tapping an item on the model never moves the camera** (the coach is already looking at it).
+- **Tapping an item on the model never turns the camera** (the coach is already looking at it); on phones it may **zoom** toward the item (6.4).
+- **Choosing a player in the team list never moves the camera** (only the letters change; 08-team-list 3.2). (rev. 17 Nov)
 - **No idle spin**, no auto-rotate after loading. 03-direction: nothing auto-plays.
+
+### 6.4 Framing rule (rev. 17 Nov, 07-editor-review 4.6, R22 to R24; built in the finish round)
+
+- **Free stage** = the stage minus its top row (the credit line, 24 px, and the 52 px row of the hint or the contextual bar when one shows), minus its bottom row (view controls 44 px + 12 px), and minus any panel (`viewInsets`).
+- **At rest:** the garment's own box is **72 to 80%** of the free stage's height on compact layouts and **75 to 80%** on wide ones, centred in it, never under a row.
+- **Item selected, compact:** the camera zooms toward the item until its box is at least **120 px** on its longer side (wide: **160 px**) or the zoom limit is reached; the item and its handles stay inside the free stage. Zooming stops while the item's box still fits the free stage (decision 009, "Selecting an item zooms onto it").
+- **Zoom aims** at the selected item, or, without a selection, at the point under the pointer, clamped so the garment's centre stays in view. Reset always returns to the rest framing.
+- **The team list's back close-up** (compact): the name and number box plus 12% fills 80% of the free stage's height (08-team-list 3.2).
+- *Test:* the magenta method (07-editor-review section 1): fill ≥ 0.72 at rest at 360 and 390; ≥ 0.75 at 1366 × 768; the selected item's box ≥ 120 px at 360 × 640; at 1420 × 612 zoomed to the limit, no handle overlaps the credit line.
+
+### 6.5 What may sit on the stage, and where (rev. 17 Nov, 07-editor-review 4.7)
+
+| Place | What | Rule |
+| --- | --- | --- |
+| Top start | The model's credit line | One line, never over the garment |
+| Top end | "On this kit" | Icon-only below 480 px |
+| Top row, centred in the free stage | **One** of: the contextual bar, the status line, "Turn to edit", the hint, the player chip (in that priority) | Never two at once |
+| Under the top row, full width minus the kit button | The flat-view or error banner | Ends 8 px before the kit button (R28) |
+| Bottom start (compact) / bottom centre of the free stage (wide) | Front, Back, Left, Right | Follows `viewInsets`; hidden in the team list on compact, where the player pill takes the row (08-team-list 3.2) |
+| Bottom end | Zoom pair and Reset (Reset only at the normal height and with the start card) | Follows `viewInsets`; with the Done panel open on wide layouts, the controls follow `viewInsets.right` or hide (R29) |
+| On the garment | Only the selection overlay, and warning badges on unselected items | — |
+
+All floating controls share one look (6.1). *Test:* the pairwise overlap audit of stage controls is empty in every state.
 
 ---
 
@@ -775,21 +826,25 @@ COMPACT, first open                                     360 x 640
 |                                          picked            |
 +------------------------------------------------------------+
 | LET'S MAKE YOUR TEAM'S KIT                                 |
-| 1  Team colours  (pick 2 or 3)                             |
-|    [##][##][##][##][##][##][##] >          Main  Second    |
-|                                            [##]  [##] [+]  |
-| 2  Team name                                               |
-|    [ e.g. Lahore Lions                             ]       |
+| (1) Team colours (pick 2 or 3)                             |  step number inline:
+| [##]1 [##]2 [##] [##] [##] [##] [##] >                     |  one left edge at +16
+| Main: Red · Second: Navy                                   |
+| (2) Team name                                              |
+| [ e.g. Lahore Lions                                    ]   |
 | [      SEE DESIGNS IN YOUR COLOURS      ]  (secondary)     |
-|                Skip: start from this design                |
+|     Skip for now: you can change everything later          |
 +------------------------------------------------------------+
 ```
 
-- **Height:** the start card is the one panel that opens taller than 232 px: about 330 px on a 360 × 640 phone (the expanded rule: the stage keeps at least 160 px). It is shown once, and the garment above it is still live.
-- **Team colours:** a sideways row of the palette's most-used colours (palette data, N14) plus "All colours ›". Tapping fills Main, then Second, then Accent; tapping a filled slot clears it. The garment recolours as each is picked.
+*(rev. 17 Nov) Redrawn after the review (07-editor-review R2, R5, decision D1): the first drawing put the step numbers in a gutter and produced two left edges.*
+
+- **One left edge (rev. 17 Nov, decision D1, R2):** the step number is a 24 px circle **inline** in its label row (8 px gap, then the label, `align-items: center`); the swatches, the field and the button start at the panel's content edge (+16) and end at −16. Only the centred "Skip" line is an exception (12.3, panel grid). On wide and short layouts the swatches wrap (six 44 px swatches per row at 8 px gaps in the 328 px column), so no swatch is cut.
+- **Height:** the start card is the one panel that opens taller than 232 px: about 330 px on a 360 × 640 phone (the expanded rule: the stage keeps at least 160 px). It is shown once, and the garment above it is still live. **On compact, while it is open, the stage shows only Reset, not + and −**, and the garment must be at least 120 px tall at 360 × 640 (rev. 17 Nov, R5).
+- **Team colours:** a sideways row of the palette's most-used colours (palette data, N14) plus "All colours ›". Tapping fills Main, then Second, then Accent; tapping a picked swatch clears it. The garment recolours as each is picked. **The pick order shows on the swatches themselves (rev. 17 Nov, R5):** a 20 px `ink` badge "1", "2", "3" on the picked swatch's top end corner, with "Main", "Second", "Accent" in its accessible name, and a line under the row, "Main: Red · Second: Navy". The separate slot row of the first version is gone (it cost 44 px and had 36 px targets, R7).
 - **Team name:** the `TextField`, `dir="auto"`. The name appears on the chest as it is typed. A placeholder, not a prefilled value (opinion: a fake team name on a real kit looks like ours, not theirs).
 - **"See designs in your colours"** (secondary button style: the red button stays "Done"): closes the card and opens Design at expanded height, with every card in the team's colours and name.
-- **"Skip: start from this design"** (text link) closes the card. So does Close or Esc. Nothing is lost: colours picked so far are kept.
+- **"Skip for now: you can change everything later"** (text link; rev. 17 Nov, R5: the first version's separate line "You can change everything later." moved into it) closes the card. So does Close or Esc. Nothing is lost: colours picked so far are kept.
+- **The closing rule (rev. 17 Nov, decision 009 "Added 17 Nov", R1):** while the card is open, the **first tap or click on an item on the model closes the card as "Skip"** (colours and name picked so far are kept), selects that item and opens its tool. **Turning and zooming the garment do not close it.** The coach can go straight to the shirt, and never edits with no tool in view.
 - The card is shown once per new design. Reopening a design never shows it.
 - **Wide layout:** the same content in the panel, with the Design tab's rail item highlighted.
 
@@ -798,15 +853,15 @@ COMPACT, first open                                     360 x 640
 1. Start card: 2 colours, team name (30 s).
 2. Design: tap 2 or 3 cards, keep one (30 s).
 3. Logos: add a crest, it lands on the left chest (25 s).
-4. Players: type a sample name and number; the camera is already on the back (20 s).
+4. Players: the camera is already on the back; add the first player to the team list (or type a sample in Style) (20 s).
 5. Done (5 s).
 
-That is 2 minutes with some slack. The user test (EZ2) checks it.
+That is 2 minutes with some slack. Entering the rest of the team is timed separately (08-team-list TL1 and TL2). (rev. 17 Nov) The user test (EZ2) checks it.
 
 ### 7.4 Guidance without a tutorial
 
 - **Empty states that say what to do next,** in the tool where it matters: the Logos box (4.6), "On this kit" (4.8), the Players switches (4.5).
-- **One hint, once, on the stage,** the first time the model is shown on a touch device: "Drag to turn. Tap something to change it." (W-ED116) as a chip at the top of the stage, dismissed by any touch on the stage. On pointer devices: "Drag to turn. Click something to change it."
+- **One hint, once, on the stage,** the first time the model is shown on a touch device: "Drag to turn. Tap something to change it." (W-ED116) as a chip at the top of the stage. On pointer devices: "Drag to turn. Click something to change it." **It goes (rev. 17 Nov, R26)** on the first touch of the stage, the first selection, the first tool change, or after 8 s, whichever comes first, and it never shows together with the contextual bar, the status line or "Turn to edit" (one thing in the stage's top row, 6.5).
 - **The "?" in each tool's header** opens two or three lines of help for that tool, inside the panel (pull, not push, 1.6).
 - **No coach marks pointing at buttons,** no "Next tip" sequences.
 
@@ -826,19 +881,23 @@ That is 2 minutes with some slack. The user test (EZ2) checks it.
 
 ---
 
-## 8. Roster preview (E4) and proof (E5)
+## 8. Team list and roster preview (E4) and proof (E5)
 
-### 8.1 Roster preview (E4): where it lives
+### 8.1 Team list and roster preview (E4): where they live (rev. 17 Nov)
 
-- **The player chip** on the stage, top centre, 44 px tall: "‹  10 · ALI RAZA  ›" with previous and next buttons (44 × 44 each) and the middle part opening the list. Names are inside `<bdi>`; an Urdu name reads "‹ 7 · محمد علی ›" with the number on the start side.
-- **The list** (inside the Players tool, below the style controls in E4): one row per player: number, name, size, and a warning badge where the name is too long for the font or the number is a duplicate (the engine's `findDuplicateJerseyNumbers`). Tapping a row shows that player on the model and turns the camera to the back.
-- **Before players exist** (no roster yet): the chip shows the sample player from the Players tool and says "Sample" (W-ED72c), so nobody thinks it is a real entry.
-- **Three players without help** (the plan's success line): previous and next on the chip are the fastest way, always visible on the stage.
-- **Real maximum lengths (E4):** when a player's name can't fit at the minimum size, the row says "Too long for this font" and the model shows it shrunk; the roster check uses the same rule.
-- The roster entry itself (players adding their details through the shared link) is the team-order flow, not the editor.
+**The founder changed the flow on 17 Nov 2026** ([decision 012](../decisions/012-team-list-entered-by-the-organizer.md)): the organizer enters every player's name, number and size **in the editor**; players get no link. The team list is therefore part of the editor, and it is specified in full in **[08-team-list.md](08-team-list.md)**. In short:
+- **The list is the Players tab** (08-team-list 3.1): one line per player, Name · No. · Size, typed with Enter moving from field to field and line to line, or pasted from WhatsApp, a spreadsheet or a CSV file (08-team-list 4 and 5). The style controls of 4.5 are one level down, in "Style".
+- **The checks** (no duplicate numbers, no blank required fields, allowed characters, a maximum name length from the font and the print box, the jersey number rule) show beside each line as the organizer types, from one roster-rules module shared with the backend (08-team-list 6).
+- **Choosing a line shows that player** on the model; on a phone the list fills the lower 60% and the back of the shirt, zoomed on the name and number, stays above it, also while the keyboard is open (08-team-list 3.2, 3.3, 7).
+- **The editor does not save the list:** it hands the list and its summary to its host, which saves it on the device before team orders exist and to the team order after (08-team-list 11, 12).
+- **The player chip** on the stage, top centre, 44 px tall: "‹  10 · ALI RAZA  ›" with previous and next buttons (44 × 44 each) and the middle part opening the list at that line. Names are inside `<bdi>`; an Urdu name reads "‹ 7 · محمد علی ›" with the number on the start side. In the stage's top row it gives way to the contextual bar, the status line, "Turn to edit" and the hint (6.5). In the list on a phone it moves to the bottom of the stage (08-team-list 7.2).
+- **Before the list has a line:** the chip shows the sample player and says "Sample" (W-ED72c), so nobody thinks it is a real entry.
+- **Three players without help** (the plan's success line): previous and next on the chip, always visible on the stage.
+- **Real maximum lengths:** a name may shrink to the smallest allowed size (placeholder 75%); beyond that the line says "Too long for the back" (08-team-list 6.1, W-TL59) and the model shows it shrunk. The server's check uses the same rule.
+- **What the first version of this section said, and why it changed:** it put the list under the style controls as a read-only roster preview, and said "the roster entry itself (players adding their details through the shared link) is the team-order flow, not the editor". There is no shared link for players any more; the entry is the editor's.
 
 ```
-COMPACT, E4: previewing players                          360 x 640
+COMPACT, E4: previewing players from another tool        360 x 640
 +------------------------------------------------------------+
 | [X]  [<-] [->]         (v) Saved          [   DONE   ]     |
 +------------------------------------------------------------+
@@ -858,11 +917,13 @@ COMPACT, E4: previewing players                          360 x 640
 
 - **In the "Done" panel** (9.2), a "Check your proof" section: three thumbnails (front, back, side), 4:5, on white, rendered from the design by the proof renderer (never with the selection or guides). Tapping one opens it full screen with pinch-zoom and a 44 px close; Back closes it.
 - While the renders are made: three `surface-alt` boxes of the same size and "Making your proof images…".
-- Signing the proof belongs to the team order (the organiser signs the roster proof), not to the editor.
+- Signing the proof belongs to the team order (the organiser signs the roster proof), not to the editor. The proof is made from the design and the team list the editor handed over (08-team-list 11.2); after signing, the list opens read-only in the editor (08-team-list 11.3). (rev. 17 Nov)
 
 ---
 
 ## 9. Saving, sharing, price and "Add to team order"
+
+*(rev. 17 Nov) The heading keeps its first wording so links to it still work. "Add to team order" is now the Done panel's main action, which follows the team list (9.2).*
 
 ### 9.1 Where they live
 
@@ -871,38 +932,44 @@ COMPACT, E4: previewing players                          360 x 640
 | Save state | Top bar, middle | Top bar, after undo/redo |
 | Share | Done panel | Top bar (secondary) and Done panel |
 | Price | Done panel | Top bar, before Done |
-| Add to team order | Done panel (the red button there) | Done panel |
+| Main action ("Save and go back"; with team orders, the next step of the team list, then "Continue to the proof"; rev. 17 Nov) | Done panel (the red button there) | Done panel |
+| Team list | Players tab (08-team-list) | Players tab |
 | Done | Top bar (red) | Top bar (red) |
 
-**One red button per view:** "Done" in the top bar. When the Done panel is open, its main button ("Add to team order") is the red one, and "Done" in the top bar becomes inactive and reads "Done" with a check (it is the panel's opener, now open).
+**One red button per view:** "Done" in the top bar. When the Done panel is open, its main button is the red one, and "Done" in the top bar becomes inactive and reads "Done" with a check (it is the panel's opener, now open).
 
 ### 9.2 The Done panel
 
-Opens over the tools (compact: the panel area at expanded height; wide: a 400 px panel from the right over the stage's right side, the garment re-framed to the left).
+Opens over the tools. **Compact:** the tool panel closes first (one sheet at a time, 3.3; closing Done brings the tool back at its detent), and the Done panel's **height follows its content**, at most `min(60dvh, 100dvh − 56 − 160)`, with no more than 24 px + the safe area under its last control (rev. 17 Nov, 07-editor-review 4.10, 5.7, R37, R38). **Wide:** a 400 px panel from the right over the stage's right side, the garment re-framed to the left, the view controls following it (6.5); its backdrop covers the tools only, or is at most `rgb(11 21 48 / 0.08)` over the stage, so the kit it asks the coach to check is not dimmed (R29). It is a native modal dialog with host slots (decision 009). Its padding is the panel grid's 16 px, title and content on one edge (12.3, R9).
 
 ```
 +----------------------------------------------------------+
 | YOUR KIT                                           [v]   |
 | [front] [back] [side]          (E5: proof images)        |
 | Jersey · Lahore Lions                                    |
+| TEAM LIST                                                |  rev. 17 Nov
+| 18 players · 19 jerseys · 2 to fix             [Show]    |  08-team-list 11.2
 | (!) 1 thing to check: logo may print blurry.  [Show]     |
 | Price           copy from founders (host slot)           |
-| [          ADD TO TEAM ORDER          ]   (red, host)    |
+| [          CONTINUE TO THE PROOF        ]   (red)        |  the next thing to do
 | [ Share for feedback ]  (secondary, later)               |
 | Keep designing                                           |
 +----------------------------------------------------------+
 ```
 
-- **Things to check:** the open warnings (low resolution, no transparency, clipped at a seam, hard to read), each with "Show", which closes the panel, selects the item and turns the camera to it. Warnings never block "Add to team order" (opinion; the designer check catches the rest, if the founders offer one).
-- **Price, the team order button and Share are host slots:** the editor package draws the panel; the storefront fills the slots with its own components and data (price from the product in the visitor's region, using `convertToLocale`; the team order action). The editor package stays free of the store (the plan's coupling rule).
+- **Things to check:** the open warnings (low resolution, no transparency, clipped at a seam, hard to read, covers another item), each with "Show", which closes the panel, selects the item and turns the camera to it. Warnings never block the main action (opinion; the designer check catches the rest, if the founders offer one).
+- **Team list (rev. 17 Nov):** the list's state in one line ("No players yet" with "Add players"; "18 players · 19 jerseys · 2 to fix" with "Show"; or "All ready"), and the export minimum when the list is below it. "Show" closes the panel and opens the list at the first line to fix. Specified in 08-team-list 11.2.
+- **The main button (rev. 17 Nov):** before team orders exist it is the host's "Save and go back" (9.3). With team orders (M3) it is always the next thing to do: "Add your players", "Fix 2 lines", "Add 3 more players" (the editor's own actions, into the list) or, when the list is ready, the host's **"Continue to the proof"** (08-team-list 11.2). The first version called it "Add to team order"; the team order now starts from the list, so the label follows the list's state.
+- **Price, the main action and Share are host slots:** the editor package draws the panel; the storefront fills the slots with its own components and data (price from the product in the visitor's region, using `convertToLocale`; the proof action). The editor package stays free of the store (the plan's coupling rule). **Share** is the read-only link to the **design** (dev-plan E-track, "Share link for a design, read-only"); it is not a way for players to enter details (decision 012).
 
 ### 9.3 Before the backend exists (E3, E4)
 
-- **Saving:** the design (JSON) and its logo files are saved **in the browser on this device** after every change (debounced 1 s; IndexedDB, because logo files don't fit localStorage). The save state reads "Saved on this device" (W-ED4). Reopening the same product's editor on the same device offers: "Continue your last design?" with "Continue" (red is not used: secondary) and "Start again" (W-ED142).
+- **Saving:** the design (JSON), its logo files **and its team list** (rev. 17 Nov, 08-team-list 11.1) are saved **in the browser on this device** after every change (debounced 1 s; IndexedDB, because logo files don't fit localStorage). The save state reads "Saved on this device" (W-ED4). Reopening the same product's editor on the same device offers: "Continue your last design?" with "Continue" (red is not used) and "Start again" (W-ED142), and restores the design and its list.
+- **The resume prompt (rev. 17 Nov, 07-editor-review 4.11, R40):** the default focus is on the safe action, **"Continue"**, placed at the end (right), filled `ink`; "Start again" before it as a secondary button. One sentence under the title: "We kept the kit you were working on, on this device." (W-ED142b, as built). Test: on open, `document.activeElement` is "Continue". The same rule holds for every dialog: "Stay" in "Leave without saving?".
 - **Share:** hidden. Not shown inactive: a button that never works teaches people to ignore it (opinion).
 - **Price:** the storefront shows the product's regional price in the slot ("from … per piece", the existing product-page price line). In the standalone demo the slot is empty.
-- **Add to team order:** team orders don't exist yet. The Done panel's red button reads "Save and go back" (W-ED163), which returns to the product page, and a line under it says when team orders open (**copy from founders**, W-ED164 **P**).
-- **Later (with the backend):** "Saved" means saved to the account with a version; signed-out coaches see "Saved on this device · Sign in to keep it" (Spized's "Don't lose your work" prompt is the same need, 1.1, but ours never blocks); Share opens a sheet with "Copy link" and "WhatsApp" first (the coaches' channel in our markets; opinion), producing a read-only link; Admiral's "share for internal review" is the model (1.3).
+- **The main button:** team orders don't exist yet. The Done panel's red button reads "Save and go back" (W-ED163), which returns to the product page, and a line under it says when team orders open (**copy from founders**, W-ED164 **P**; with the team list, W-TL82 of 08-team-list, which mentions the list too). An unfinished list is fine to save.
+- **Later (with the backend):** "Saved" means saved to the account with a version, and the team list to the team order (only the signed-in organizer can read or change it, decision 012); signed-out coaches see "Saved on this device · Sign in to keep it" (Spized's "Don't lose your work" prompt is the same need, 1.1, but ours never blocks); Share opens a sheet with "Copy link" and "WhatsApp" first (the coaches' channel in our markets; opinion), producing a **read-only link to the design** (never to the team list); Admiral's "share for internal review" is the model (1.3). (rev. 17 Nov)
 
 ---
 
@@ -926,7 +993,8 @@ Opens over the tools (compact: the panel area at expanded height; wide: a 400 px
 If WebGL 2 isn't available (about 3% of usage, 1.5), or the context can't be created, the editor does not stop. It shows **the flat view**: the front and back pieces side by side (sleeves under them), drawn by the same `drawPatternTexture` in flat mode (the demo's "Flat pattern pieces" already does this).
 - Every tool works: colours, templates, names, numbers, logos, text.
 - Selection: by tapping a piece item in the flat view (2D hit test, `layerAtPoint`, exists) or from "On this kit". Moving: the fine-tune controls and presets only in E3 (drag in the flat view later).
-- A banner at the top of the stage: "The 3D view can't run on this device. You can still design your kit here." (W-ED143).
+- A banner at the top of the stage: "The 3D view can't run on this device. You can still design your kit here." (W-ED143). It sits under the stage's top row and **ends 8 px before the "On this kit" button**; it never runs under it (rev. 17 Nov, R28, 6.5).
+- The selected item in the flat view has the same two-tone line as in 3D (R36). The team list works the same in the flat view; the back piece shows the chosen line (08-team-list 13.5). (rev. 17 Nov)
 - **If the 3D context is lost** while working (a phone under memory pressure): the stage shows "Restarting the 3D view…" and the engine restores it; the design is untouched. After two failures in a session, switch to the flat view with the banner.
 
 ```
@@ -997,7 +1065,8 @@ The design functions throw readable errors for impossible edits. The interface p
 ### 11.2 Accessibility
 
 - **Keyboard:** every action is possible without the canvas. Tab order: top bar, the tool tabs (one tab stop; arrows move between tabs; `role="tablist"`), the open panel, the stage (one stop; arrows turn when nothing is selected), view controls, "On this kit". Shortcuts as in 5.1 and 10.5, listed in the "?" help of the stage.
-- **Focus:** the 2 px `focus` ring with 2 px offset (03). On navy, the ring is white with the `focus` ring outside it (white on navy 18:1; focus blue on navy is only 3.5:1).
+- **Focus:** the 2 px `focus` ring with 2 px offset (03). On navy, the ring is white with the `focus` ring outside it (white on navy 18:1; focus blue on navy is only 3.5:1). **Inside a scrolling panel the ring uses a −2 px offset**, so the panel's overflow never clips it, and it follows the control's own radius (rev. 17 Nov, R16, 07-editor-review 4.9).
+- **States (rev. 17 Nov, 07-editor-review 4.9):** every interactive component has rest, hover (pointer only), focus-visible, pressed or selected, and inactive states, and hover never looks like selected: chips, segmented buttons and tabs get `surface-alt` on hover (tabs: label to `ink`); swatches and cards a 1 px `border-strong` outer ring; stage controls a solid `surface` (R17). *Test:* a state-sheet screenshot of each component.
 - **Touch targets:** 44 × 44 at least; handles have 44 px hit areas around smaller visible marks; 8 px between targets.
 - **Contrast:** text 4.5:1 or more (pairs in 12.2); controls and handles 3:1 or more against what is under them; the handles are two-tone so they hold on any kit colour.
 - **Not by colour alone:** swatches have names and a check; warnings have an icon and words; the current side is pressed and filled.
@@ -1005,7 +1074,9 @@ The design functions throw readable errors for impossible edits. The interface p
 - **Pointer alternatives:** zoom buttons (2.5.1), fine-tune and presets (2.5.7).
 - **The non-3D description:** the stage has `role="img"` and an accessible name that describes the kit in words, updated after each change (debounced 1 s, not announced): "Jersey, back view. Body navy, shoulders white, side panels red. Team name TIGERS on the chest. Logo on the left chest. Name ALI RAZA and number 10 on the back." The "On this kit" list is the full, navigable version. Screen-reader users can do everything through the panels and the list; the flat view (10.3) is available from the stage's "?" as "Show the flat view".
 - **Announcements:** the status line is `role="status"`; upload errors are `role="alert"` and take focus.
-- **Panels:** compact panels are non-modal regions (`role="region"`, labelled by the tool name), so focus is not trapped; Back and Esc close them; a visible close button always (1.6). The Done panel and dialogs are modal (`<dialog>` with `showModal()`, which traps focus natively).
+- **Panels:** compact panels are non-modal regions (`role="region"`, labelled by the tool name), so focus is not trapped; Back and Esc close them; a visible close button always (1.6). The Done panel and dialogs are modal (`<dialog>` with `showModal()`, which traps focus natively), and **their default focus is the safe action** ("Continue", "Stay"; rev. 17 Nov, 07-editor-review 4.11).
+- **Warning badges on the model** are buttons with a name ("Needs a look: hard to read on White") and a `title`, never `aria-hidden` (rev. 17 Nov, R15).
+- **The team list** has its own names and keyboard rules: 08-team-list 13.7 and 13.8. (rev. 17 Nov)
 
 ### 11.3 Performance budgets (the developer must hold these)
 
@@ -1031,7 +1102,7 @@ E3 logs the timings to the console in development; E5 measures them on a real mi
 
 - **Frame:** the top bar is `inverse` navy, like the store header, so the editor is visibly part of the store. Everything else in the frame is white (`surface`) with `border` dividers.
 - **The kit is the colour:** the frame has no colour except navy, the one red button, and the `focus` blue. No accent lime in the editor (it would compete with kit colours; 03 allows it only on navy, and the editor doesn't need it).
-- **Type:** Barlow Condensed 700 uppercase for panel titles (`h3`, 20/26 on compact, 22/28 on wide) and the Done button label; Inter for everything else; Noto Sans Arabic for Arabic-script text in fields and lists. Rail and dock labels: Inter 14/20, semibold when active.
+- **Type:** Barlow Condensed 700 uppercase for panel titles (`panel-title`, 20/26 on compact, 22/28 on wide) and the Done button label; Inter for everything else; Noto Sans Arabic for Arabic-script text in fields and lists. Rail and dock labels: Inter 14/20 (`tab`), semibold when active. The full type table is in 12.3. (rev. 17 Nov)
 - **Buttons:** the store's Button look: 4 px radius, 48 px tall for main buttons, 44 px for tool buttons; primary red with white label; secondary `ink` outline (on navy: white outline, white label).
 - **Panels:** `surface`, 16 px top corners on compact (`radius-sheet`), a 1 px `border` line on the top edge and a soft shadow `0 -4px 16px rgb(11 21 48 / 0.08)`; the grab handle 36 × 4 px `border-strong`, centred, in a 24 px tall strip (the strip, not the bar, is the drag target).
 - **Icons:** 24 px line icons, 1.75 px stroke, round caps, `currentColor`, the same drawing rules as the store's `LineIcon`. Drawn in the editor package (no icon library). New icons: template grid, palette drop, team shield, shirt number, image, Aa, undo, redo, share, eye, rotate, layers stack, more (⋯), close, zoom in, zoom out, reset view, lock, swap (⇄), check, alert.
@@ -1053,7 +1124,7 @@ Existing store tokens, used as they are (CSS variables `--c-*`): `surface`, `sur
 | `warning-surface` | #FFF7E6 | Warning alert background | `ink` on it 16.9:1 |
 | `handle` | #FFFFFF fill, `ink` 2 px border | Selection handles | two-tone: visible on light and dark kits |
 | `guide` | `focus` #2563EB, 1 px dashed | Snapping guides | 4.2:1 on the light stage; drawn on the garment with a 1 px white halo |
-| `overlay-control` | `surface` at 92% opacity | View controls on the stage | |
+| `overlay-control` | `surface` at 96% opacity, 1 px line `rgb(11 21 48 / 0.24)`, shadow `0 1px 3px rgb(11 21 48 / 0.12)` (rev. 17 Nov; was 92% with a `border` line, R25) | Every control floating on the stage (6.1, 6.5) | the icons and words carry the contrast |
 
 **Decision: a light stage that deepens for light kits.**
 - **Why light:** our default and most common kit colours (navy, black, red, green; the placeholder palette) stand out on light grey: navy 11.1:1, black 15.3:1 against `stage-bottom`. A dark stage would swallow navy and black kits, and our product photos sit on light grey too (03). Opinion, backed by the ratios.
@@ -1062,6 +1133,46 @@ Existing store tokens, used as they are (CSS variables `--c-*`): `surface`, `sur
 - **Rejected:** a dark stage (premium-looking in renders, but our navy-heavy kits disappear: opinion); a user toggle for the stage (one more control nobody needs; opinion).
 
 **Spacing, radii, motion:** the store's (03): 4 px base, `radius-control` 4, `radius-card` 8, `radius-sheet` 16; motion 150 to 250 ms ease-out for the interface, 350 ms ease-in-out for camera turns only.
+
+**Fallback values (rev. 17 Nov, 07-editor-review 5.5):** the package's fallback values for the `--c-*` variables must **equal 03-direction's**. On 17 Nov they differed: `border` #DDE2EA instead of #C9D1DE, `border-strong` #7D879A instead of #6B7689, `inverse` #0B1F45 instead of #0B1530, `on-inverse-muted` #8F9CB8 instead of #B8C2D6, `ink-muted` #4A5468 instead of #4A5568, `surface-alt` #F2F4F7 instead of #F3F5F9, `success` #17703A instead of #0F7A3D. With those fallbacks `border-strong` on white is 3.6:1 instead of 4.6:1.
+
+### 12.3 Panel grid, spacing and type in use (rev. 17 Nov, 07-editor-review 4.1 to 4.4 and 4.8)
+
+These rules are tests: unit tests on the stylesheet and read-only page audits in `packages/editor/scripts/audit/`, run before an editor round is accepted (decision 009, "Added 17 Nov").
+
+**Panel grid (4.1).**
+- `--fmo-panel-pad` = 16 px, on the tool panels, the start card, the Done panel, the help box and the team list.
+- Every full-width block (field, button, alert, card list, section) starts at the content's start edge and ends at its end edge. Rows of chips, swatches and segmented controls start at the start edge and may end short.
+- Icon buttons in a header keep a 44 px hit area; their icon's edge is on the content edge (`margin-inline-end: -10px`).
+- Centred text (Skip, Keep designing, small notes under a main button) is the only exception.
+- On tablets the header and the content share the same centred 560 px column.
+- The content's end edge does not move when a panel starts scrolling (`scrollbar-gutter: stable`, the padding reduced by the gutter's measured width, R4).
+- Left-aligned text buttons have no side padding (`padding-inline: 0`, `min-width: 44px`), so their text starts on the content edge (R10).
+- *Test:* at 360, 390, 820 × 1180, 844 × 390, 1366 and 1920, in every panel, the set of left offsets of full-width blocks is {16} and the set of right offsets is {16}.
+
+**Spacing in use (4.2).** 4, 8, 12, 16, 24 only. Label → control 8. Controls of one group 8. Group → next label 16. Section → section 24, with a 1 px `border` divider 16 px above the next section's title. *Test:* the gap audit returns no other value.
+
+**Type tokens for the editor (4.3)** (px, size/line height, Latin; Arabic script gets 1.2 × the line height):
+
+| Token | Value | Use |
+| --- | --- | --- |
+| `panel-title` | heading 700 uppercase, 20/26 compact, 22/28 wide; may wrap to 2 lines, never cut | Panel and dialog titles |
+| `section-title` | body 700, 15/20 | Group titles in a panel ("Preview as", "On the shirt", "Style", "Where") |
+| `label` | body 600, 14/20 | Field and control labels, column headings |
+| `body` | body 400, 15/21 | Running text, chips, buttons' words; text fields at 16 px on compact |
+| `button` | body 600, 15/20 | Secondary and text buttons |
+| `primary` | heading 700 uppercase, 18/18 | Done, the Done panel's main action |
+| `tab` | body 500, 14/20 (650 when selected) | Dock and rail labels |
+| `small` | body 400, 13/18 | Notes, save state, hint, messages under a line |
+| `credit` | body 400, 11/16 | The model credit only |
+
+*Test:* the type audit returns only these combinations, and "Done" computes to the heading face, 700, 18 px.
+
+**Stylesheet scoping (4.4).** The package's element resets use `:where()` so they never outrank a component class (`:where(.fmo-editor) button { font: inherit; color: inherit; }`, R8). *Test:* every button's computed font matches its component rule.
+
+**Native controls (4.8).** No classic scrollbar under a row on wide and short layouts: rows wrap. The panel body has a thin bar (`scrollbar-width: thin`, `scrollbar-color: var(--fmo-border-strong) transparent`) with a stable gutter. On compact, rows scroll sideways without a bar and with a 24 px fade at the end while there is more (the cut-off last item is the cue). *Test:* no element inside the editor with horizontal overflow on wide layouts.
+
+**Fonts.** The package loads no fonts; its host provides them (decision 009). **The demo page loads Barlow Condensed and Inter** (SIL OFL 1.1, development dependencies of the editor package), so the founder judges the real look (rev. 17 Nov, decision D4 of the review).
 
 ---
 
@@ -1092,7 +1203,7 @@ Size key as in 05: **S** about half a day, **M** about 1 day, **L** 2 days or mo
 | `TextRoleControls` | M | Shared by Team, Players and Text: value field, where (presets), style, outline, size, readability warning |
 | `FontList` | S | Rows set in the coach's own text |
 | `PositionPresets` | S | Chips with mini diagrams; "wearer's left" |
-| `PlayerControls` | M | Sample player, switches, digits |
+| `PlayerControls` | M | Sample player, switches, digits (the Players tab's "Style" view since 17 Nov) |
 | `LogoDropzone`, `LogoCard` | M | Upload flow, checks mapped to wording, Make it sharp, Replace, Remove |
 | `FineTune` | S | Steppers for size, turn, nudge, centre |
 | `OnThisKit` | M | List, row menu, locked shapes, empty state |
@@ -1102,7 +1213,8 @@ Size key as in 05: **S** about half a day, **M** about 1 day, **L** 2 days or mo
 | `ConfirmDialog` | S | Native `<dialog>` |
 | `EditorIcon` | S | The icon set (12.1) |
 | `editorWording` (data) | S | All wording from section 14, as data with ids, marked `// DRAFT WORDING.` |
-| `PlayerChip` (E4) | S | Previous, next, list |
+| `PlayerChip` (E4) | S | Previous, next, list; inactive at the ends; "Sample" state |
+| Team list (E4, rev. 17 Nov) | L | `TeamList`, `TeamListSummary`, `TeamListLine`, `SizeField` and `SizeStrip`, `LineMenu`, `PasteView`, `BySizeList`, `StageListMode`, and the Done panel's team list section: [08-team-list.md](08-team-list.md) 14.4. The roster-rules module is shared with the backend and is not UI |
 
 ### 13.2 Reused (the look and the rules, re-created in the package from the store's specification)
 
@@ -1117,7 +1229,7 @@ The package can't import storefront code, so these are matched, not imported. Th
 ### 13.3 Used from the storefront, in the host slots
 
 - The product's regional price line and `convertToLocale` (05 §2.4).
-- The store's `Button` for "Add to team order" when team orders exist.
+- The store's `Button` for the Done panel's main action when team orders exist ("Continue to the proof", 9.2; rev. 17 Nov).
 - The store's `Sheet` for sign-in and share sheets opened from the slots.
 
 ### 13.4 Removed from today's demo (the demo page keeps them only behind a developer switch)
@@ -1163,8 +1275,8 @@ All of this is **DRAFT WORDING, founders to confirm**. It goes into the editor p
 | W-ED22 | Team name |
 | W-ED22b | e.g. Lahore Lions *(placeholder)* |
 | W-ED23 | See designs in your colours |
-| W-ED24 | Skip: start from this design |
-| W-ED25 | You can change everything later. |
+| W-ED24 | Skip for now: you can change everything later *(rev. 17 Nov, R5: W-ED25 joined into it)* |
+| W-ED25 | *(removed 17 Nov; now part of W-ED24)* |
 
 ### Design (`templates`)
 | Id | Text |
@@ -1206,7 +1318,7 @@ All of this is **DRAFT WORDING, founders to confirm**. It goes into the editor p
 | W-ED65 | None · Thin · Thick |
 | W-ED66 | Small · Medium · Large |
 | W-ED70 | Names and numbers |
-| W-ED71 **P** | Each player's name and number come from your team list. |
+| W-ED71 **P** | Each player's name and number come from your team list. *(rev. 17 Nov: shown in the Players tab's Style view; "your team list" is the list in the same tab, 08-team-list)* |
 | W-ED72 | Preview as |
 | W-ED72b | PLAYER *(sample name)* and 10 *(sample number)* |
 | W-ED72c | Sample |
@@ -1257,6 +1369,9 @@ All of this is **DRAFT WORDING, founders to confirm**. It goes into the editor p
 | W-ED110b | Bring forward · Send back · Edit |
 | W-ED111 | Part of this is cut off at the seam. |
 | W-ED111b | Move it in |
+| W-ED111c | This covers the {item}. *(rev. 17 Nov, as built)* |
+| W-ED111d | Move it clear *(rev. 17 Nov, as built)* |
+| W-ED115 | Needs a look: {reason} *(a warning badge's name and tooltip; rev. 17 Nov, as built)* |
 | W-ED112 | Turn to edit |
 | W-ED113 | Fine-tune |
 | W-ED114 | Bigger · Smaller · Turn left · Turn right · Straighten · Centre on the shirt |
@@ -1280,6 +1395,7 @@ All of this is **DRAFT WORDING, founders to confirm**. It goes into the editor p
 | W-ED141 | Still loading. Your connection seems slow. |
 | W-ED141b | We couldn't load the 3D kit. / Try again / Use the flat view |
 | W-ED142 | Continue your last design? / Continue / Start again |
+| W-ED142b | We kept the kit you were working on, on this device. *(rev. 17 Nov, R40, as built)* |
 | W-ED143 | The 3D view can't run on this device. You can still design your kit here. |
 | W-ED144 | Restarting the 3D view… |
 | W-ED145 | Fonts are still loading. Names may change shape slightly. |
@@ -1293,7 +1409,7 @@ All of this is **DRAFT WORDING, founders to confirm**. It goes into the editor p
 | --- | --- |
 | W-ED160 | Your kit |
 | W-ED161 | {n} things to check / 1 thing to check · Show |
-| W-ED162 | Add to team order *(when team orders exist)* |
+| W-ED162 | *(rev. 17 Nov: replaced by the team list's next step and "Continue to the proof", 08-team-list W-TL81 to W-TL86)* |
 | W-ED163 | Save and go back *(until then)* |
 | W-ED164 **P** | Team orders open soon. Your design is saved on this device. *(copy from founders)* |
 | W-ED165 | Share for feedback *(later)* |
@@ -1306,8 +1422,10 @@ All of this is **DRAFT WORDING, founders to confirm**. It goes into the editor p
 | --- | --- |
 | W-ED170 | Previous player / Next player |
 | W-ED171 | Player {i} of {n} |
-| W-ED172 | Too long for this font |
-| W-ED173 | Same number as {name} |
+| W-ED172 | *(rev. 17 Nov: replaced by W-TL59 "Too long for the back…" in 08-team-list)* |
+| W-ED173 | *(rev. 17 Nov: replaced by W-TL55 "Same number as {name} ({number}).")* |
+
+The team list's own wording (W-TL1 to W-TL88) is in [08-team-list.md](08-team-list.md) section 15, group `teamList`.
 
 Change labels for the status line (W-ED150) come from the edit: "Body colour", "Team name", "Logo position", "Logo size", "Design", "Number style", and so on, one per edit type.
 
@@ -1334,9 +1452,9 @@ E3 as written in dev-plan (palette with HEX snapping, templates) plus this inter
 - Draft-quality drags (5.3), with timings logged.
 - Done panel (without proof), host slots.
 
-**E4:** roster preview: player chip, list, previous and next; real maximum lengths per font; "Too long" and duplicate badges; the start of real phone measurements.
+**E4 (rev. 17 Nov):** the team list and roster preview, to [08-team-list.md](08-team-list.md): the list in the Players tab (typing, sizes, paste and CSV, the checks beside each line, the summary and the minimum), the player chip with previous and next, the stage's list mode and back close-up, the shared roster-rules module with real maximum lengths per font, the list handed to the host and saved on the device; the start of real phone measurements. Its review checklist is 08-team-list section 16.
 **E5:** proof renders in the Done panel; phone performance measured against 11.3.
-**Later:** share and save with the backend; Add to team order; patterns and fades (4.4); mirror to the other sleeve; remove plain background; arched text; drag in the flat view; 3D template thumbnails; an Arabic or Urdu interface.
+**Later:** share and save with the backend; the team list saved to the team order and "Continue to the proof" (M3); patterns and fades (4.4); mirror to the other sleeve; remove plain background; arched text; drag in the flat view; 3D template thumbnails; an Arabic or Urdu interface.
 
 ### 15.2 What the engine must add (for the engine owner and the coordinator)
 
@@ -1364,9 +1482,9 @@ E3 as written in dev-plan (palette with HEX snapping, templates) plus this inter
 
 N1 to N4 change the design format. **Whether that is version 3, or optional additions to version 2, is the engine owner's and coordinator's decision** (Q-D5).
 
-### 15.3 E3 review checklist (E3a and E3b), at 390 × 844 and 1366 × 900
+### 15.3 Editor review checklist (E3a, E3b and every later round), at 390 × 844 and 1366 × 768
 
-Screenshots with device emulation at 390 px (and 360 × 640 for the starred items), and at 1366 px, each opened by the reviewer:
+Screenshots with device emulation at 390 px (and 360 × 640 for the starred items), and at 1366 × 768 and **1366 × 600** (rev. 17 Nov: the founder's window, 3.1), each opened by the reviewer. **Items 24 to 30 were added on 17 Nov** from the review's rules (07-editor-review section 4) and corrections (section 5); the review's audits in `packages/editor/scripts/audit/` check most of them. The team list has its own checklist: 08-team-list section 16.
 
 1. ★ At 360 × 640, with any tool at normal height, the garment is fully visible and the stage is at least 288 px tall (MO4).
 2. ★ The six tabs fit at 360 px with their labels on one line; none is cut.
@@ -1390,7 +1508,14 @@ Screenshots with device emulation at 390 px (and 360 × 640 for the starred item
 20. Reduced motion on: no camera turns animate, no panel slides, no flashes.
 21. Test names: `محمد علی` and `عبدالله الهاشمي` as team name and sample player, `٧` as number, look right on the model and in the lists.
 22. One red button per view; no developer text (JSON, "valid", texture sizes) without `?dev=1`.
-23. Landscape phone (844 × 390): rail on the right, panel 320 px, garment to its left.
+23. Landscape phone (844 × 390): rail on the right, panel 320 px, garment to its left; the contextual bar's "Done" is not under the panel.
+24. ★ **Type audit (12.3):** only the type tokens' combinations; "Done" in the heading face, 700, 18 px; dock labels 14/20.
+25. ★ **Panel grid and spacing (12.3):** in every panel, the start card and the Done panel, one left edge (+16) and one right edge (−16) for full-width blocks; gaps only 4, 8, 12, 16, 24; no browser scrollbar under a row at 1366 and 1920.
+26. ★ **Selection box (5.2):** four straight lines, outset 8 px, at least 44 px; no handle on the item, on another item or on a stage control; the turn handle off the name when the number is selected; no badge on the selected item.
+27. ★ **Framing (6.4):** garment fill ≥ 0.72 at rest at 360 and 390, ≥ 0.75 at 1366 × 768; a selected item ≥ 120 px at 360 × 640; at 1420 × 612 zoomed to the limit the selected item stays inside the free stage.
+28. **Stage (6.5):** the overlap audit of stage controls is empty in every state; one thing at a time in the top row; the flat-view banner stops before "On this kit"; with Done open on wide, no view control under the panel.
+29. ★ **Warnings (4, 4.6):** a selected item's warning and its fix are in view at the top of its panel without scrolling at 1366 × 768 and 390 × 844; an unselected item's badge has a name and selects the item; "This covers the …" appears when one item overlaps another and "Move it clear" fixes it.
+30. **Start card and dialogs (7.2, 9.3):** the first tap on an item closes the card and opens its tool, while turning keeps it open; the garment is ≥ 120 px tall with the card at 360 × 640; "Continue your last design?" focuses "Continue"; on compact, never two sheets at once (Done closes the tool panel and restores it).
 
 ---
 
@@ -1407,7 +1532,8 @@ Screenshots with device emulation at 390 px (and 360 × 640 for the starred item
 | Q-D5 | Design format for roles, templates, shapes, outlines, team colours | A: version 3. B: optional fields in version 2 | Engine owner's call; nothing has been saved in production yet, so **A** costs little now |
 | Q-D6 | Keep the colour code the coach asked for, next to the palette colour? | A: keep (`requested`). B: drop | **A.** Shows the coach where the colour came from; helps the design team |
 | Q-D7 | Stage | A: light, deepening for light kits. B: light only. C: dark | **A** |
-| Q-D8 | The "Players" tab name, before the roster exists | A: "Players". B: "Numbers" | **A.** It becomes the roster preview in E4 |
+| Q-D8 | The "Players" tab name, before the roster exists | A: "Players". B: "Numbers" | **A.** It becomes the roster preview in E4 *(decided, decision 009; since 17 Nov the tab holds the team list itself, 08-team-list 3.1)* |
+| Q-D10 | The team list's own decisions (where it lives, one undo history, designs without a name or number, spares, two shirts, goalkeeper kits, limits, the shared reader, M2's model, "0" and "00") (rev. 17 Nov) | | See [08-team-list.md](08-team-list.md) section 17.1 |
 | Q-D9 | Where the editor's interface code lives | A: `packages/editor/src/ui`, with host slots. B: in the storefront | **A.** Keeps the editor portable (the plan's Shopify option) |
 
 ### Business questions (for the founders)
@@ -1473,5 +1599,7 @@ All opened on **12 Nov 2026** with a web-fetch tool (text only; no competitor si
 | Shopify, media UX: https://shopify.dev/docs/storefronts/themes/product-merchandising/media/media-ux | 3D inactive by default; keyboard panning; labelled buttons |
 | MDN, prefers-reduced-motion: https://developer.mozilla.org/en-US/docs/Web/CSS/@media/prefers-reduced-motion | Definition and values |
 | MDN, viewport meta: https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/meta/name/viewport | `interactive-widget=resizes-content` |
+
+**Added 17 Nov 2026:** the revision's rules come from [07-editor-review.md](07-editor-review.md) (its sources in section 8) and decision 009; the team list's research and sources are in [08-team-list.md](08-team-list.md) sections 1 and 18 (opened 17 Nov 2026).
 
 **Opinion, not evidence:** the six tabs and their names, the panel heights, the start card, tap to try, select first on touch, the stage tones, the snapping distances, the ΔE thresholds, the budgets marked "opinion" and the split of E3 are my design judgements, based on the sources above, our demo's screenshots (section 2) and directions 03 and 05.

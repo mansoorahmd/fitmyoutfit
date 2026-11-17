@@ -93,18 +93,23 @@ export type RushControlView = {
  */
 export const rushControlView = (
   rules: Pick<CheckoutRules, "rush" | "delivery_promise"> | null | undefined,
-  currencyCode: string
+  currencyCode: string,
+  items?: AmountLike[] | null
 ): RushControlView | null => {
   const rush = rules?.rush
   if (!rush || !rush.available) {
     return null
   }
+  // The cart's own rush line is what the summary and the total show; if it
+  // still holds another figure than the rules' (and couldn't be brought in
+  // line), the card shows the line's, so a screen never has two amounts.
+  const amount = rushOutOfLine(rules, items) ? (rushLineAmount(items) ?? rush.amount) : rush.amount
   const promise = rules?.delivery_promise
   return {
     chosen: rush.in_cart ? "rush" : "standard",
     standardDate: promise?.standard?.date ?? null,
     rushDate: promise?.rush?.date ?? null,
-    amount: convertToLocale({ amount: rush.amount, currency_code: currencyCode || rush.currency_code }),
+    amount: convertToLocale({ amount, currency_code: currencyCode || rush.currency_code }),
     percentage: rush.percentage,
   }
 }
@@ -118,6 +123,20 @@ export const rushControlView = (
  */
 export const rushIsStale = (rules: { rush?: RushRule | null } | null | undefined): boolean =>
   !!rules?.rush && !rules.rush.available && rules.rush.in_cart
+
+/**
+ * The cart holds a rush line whose amount is not the rules' amount (staff
+ * changed the percentage and nothing has priced the cart since). Only while
+ * rush is offered and in the cart; a stale line is rushIsStale's case.
+ */
+export const rushOutOfLine = (
+  rules: { rush?: RushRule | null } | null | undefined,
+  items: AmountLike[] | null | undefined
+): boolean => {
+  const rush = rules?.rush
+  const line = rushLineAmount(items)
+  return !!rush && rush.available && rush.in_cart && line !== null && Math.round(line * 100) !== Math.round(rush.amount * 100)
+}
 
 /** What a press on a card asks the backend for: add, remove, or nothing (it is chosen already). */
 export const rushRequest = (current: DeliverySpeed, wanted: DeliverySpeed): "add" | "remove" | null =>
@@ -157,6 +176,15 @@ export const RUSH_CONFLICT_RETRIES = 1
  * never leaves the control spinning and "Place order" waiting for good.
  */
 export const RUSH_SAVE_SERVER_MS = 15_000
+
+/**
+ * A save that ended with "no answer" may still be made by the backend
+ * after the page gave up (it answered at 19 s when the page's limit is
+ * 15 s). The page reads the cart again by itself, twice and no more:
+ * this long after the "no answer", and this long after the first of the two.
+ */
+export const RUSH_LATE_READ_FIRST_MS = 5_000
+export const RUSH_LATE_READ_SECOND_MS = 15_000
 
 /**
  * Saves the choice: one request, and on HTTP 409 the same request again,

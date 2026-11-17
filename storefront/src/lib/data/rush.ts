@@ -72,3 +72,21 @@ export async function dropStaleRush(): Promise<boolean> {
   const result = await send(cartId, "DELETE", RUSH_SAVE_SERVER_MS)
   return result.ok
 }
+
+/**
+ * Brings the visitor's rush line to the rule's amount: POST on a cart that
+ * has the line leaves it and prices it again (contract 9, "Adding and
+ * removing"). Called while a page renders (the line kept an older figure
+ * after staff changed the percentage), so it drops no cached reads itself;
+ * the page reads the cart and the rules again. True when the backend
+ * answered 200; false when it couldn't be done (the page then shows the
+ * line's own amount).
+ */
+export async function repriceRush(): Promise<boolean> {
+  const cartId = await getCartId()
+  if (!cartId) {
+    return false
+  }
+  const result = await send(cartId, "POST", RUSH_SAVE_SERVER_MS)
+  return result.ok
+}

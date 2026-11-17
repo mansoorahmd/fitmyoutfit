@@ -193,6 +193,8 @@ Everything except the hero copy is a placeholder until the founders give wording
    3. Each player adds their name, number and size; players don't pay.
    4. Check and sign the roster proof; we make and deliver the kit.
 
+   **Changed 17 Nov 2026 (coordinator's note; founder's decision, [decision 012](../decisions/012-team-list-entered-by-the-organizer.md)):** steps 2 and 3 above describe the old flow. There is no player link at launch. The steps are now: 1. Design your kit in 3D. 2. Add your players in one list: name, number and size. 3. See each player's shirt, then check and sign the roster proof. 4. We make and deliver the kit. The home page's headline and sentence about the link change with them (draft wording).
+
    A payment line sits under the steps (the 50% deposit and 50% balance terms, **copy from founders**), then the button "Start your team kit". Layout: a vertical list at 360 px, four columns at 1280 px.
 5. **The roster proof.** A picture of a proof page (from our own proof PDF once it exists), with three points: every name, number and size on one page; you sign it; we check the finished kit against it at our Lahore hub before it ships (**copy from founders**).
 6. **Sizing.** "Not sure of sizes?" Link to the size charts, plus the refundable fit kit (**copy from founders**).

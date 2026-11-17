@@ -16,11 +16,15 @@ import { checkoutView } from "@lib/util/checkout-view"
 import { orderConfirmationView } from "@lib/util/order-confirmation"
 import {
   RUSH_CONFLICT_RETRIES,
+  RUSH_LATE_READ_FIRST_MS,
+  RUSH_LATE_READ_SECOND_MS,
+  RUSH_SAVE_SERVER_MS,
   codHintMentionsRush,
   isRushLine,
   rushControlView,
   rushIsStale,
   rushLineAmount,
+  rushOutOfLine,
   rushRequest,
   rushSaveResult,
   saveRushChoice,
@@ -386,5 +390,50 @@ describe("the 'total changed' alert", () => {
     expect(shown.retryLabel).toBe(false)
     expect(shown.hidePlaceOrder).toBe(false)
     expect(shown.focus).toBe("alert")
+  })
+})
+
+
+describe("the time limits are pinned to their literal values", () => {
+  // Other tests advance the clock by these constants themselves, so only a
+  // literal here notices a changed number.
+  it("the save's limit is 15 seconds; the late reads are 5 and 15 seconds after the 'no answer'", () => {
+    expect(RUSH_SAVE_SERVER_MS).toBe(15000)
+    expect(RUSH_LATE_READ_FIRST_MS).toBe(5000)
+    expect(RUSH_LATE_READ_SECOND_MS).toBe(15000)
+  })
+})
+
+describe("a rush line priced differently from the rules (rushOutOfLine)", () => {
+  // staff set 7.77% while the cart's line still says PKR 1,200 (QA16, E)
+  const rules = (amount: number, over: Record<string, unknown> = {}) =>
+    parseCheckoutRules({ ...rulesPkRushInCart, rush: { ...rulesPkRushInCart.rush, amount, ...over } })
+  const items = [tshirtLine(), rushLine({ subtotal: 1200, unit_price: 1200, total: 1200 })]
+
+  it("is out of line when the line's amount is not the rule's", () => {
+    expect(rushOutOfLine(rules(466), items)).toBe(true)
+    expect(rushOutOfLine(rules(1200), items)).toBe(false)
+  })
+
+  it("is never out of line without a rush line, without rush in the cart, or when rush isn't offered", () => {
+    expect(rushOutOfLine(rules(466), [tshirtLine()])).toBe(false)
+    expect(rushOutOfLine(rules(466, { in_cart: false }), items)).toBe(false)
+    expect(rushOutOfLine(rules(0, { available: false }), items)).toBe(false)
+    expect(rushOutOfLine(null, items)).toBe(false)
+  })
+
+  it("the card shows the cart line's amount while the two differ, the rule's when they agree", () => {
+    expect(plain(rushControlView(rules(466), "pkr", items)?.amount)).toBe("PKR 1,200")
+    expect(plain(rushControlView(rules(1200), "pkr", items)?.amount)).toBe("PKR 1,200")
+    expect(plain(rushControlView(rules(466), "pkr")?.amount)).toBe("PKR 466")
+    expect(plain(rushControlView(rules(466), "pkr", [tshirtLine()])?.amount)).toBe("PKR 466")
+  })
+
+  it("the cart page's and the checkout's views carry the same figure in the card and the row", () => {
+    const cart = checkoutCartPkRush({ items, item_subtotal: 5200, total: 5450 })
+    const page = cartPageView({ cart: cart as any, rules: rules(466), shippingOptions: [optionPk], countryCode: "pk", isGuest: false })
+    expect(plain(page.rushControl?.amount)).toBe(plain(page.rush))
+    const co = checkoutView({ cart: cart as any, rules: rules(466), shippingOptions: [optionPk], providerIds: [], customer: null, countryCode: "pk" } as any)
+    expect(plain(co.rushControl?.amount)).toBe(plain(page.rush))
   })
 })

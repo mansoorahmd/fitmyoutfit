@@ -130,6 +130,8 @@ Every source below was opened on **10 Nov 2026**. Findings are split into **Evid
 
 **For us (opinion):** Our flow (design → share one link → players add name, number and size → sign the roster proof) is simpler than a team store and easy to show in 4 steps. It is the home page's second most important section.
 
+> **Note, 17 Nov 2026: the flow above is out of date.** The founder changed it on 17 Nov 2026 ([decision 012](../decisions/012-team-list-entered-by-the-organizer.md)): players no longer add their own details through a link. The new flow is **design → enter the team list in the editor (the organizer types or pastes each player's name, number and size) → sign the roster proof → pay the deposit**. It is still four steps and still the home page's second section. The research above stays as it was found; Spized's shared list link is now a pattern we do not use at launch (it may come back later as an addition). The team list itself is specified in [08-team-list.md](08-team-list.md).
+
 ## 9. Trust signals
 
 **Evidence**

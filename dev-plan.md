@@ -98,8 +98,8 @@ Build a custom Medusa module, `team-order`, with three models:
 
 | Model | Fields |
 | --- | --- |
-| TeamOrder | organizer (customer), team name, design version, product and colorway, region, need-by date, status |
-| RosterEntry | team order, player name, number, size, product, position in the list, locked |
+| TeamOrder | organizer (customer), team name, design version, product and colorway, region, need-by date, status, which fields the design prints (name, number) |
+| RosterEntry | team order, player name, number, size, product, position in the list, count (1 to 10 of this shirt), no name on this shirt, no number on this shirt, locked |
 | ProofApproval | team order, design version, roster snapshot (stored copy plus hash), signed by, signed at, IP address |
 
 **Status flow:** `draft → proof_sent → approved → deposit_paid → in_production → balance_due → shipped`. The team list is edited in `draft`; there is no open or closed step, because no players enter anything. Production is handled outside the store for now. Admin sets `in_production` and `shipped` by hand.
