@@ -31,13 +31,14 @@ export const showsBackLink = (page: AccountPage): boolean => page !== "overview"
 export const showsTitleBand = (page: AccountPage): boolean => page === "overview"
 
 /**
- * Whether the store can change a password while signed in. Medusa 2.22's
+ * Whether the profile has a Password row. Medusa 2.22's
  * POST /auth/customer/emailpass/update accepts only a token from its
  * reset-password flow (an email), never a signed-in token or the current
  * password (checked against the backend: HTTP 401 "Invalid token"). So the
- * password row stays out until password reset exists (a later task).
+ * row doesn't ask for the old password: its button asks for a reset link to
+ * the account's own email (task S1-10c).
  */
-export const PASSWORD_CHANGE_AVAILABLE = false
+export const PASSWORD_CHANGE_AVAILABLE = true
 
 export type ProfileRowKey = "name" | "phone" | "email" | "password"
 
@@ -70,7 +71,7 @@ const join = (...parts: (string | null | undefined)[]) =>
 /**
  * The profile's rows (05, 9.6), in order: Name (editable), Phone
  * (editable), Email (read-only: changing it is not wired in M1), and
- * Password only when it can be changed (PASSWORD_CHANGE_AVAILABLE). The
+ * Password when it can be changed (PASSWORD_CHANGE_AVAILABLE). The
  * starter's billing address is removed: addresses live on their own page.
  */
 export const profileRows = (
@@ -97,7 +98,8 @@ export const profileRows = (
     row("email", customer.email?.trim() ?? "", "ltr", false),
   ]
   if (passwordChange) {
-    rows.push(row("password", "", "ltr", true))
+    // never shown, only masked; its button asks for a link (not an "Edit" form)
+    rows.push({ ...row("password", p.password.mask, "ltr", false), empty: false })
   }
   return rows
 }

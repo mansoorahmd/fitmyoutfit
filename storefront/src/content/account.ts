@@ -12,7 +12,10 @@
 // Decisions for M1 (decision 008 and task S1-5): no email is sent, so
 // nothing here says one was or will be; a guest's earlier orders are not
 // linked to a new account, so nothing here promises that; password reset
-// is a later task, so its link is behind `forgotPassword.show`, off.
+// (task S1-10c) says a link "is on its way", never that an email was sent:
+// until Resend is connected (Sprint 2) production sends nothing. How long a
+// link lasts comes from the backend's settings (RESET_LINK_MINUTES), so
+// the sentences take it as {minutes}.
 
 export const accountContent = {
   pageTitles: {
@@ -30,6 +33,10 @@ export const accountContent = {
     addresses: "Addresses",
     // DRAFT WORDING. No id: the browser tab's title on the profile page.
     profile: "Profile",
+    // DRAFT WORDING. No id: the browser tab's title on the forgot-password page.
+    forgotPassword: "Forgot your password?",
+    // DRAFT WORDING. No id: the browser tab's title on the page a reset link opens.
+    resetPassword: "Set a new password",
   },
 
   /** Sign-in and create account (05, section 8). */
@@ -83,12 +90,16 @@ export const accountContent = {
     // DRAFT WORDING. W-L8
     creating: "Creating your account…",
     forgotPassword: {
-      /** Off until password reset exists (a later task turns it on). */
-      show: false,
-      // DRAFT WORDING. W-L9: hidden until reset exists (gap G8).
+      /** On since task S1-10c: password reset exists. */
+      show: true,
+      // DRAFT WORDING. W-L9 (gap G8 closed by S1-10c).
       label: "Forgot your password?",
-      /** Where W-L9 leads once reset exists; set by that task (a path, not wording). */
-      href: "/account/reset-password",
+      /** Where W-L9 leads (a path, not wording). The email is carried over in the browser, never in the address. */
+      href: "/account/forgot-password",
+    },
+    notices: {
+      // DRAFT WORDING. No id: shown on sign-in after a new password was saved; the customer is not signed in yet.
+      passwordChanged: "Your password was changed. Sign in with your new password.",
     },
     errors: {
       // DRAFT WORDING. W-L10: never says which of the two was wrong.
@@ -106,6 +117,53 @@ export const accountContent = {
       // DRAFT WORDING. No id: a new password made only of spaces (QA S1-4c, m4).
       passwordSpaces: "Use letters, numbers or symbols, not only spaces",
     },
+  },
+
+  /** "Forgot your password?" (contract m1-password-reset, section 3). */
+  forgot: {
+    // DRAFT WORDING. No id: the page's heading.
+    title: "Forgot your password?",
+    // DRAFT WORDING. No id: the line under the heading.
+    intro: "Enter the email address of your account and we'll look for it.",
+    // DRAFT WORDING. No id: the button before the first request.
+    button: "Get a reset link",
+    // DRAFT WORDING. No id: the button after a request, to ask once more.
+    buttonAgain: "Ask again",
+    // DRAFT WORDING. No id: the button after a request that failed.
+    buttonRetry: "Try again",
+    // DRAFT WORDING. No id: the loading label.
+    requesting: "Requesting…",
+    // DRAFT WORDING. No id: the link back to sign-in.
+    backToSignIn: "Back to sign in",
+    // DRAFT WORDING. No id (P): the same answer whether or not the email has an account; promises no email.
+    requestedTitle: "If that email belongs to an account, a reset link is on its way.",
+    // DRAFT WORDING. No id (P): {minutes} is RESET_LINK_MINUTES.
+    requestedBody:
+      "The link works for {minutes} minutes. If nothing arrives, check that the address is right and look in your spam folder, then ask again below. A new link cancels the earlier one.",
+    // DRAFT WORDING. No id: the request itself failed (the store didn't answer).
+    failed: "We couldn't ask for the link. Check your connection and try again.",
+  },
+
+  /** The page a reset link opens (contract m1-password-reset, section 3). */
+  reset: {
+    // DRAFT WORDING. No id: the page's heading.
+    title: "Set a new password",
+    // DRAFT WORDING. No id: the label above the account's email.
+    emailLabel: "Email",
+    // DRAFT WORDING. No id: the label of the new-password field.
+    passwordLabel: "New password",
+    // DRAFT WORDING. No id: the main button.
+    button: "Save new password",
+    // DRAFT WORDING. No id: the loading label.
+    saving: "Saving…",
+    // DRAFT WORDING. No id: the store refused or didn't answer; the link may still be good.
+    failed: "We couldn't save your new password. Your link may still work, so try again.",
+    // DRAFT WORDING. No id: the heading when the link is expired, used, wrong or incomplete.
+    goneTitle: "This link no longer works",
+    // DRAFT WORDING. No id: {minutes} is RESET_LINK_MINUTES.
+    goneBody: "A reset link works once, for {minutes} minutes. Ask for a new one to set your password.",
+    // DRAFT WORDING. No id: the button that leads to the forgot-password page.
+    goneButton: "Ask for a new link",
   },
 
   /** The account's frame (05, 9.1). */
@@ -253,6 +311,25 @@ export const accountContent = {
       email: "Email",
       // DRAFT WORDING. No id: the row's label (05, 9.6).
       phone: "Phone",
+      // DRAFT WORDING. No id: the row's label.
+      password: "Password",
+    },
+    password: {
+      // DRAFT WORDING. No id: the row's value; the password is never shown.
+      mask: "••••••••",
+      // DRAFT WORDING. No id (P): the row's button. It doesn't ask for the old password.
+      button: "Email me a link",
+      // DRAFT WORDING. No id: the button's accessible name.
+      buttonLabel: "Email me a link to change my password",
+      // DRAFT WORDING. No id: the loading label.
+      requesting: "Requesting…",
+      // DRAFT WORDING. No id (P): {email} is the account's email; promises no email.
+      requestedTitle: "A link to set a new password is on its way to {email}.",
+      // DRAFT WORDING. No id (P): {minutes} is RESET_LINK_MINUTES.
+      requestedBody:
+        "The link works for {minutes} minutes. A new link cancels the earlier one. If nothing arrives, look in your spam folder or ask again.",
+      // DRAFT WORDING. No id: the request failed.
+      failed: "We couldn't ask for the link. Try again.",
     },
     fields: {
       // DRAFT WORDING. No id: 05, 9.6, the name row's first field.

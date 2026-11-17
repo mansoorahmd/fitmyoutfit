@@ -258,13 +258,15 @@ describe("addresses (05, 9.5)", () => {
 })
 
 describe("profile (05, 9.6)", () => {
-  it("shows name, phone and a read-only email; no password row", () => {
+  it("shows name, phone, a read-only email and the password row (a link button, not an Edit form)", () => {
     render(<ProfileRows email={customer.email} initial={{ firstName: "محمد علی", lastName: "", phone: "0300 1234567" }} />)
     expect(screen.getByRole("button", { name: "Edit Name" })).toBeInTheDocument()
     expect(screen.getByRole("button", { name: "Edit Phone" })).toBeInTheDocument()
     expect(screen.queryByRole("button", { name: "Edit Email" })).toBeNull()
     expect(screen.getByTestId("profile-value-email")).toHaveTextContent(customer.email)
-    expect(screen.queryByText("Password")).toBeNull()
+    expect(screen.getByTestId("profile-row-password")).toHaveTextContent("Password")
+    expect(screen.queryByRole("button", { name: "Edit Password" })).toBeNull()
+    expect(screen.getByTestId("profile-password-link")).toBeInTheDocument()
   })
 
   it("edits a row in place and says Saved", async () => {

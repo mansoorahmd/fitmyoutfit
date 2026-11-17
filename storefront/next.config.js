@@ -24,6 +24,20 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
+  // The pages a password-reset link touches: the link's address holds a
+  // token, so the browser must send no Referer from them and keep no copy.
+  // (The middleware moves the token into a cookie; see
+  // src/lib/util/reset-cookie.ts.)
+  async headers() {
+    const sensitive = [
+      { key: "Referrer-Policy", value: "no-referrer" },
+      { key: "Cache-Control", value: "no-store" },
+    ]
+    return [
+      { source: "/account/reset-password", headers: sensitive },
+      { source: "/:countryCode/account/reset-password", headers: sensitive },
+    ]
+  },
   images: {
     // Every `quality` the code asks next/image for: 75 is the default, 50 is
     // the thumbnail's. Next 16 refuses any value not listed here (its

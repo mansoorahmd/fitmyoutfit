@@ -2,6 +2,7 @@ import { HttpTypes } from "@medusajs/types"
 import { NextRequest, NextResponse } from "next/server"
 import { urlHasCountryCode as hasCountryCode } from "@lib/util/url-country"
 import { chooseVisitorCountry } from "@lib/util/visitor-country"
+import { resetLinkRedirect, resetSecret } from "@lib/util/reset-cookie"
 
 const BACKEND_URL = process.env.MEDUSA_BACKEND_URL
 const PUBLISHABLE_API_KEY = process.env.NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY
@@ -106,6 +107,30 @@ export async function middleware(request: NextRequest) {
   const countryCode = regionMap && (await getCountryCode(request, regionMap))
 
   const urlHasCountryCode = hasCountryCode(request.nextUrl.pathname, countryCode)
+
+  // A password-reset link (contract m1-password-reset, section 3): the token
+  // and email in its address go into a sealed, http-only cookie scoped to the
+  // page, and the browser is sent to the same page without a query, so no
+  // token stays in the address bar, the history or a Referer.
+  if (urlHasCountryCode) {
+    const reset = await resetLinkRedirect(request.nextUrl.pathname, request.nextUrl.search, resetSecret())
+    if (reset) {
+      const sealed = NextResponse.redirect(new URL(reset.location, request.nextUrl.origin), 303)
+      sealed.cookies.set(reset.cookie.name, reset.cookie.value, {
+        path: reset.cookie.path,
+        maxAge: reset.cookie.maxAge,
+        httpOnly: true,
+        sameSite: "lax", // sent on the redirect that follows a click from an email, which "strict" would withhold
+        secure: process.env.NODE_ENV === "production",
+      })
+      if (!cacheIdCookie) {
+        sealed.cookies.set("_medusa_cache_id", cacheId, { maxAge: 60 * 60 * 24 })
+      }
+      sealed.headers.set("Referrer-Policy", "no-referrer")
+      sealed.headers.set("Cache-Control", "no-store")
+      return sealed
+    }
+  }
 
   // if one of the country codes is in the url and the cache id is set, return next
   if (urlHasCountryCode && cacheIdCookie) {

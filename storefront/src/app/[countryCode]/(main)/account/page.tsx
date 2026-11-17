@@ -5,7 +5,7 @@ import { customerState } from "@lib/data/customer"
 import { listAccountOrders } from "@lib/data/orders"
 import { listRegions } from "@lib/data/regions"
 import { addressCardView, overviewAddress, storeCountries } from "@lib/util/account-address"
-import { authView, queryValue } from "@lib/util/account-auth"
+import { authNotice, authView, queryValue } from "@lib/util/account-auth"
 import { orderCardView } from "@lib/util/account-orders"
 import AccountOverview from "@modules/account/templates/account-overview"
 import AccountFrame from "@modules/account/templates/account-frame"
@@ -51,6 +51,7 @@ export default async function AccountPage(props: Props) {
         view={authView(queryValue(query.view))}
         next={queryValue(query.next) || null}
         email={queryValue(query.email).slice(0, 254)}
+        notice={authNotice(queryValue(query.notice), authView(queryValue(query.view)))}
       />
     )
   }

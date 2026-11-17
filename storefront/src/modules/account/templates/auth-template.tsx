@@ -1,5 +1,6 @@
 import { accountContent } from "@content/account"
-import { AuthView } from "@lib/util/account-auth"
+import { AuthNotice, AuthView } from "@lib/util/account-auth"
+import Alert from "@modules/common/components/alert"
 
 import AuthForm from "../components/auth-form"
 import AuthViewSwitch from "../components/auth-view-switch"
@@ -18,16 +19,22 @@ const AuthTemplate = ({
   view,
   next,
   email,
+  notice = null,
 }: {
   view: AuthView
   next: string | null
   email: string
+  /** A one-time message above the form (`?notice=`): the new password was saved. */
+  notice?: AuthNotice | null
 }) => (
   <div className="content-container pb-12 pt-8 xl:py-16" data-testid="auth-page">
     <div className="mx-auto flex w-full max-w-[440px] flex-col gap-6 xl:rounded-card xl:border xl:border-brand-border-strong xl:p-8">
       <h1 className="type-h1 uppercase text-brand-ink" data-testid="auth-title">
         {view === "create" ? words.createTitle : words.signInTitle}
       </h1>
+      {notice === "password-changed" && (
+        <Alert variant="success" title={words.notices.passwordChanged} data-testid="auth-notice" />
+      )}
       <AuthViewSwitch view={view} next={next} email={email || null} />
       <p className="type-body text-brand-ink-muted">
         {view === "create" ? words.createWhy : words.signInWhy}

@@ -37,19 +37,21 @@ describe("the account menu and frame (05, 9.1)", () => {
 })
 
 describe("profileRows (05, 9.6)", () => {
-  it("shows Name and Phone to edit, the email read-only, no password and no billing address", () => {
+  it("shows Name and Phone to edit, the email read-only, a masked password and no billing address", () => {
     const rows = profileRows(customer)
     expect(rows.map((r) => [r.key, r.value, r.editable, r.direction])).toEqual([
       ["name", "محمد علی", true, "auto"],
       ["phone", "0300 1234567", true, "ltr"],
       ["email", "probe1794431526934@example.com", false, "ltr"],
+      ["password", "••••••••", false, "ltr"],
     ])
   })
 
-  it("leaves the password row out while the store API can't change a password", () => {
-    expect(PASSWORD_CHANGE_AVAILABLE).toBe(false)
-    expect(profileRows(customer).some((r) => r.key === "password")).toBe(false)
-    expect(profileRows(customer, { passwordChange: true }).map((r) => r.key)).toContain("password")
+  it("has the password row (S1-10c): it asks for a reset link, so it has no Edit form", () => {
+    expect(PASSWORD_CHANGE_AVAILABLE).toBe(true)
+    const password = profileRows(customer).find((r) => r.key === "password")
+    expect(password).toMatchObject({ label: "Password", editable: false, empty: false })
+    expect(profileRows(customer, { passwordChange: false }).some((r) => r.key === "password")).toBe(false)
   })
 
   it("says 'Not given' for an empty value", () => {
