@@ -148,12 +148,38 @@ describe("the sealed cookie (the token between the page load and the submit)", (
     }
   })
 
-  it("needs RESET_COOKIE_SECRET in production, and stands one in only elsewhere", () => {
-    expect(resetSecret({ RESET_COOKIE_SECRET: SECRET, NODE_ENV: "production" })).toBe(SECRET)
-    expect(() => resetSecret({ NODE_ENV: "production" })).toThrow(/RESET_COOKIE_SECRET/)
-    expect(() => resetSecret({ RESET_COOKIE_SECRET: "short", NODE_ENV: "production" })).toThrow()
-    expect(resetSecret({ NODE_ENV: "development" }).length).toBeGreaterThanOrEqual(32)
-    expect(resetSecret({ NODE_ENV: "test" }).length).toBeGreaterThanOrEqual(32)
+  it("uses a real secret of 32 characters or more, trimmed, whatever NODE_ENV is", () => {
+    for (const NODE_ENV of ["production", "development", "test", "staging", "Production", "", undefined]) {
+      expect(resetSecret({ RESET_COOKIE_SECRET: SECRET, NODE_ENV }), String(NODE_ENV)).toBe(SECRET)
+      expect(resetSecret({ RESET_COOKIE_SECRET: `  ${SECRET}\n`, NODE_ENV }), String(NODE_ENV)).toBe(SECRET)
+    }
+  })
+
+  it("stands the public development secret in only when NODE_ENV, trimmed, is exactly development or test", () => {
+    for (const NODE_ENV of ["development", "test", " development ", "test\n"]) {
+      expect(resetSecret({ NODE_ENV }), NODE_ENV).toBe("development-only-reset-cookie-secret-not-for-production")
+      // a secret that is too short or blank does not count: the stand-in is used (development only)
+      expect(resetSecret({ NODE_ENV, RESET_COOKIE_SECRET: "short" }), NODE_ENV).toBe("development-only-reset-cookie-secret-not-for-production")
+      expect(resetSecret({ NODE_ENV, RESET_COOKIE_SECRET: "   " }), NODE_ENV).toBe("development-only-reset-cookie-secret-not-for-production")
+    }
+  })
+
+  it("needs the real secret for every other NODE_ENV: unset, blank, staging, Production, prod, a typo", () => {
+    for (const NODE_ENV of [undefined, "", "   ", "production", "Production", "PRODUCTION", "prod", "staging", "Staging", "Development", "TEST", "dev", "qa", "developement"]) {
+      for (const RESET_COOKIE_SECRET of [undefined, "", "   ", "short", "x".repeat(31), `${"x".repeat(20)}      `]) {
+        expect(() => resetSecret({ NODE_ENV, RESET_COOKIE_SECRET }), `${NODE_ENV} / ${RESET_COOKIE_SECRET}`).toThrow(/RESET_COOKIE_SECRET/)
+      }
+    }
+  })
+
+  it("the error names no secret and no token", () => {
+    try {
+      resetSecret({ NODE_ENV: "staging", RESET_COOKIE_SECRET: "a-short-secret-value" })
+      throw new Error("did not throw")
+    } catch (error) {
+      expect(String((error as Error).message)).not.toContain("a-short-secret-value")
+      expect(String((error as Error).message)).not.toContain("development-only-reset-cookie-secret")
+    }
   })
 })
 

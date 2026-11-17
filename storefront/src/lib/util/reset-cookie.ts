@@ -42,18 +42,25 @@ const fromBase64Url = (value: string): Uint8Array<ArrayBuffer> => {
 }
 
 /**
- * The secret the key comes from. In production it must be set (a long random
- * string, at least 32 characters); a missing secret is a deployment mistake
- * and fails loudly. In development and test a fixed value stands in, so
- * nothing needs configuring locally.
+ * The secret the key comes from: RESET_COOKIE_SECRET, a long random string of
+ * at least 32 characters. The fixed stand-in, which is public in the
+ * repository, is used only when NODE_ENV, trimmed, is exactly `development`
+ * or `test` (the backend's rule for its own dev-only values, in
+ * backend/src/lib/config/node-env.ts). Any other value (unset, blank,
+ * `staging`, `Production`, a typo) needs the real secret; without it this
+ * throws, and only the code that seals or opens a reset cookie asks for the
+ * secret, so only the reset path fails. The message names no token.
  */
 export const resetSecret = (env: Record<string, string | undefined> = process.env): string => {
   const value = env.RESET_COOKIE_SECRET?.trim()
   if (value && value.length >= 32) return value
-  if (env.NODE_ENV === "production") {
-    throw new Error("RESET_COOKIE_SECRET must be set to a random string of at least 32 characters")
+  const nodeEnv = (env.NODE_ENV ?? "").trim()
+  if (nodeEnv === "development" || nodeEnv === "test") {
+    return "development-only-reset-cookie-secret-not-for-production"
   }
-  return "development-only-reset-cookie-secret-not-for-production"
+  throw new Error(
+    "RESET_COOKIE_SECRET must be set to a random string of at least 32 characters (the development stand-in is used only when NODE_ENV is exactly development or test)"
+  )
 }
 
 const key = async (secret: string, usage: "encrypt" | "decrypt"): Promise<CryptoKey> => {
