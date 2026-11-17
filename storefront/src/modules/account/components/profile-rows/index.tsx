@@ -228,7 +228,12 @@ const ProfileRows = ({
                 )}
               </div>
               {row.key === "password" && link === "requested" && (
-                <Alert variant="success" announce title={fill(words.password.requestedTitle, { email })} data-testid="profile-password-requested">
+                <Alert
+                  variant="success"
+                  announce
+                  title={<span className="wrap-anywhere">{fill(words.password.requestedTitle, { email })}</span>}
+                  data-testid="profile-password-requested"
+                >
                   {fill(words.password.requestedBody, { minutes: RESET_LINK_MINUTES })}
                 </Alert>
               )}

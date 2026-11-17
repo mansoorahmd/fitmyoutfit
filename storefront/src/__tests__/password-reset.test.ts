@@ -191,7 +191,7 @@ describe("the middleware's rule for the link's address", () => {
       { token: TOKEN, email: "not-an-email" },
       { token: "has space", email: "a@b.co" },
       { foo: "bar" },
-    ]) {
+    ] as Record<string, string>[]) {
       const result = await resetLinkRedirect("/pk/account/reset-password", query(params), SECRET, NOW)
       expect(result?.location, JSON.stringify(params)).toBe("/pk/account/reset-password")
       expect(result?.cookie).toMatchObject({ value: "", maxAge: 0, path: "/pk/account/reset-password" })
