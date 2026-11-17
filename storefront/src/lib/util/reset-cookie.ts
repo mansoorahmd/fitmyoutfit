@@ -121,7 +121,8 @@ export type ResetRedirect = {
 export const resetLinkRedirect = async (
   pathname: string,
   search: string,
-  secret: string,
+  /** The secret, or a function that gives it: asked for only when a cookie is sealed, so a missing secret never breaks other pages. */
+  secret: string | (() => string),
   now: number = Date.now()
 ): Promise<ResetRedirect | null> => {
   const match = RESET_PATH.exec(pathname)
@@ -133,6 +134,6 @@ export const resetLinkRedirect = async (
   if (!token || !email) return { location: path, cookie: { name: RESET_COOKIE, value: "", path, maxAge: 0 } }
   return {
     location: path,
-    cookie: { name: RESET_COOKIE, value: await sealReset({ token, email }, secret, now), path, maxAge: RESET_COOKIE_MAX_AGE },
+    cookie: { name: RESET_COOKIE, value: await sealReset({ token, email }, typeof secret === "function" ? secret() : secret, now), path, maxAge: RESET_COOKIE_MAX_AGE },
   }
 }

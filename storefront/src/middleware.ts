@@ -113,7 +113,7 @@ export async function middleware(request: NextRequest) {
   // page, and the browser is sent to the same page without a query, so no
   // token stays in the address bar, the history or a Referer.
   if (urlHasCountryCode) {
-    const reset = await resetLinkRedirect(request.nextUrl.pathname, request.nextUrl.search, resetSecret())
+    const reset = await resetLinkRedirect(request.nextUrl.pathname, request.nextUrl.search, () => resetSecret())
     if (reset) {
       const sealed = NextResponse.redirect(new URL(reset.location, request.nextUrl.origin), 303)
       sealed.cookies.set(reset.cookie.name, reset.cookie.value, {

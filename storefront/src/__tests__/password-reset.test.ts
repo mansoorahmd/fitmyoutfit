@@ -183,6 +183,16 @@ describe("the middleware's rule for the link's address", () => {
     expect(await resetLinkRedirect("/account/reset-password", query({ token: TOKEN }), SECRET, NOW)).toBeNull()
   })
 
+  it("asks for the secret only when it must seal a cookie: a missing secret breaks no other page and no bad link", async () => {
+    const boom = () => {
+      throw new Error("the secret was asked for")
+    }
+    expect(await resetLinkRedirect("/pk/store", query({ token: TOKEN }), boom, NOW)).toBeNull()
+    expect(await resetLinkRedirect("/pk/account/reset-password", "", boom, NOW)).toBeNull()
+    expect((await resetLinkRedirect("/pk/account/reset-password", query({ email: "a@b.co" }), boom, NOW))?.cookie.maxAge).toBe(0)
+    await expect(resetLinkRedirect("/pk/account/reset-password", query({ token: TOKEN, email: "a@b.co" }), boom, NOW)).rejects.toThrow()
+  })
+
   it("a link missing its token or email, or with a malformed one, clears the cookie instead of setting one", async () => {
     for (const params of [
       { email: "a@b.co" },
