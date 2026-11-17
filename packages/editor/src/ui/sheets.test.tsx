@@ -111,7 +111,7 @@ describe("R15, D2: a selected item's warning leads its panel", () => {
 });
 
 describe("R14: many logos stay short", () => {
-  const asset = (id: string) => ({ assetId: id, mediaType: "image/png", width: 1200, height: 1200 });
+  const asset = (id: string) => ({ assetId: id, mediaType: "image/png" as const, width: 1200, height: 1200 });
   let d = design;
   for (const [k, preset] of ["left-chest", "right-chest", "upper-back"].entries()) d = addLayer(d, newLogoLayer(product, { id: `logo-${k + 1}`, preset, role: k === 0 ? "crest" : "sponsor", asset: asset(`a${k + 1}`) }), { product });
   it("Add a logo comes first; a logo not selected is one row (no Replace, Where or Size)", () => {
