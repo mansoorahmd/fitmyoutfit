@@ -253,14 +253,15 @@ export class CameraRig {
 
   /**
    * E3d (R22, 4.6): zooms in on the selected item until its box is `minPx` on its longer side (or the zoom limit),
-   * when it is smaller (`longPx` now). The zoom before is restored when the item is let go, unless the coach
-   * zoomed in between.
+   * when it is smaller (`longPx` now). `nearer`: how much nearer the camera the item is than the point it turns
+   * round (its box grows with the camera's distance to it; zoomed in, the camera aims at the item itself). The
+   * zoom before is restored when the item is let go, unless the coach zoomed in between.
    */
-  zoomToItem(longPx: number, minPx: number): void {
+  zoomToItem(longPx: number, minPx: number, nearer = 0): void {
     const f = this.config?.framing;
     if (!f || longPx <= 0 || longPx >= minPx || this.focus) return;
     const from = this.anim ? this.anim.to : this.orbit();
-    const distance = Math.max(this.minDistance(), (from.distance * longPx) / minPx);
+    const distance = Math.max(this.minDistance(), ((from.distance - nearer) * longPx) / minPx);
     if (distance >= from.distance - 1e-6) return;
     const restore = this.itemZoom?.restore ?? this.zoomFactor;
     this.zoomFactor = distance / f.fit;

@@ -180,7 +180,7 @@ export const EDITOR_CSS = /* css */ `
 .fmo-ft-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .fmo-ft-row > .fmo-label { min-width: 48px; margin: 0; }
 .fmo-item-head:has(> .fmo-item-pick) { flex-wrap: wrap; row-gap: 0; }
-.fmo-item-pick { flex: 1 1 100%; min-width: 0; display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0; border: 0; background: none; color: inherit; cursor: pointer; text-align: start; font: inherit; }
+.fmo-item-pick { flex: 1 1 100%; min-width: 0; display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 0; border: 0; background: none; color: inherit; cursor: pointer; text-align: start; font: inherit; }
 .fmo-item[data-selected="true"] .fmo-item-name { text-decoration: underline; text-underline-offset: 3px; }
 .fmo-badge { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 12px; background: var(--fmo-warning-surface, #FFF7E6); color: var(--fmo-warning, #8A5A00); border: 1px solid currentColor; }
 .fmo-stepper-row { display: flex; align-items: center; gap: 12px; }
@@ -358,7 +358,7 @@ export const EDITOR_CSS = /* css */ `
 .fmo-group-label { font: var(--fmo-type-small); color: var(--fmo-ink-muted); white-space: nowrap; }
 .fmo-field { display: block; width: 100%; height: 48px; padding: 0 12px; border: 1px solid var(--fmo-border-strong); border-radius: var(--fmo-radius-control); background: var(--fmo-surface); color: var(--fmo-ink); font: 400 16px/1.2 var(--fmo-font-body); }
 .fmo-field[aria-invalid="true"] { border-color: var(--fmo-error); border-width: 2px; }
-.fmo-field-error { margin: 8px 0 0; color: var(--fmo-error); font: var(--fmo-type-small); display: flex; gap: 6px; align-items: flex-start; }
+.fmo-field-error { margin: 8px 0 0; color: var(--fmo-error); font: var(--fmo-type-small); display: flex; gap: 8px; align-items: flex-start; }
 .fmo-fields { display: grid; grid-template-columns: 1fr 88px; gap: 8px; }
 .fmo-code-field { position: relative; }
 .fmo-code-field .fmo-field { padding-inline-start: 12px; text-transform: uppercase; font-variant-numeric: tabular-nums; letter-spacing: 0.04em; }

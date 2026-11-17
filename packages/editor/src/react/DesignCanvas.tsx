@@ -633,7 +633,7 @@ function ModelView({
     // Only once it faces the camera and no camera move runs (a selection from a list turns the garment first).
     if (zoomedFor.current !== layer.id && on.facing && !rig.animating && pointersDown.current.size === 0 && !gestureNow.current) {
       zoomedFor.current = layer.id;
-      if (minPx) rig.zoomToItem(itemLongSide(on.corners), minPx);
+      if (minPx) rig.zoomToItem(itemLongSide(on.corners), minPx, rig.distance() - toItem);
     }
     // The lines (print area, guides) move only with the camera or when they change: projected again only then (S1).
     const linesKey = JSON.stringify([cam.matrixWorld.elements, cam.projectionMatrix.elements, g, vs.width, vs.height]);
