@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { createDesign } from "../design/create";
 import { addLayer, updateLayer } from "../design/edit";
+import { nudgeLayer } from "../design/item-edits";
 import { newLogoLayer } from "../design/new-layers";
 import { isClipped } from "../design/print-area";
 import { applyTemplate, type Template } from "../design/template";
@@ -69,6 +70,12 @@ for (const [name, product, dir] of [
       const moved = fixed.layers.find((l) => l.id === "logo-1")!;
       expect(coveredItem(fixed, moved)).toBeNull();
       expect(isClipped(product, moved)).toBe(false);
+      // There is room: it is moved, not made smaller.
+      expect(moved.size).toEqual(logo.size);
+      expect(moved.position).not.toEqual(logo.position);
+      // The nearest free place: 2 mm back towards where it was, it covers the team name again.
+      const back = nudgeLayer(fixed, "logo-1", 0, -Math.sign(moved.position.y - logo.position.y) * 2, { product });
+      expect(coveredItem(back, back.layers.find((l) => l.id === "logo-1")!)).not.toBeNull();
     });
 
     it("an item that covers nothing has no fix to make", () => {
