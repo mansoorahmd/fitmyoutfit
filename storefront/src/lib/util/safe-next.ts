@@ -52,9 +52,12 @@ export const safeNextPath = (value: unknown): string | null => {
 
 /**
  * The full path to go to after sign-in: the safe `next` in the visitor's
- * country, else the account overview. A safe `next` that already starts
- * with a country the store serves (`storeCountries`, lower case) is used as
- * it is: "/gb/cart" stays "/gb/cart", never "/pk/gb/cart" (QA S1-4c, m7).
+ * country, else the account overview. A safe `next` that starts with a
+ * country the store serves is used with that country, whatever the case of
+ * its letters: "/gb/cart" stays "/gb/cart", never "/pk/gb/cart" (QA S1-4c,
+ * m7), and "/GB/cart" becomes "/gb/cart", not "/pk/GB/cart", a 404 (S1-11).
+ * A first segment of two letters that is not a country the store serves
+ * ("/de/cart") is not a path of ours: the visitor lands on the account.
  */
 export const afterSignInPath = (
   countryCode: string,
@@ -62,11 +65,15 @@ export const afterSignInPath = (
   storeCountries: string[] = []
 ): string => {
   const country = /^[a-z]{2}$/.test(countryCode) ? countryCode : ""
-  const safe = safeNextPath(next)
-  const first = safe ? /^\/([a-z]{2})(?=[/?#]|$)/.exec(safe)?.[1] : undefined
-  if (safe && first && storeCountries.includes(first)) {
-    return safe
-  }
   const prefix = country ? `/${country}` : ""
-  return `${prefix}${safe ?? "/account"}`
+  const safe = safeNextPath(next)
+  if (!safe) return `${prefix}/account`
+  const first = /^\/([A-Za-z]{2})(?=[/?#]|$)/.exec(safe)?.[1]
+  if (first) {
+    const served = first.toLowerCase()
+    return storeCountries.includes(served)
+      ? `/${served}${safe.slice(3)}`
+      : `${prefix}/account`
+  }
+  return `${prefix}${safe}`
 }
