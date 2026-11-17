@@ -38,6 +38,85 @@ export function isResetActorType(actorType: unknown): actorType is ResetActorTyp
 }
 
 /**
+ * The sign-in method whose password a reset link changes. Medusa keeps one `emailpass` identity per
+ * email, shared by the customer and the admin user of that email.
+ */
+export const RESET_PROVIDER = "emailpass"
+
+/**
+ * Where an auth identity records its account of each actor type: Medusa 2.22.6 writes
+ * `<actor_type>_id` into the identity's `app_metadata` when the account is created
+ * (setAuthAppMetadataStep: `customer_id` from createCustomerAccountWorkflow, `user_id` from
+ * createUserAccountWorkflow) and removes it when the account is removed. A database row:
+ * `{"user_id": "user_01...", "customer_id": "cus_01..."}` for an email that is both.
+ */
+export const ACCOUNT_ID_KEYS = {
+  customer: "customer_id",
+  user: "user_id",
+} as const satisfies Record<ResetActorType, string>
+
+/**
+ * Does an auth identity with this `app_metadata` have an account of `actorType`? Only when the
+ * actor type's key holds a non-blank text id. Anything else (no metadata, not an object, the key
+ * missing, null, a number, a blank text) is no.
+ */
+export function hasAccountOfType(appMetadata: unknown, actorType: ResetActorType): boolean {
+  if (typeof appMetadata !== "object" || appMetadata === null || Array.isArray(appMetadata)) {
+    return false
+  }
+  const key = ACCOUNT_ID_KEYS[actorType]
+  if (!Object.prototype.hasOwnProperty.call(appMetadata, key)) {
+    return false
+  }
+  const id = (appMetadata as Record<string, unknown>)[key]
+  return typeof id === "string" && id.trim() !== ""
+}
+
+/**
+ * What the subscriber learned about the email's account of the asked actor type: it has one, it
+ * has none, or the lookup failed (`errorName` from errorNameForLog). planPasswordReset sends a link
+ * only for `has_account`.
+ */
+export type AccountCheck =
+  | { kind: "has_account" }
+  | { kind: "no_account" }
+  | { kind: "lookup_failed"; errorName: string }
+
+/**
+ * The email and actor type the subscriber must look up before planPasswordReset can send a link;
+ * undefined when the plan sends nothing whatever the account (an actor type without a reset page,
+ * no email), so nothing is looked up then.
+ */
+export function accountToLookUp(
+  event: PasswordResetEventData
+): { email: string; actorType: ResetActorType } | undefined {
+  const { entity_id: email, actor_type: actorType } = event
+  if (!isResetActorType(actorType) || typeof email !== "string" || email.trim() === "") {
+    return undefined
+  }
+  return { email, actorType }
+}
+
+/**
+ * An error's name for a log line, never its message (a message can quote the email or a link):
+ * the name when it is a plain identifier of at most 60 characters, otherwise `error`.
+ */
+export function errorNameForLog(error: unknown): string {
+  const name = (error as { name?: unknown } | null | undefined)?.name
+  return typeof name === "string" && /^[A-Za-z_$][\w$.]{0,59}$/.test(name) ? name : "error"
+}
+
+/**
+ * The error line when sending a link failed. With `mayLog` (development and test, where the link
+ * itself is logged anyway) it gives the error's message; everywhere else only its name, because the
+ * message could quote the notification's data.
+ */
+export function sendFailureLine(error: unknown, mayLog: boolean): string {
+  const why = mayLog ? `${(error as Error)?.message ?? error}` : errorNameForLog(error)
+  return `Could not send a password reset link (${why}). A new link can be asked for.`
+}
+
+/**
  * The reset link for an actor type, email and token: `<base><page>?token=<token>&email=<email>`,
  * both values percent-encoded with encodeURIComponent (a `+` becomes %2B, a space %20, `&` %26,
  * non-Latin letters their UTF-8 bytes). Undefined for an actor type without a reset page, and for
@@ -127,6 +206,8 @@ export type PasswordResetPlan =
   | { action: "withhold"; warning: string }
   /** Nothing to send; `reason` is logged (it names neither the email nor the token). */
   | { action: "skip"; reason: string }
+  /** The account lookup failed: nothing is sent; `error` is logged as an error (domain at most). */
+  | { action: "fail"; error: string }
 
 export type PasswordResetEventData = {
   entity_id?: unknown
@@ -144,13 +225,18 @@ function describeActorType(actorType: unknown): string {
 }
 
 /**
- * The plan for one `auth.password_reset` event. `mayLog` is mayLogResetLink (email-delivery.ts):
- * when false (production without an email provider) nothing is sent and the warning names the
- * email's domain at most; never the token or the link.
+ * The plan for one `auth.password_reset` event. A link is sent only when the actor type has a
+ * reset page, the event has an email and a token, and `account` says the email's identity has an
+ * account of that actor type (Medusa takes the actor type from the request's path and keeps one
+ * identity per email for customers and admin users alike, so without this a customer could be
+ * sent an admin link and an admin a storefront link). An email that is both gets the kind asked
+ * for. `mayLog` is mayLogResetLink (email-delivery.ts): when false (outside development and test,
+ * no email provider) nothing is sent and the warning names the email's domain at most; never the
+ * token or the link. No log line of the plan names the email's local part or the token.
  */
 export function planPasswordReset(
   event: PasswordResetEventData,
-  options: { urls: PublicUrls; mayLog: boolean; channel: string }
+  options: { urls: PublicUrls; mayLog: boolean; channel: string; account: AccountCheck }
 ): PasswordResetPlan {
   const { entity_id: email, actor_type: actorType, token } = event
   if (!isResetActorType(actorType)) {
@@ -163,6 +249,20 @@ export function planPasswordReset(
     return {
       action: "skip",
       reason: `Password reset event for actor type ${describeActorType(actorType)} without an email or token: no link sent.`,
+    }
+  }
+  if (options.account.kind === "lookup_failed") {
+    return {
+      action: "fail",
+      error:
+        `Password reset for a ${actorType} account at ${emailDomainForLog(email)}: the account ` +
+        `could not be looked up (${errorNameForLog({ name: options.account.errorName })}); no link sent.`,
+    }
+  }
+  if (options.account.kind !== "has_account") {
+    return {
+      action: "skip",
+      reason: `Password reset asked for actor type "${actorType}" by an email that has no ${actorType} account: no link sent.`,
     }
   }
   if (!options.mayLog) {

@@ -2,17 +2,26 @@ import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { generateJwtToken } from "@medusajs/framework/utils"
 import {
+  ACCOUNT_ID_KEYS,
+  accountToLookUp,
   ADMIN_RESET_PAGE,
   CUSTOMER_RESET_PAGE,
   emailDomainForLog,
+  errorNameForLog,
+  hasAccountOfType,
   PASSWORD_RESET_EVENT,
   PASSWORD_RESET_TEMPLATE,
   planPasswordReset,
+  RESET_PROVIDER,
   resetPasswordLink,
+  sendFailureLine,
   tokenLifetimeMinutes,
+  type AccountCheck,
 } from "../password-reset"
 
 const urls = { storefrontUrl: "https://shop.example.com", backendUrl: "https://api.example.com" }
+const HAS: AccountCheck = { kind: "has_account" }
+const NONE: AccountCheck = { kind: "no_account" }
 
 /** An unsigned JWT-shaped token with these claims (the signature is not read). */
 function tokenWith(claims: Record<string, unknown>): string {
@@ -172,7 +181,7 @@ describe("planPasswordReset", () => {
   const event = { entity_id: "Zoë+Team@Example.com", actor_type: "customer", token, metadata: { x: 1 } }
 
   it("in development sends one email notification with the link, email, actor type and minutes", () => {
-    const plan = planPasswordReset(event, { urls, mayLog: true, channel: "email" })
+    const plan = planPasswordReset(event, { urls, mayLog: true, channel: "email", account: HAS })
     expect(plan).toEqual({
       action: "send",
       notification: {
@@ -193,7 +202,7 @@ describe("planPasswordReset", () => {
   })
 
   it("sends admin users the admin's link", () => {
-    const plan = planPasswordReset({ ...event, actor_type: "user" }, { urls, mayLog: true, channel: "email" })
+    const plan = planPasswordReset({ ...event, actor_type: "user" }, { urls, mayLog: true, channel: "email", account: HAS })
     expect(plan.action === "send" && plan.notification.data.link).toBe(
       `https://api.example.com/app/reset-password?token=${token}&email=Zo%C3%AB%2BTeam%40Example.com`
     )
@@ -202,7 +211,7 @@ describe("planPasswordReset", () => {
 
   it("in production sends nothing and warns with the domain at most: no token, link or local part", () => {
     for (const actor_type of ["customer", "user"]) {
-      const plan = planPasswordReset({ ...event, actor_type }, { urls, mayLog: false, channel: "email" })
+      const plan = planPasswordReset({ ...event, actor_type }, { urls, mayLog: false, channel: "email", account: HAS })
       expect(plan.action).toBe("withhold")
       const warning = plan.action === "withhold" ? plan.warning : ""
       expect(warning).toContain(`a ${actor_type} account at example.com was not sent`)
@@ -216,7 +225,7 @@ describe("planPasswordReset", () => {
     "skips the actor type %j without naming the email, in development and production",
     (actor_type) => {
       for (const mayLog of [true, false]) {
-        const plan = planPasswordReset({ ...event, actor_type }, { urls, mayLog, channel: "email" })
+        const plan = planPasswordReset({ ...event, actor_type }, { urls, mayLog, channel: "email", account: HAS })
         expect(plan.action).toBe("skip")
         const reason = plan.action === "skip" ? plan.reason : ""
         expect(reason).toContain("no link sent")
@@ -233,13 +242,13 @@ describe("planPasswordReset", () => {
     ["no token", { token: undefined }],
     ["an empty token", { token: "" }],
   ])("skips an event with %s", (_name, change) => {
-    const plan = planPasswordReset({ ...event, ...change }, { urls, mayLog: true, channel: "email" })
+    const plan = planPasswordReset({ ...event, ...change }, { urls, mayLog: true, channel: "email", account: HAS })
     expect(plan.action).toBe("skip")
   })
 
   it("skips a token without a lifetime, or an email it cannot encode, naming neither", () => {
     for (const change of [{ token: "abc" }, { entity_id: "a\uD800@example.com" }]) {
-      const plan = planPasswordReset({ ...event, ...change }, { urls, mayLog: true, channel: "email" })
+      const plan = planPasswordReset({ ...event, ...change }, { urls, mayLog: true, channel: "email", account: HAS })
       expect(plan.action).toBe("skip")
       expect(plan.action === "skip" && plan.reason).toContain("could not be written into a link")
       expect(plan.action === "skip" && plan.reason).not.toContain("abc")
@@ -249,8 +258,139 @@ describe("planPasswordReset", () => {
   it("never uses the request's metadata", () => {
     const plan = planPasswordReset(
       { ...event, metadata: { link: "https://evil.example", redirect: "https://evil.example" } } as never,
-      { urls, mayLog: true, channel: "email" }
+      { urls, mayLog: true, channel: "email", account: HAS }
     )
     expect(JSON.stringify(plan)).not.toContain("evil")
+  })
+
+  it("clips the actor type in the skip line to 40 characters", () => {
+    const plan = planPasswordReset(
+      { ...event, actor_type: "x".repeat(60) },
+      { urls, mayLog: true, channel: "email", account: HAS }
+    )
+    const reason = plan.action === "skip" ? plan.reason : ""
+    expect(reason).toContain(`"${"x".repeat(40)}"`)
+    expect(reason).not.toContain("x".repeat(41))
+  })
+
+  describe("only for an account of the asked kind (QA's fifteenth review, B1)", () => {
+    it.each(["customer", "user"])(
+      "sends no %s link when the email has no account of that kind, in development and production",
+      (actor_type) => {
+        for (const mayLog of [true, false]) {
+          const plan = planPasswordReset({ ...event, actor_type }, { urls, mayLog, channel: "email", account: NONE })
+          expect(plan).toEqual({
+            action: "skip",
+            reason: `Password reset asked for actor type "${actor_type}" by an email that has no ${actor_type} account: no link sent.`,
+          })
+          const reason = plan.action === "skip" ? plan.reason : ""
+          expect(reason).not.toMatch(/zo|team|example/i)
+          expect(reason).not.toContain(token)
+        }
+      }
+    )
+
+    it("sends nothing when the lookup failed, and logs the error's name and the domain only", () => {
+      for (const mayLog of [true, false]) {
+        const plan = planPasswordReset(
+          event,
+          { urls, mayLog, channel: "email", account: { kind: "lookup_failed", errorName: "KnexTimeoutError" } }
+        )
+        expect(plan).toEqual({
+          action: "fail",
+          error:
+            "Password reset for a customer account at example.com: the account could not be looked up " +
+            "(KnexTimeoutError); no link sent.",
+        })
+      }
+      const odd = planPasswordReset(event, {
+        urls,
+        mayLog: true,
+        channel: "email",
+        account: { kind: "lookup_failed", errorName: "zoë+team@example.com" },
+      })
+      expect(odd.action === "fail" && odd.error).toContain("(error)")
+      expect(JSON.stringify(odd)).not.toMatch(/zo|team/i)
+    })
+  })
+})
+
+describe("hasAccountOfType", () => {
+  it("reads Medusa's keys: customer_id for customers, user_id for admin users", () => {
+    expect(ACCOUNT_ID_KEYS).toEqual({ customer: "customer_id", user: "user_id" })
+    expect(RESET_PROVIDER).toBe("emailpass")
+    expect(hasAccountOfType({ customer_id: "cus_1" }, "customer")).toBe(true)
+    expect(hasAccountOfType({ customer_id: "cus_1" }, "user")).toBe(false)
+    expect(hasAccountOfType({ user_id: "user_1" }, "user")).toBe(true)
+    expect(hasAccountOfType({ user_id: "user_1" }, "customer")).toBe(false)
+  })
+
+  it("gives both kinds to an email that is both", () => {
+    const both = { user_id: "user_1", customer_id: "cus_1" }
+    expect(hasAccountOfType(both, "customer")).toBe(true)
+    expect(hasAccountOfType(both, "user")).toBe(true)
+  })
+
+  it.each([
+    ["no metadata", undefined],
+    ["null", null],
+    ["text", "customer_id"],
+    ["an array", ["cus_1"]],
+    ["an empty object", {}],
+    ["a null id", { customer_id: null }],
+    ["a blank id", { customer_id: "  " }],
+    ["a number id", { customer_id: 5 }],
+    ["an inherited key", Object.create({ customer_id: "cus_1" })],
+    ["another actor's key", { vendor_id: "v_1" }],
+  ])("is no for %s", (_name, appMetadata) => {
+    expect(hasAccountOfType(appMetadata, "customer")).toBe(false)
+  })
+
+  it("matches Medusa's key in the installed sign-in route (`${actor_type}_id`)", () => {
+    const route = readFileSync(
+      join(__dirname, "..", "..", "..", "..", "node_modules/@medusajs/medusa/dist/api/auth/[actor_type]/[auth_provider]/route.js"),
+      "utf8"
+    )
+    expect(route).toContain("authIdentity.app_metadata?.[`${actor_type}_id`]")
+  })
+})
+
+describe("accountToLookUp", () => {
+  it("looks up the email for an actor type with a reset page", () => {
+    expect(accountToLookUp({ entity_id: "a@b.co", actor_type: "user" })).toEqual({ email: "a@b.co", actorType: "user" })
+    expect(accountToLookUp({ entity_id: "a@b.co", actor_type: "customer" })).toEqual({
+      email: "a@b.co",
+      actorType: "customer",
+    })
+  })
+
+  it.each([
+    ["an unknown actor type", { entity_id: "a@b.co", actor_type: "vendor" }],
+    ["no actor type", { entity_id: "a@b.co" }],
+    ["no email", { actor_type: "customer" }],
+    ["a blank email", { entity_id: " ", actor_type: "customer" }],
+    ["an email that is not text", { entity_id: 3, actor_type: "customer" }],
+  ])("looks nothing up for %s", (_name, data) => {
+    expect(accountToLookUp(data)).toBeUndefined()
+  })
+})
+
+describe("errorNameForLog and sendFailureLine", () => {
+  it("gives a plain name, and `error` for anything else", () => {
+    expect(errorNameForLog(new TypeError("x"))).toBe("TypeError")
+    expect(errorNameForLog({ name: "KnexTimeoutError" })).toBe("KnexTimeoutError")
+    for (const odd of [undefined, null, "text", { name: 5 }, { name: "" }, { name: "a b" }, { name: "x".repeat(61) }]) {
+      expect(errorNameForLog(odd)).toBe("error")
+    }
+  })
+
+  it("gives the message only where a link may be logged, otherwise only the name", () => {
+    const error = new Error("data: https://shop.example.com/account/reset-password?token=abc.def.ghi")
+    expect(sendFailureLine(error, true)).toBe(
+      `Could not send a password reset link (${error.message}). A new link can be asked for.`
+    )
+    const line = sendFailureLine(error, false)
+    expect(line).toBe("Could not send a password reset link (Error). A new link can be asked for.")
+    expect(line).not.toMatch(/token|https?:|abc/)
   })
 })

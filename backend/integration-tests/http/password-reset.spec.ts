@@ -7,14 +7,19 @@
  */
 import { medusaIntegrationTestRunner } from "@medusajs/test-utils"
 import { Modules } from "@medusajs/framework/utils"
+import { createCustomerAccountWorkflow, createUserAccountWorkflow } from "@medusajs/medusa/core-flows"
 import sendPasswordResetLink from "../../src/subscribers/password-reset-link"
 
 jest.setTimeout(300 * 1000)
 
 const STOREFRONT_URL = "http://shop.reset-test.local:8123"
 const BACKEND_URL = "http://api.reset-test.local:9123"
+/** A customer only. */
 const CUSTOMER_EMAIL = "zoë+reset@example.com"
+/** An admin user only. */
 const USER_EMAIL = "staff.reset@example.com"
+/** Both a customer and an admin user (one identity). */
+const BOTH_EMAIL = "both.reset@example.com"
 const PASSWORD = "first-password-1"
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -47,13 +52,35 @@ medusaIntegrationTestRunner({
           .subscribe("auth.password_reset", async ({ data }: { data: any }) => {
             events.push({ actor_type: data.actor_type, entity_id: data.entity_id })
           })
-        for (const [actor, email] of [
-          ["customer", CUSTOMER_EMAIL],
-          ["user", USER_EMAIL],
-        ]) {
-          const res = await api.post(`/auth/${actor}/emailpass/register`, { email, password: PASSWORD })
+        // Each email gets its identity (Medusa's register route) and then its account(s), the way
+        // the store's sign-up and the admin's invite create them: that writes customer_id / user_id
+        // into the identity's app_metadata.
+        for (const [email, kinds] of [
+          [CUSTOMER_EMAIL, ["customer"]],
+          [USER_EMAIL, ["user"]],
+          [BOTH_EMAIL, ["customer", "user"]],
+        ] as const) {
+          const res = await api.post(`/auth/${kinds[0]}/emailpass/register`, { email, password: PASSWORD })
           expect(res.status).toBe(200)
+          const authIdentityId = JSON.parse(
+            Buffer.from(String(res.data.token).split(".")[1], "base64url").toString("utf8")
+          ).auth_identity_id
+          for (const kind of kinds) {
+            if (kind === "customer") {
+              await createCustomerAccountWorkflow(getContainer()).run({
+                input: { authIdentityId, customerData: { email } },
+              })
+            } else {
+              await createUserAccountWorkflow(getContainer()).run({
+                input: { authIdentityId, userData: { email } },
+              })
+            }
+          }
         }
+        const [both] = await getContainer()
+          .resolve(Modules.AUTH)
+          .listProviderIdentities({ entity_id: BOTH_EMAIL }, { relations: ["auth_identity"] })
+        expect(Object.keys(both.auth_identity?.app_metadata ?? {}).sort()).toEqual(["customer_id", "user_id"])
       })
 
       it("sends a customer one email notification with the storefront's link, and the token works", async () => {
@@ -148,23 +175,76 @@ medusaIntegrationTestRunner({
         expect(await notifications()).toHaveLength(before)
       })
 
+      describe("only for an account of the asked kind (QA's fifteenth review, B1)", () => {
+        it("sends a customer-only email nothing through the admin route", async () => {
+          const before = (await notifications()).length
+          const res = await api.post("/auth/user/emailpass/reset-password", { identifier: CUSTOMER_EMAIL }, allow)
+          expect(res.status).toBe(201)
+          await waitForEvents(4)
+          expect(events[3]).toEqual({ actor_type: "user", entity_id: CUSTOMER_EMAIL })
+          expect(await notifications()).toHaveLength(before)
+        })
+
+        it("sends an admin-only email nothing through the customer route", async () => {
+          const before = (await notifications()).length
+          const res = await api.post("/auth/customer/emailpass/reset-password", { identifier: USER_EMAIL }, allow)
+          expect(res.status).toBe(201)
+          await waitForEvents(5)
+          expect(events[4]).toEqual({ actor_type: "customer", entity_id: USER_EMAIL })
+          expect(await notifications()).toHaveLength(before)
+        })
+
+        it("sends an email that is both the kind of link asked for", async () => {
+          expect(await notifications({ to: BOTH_EMAIL })).toHaveLength(0)
+          const asCustomer = await api.post(
+            "/auth/customer/emailpass/reset-password",
+            { identifier: BOTH_EMAIL },
+            allow
+          )
+          expect(asCustomer.status).toBe(201)
+          await waitForEvents(6)
+          const asUser = await api.post("/auth/user/emailpass/reset-password", { identifier: BOTH_EMAIL }, allow)
+          expect(asUser.status).toBe(201)
+          await waitForEvents(7)
+          const sent = await notifications({ to: BOTH_EMAIL })
+          expect(sent.map((n) => (n.data as Record<string, any>).actor_type)).toEqual(["customer", "user"])
+          const [customerLink, userLink] = sent.map((n) => new URL((n.data as Record<string, any>).link))
+          expect(customerLink.origin + customerLink.pathname).toBe(`${STOREFRONT_URL}/account/reset-password`)
+          expect(userLink.origin + userLink.pathname).toBe(`${BACKEND_URL}/app/reset-password`)
+        })
+      })
+
       describe("called directly", () => {
         const token =
           "eyJhbGciOiJIUzI1NiJ9." +
           Buffer.from(JSON.stringify({ iat: 1000, exp: 1900 })).toString("base64url") +
           ".c2lnbmF0dXJl"
 
-        function fakeContainer() {
+        /**
+         * The real container, with a recording logger and notification module, and an auth module
+         * whose one identity has `appMetadata` (or whose lookup throws `lookupError`).
+         */
+        function fakeContainer(
+          options: { appMetadata?: unknown; lookupError?: Error } = { appMetadata: { customer_id: "cus_1" } }
+        ) {
           const log = { warn: jest.fn(), info: jest.fn(), error: jest.fn(), debug: jest.fn() }
           const createNotifications = jest.fn()
+          const auth = {
+            listProviderIdentities: jest.fn(async () => {
+              if (options.lookupError) throw options.lookupError
+              return [{ auth_identity_id: "authid_1" }]
+            }),
+            retrieveAuthIdentity: jest.fn(async () => ({ id: "authid_1", app_metadata: options.appMetadata })),
+          }
           const container = {
             resolve: (key: string) => {
               if (key === "logger") return log
               if (key === Modules.NOTIFICATION) return { createNotifications }
+              if (key === Modules.AUTH) return auth
               return getContainer().resolve(key)
             },
           }
-          return { log, createNotifications, container }
+          return { log, createNotifications, auth, container }
         }
 
         async function run(data: Record<string, unknown>, container: unknown) {
@@ -225,6 +305,52 @@ medusaIntegrationTestRunner({
           expect(skipping.createNotifications).not.toHaveBeenCalled()
           expect(skipping.log.info).toHaveBeenCalledTimes(1)
           expect(String(skipping.log.info.mock.calls[0][0])).not.toContain("a@example.com")
+        })
+
+        it("looks up the email's emailpass identity, and sends no admin link to a customer-only identity", async () => {
+          const customerOnly = fakeContainer({ appMetadata: { customer_id: "cus_1" } })
+          await run({ entity_id: "a@example.com", actor_type: "user", token }, customerOnly.container)
+          expect(customerOnly.auth.listProviderIdentities).toHaveBeenCalledWith(
+            { entity_id: "a@example.com", provider: "emailpass" },
+            { select: ["auth_identity_id"] }
+          )
+          expect(customerOnly.auth.retrieveAuthIdentity).toHaveBeenCalledWith("authid_1", { select: ["app_metadata"] })
+          expect(customerOnly.createNotifications).not.toHaveBeenCalled()
+          expect(customerOnly.log.info).toHaveBeenCalledTimes(1)
+          expect(String(customerOnly.log.info.mock.calls[0][0])).toBe(
+            'Password reset asked for actor type "user" by an email that has no user account: no link sent.'
+          )
+
+          const userOnly = fakeContainer({ appMetadata: { user_id: "user_1" } })
+          await run({ entity_id: "a@example.com", actor_type: "user", token }, userOnly.container)
+          expect(userOnly.createNotifications).toHaveBeenCalledTimes(1)
+          expect(userOnly.createNotifications.mock.calls[0][0].data.actor_type).toBe("user")
+
+          const noMetadata = fakeContainer({ appMetadata: null })
+          await run({ entity_id: "a@example.com", actor_type: "customer", token }, noMetadata.container)
+          expect(noMetadata.createNotifications).not.toHaveBeenCalled()
+
+          const unknownActor = fakeContainer()
+          await run({ entity_id: "a@example.com", actor_type: "vendor", token }, unknownActor.container)
+          expect(unknownActor.auth.listProviderIdentities).not.toHaveBeenCalled()
+        })
+
+        it("sends nothing when the lookup fails, and logs the error's name and the domain only", async () => {
+          const failing = fakeContainer({
+            lookupError: Object.assign(new Error("select ... where entity_id = 'secret.person@example.org'"), {
+              name: "DriverException",
+            }),
+          })
+          await run({ entity_id: "secret.person@example.org", actor_type: "customer", token }, failing.container)
+          expect(failing.createNotifications).not.toHaveBeenCalled()
+          expect(failing.log.error).toHaveBeenCalledTimes(1)
+          const line = String(failing.log.error.mock.calls[0][0])
+          expect(line).toBe(
+            "Password reset for a customer account at example.org: the account could not be looked up " +
+              "(DriverException); no link sent."
+          )
+          expect(failing.log.info).not.toHaveBeenCalled()
+          expect(failing.log.warn).not.toHaveBeenCalled()
         })
 
         it("logs a failed send as an error and never throws", async () => {
