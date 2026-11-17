@@ -288,6 +288,12 @@ Decision: a design step (E-UX) comes before E3, and E3 builds the interface to i
 - **Held:** the start card's closing rule on desktop and touch; every kind of item selected stays inside the free stage with its handles and the view comes back; the earlier gesture, undo, storage, upload and accessibility scripts on both models; the audits pass at six sizes and do fail when a rule is broken (a gap off the scale, one block off the grid; a uniform change of the panel padding is not caught).
 - **Not checked by QA:** real phones, Safari, Firefox; the flat view and keyboard-only use by hand; the badge's screen-reader name.
 
+**Wind-up of the sprint (17 Nov, about 17:00), at the founder's request: "need to wind up this sprint", "it's burning all my limits".**
+- **Nothing new is started.** Two tasks were already running and are the last: E3e (the editor's drag slowdown and QA's points) and S1-11 (the storefront clean-up). The coordinator cannot stop a running agent from its side; the founder can, from the agent panel. Each commits after every point, so a stopped task loses only its uncommitted part. If they finish, the coordinator runs the tests once, looks at the pictures and merges what passes, without a QA review.
+- **M1 as it stands on `master`:** both "done when" lines passed on the preview at 390 px on 17 Nov, 15:20 (Pakistan, 1 T-shirt, cash on delivery; the UK blocked at 9 and placed at 10). Merged since then: the rush fix round and password reset in the storefront (storefront only; the coordinator's tests pass, 1074). The two lines were not run again after those merges.
+- **Known and open on `master`:** the editor drags slower than before its finish round (8.4 ms a frame before, 24.9 ms after); "Move it clear" can do nothing or park an item under another; the home page still describes the old link flow; sign-in and create account can put a password in the address if the button is pressed before the page's script loads; the hydration error between cart and checkout on a production build; the editor demo bundle is over its budget. Not verified anywhere: real phones, Safari, Firefox, a screen reader, CI on GitHub.
+- **Not started, waiting for the founder's yes:** M2 (team orders, backend), the team list in the editor (E4; specified in `docs/design/08-team-list.md`), E5, housekeeping (finished worktrees, branches and the evidence databases).
+
 **Third interruption, 17 Nov, about 03:00 to 12:20.** The account's usage limit stopped the editor round E3d and the rush storefront task, and the fix round S1-10b had not yet been started; then the machine was restarted. What the coordinator found and did at 12:20:
 - **Docker Desktop is not running,** so the database is down and with it the store preview. The coordinator does not start Docker; the founder is asked to. A background command waits for the database and Redis, then moves the preview worktree to `master`, runs `PORT=9002 npm run setup` and starts the preview (storefront 8000, backend 9002).
 - **The editor demo** was started again on port 5183 from its worktree, moved forward to `master`.
@@ -544,6 +550,7 @@ Assumptions the founders have not confirmed:
 
 ## Standing instructions from the founder
 
+- **Use the account's limits carefully (17 Nov):** the work was using up the founder's usage limits. No task is started without the founder's yes; one task at a time unless he says otherwise; Sonnet by default (the rule in `.claude/agents/coordinator.md`); small briefs with only the evidence a decision needs; the coordinator checks small rounds itself (tests, pictures) and does not send them to QA.
 - **Retail conventions (11 Nov):** where a checkout or order question has no answer in the plan, do what ordinary retail stores on Shopify do today.
 - **Placeholders stay until the whole project works (12 Nov):** the founder is in no hurry to give the real numbers (cash-on-delivery limit, delivery fee, export minimum, rush percentage) or the size chart. Functionality and the user journey come first; the numbers and the size chart are settled once the complete project is working. Do not ask for them again before then.
 
