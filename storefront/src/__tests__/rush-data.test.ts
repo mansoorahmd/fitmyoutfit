@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { CART_CACHE_TAGS } from "@lib/util/cart-cache"
+import { RUSH_SAVE_SERVER_MS } from "@lib/util/rush"
 
 import { completedPk } from "./fixtures/m1-checkout"
 import { checkoutCartPkRush, noSessionAfterPriceChange } from "./fixtures/rush"
@@ -102,7 +103,7 @@ beforeEach(() => {
 describe("chooseRush", () => {
   it("Rush: POST on the visitor's cart, nothing in the body, and the cart's reads dropped", async () => {
     expect(await chooseRush(true)).toEqual({ ok: true })
-    expect(rushCalls()).toEqual([{ path: "/store/carts/cart_1/rush", method: "POST", query: { fields: "id" } }])
+    expect(rushCalls()).toEqual([{ path: "/store/carts/cart_1/rush", method: "POST", query: { fields: "id" }, signal: true }])
     expect(allCartTagsRevalidated()).toBe(true)
   })
 
@@ -145,12 +146,43 @@ describe("chooseRush", () => {
     expect(await chooseRush(true)).toEqual({ ok: false, kind: "cart_lost" })
     expect(rushCalls()).toHaveLength(0)
   })
+
+  it("a backend that never answers: no answer once the time limit is up, and the page reads the truth", async () => {
+    vi.useFakeTimers()
+    try {
+      state.rush = [() => new Promise(() => {})]
+      let result: unknown = null
+      void chooseRush(true).then((r) => (result = r))
+      await vi.advanceTimersByTimeAsync(RUSH_SAVE_SERVER_MS - 1)
+      expect(result).toBeNull()
+      await vi.advanceTimersByTimeAsync(1)
+      expect(result).toEqual({ ok: false, kind: "no_answer" })
+      expect(rushCalls()).toHaveLength(1)
+      expect(allCartTagsRevalidated()).toBe(true)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("409, then no answer: both tries share the one time limit", async () => {
+    vi.useFakeTimers()
+    try {
+      state.rush = [() => fail(409), () => new Promise(() => {})]
+      let result: unknown = null
+      void chooseRush(false).then((r) => (result = r))
+      await vi.advanceTimersByTimeAsync(RUSH_SAVE_SERVER_MS)
+      expect(result).toEqual({ ok: false, kind: "no_answer" })
+      expect(rushCalls()).toHaveLength(2)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })
 
 describe("dropStaleRush", () => {
   it("removes rush from the visitor's own cart only", async () => {
     expect(await dropStaleRush()).toBe(true)
-    expect(rushCalls()).toEqual([{ path: "/store/carts/cart_1/rush", method: "DELETE", query: { fields: "id" } }])
+    expect(rushCalls()).toEqual([{ path: "/store/carts/cart_1/rush", method: "DELETE", query: { fields: "id" }, signal: true }])
     state.cartId = null
     expect(await dropStaleRush()).toBe(false)
     expect(rushCalls()).toHaveLength(1)

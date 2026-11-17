@@ -151,6 +151,14 @@ export const rushSaveResult = (call: { ok: true } | { ok: false; status?: number
 export const RUSH_CONFLICT_RETRIES = 1
 
 /**
+ * The server action's time limit for saving the choice, both tries
+ * together. A backend that doesn't answer in time is "no answer": the
+ * control says so and the page reads the cart again, so a hung request
+ * never leaves the control spinning and "Place order" waiting for good.
+ */
+export const RUSH_SAVE_SERVER_MS = 15_000
+
+/**
  * Saves the choice: one request, and on HTTP 409 the same request again,
  * at most RUSH_CONFLICT_RETRIES times.
  */
