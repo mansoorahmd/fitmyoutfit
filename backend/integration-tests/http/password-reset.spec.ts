@@ -265,6 +265,32 @@ medusaIntegrationTestRunner({
         })
       })
 
+      describe("a token works once, also for two updates at the same moment (QA's fifteenth review, S3)", () => {
+        it("answers one of two simultaneous updates with 200 and the other with 401, in 5 rounds of 5", async () => {
+          for (let round = 0; round < 5; round++) {
+            const before = (await notifications({ to: CUSTOMER_EMAIL })).length
+            const res = await api.post("/auth/customer/emailpass/reset-password", { identifier: CUSTOMER_EMAIL }, allow)
+            expect(res.status).toBe(201)
+            await waitForEvents(9 + round)
+            const sent = await notifications({ to: CUSTOMER_EMAIL })
+            expect(sent).toHaveLength(before + 1)
+            const token = new URL((sent[sent.length - 1].data as Record<string, any>).link).searchParams.get("token")!
+            const statuses = await Promise.all(
+              [0, 1, 2, 3, 4].map((i) =>
+                api
+                  .post(
+                    "/auth/customer/emailpass/update",
+                    { password: `round-${round}-password-${i}` },
+                    { headers: { authorization: `Bearer ${token}` }, ...allow }
+                  )
+                  .then((r: { status: number }) => r.status)
+              )
+            )
+            expect(statuses.sort()).toEqual([200, 401, 401, 401, 401])
+          }
+        })
+      })
+
       describe("called directly", () => {
         const token =
           "eyJhbGciOiJIUzI1NiJ9." +
