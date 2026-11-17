@@ -9,7 +9,8 @@
  * would be dropped or doubled when a page path is added to it, a query or fragment would end up in
  * the middle of every link, and a user or password would be sent to every customer who gets a link.
  * Development and test fall back to the addresses in backend/.env.example when a value is unset;
- * every other NODE_ENV (node-env.ts) needs both set, with `https`. A value is never echoed in a
+ * every other NODE_ENV (node-env.ts) needs both set, with `https` and a public host name (not
+ * localhost, an IP address or a name without a dot: a typo guard). A value is never echoed in a
  * message (it may hold credentials).
  */
 import type { Env } from "./build-config"
@@ -53,8 +54,29 @@ function writeAs(name: PublicUrlName, production: boolean): string {
 }
 
 /**
+ * What kind of host that is not a public host name `hostname` is (as the URL parser gives it:
+ * lower case, IPv4 in any form normalised to four decimal numbers, so `0x7f.1` is `127.0.0.1`,
+ * IPv6 in brackets), or undefined for a public-looking name: `localhost` (or a name under it), an
+ * IP address, or a name without a dot (a trailing dot does not count).
+ */
+export function notPublicHost(hostname: string): string | undefined {
+  const host = hostname.toLowerCase().replace(/\.$/, "")
+  if (host === "localhost" || host.endsWith(".localhost")) {
+    return "localhost"
+  }
+  if (host.startsWith("[") || /^\d+\.\d+\.\d+\.\d+$/.test(host)) {
+    return "an IP address"
+  }
+  if (!host.includes(".")) {
+    return "a host without a dot"
+  }
+  return undefined
+}
+
+/**
  * Why `raw` cannot be used as `name`, or undefined when it can. `production` is true for every
- * NODE_ENV other than unset, development and test.
+ * NODE_ENV other than unset, development and test; there the host must also be a public host
+ * name (notPublicHost: no localhost, IP address or name without a dot, a typo guard).
  */
 export function publicUrlProblem(
   name: PublicUrlName,
@@ -79,6 +101,12 @@ export function publicUrlProblem(
   }
   if (!url.hostname) {
     return `${name} names no host. ${writeAs(name, production)}`
+  }
+  if (production) {
+    const kind = notPublicHost(url.hostname)
+    if (kind) {
+      return `${name} names ${kind}, which nobody outside this machine or network can open. ${writeAs(name, production)}`
+    }
   }
   if (url.username || url.password) {
     return `${name} must not contain a user name or password, because it is written into links sent to customers. ${writeAs(name, production)}`

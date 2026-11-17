@@ -108,6 +108,41 @@ describe("readPublicUrls", () => {
     expect(problems[0]).toContain("for example https://shop.example.com")
   })
 
+  it.each([
+    ["https://localhost", "names localhost"],
+    ["https://LOCALHOST:8443", "names localhost"],
+    ["https://localhost.", "names localhost"],
+    ["https://shop.localhost", "names localhost"],
+    ["https://127.0.0.1", "names an IP address"],
+    ["https://203.0.113.7", "names an IP address"],
+    ["https://0x7f.1", "names an IP address"],
+    ["https://2130706433", "names an IP address"],
+    ["https://[2001:db8::1]", "names an IP address"],
+    ["https://[::1]:8443", "names an IP address"],
+    ["https://shop", "names a host without a dot"],
+    ["https://shop.", "names a host without a dot"],
+  ])("refuses STOREFRONT_URL=%j and BACKEND_URL in production: %s (typo guard)", (value, message) => {
+    for (const name of ["STOREFRONT_URL", "BACKEND_URL"] as const) {
+      const problems = publicUrlProblems({ ...prod, [name]: value })
+      expect(problems).toHaveLength(1)
+      expect(problems[0]).toContain(`${name} ${message}, which nobody outside this machine or network can open.`)
+      expect(problems[0]).toContain("Write ")
+      expect(problems[0]).toContain(name === "STOREFRONT_URL" ? "for example https://shop.example.com" : "for example https://api.example.com")
+    }
+  })
+
+  it("accepts public host names in production, also with a port, upper case or an IDN", () => {
+    for (const value of ["https://shop.example.com", "https://SHOP.Example.COM:8443", "https://bücher.example", "https://shop.example.com."]) {
+      expect(publicUrlProblem("STOREFRONT_URL", value, true)).toBeUndefined()
+    }
+  })
+
+  it("keeps localhost and IP addresses for development and test", () => {
+    for (const value of ["http://localhost:8000", "http://127.0.0.1:9009", "http://shop:8000"]) {
+      expect(publicUrlProblem("STOREFRONT_URL", value, false)).toBeUndefined()
+    }
+  })
+
   it("never echoes the value, which may hold a password", () => {
     const problems = publicUrlProblems({
       ...prod,
