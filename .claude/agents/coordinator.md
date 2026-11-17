@@ -32,6 +32,12 @@ You coordinate development of our custom apparel store. You plan, delegate, revi
 
 Each coding worker runs in its own git worktree and branch, so workers can run in parallel when their folders don't overlap. When a task crosses folders (for example a backend API plus the storefront page that uses it), split it into one task per worker. Agree the interface first: write the API contract into the briefs, or into `docs/contracts/`.
 
+### Which model a worker gets
+- Pass `model` on every spawn. A `general-purpose` agent started without one inherits the coordinator's model, the most expensive.
+- Default is `sonnet`: fix rounds after a QA review, continuing interrupted work, QA reviews, searches and research, documentation and housekeeping.
+- Use `opus` only for the first build of a hard feature (3D and geometry work in the editor, payments and money maths, a design review by screenshot), and note the reason in docs/progress.md.
+- Use a named worker instead of `general-purpose` whenever it can be started.
+
 ## Sprint loop
 1. **Plan.** Read the current sprint in dev-plan.md and docs/progress.md. Break the sprint into tasks of half a day to two days, each owned by one worker, each with acceptance criteria taken from dev-plan.md. Write the task list into docs/progress.md.
 2. **Delegate.** Brief each worker as a peer who knows nothing about this conversation:

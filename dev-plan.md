@@ -1,6 +1,6 @@
 # Store development plan
 
-10 Nov 2026. This plan covers only the code for the online store: the shop, team orders and the 3D editor. Production, factory and logistics work is left out and comes after the store is ready. Relabelled from weeks to milestones on 11 Nov 2026; the tasks and "Done when" lines are unchanged.
+10 Nov 2026. This plan covers only the code for the online store: the shop, team orders and the 3D editor. Production, factory and logistics work is left out and comes after the store is ready. Relabelled from weeks to milestones on 11 Nov 2026; the tasks and "Done when" lines are unchanged. Changed on 17 Nov 2026 (founder): the organizer enters the whole team list in the editor; the player link is left out for now (M2, M3 and E4 below).
 
 Inputs: plan.md and the founder decisions in critiques/DECISIONS.md.
 
@@ -9,7 +9,7 @@ Inputs: plan.md and the founder decisions in critiques/DECISIONS.md.
 A store for **teams and clubs** in **Pakistan, the UK, the UAE and the US**, selling three products: **jersey, T-shirt and jacket**. Ordering works like this:
 
 1. The organizer designs the kit and opens a team order.
-2. The organizer shares a link. Each player adds their name, number and size, and pays nothing.
+2. The organizer enters the team list in the editor: each player's name, number and size. Players get no link and pay nothing.
 3. The organizer signs off one roster proof showing every name, number and size.
 4. The organizer pays a **50% deposit**, then **50% before shipping**.
 5. We promise **delivery within 15 days of proof approval**, or 10 days with paid rush.
@@ -98,32 +98,32 @@ Build a custom Medusa module, `team-order`, with three models:
 
 | Model | Fields |
 | --- | --- |
-| TeamOrder | organizer (customer), team name, design version, product and colorway, region, need-by date, close date, status, share token |
-| RosterEntry | team order, player name, number, size, product, submitted at, locked |
+| TeamOrder | organizer (customer), team name, design version, product and colorway, region, need-by date, status |
+| RosterEntry | team order, player name, number, size, product, position in the list, locked |
 | ProofApproval | team order, design version, roster snapshot (stored copy plus hash), signed by, signed at, IP address |
 
-**Status flow:** `draft → open → closed → proof_sent → approved → deposit_paid → in_production → balance_due → shipped`. Production is handled outside the store for now. Admin sets `in_production` and `shipped` by hand.
+**Status flow:** `draft → proof_sent → approved → deposit_paid → in_production → balance_due → shipped`. The team list is edited in `draft`; there is no open or closed step, because no players enter anything. Production is handled outside the store for now. Admin sets `in_production` and `shipped` by hand.
 
 Tasks:
-- [ ] **Need-by date.** Work out the latest close date and the latest proof-approval date backwards from the need-by date, using the 15-day promise. Reject or warn when the need-by date can't be met, and offer rush.
-- [ ] **Public share link.** Players need no login. Each player adds or edits only their own line, and the organizer can edit all lines.
+- [ ] **Need-by date.** Work out the latest proof-approval date backwards from the need-by date, using the 15-day promise. Reject or warn when the need-by date can't be met, and offer rush.
+- [ ] **Team list entered by the organizer.** Only the signed-in organizer can read or change the list: add, edit, remove and reorder lines, saved as they go. There is no public link and no player login (founder, 17 Nov 2026; a player link may come later).
 - [ ] **Roster checks on the server:**
   - No duplicate numbers.
   - No blank required fields.
   - Allowed characters and a maximum length per field. The length limit comes from the editor's font metrics; use a fixed number until then.
-  - CSV upload for the organizer.
+  - A pasted list or a CSV upload from the organizer goes through the same checks.
 - [ ] **Lock edits** at proof approval. Any change after that creates a new proof version.
-- [ ] **Late joiners.** The organizer can add a player after the order closes. The number is checked against numbers already used, and the addition becomes a linked add-on order.
+- [ ] **Late joiners.** The organizer can add a player after the proof is signed. The number is checked against numbers already used, and the addition becomes a linked add-on order.
 - [ ] **Reorders.** The organizer reorders from a past team order with the same design version. They choose players, sizes and quantities.
 - [ ] **Admin extension:** a team orders list and detail page, with buttons to change status and view the roster and proof.
-- [ ] **Emails:** invite link, reminder 3 days and 1 day before close, roster closed, proof ready, payment due.
+- [ ] **Emails, all to the organizer:** reminder 3 days and 1 day before the latest date to sign the proof, proof ready, payment due.
 
-**Done when:** a test team of 20 can go from open, to close, to a signed proof, using API tests only.
+**Done when:** a test team of 20 can go from a new team order, to a full team list, to a signed proof, using API tests only.
 
 ## M3 Team orders storefront and payments (was Sprint 3). FE leads; BE owns payments
 
-- [ ] **Organizer dashboard.** Shows who has submitted, who hasn't and who has no size, with a copy-link button and a close-now button.
-- [ ] **Player page,** reached from the shared link. Mobile first, entry takes under a minute, and it previews the player's name and number on the design.
+- [ ] **Team list in the editor.** The organizer adds each player's name, number and size in one list, by typing or by pasting a list. Mobile first. Choosing a line shows that player's name and number on the design (editor step E4), and a failed check shows beside its line as they type. The storefront saves the list to the team order.
+- [ ] **Organizer's team-order page.** Shows the order's state: how many lines are complete, which lines have no size or a failed check, and the latest date to sign the proof for the need-by date, with a button back into the editor.
 - [ ] **Roster proof page and PDF.** One page with every player's name as printed, number, size and garment measurement, plus front and back thumbnails. The organizer signs by typing their name and ticking a box, and the time is stored.
 - [ ] **Deposit and balance (spike first, about 2 days).** Confirm how Medusa v2 can take two payments on one order: either two payment collections, or an order with an outstanding amount.
   - If neither works cleanly, use the fallback: one draft order with a payment link for the deposit, and a second payment link for the balance.
@@ -134,13 +134,11 @@ Tasks:
 
 **Done when:** a PL test team goes through the whole flow in the browser on a phone:
 1. create
-2. share
-3. 20 players submit
-4. close
-5. proof signed
-6. deposit
-7. balance
-8. marked shipped
+2. the organizer enters 20 players in the editor
+3. proof signed
+4. deposit
+5. balance
+6. marked shipped
 
 ## 3D editor track: steps E1 to E5, alongside M1 to M3. 3D leads
 
@@ -156,7 +154,7 @@ Stack: React with Three.js (react-three-fiber), in `packages/editor`. The storef
 | E1 | Load the GLB model and orbit the camera. Map 2D SVG pattern panels to the 3D model as textures. Change colour per zone. |
 | E2 | Text, numbers and logo upload. Upload checks: file type, resolution, transparency, and a warning below a minimum DPI. Undo and redo. |
 | E3 | **Palette:** customers pick print-tested colours. A custom HEX value snaps to the nearest palette colour, with a visible warning that shows both colours. **Templates:** load a template and change its text and colours. Built in two parts to the interface specification, docs/design/06-editor.md (decision 009): **E3a** the new interface, templates, team colours and the palette; **E3b** handles on the model, logos, free text and the Done panel. |
-| E4 | Roster preview: switch the 3D view between players, showing each name and number. Font metrics give a real maximum length per field, which the roster checks then use. |
+| E4 | Team list and roster preview: the organizer enters each player's name, number and size in a list inside the editor, and switches the 3D view between players, showing each name and number. The editor hands the list to its host, which saves it. Font metrics give a real maximum length per field, which the roster checks then use. |
 | E5 | Proof renders: front, back and side PNGs from the JSON, uploaded to storage and attached to the proof. Measure performance on a mid-range Android phone. |
 
 - [ ] Save the design JSON through a backend `design` module with versions. Every save creates a new version, and proofs refer to a version.
@@ -172,8 +170,8 @@ Stack: React with Three.js (react-three-fiber), in `packages/editor`. The storef
 - [ ] Payment providers:
   - Stripe or PayPal under the UAE company, once approved.
   - JazzCash and Easypaisa for Pakistan. Check for existing Medusa plugins first; otherwise write custom payment providers.
-- [ ] Load and security pass: rate-limit the public share links, and run a malware scan on file uploads.
-- [ ] Analytics events: design started, team order opened, roster closed, proof signed, deposit paid.
+- [ ] Load and security pass: rate-limit the public read-only design link, and run a malware scan on file uploads.
+- [ ] Analytics events: design started, team order started, team list completed, proof signed, deposit paid.
 
 ## Not in this plan (comes after the store is ready)
 

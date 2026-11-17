@@ -20,7 +20,7 @@ Decisions:
   - Refundable fit kits.
 - **Team orders:**
   - The organizer pays: 50% deposit at proof approval, 50% before shipping.
-  - Players add name, number and size through a shared link and pay nothing.
+  - The organizer enters every player's name, number and size in the editor, in one team list. Players pay nothing. There is no player link at launch; it may come later (founder, 17 Nov 2026).
   - Export orders ship as one duty-paid box to the organizer, with each jersey bagged and labelled.
 - **Where we win:**
   - Self-serve online ordering with a 3D editor.
@@ -108,8 +108,8 @@ Our biggest risks are commercial: margin after US duty, color consistency across
 | Print-tested palette with HEX snapping and a warning | Must for launch | M1 |
 | Template, clipart and font library for teams | Must for launch | M1 |
 | Upload checks and auto-upscaling | Must for launch | M1 |
-| Team link: players add name, number and size | Must for launch | M3 |
-| Need-by date, with the close date worked out from it | Must for launch | M3 |
+| Team list in the editor: the organizer enters each player's name, number and size | Must for launch | M3 |
+| Need-by date, with the latest date to sign the proof worked out from it | Must for launch | M3 |
 | Roster checks: duplicate numbers, blank fields, length and character limits | Must for launch | M3 |
 | One-page roster proof signed by the organizer, with edits locked after signing | Must for launch | M3 |
 | Late joiners and reorders from a past team order | Must for launch | M3 |
@@ -122,6 +122,7 @@ Our biggest risks are commercial: margin after US duty, color consistency across
 | Company accounts, purchase orders, invoices | Later | — |
 | AI design assist | Later | — |
 | Shipping to each player | Later | — |
+| Player link: players add their own name, number and size | Later | — |
 | Fundraising markup, storefronts, private-label builder | Later | — |
 
 ## Milestone plan
@@ -143,7 +144,7 @@ Public launch is in about 24 weeks. Store development runs from week 1. Week-by-
 | M0 Foundations | **Payments:** apply for gateways under the UAE company in week 1. **Factories:** choose 3–5 of the 20+ partners for launch. Agree a method for each product, and one color standard across factories. **Size and color tests:** run a shrinkage test for each fabric, and build size charts from finished garments. **Assets:** patterns and 3D models for the jersey, T-shirt and jacket. **Pricing and duty:** real all-in quotes for 10 team orders in each of the 4 markets. Check UK and UAE duty. **Development:** project setup (Sprint 0). | Partner factories' test prints match the palette, and their sizes are within tolerance. Gateway status is known. Export minimum and prices are set from real quotes. The developers can run the store locally. |
 | M1 Design engine | Own 3D editor: colors by zone, text, numbers, logos, templates, the palette with snapping, a preview for each player, and proof renders. Designs are saved as versioned data. | A coach builds a team design from a template and previews 3 players without help. The proof render matches the 3D view. |
 | M2 Store, checkout and payments | Medusa backend and Next.js storefront. 4 regions, minimum quantity per region, and cash on delivery below a limit in Pakistan. "Delivered by" date and rush option. Duty-paid prices. Deposit and balance payments. Fit kits, design-help queue, IP check. | A Pakistan single-piece order and a UK team order each run from cart to payment. |
-| M3 Team orders | Team link, need-by date, roster checks, signed roster proof, edits locked after signing. Late joiners, reorders, organizer dashboard, and email reminders. | A test team of 20 goes from create to share to close to signed proof to deposit to balance on a phone, with no manual edits. A player added after close gets a matching jersey. |
+| M3 Team orders | Team list entered by the organizer in the editor, need-by date, roster checks, signed roster proof, edits locked after signing. Late joiners, reorders, the organizer's order page, and email reminders to the organizer. | A test team of 20 goes from create to a full team list to signed proof to deposit to balance on a phone, with no manual edits. A player added after signing gets a matching jersey. |
 | M4 Factory network link | Standard job file. Routing by method and factory load. Factory and lot recorded on each piece. Hub quality and color check for team orders, and factory photo check for bulk. Remake lane with the 7-day guarantee. One duty-paid box per team. Status page and WhatsApp updates. | A shift of mixed orders (team orders, singles, a reorder and a remake) runs at partner factories from system files, and passes the hub check. |
 | M5 Pilot with real teams | Invited teams in all 4 markets, with real orders and real payments. | Tracked weekly: contribution margin after duty, freight and fees; remake rate; on-time rate against the promised date; days from claim to replacement in hand. Top pilot issues fixed. |
 | M6 Public launch | Marketing site, SEO pages for each sport and product, pilot reviews, and a support playbook. Open about Pakistan production: "made by our partner factories in Pakistan". | Store open to the public. |

@@ -8,6 +8,7 @@ import { isPakistan } from "./home-regions"
 import { convertToLocale } from "./money"
 import { productKind } from "./product-kind"
 import { showsTaxNote } from "./product-page"
+import { withoutRush } from "./rush"
 import { isAdultSize, isSizeOption, isYouthSize } from "./sizes"
 
 type LineLike = Pick<
@@ -20,10 +21,19 @@ type LineLike = Pick<
   product?: { metadata?: Record<string, unknown> | null } | null
 }
 
-/** The number of pieces: the sum of the quantities, not the number of lines. */
+/**
+ * The number of pieces: the sum of the quantities, not the number of lines.
+ * Garments and the fit kit; never the rush line (contract 9), which is a
+ * charge, not a piece. A line read without its product counts.
+ */
 export const pieceCount = (
-  items: Pick<HttpTypes.StoreCartLineItem, "quantity">[] | null | undefined
-): number => (items ?? []).reduce((sum, item) => sum + (item.quantity || 0), 0)
+  items:
+    | (Pick<HttpTypes.StoreCartLineItem, "quantity"> & {
+        product?: { metadata?: Record<string, unknown> | null } | null
+      })[]
+    | null
+    | undefined
+): number => withoutRush(items).reduce((sum, item) => sum + (item.quantity || 0), 0)
 
 /**
  * The line's size ("M"), or null for a line without one (the fit kit). The

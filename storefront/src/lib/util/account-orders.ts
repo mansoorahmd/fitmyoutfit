@@ -15,6 +15,7 @@ import { HttpTypes } from "@medusajs/types"
 import { accountContent } from "@content/account"
 
 import { money, pieceCount } from "./cart-view"
+import { withoutRush } from "./rush"
 import {
   OrderConfirmationView,
   OrderPromise,
@@ -101,7 +102,15 @@ type OrderLike = Pick<
   "id" | "display_id" | "created_at" | "total" | "currency_code" | "status"
 > & {
   fulfillment_status?: string | null
-  items?: { thumbnail?: string | null; quantity: number; product_title?: string | null; title?: string | null }[] | null
+  items?:
+    | {
+        thumbnail?: string | null
+        quantity: number
+        product_title?: string | null
+        title?: string | null
+        product?: { metadata?: Record<string, unknown> | null } | null
+      }[]
+    | null
 }
 
 /** One order as the order history shows it (05, 9.3). */
@@ -109,7 +118,8 @@ export const orderCardView = (order: OrderLike, promise: OrderPromise | null): O
   const number = orderNumber(order.display_id)
   const placed = placedOnDate(order.created_at)
   const items = order.items ?? []
-  const withPicture = items.filter((item) => !!item.thumbnail)
+  // the rush line is a charge, not a garment: no picture of it (contract 9)
+  const withPicture = withoutRush(items).filter((item) => !!item.thumbnail)
   const status = orderStatus(order)
   return {
     id: order.id,

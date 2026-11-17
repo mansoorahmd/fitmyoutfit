@@ -478,7 +478,7 @@ describe("Place order (05, 6.6 to 6.8)", () => {
       fireEvent.click(button)
     })
     expect(callsOf("placeOrder")).toHaveLength(1)
-    expect(callsOf("placeOrder")[0].args).toEqual(["pp_cod_cod", "pk"])
+    expect(callsOf("placeOrder")[0].args).toEqual(["pp_cod_cod", "pk", 2250]) // with the total the page showed (contract 9)
     expect(button).toHaveAttribute("aria-busy", "true")
     expect(within(button).getByTestId("button-loading")).toHaveTextContent("Placing your order…")
     await act(async () => finish({ kind: "server" }))
@@ -872,6 +872,6 @@ describe("Place order (05, 6.6 to 6.8)", () => {
     await act(async () => {
       fireEvent.click(screen.getByTestId("place-order"))
     })
-    expect(callsOf("placeOrder")[0].args).toEqual(["pp_cod_cod", "pk"])
+    expect(callsOf("placeOrder")[0].args).toEqual(["pp_cod_cod", "pk", 2250]) // with the total the page showed (contract 9)
   })
 })

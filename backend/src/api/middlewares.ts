@@ -18,6 +18,11 @@
  *
  * Medusa's order cancel (POST /admin/orders/:id/cancel) holds the order's cash lock for as long as
  * it runs, so it never interleaves with "mark cash as collected" (holdOrderCashLockDuringCancel).
+ *
+ * Password reset (docs/contracts/m1-password-reset.md): every request's logged address and
+ * Referer lose the value of a `token` parameter (redactCredentialsInRequestLog), and a password
+ * update holds its reset token's lock, so a token works once even when two updates arrive at the
+ * same moment (holdResetTokenLockDuringUpdate).
  */
 import {
   defineMiddlewares,
@@ -36,6 +41,10 @@ import {
   reservedKeysMessage,
 } from "../lib/rules/order-metadata"
 import { isRushKind } from "../lib/rules/rush-charge"
+import { redactLoggedRequestFields, type LoggedRequestFields } from "../lib/rules/request-log-redaction"
+import { errorNameForLog } from "../lib/rules/password-reset"
+import { RESET_TOKEN_BUSY_MESSAGE, resetTokenLockKey } from "../lib/rules/reset-token-lock"
+import { ResetTokenLockBusy, withResetTokenLock } from "../workflows/password-reset/reset-token-lock"
 import { ORDER_BUSY_FOR_CANCEL_MESSAGE } from "../lib/rules/cash-collection"
 import { OrderCashLockBusy, withOrderCashLock } from "../workflows/cash-collection/order-cash-lock"
 import { assertCheckoutAllowed } from "../workflows/checkout-rules/load-checkout-rules"
@@ -223,8 +232,80 @@ export function holdOrderCashLockDuringCancel(
   })
 }
 
+/**
+ * Before every request Medusa routes: removes the value of a `token` query parameter from the
+ * request's logged address and from its `Referer` (lib/rules/request-log-redaction.ts), so Medusa's
+ * request log never holds a reset or invite token (QA's fifteenth review, B2). Routing and the
+ * route handlers read `req.url` and `req.query`, which are left alone.
+ */
+export function redactCredentialsInRequestLog(
+  req: MedusaRequest,
+  _res: MedusaResponse,
+  next: MedusaNextFunction
+): void {
+  redactLoggedRequestFields(req as unknown as LoggedRequestFields)
+  next()
+}
+
+/** The longest an update holds its reset token's lock, whatever happens to its response. */
+const RESET_TOKEN_LOCK_LIMIT_MS = 60 * 1000
+
+/**
+ * Before POST /auth/:actor_type/emailpass/update (Medusa's route and its token check): holds the
+ * reset token's lock (workflows/password-reset/reset-token-lock.ts) until the response is sent,
+ * so a second update with the same token waits, then finds the token used and is refused (QA's
+ * fifteenth review, S3). Without a readable `jti` nothing is locked. When the lock is not free in
+ * time: HTTP 409 (`conflict`).
+ */
+export function holdResetTokenLockDuringUpdate(
+  req: MedusaRequest,
+  res: MedusaResponse,
+  next: MedusaNextFunction
+): void {
+  const key = resetTokenLockKey(req.headers.authorization)
+  if (!key) {
+    return next()
+  }
+  let release: () => void = () => undefined
+  const done = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  res.once("finish", () => release())
+  res.once("close", () => release())
+  setTimeout(() => release(), RESET_TOKEN_LOCK_LIMIT_MS).unref()
+  let handedOn = false
+  withResetTokenLock(req.scope, key, async () => {
+    handedOn = true
+    next()
+    await done
+  }).catch((error: unknown) => {
+    if (handedOn) {
+      // The update ran and answered; only releasing the lock failed (it ends with its connection).
+      req.scope
+        .resolve(ContainerRegistrationKeys.LOGGER)
+        .warn(`Reset token lock: ${errorNameForLog(error)}`)
+      return
+    }
+    if (error instanceof ResetTokenLockBusy) {
+      res.status(409).json({ type: MedusaError.Types.CONFLICT, message: RESET_TOKEN_BUSY_MESSAGE })
+      return
+    }
+    next(error)
+  })
+}
+
 export default defineMiddlewares({
   routes: [
+    {
+      // No method: a global middleware, ahead of the routes.
+      matcher: "/",
+      middlewares: [redactCredentialsInRequestLog],
+    },
+    {
+      matcher: "/auth/:actor_type/emailpass/update",
+      method: ["POST"],
+      middlewares: [holdResetTokenLockDuringUpdate],
+    },
     {
       matcher: "/store/payment-collections/:id/payment-sessions",
       method: ["POST"],

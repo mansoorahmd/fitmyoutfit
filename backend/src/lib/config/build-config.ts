@@ -3,6 +3,7 @@
  * No Medusa imports, so they can be unit tested without booting the app.
  * medusa-config.ts only calls `buildMedusaConfig`.
  */
+import { buildAdminConfig } from "./admin-page"
 import {
   databaseHostProblem,
   databaseUrlReadings,
@@ -10,7 +11,9 @@ import {
   type DatabaseHostProblem,
   type DatabaseLogin,
 } from "./database-login"
+import { EMAIL_CHANNEL, emailDelivery } from "./email-delivery"
 import { describeNodeEnv, isLocalNodeEnv } from "./node-env"
+import { publicUrlProblems, PublicUrlError, readPublicUrls } from "./public-urls"
 
 export type Env = Record<string, string | undefined>
 
@@ -297,6 +300,8 @@ export function productionSecretProblems(env: Env): string[] {
         "or use a different database user"
     )
   }
+  // STOREFRONT_URL and BACKEND_URL go into links sent to customers and staff (public-urls.ts).
+  problems.push(...publicUrlProblems(env))
   return problems
 }
 
@@ -309,6 +314,23 @@ export function assertProductionSecrets(env: Env): void {
         "Every NODE_ENV other than development and test needs real values. " +
         "The values in .env.example are for local development only."
     )
+  }
+}
+
+/**
+ * In development and test too, a STOREFRONT_URL or BACKEND_URL that is set must be usable
+ * (public-urls.ts); outside them assertProductionSecrets has already refused it.
+ */
+export function assertPublicUrls(env: Env): void {
+  try {
+    readPublicUrls(env)
+  } catch (error) {
+    if (error instanceof PublicUrlError) {
+      throw new ConfigError(
+        `Refusing to start with NODE_ENV=${describeNodeEnv(env.NODE_ENV)}:\n- ${error.message.split("\n").join("\n- ")}`
+      )
+    }
+    throw error
   }
 }
 
@@ -428,21 +450,54 @@ export function buildOwnModules(): ModuleEntry[] {
   return [{ resolve: "./src/modules/cash-collection" }]
 }
 
+/**
+ * The Notification Module, with Medusa's local provider (it writes each notification to the log)
+ * on the `feed` channel always, as Medusa's own default has it, and on the `email` channel only
+ * where emailDelivery (email-delivery.ts) says email is logged: NODE_ENV exactly `development` or
+ * `test`. Elsewhere no provider takes `email`, so the local provider never writes an email to the
+ * log; but Medusa stores a notification, data included, in its `notification` table (readable by
+ * admins through GET /admin/notifications) before it refuses it for lack of a provider. So this is
+ * not what keeps a reset link out of production: the password-reset subscriber creates no
+ * notification at all there (mayLogResetLink). Our own code never writes a link or token to a log
+ * outside development and test; Medusa's request log is another matter (see the README).
+ * Configuring the module replaces Medusa's default entry for it (the last entry wins).
+ */
+export function buildNotificationModules(env: Env): ModuleEntry[] {
+  const channels = emailDelivery(env) === "log" ? ["feed", EMAIL_CHANNEL] : ["feed"]
+  return [
+    {
+      resolve: "@medusajs/medusa/notification",
+      options: {
+        providers: [
+          {
+            resolve: "@medusajs/medusa/notification-local",
+            id: "local",
+            options: { name: "Local Notification Provider", channels },
+          },
+        ],
+      },
+    },
+  ]
+}
+
 export function buildModules(env: Env): ModuleEntry[] {
   return [
     ...buildRedisModules(env),
     ...buildFileModules(env),
     ...buildPaymentModules(),
+    ...buildNotificationModules(env),
     ...buildOwnModules(),
   ]
 }
 
 /**
  * The whole Medusa configuration (what medusa-config.ts passes to `defineConfig`).
- * In production it first refuses missing or dev-only secrets.
+ * In production it first refuses missing or dev-only secrets and unusable public URLs; in
+ * development and test it refuses a public URL that is set but unusable.
  */
 export function buildMedusaConfig(env: Env) {
   assertProductionSecrets(env)
+  assertPublicUrls(env)
   return {
     projectConfig: {
       databaseUrl: env.DATABASE_URL,
@@ -450,5 +505,7 @@ export function buildMedusaConfig(env: Env) {
       http: buildHttpConfig(env),
     },
     modules: buildModules(env),
+    // The admin's reset link keeps its token out of every request (admin-page.ts).
+    admin: buildAdminConfig(),
   }
 }

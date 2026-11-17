@@ -7,6 +7,7 @@ import { checkoutContent } from "@content/checkout"
 import { CheckoutView } from "@lib/util/checkout-view"
 import { countWords, fillParts } from "@lib/util/wording"
 import CartSummary from "@modules/cart/components/cart-summary"
+import { useRushSaving } from "@modules/cart/components/rush-choice"
 import Amount from "@modules/common/components/amount"
 import ChevronDown from "@modules/common/icons/chevron-down"
 
@@ -14,20 +15,27 @@ import SummaryLines from "../summary-lines"
 
 const lineWords = { size: checkoutContent.check.size, times: checkoutContent.check.times }
 
-/** The lines and the summary rows (05, 4.4): items, delivery, total, tax note, date. */
-export const OrderSummaryContent = ({ view }: { view: CheckoutView }) => (
-  <div className="flex flex-col gap-4">
-    <SummaryLines lines={view.lines} words={lineWords} />
-    <div className="border-t border-brand-border pt-4">
-      <CartSummary
-        {...view.summary}
-        codLimit={null}
-        minimum={null}
-        updating={false}
-      />
+/**
+ * The lines and the summary rows (05, 4.4): items, rush production (when
+ * the cart holds it), delivery, total, tax note, date. While a delivery
+ * speed choice saves, the amounts are grey bars.
+ */
+export const OrderSummaryContent = ({ view }: { view: CheckoutView }) => {
+  const updating = useRushSaving()
+  return (
+    <div className="flex flex-col gap-4">
+      <SummaryLines lines={view.lines} words={lineWords} />
+      <div className="border-t border-brand-border pt-4">
+        <CartSummary
+          {...view.summary}
+          codLimit={null}
+          minimum={null}
+          updating={updating}
+        />
+      </div>
     </div>
-  </div>
-)
+  )
+}
 
 /**
  * From 1024 px, the summary box on the right (05, 6.3): "Your order", the
@@ -60,6 +68,7 @@ export const OrderSummaryDisclosure = ({ view }: { view: CheckoutView }) => {
   // S1-4c, m8). The bar is on the page once.
   const panelId = SUMMARY_PANEL_ID
   const { summaryBar } = checkoutContent
+  const updating = useRushSaving()
 
   return (
     <div className="-mx-4 bg-brand-surface-alt md:mx-0 md:rounded-card" data-testid="order-summary-disclosure">
@@ -86,7 +95,9 @@ export const OrderSummaryDisclosure = ({ view }: { view: CheckoutView }) => {
           aria-hidden="true"
           className={clx("shrink-0 transition-transform duration-150", open && "rotate-180")}
         />
-        <Amount className="type-body font-semibold">{view.summary.total}</Amount>
+        <Amount loading={updating} className="type-body font-semibold">
+          {view.summary.total}
+        </Amount>
       </button>
       <div id={panelId} hidden={!open} className="px-4 pb-4">
         <OrderSummaryContent view={view} />
