@@ -3,12 +3,17 @@
 // Below 1024 px one column, centred at 560 px from 768 px. From 1024 px the
 // lines take 7/12 and the summary 5/12, sticky under the header + 16 px,
 // with 48 px between them.
+// Below 1024 px the sticky checkout bar (64 px and the safe-area inset) lies
+// over the foot of the screen: the page ends 112 px lower, and whatever the
+// customer can tap stops 112 px above the foot of the screen when the browser
+// scrolls it into view (a focus, a jump), so it is never under the bar (S1-11).
 
 const NARROW = "mx-auto w-full max-w-[560px] lg:mx-0 lg:max-w-none"
 
 export const cartLayout = {
-  page: "content-container pt-6 pb-12 md:pt-8 xl:pb-24",
-  columns: "flex flex-col gap-8 lg:grid lg:grid-cols-12 lg:items-start lg:gap-12",
+  page: "content-container pt-6 pb-28 md:pt-8 lg:pb-12 xl:pb-24",
+  columns:
+    "flex flex-col gap-8 lg:grid lg:grid-cols-12 lg:items-start lg:gap-12 [&_:is(a,button,input,section)]:scroll-mb-28 lg:[&_:is(a,button,input,section)]:scroll-mb-0",
   main: `${NARROW} flex flex-col gap-6 lg:col-span-7`,
   aside: `${NARROW} flex flex-col gap-4 lg:col-span-5 lg:sticky lg:top-20 xl:top-[88px]`,
   // The summary box: a plain block on phones (the lines' bottom divider is
