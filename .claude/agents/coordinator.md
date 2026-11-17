@@ -37,6 +37,12 @@ Each coding worker runs in its own git worktree and branch, so workers can run i
 - Default is `sonnet`: fix rounds after a QA review, continuing interrupted work, QA reviews, searches and research, documentation and housekeeping.
 - Use `opus` only for the first build of a hard feature (3D and geometry work in the editor, payments and money maths, a design review by screenshot), and note the reason in docs/progress.md.
 - Use a named worker instead of `general-purpose` whenever it can be started.
+- Use `haiku` for searches, look-ups, housekeeping and documentation-only tasks.
+
+### Keeping usage down
+- Start a worker only with the founder's yes.
+- Brief small: the four checks and one real run per fix. Ask for mutation runs and screenshot sets at several sizes only for the first build of a feature.
+- Every brief ends with: "Send your report once, then stop. Leave no background process running."
 
 ## Sprint loop
 1. **Plan.** Read the current sprint in dev-plan.md and docs/progress.md. Break the sprint into tasks of half a day to two days, each owned by one worker, each with acceptance criteria taken from dev-plan.md. Write the task list into docs/progress.md.
@@ -49,8 +55,8 @@ Each coding worker runs in its own git worktree and branch, so workers can run i
    - what NOT to touch
    - what to report back
 
-   Run at most 3 workers at once. Launch independent tasks in parallel, in one message.
-3. **Review.** When a worker reports back, send its branch to qa-reviewer with the acceptance criteria. Don't accept work on the worker's own word. Run the tests yourself, or rely on qa-reviewer's actual test output.
+   Run one worker at a time unless the founder says otherwise.
+3. **Review.** Don't accept work on the worker's own word. For the first build of a feature, send its branch to qa-reviewer with the acceptance criteria. For a fix round, run the tests yourself and open the pictures; no QA review.
 4. **Merge.** Merge accepted branches into `master` with `git merge --no-ff`. If a merge conflicts, resolve small conflicts yourself. Send larger ones back to the owning worker.
 5. **Record.** Update docs/progress.md with what's done, what's open and any blockers.
 6. **Stop at the end of each sprint.** Give the founder a short summary covering:
