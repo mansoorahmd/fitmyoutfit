@@ -37,8 +37,10 @@ function medusaToken(entityId: string, seconds = 15 * 60): string {
   )
 }
 
+/** The parameters the reset page reads: the query (customer) or the fragment (admin, moved into the query by the page). */
 function queryOf(link: string): URLSearchParams {
-  return new URL(link).searchParams
+  const url = new URL(link)
+  return url.hash ? new URLSearchParams(url.hash.slice(1)) : url.searchParams
 }
 
 describe("resetPasswordLink", () => {
@@ -47,7 +49,7 @@ describe("resetPasswordLink", () => {
       "https://shop.example.com/account/reset-password?token=t.k.n&email=a%40b.co"
     )
     expect(resetPasswordLink({ actorType: "user", email: "a@b.co", token: "t.k.n" }, urls)).toBe(
-      "https://api.example.com/app/reset-password?token=t.k.n&email=a%40b.co"
+      "https://api.example.com/app/reset-password#token=t.k.n&email=a%40b.co"
     )
     expect(CUSTOMER_RESET_PAGE).toBe("/account/reset-password")
     expect(ADMIN_RESET_PAGE).toBe("/app/reset-password")
@@ -84,6 +86,8 @@ describe("resetPasswordLink", () => {
       expect(decodeURIComponent(raw)).toBe(email)
       expect(link).not.toMatch(/[\s"<>`{}|\\^]/)
       expect(new URL(link).pathname).toBe(actorType === "customer" ? CUSTOMER_RESET_PAGE : ADMIN_RESET_PAGE)
+      // The admin's token never goes to the server: no query, everything in the fragment.
+      expect(new URL(link).search === "").toBe(actorType === "user")
     }
   })
 
@@ -204,7 +208,7 @@ describe("planPasswordReset", () => {
   it("sends admin users the admin's link", () => {
     const plan = planPasswordReset({ ...event, actor_type: "user" }, { urls, mayLog: true, channel: "email", account: HAS })
     expect(plan.action === "send" && plan.notification.data.link).toBe(
-      `https://api.example.com/app/reset-password?token=${token}&email=Zo%C3%AB%2BTeam%40Example.com`
+      `https://api.example.com/app/reset-password#token=${token}&email=Zo%C3%AB%2BTeam%40Example.com`
     )
     expect(plan.action === "send" && plan.notification.data.actor_type).toBe("user")
   })

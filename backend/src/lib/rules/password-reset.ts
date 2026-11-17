@@ -22,14 +22,21 @@ export const CUSTOMER_RESET_PAGE = "/account/reset-password"
  * The admin's own page in Medusa's dashboard: route `/reset-password` under the admin path `/app`
  * (Medusa's default; our config does not change it). It reads `token` from the query and shows
  * the email from inside the token; `email` is added for the same shape as the customer's link.
+ * The admin's link carries both in the fragment (`#token=…&email=…`), so the token never reaches
+ * the server or its request log; a script in the admin's page moves them into the query before
+ * the page reads them (lib/config/admin-page.ts).
  */
 export const ADMIN_RESET_PAGE = "/app/reset-password"
 
-/** The reset page for each actor type that has one. Any other actor type gets no link. */
+/**
+ * The reset page for each actor type that has one, and what comes between the page and
+ * `token=…&email=…`: `?` (the query) for the storefront, `#` (the fragment) for the admin.
+ * Any other actor type gets no link.
+ */
 const RESET_PAGES = {
-  customer: { base: "storefrontUrl", page: CUSTOMER_RESET_PAGE },
-  user: { base: "backendUrl", page: ADMIN_RESET_PAGE },
-} as const satisfies Record<string, { base: keyof PublicUrls; page: string }>
+  customer: { base: "storefrontUrl", page: CUSTOMER_RESET_PAGE, separator: "?" },
+  user: { base: "backendUrl", page: ADMIN_RESET_PAGE, separator: "#" },
+} as const satisfies Record<string, { base: keyof PublicUrls; page: string; separator: "?" | "#" }>
 
 export type ResetActorType = keyof typeof RESET_PAGES
 
@@ -117,10 +124,11 @@ export function sendFailureLine(error: unknown, mayLog: boolean): string {
 }
 
 /**
- * The reset link for an actor type, email and token: `<base><page>?token=<token>&email=<email>`,
- * both values percent-encoded with encodeURIComponent (a `+` becomes %2B, a space %20, `&` %26,
- * non-Latin letters their UTF-8 bytes). Undefined for an actor type without a reset page, and for
- * an email or token that cannot be encoded (a lone UTF-16 surrogate).
+ * The reset link for an actor type, email and token: `<base><page>?token=<token>&email=<email>`
+ * for a customer, `<base><page>#token=<token>&email=<email>` for an admin user, both values
+ * percent-encoded with encodeURIComponent (a `+` becomes %2B, a space %20, `&` %26, non-Latin
+ * letters their UTF-8 bytes). Undefined for an actor type without a reset page, and for an email
+ * or token that cannot be encoded (a lone UTF-16 surrogate).
  */
 export function resetPasswordLink(
   input: { actorType: unknown; email: string; token: string },
@@ -129,7 +137,7 @@ export function resetPasswordLink(
   if (!isResetActorType(input.actorType)) {
     return undefined
   }
-  const { base, page } = RESET_PAGES[input.actorType]
+  const { base, page, separator } = RESET_PAGES[input.actorType]
   let token: string
   let email: string
   try {
@@ -138,7 +146,7 @@ export function resetPasswordLink(
   } catch {
     return undefined
   }
-  return `${urls[base]}${page}?token=${token}&email=${email}`
+  return `${urls[base]}${page}${separator}token=${token}&email=${email}`
 }
 
 /**

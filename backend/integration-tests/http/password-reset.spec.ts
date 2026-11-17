@@ -9,6 +9,7 @@ import { medusaIntegrationTestRunner } from "@medusajs/test-utils"
 import { Modules } from "@medusajs/framework/utils"
 import { createCustomerAccountWorkflow, createUserAccountWorkflow } from "@medusajs/medusa/core-flows"
 import sendPasswordResetLink from "../../src/subscribers/password-reset-link"
+import middlewaresConfig, { redactCredentialsInRequestLog } from "../../src/api/middlewares"
 
 jest.setTimeout(300 * 1000)
 
@@ -145,8 +146,19 @@ medusaIntegrationTestRunner({
         expect(data.expires_in_minutes).toBe(15)
         const link = new URL(data.link)
         expect(link.origin + link.pathname).toBe(`${BACKEND_URL}/app/reset-password`)
-        expect(link.searchParams.get("email")).toBe(USER_EMAIL)
-        expect(link.searchParams.get("token")).toMatch(/^[\w-]+\.[\w-]+\.[\w-]+$/)
+        // In the fragment, never in the query: a browser does not send it to the server.
+        expect(link.search).toBe("")
+        const fragment = new URLSearchParams(link.hash.slice(1))
+        expect([...fragment.keys()]).toEqual(["token", "email"])
+        expect(fragment.get("email")).toBe(USER_EMAIL)
+        const token = fragment.get("token")!
+        expect(token).toMatch(/^[\w-]+\.[\w-]+\.[\w-]+$/)
+        const update = await api.post(
+          "/auth/user/emailpass/update",
+          { password: "second-password-2" },
+          { headers: { authorization: `Bearer ${token}` }, ...allow }
+        )
+        expect(update.status).toBe(200)
       })
 
       it("sends nothing for an actor type without a reset page, though Medusa emits the event", async () => {
@@ -211,6 +223,45 @@ medusaIntegrationTestRunner({
           const [customerLink, userLink] = sent.map((n) => new URL((n.data as Record<string, any>).link))
           expect(customerLink.origin + customerLink.pathname).toBe(`${STOREFRONT_URL}/account/reset-password`)
           expect(userLink.origin + userLink.pathname).toBe(`${BACKEND_URL}/app/reset-password`)
+        })
+      })
+
+      describe("request log (QA's fifteenth review, B2)", () => {
+        it("runs the redaction middleware for every request, ahead of the routes", () => {
+          const entry = middlewaresConfig.routes?.find((route) =>
+            (route.middlewares as unknown[] | undefined)?.includes(redactCredentialsInRequestLog)
+          )
+          expect(entry).toEqual({ matcher: "/", middlewares: [redactCredentialsInRequestLog] })
+          expect(middlewaresConfig.routes?.[0]).toBe(entry)
+        })
+
+        it("hands Medusa's request log a redacted address and referrer, and leaves routing alone", () => {
+          const req = {
+            url: "/auth/user/emailpass/update?token=a.b.c",
+            originalUrl: "/auth/user/emailpass/update?token=a.b.c",
+            headers: { referer: "https://api.example.com/app/reset-password?token=a.b.c&email=x" },
+          }
+          const next = jest.fn()
+          redactCredentialsInRequestLog(req as never, {} as never, next)
+          expect(next).toHaveBeenCalledWith()
+          expect(req.originalUrl).toBe("/auth/user/emailpass/update?token=[redacted]")
+          expect(req.headers.referer).toBe("https://api.example.com/app/reset-password?token=[redacted]&email=x")
+          expect(req.url).toBe("/auth/user/emailpass/update?token=a.b.c")
+        })
+
+        it("a reset still works through the middleware when the Referer carries the token", async () => {
+          const res = await api.post("/auth/customer/emailpass/reset-password", { identifier: CUSTOMER_EMAIL }, allow)
+          expect(res.status).toBe(201)
+          await waitForEvents(8)
+          const [last] = (await notifications({ to: CUSTOMER_EMAIL })).slice(-1)
+          const link = (last.data as Record<string, any>).link as string
+          const token = new URL(link).searchParams.get("token")!
+          const update = await api.post(
+            "/auth/customer/emailpass/update",
+            { password: "third-password-3" },
+            { headers: { authorization: `Bearer ${token}`, referer: link }, ...allow }
+          )
+          expect(update.status).toBe(200)
         })
       })
 

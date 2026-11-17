@@ -36,6 +36,7 @@ import {
   reservedKeysMessage,
 } from "../lib/rules/order-metadata"
 import { isRushKind } from "../lib/rules/rush-charge"
+import { redactLoggedRequestFields, type LoggedRequestFields } from "../lib/rules/request-log-redaction"
 import { ORDER_BUSY_FOR_CANCEL_MESSAGE } from "../lib/rules/cash-collection"
 import { OrderCashLockBusy, withOrderCashLock } from "../workflows/cash-collection/order-cash-lock"
 import { assertCheckoutAllowed } from "../workflows/checkout-rules/load-checkout-rules"
@@ -223,8 +224,28 @@ export function holdOrderCashLockDuringCancel(
   })
 }
 
+/**
+ * Before every request Medusa routes: removes the value of a `token` query parameter from the
+ * request's logged address and from its `Referer` (lib/rules/request-log-redaction.ts), so Medusa's
+ * request log never holds a reset or invite token (QA's fifteenth review, B2). Routing and the
+ * route handlers read `req.url` and `req.query`, which are left alone.
+ */
+export function redactCredentialsInRequestLog(
+  req: MedusaRequest,
+  _res: MedusaResponse,
+  next: MedusaNextFunction
+): void {
+  redactLoggedRequestFields(req as unknown as LoggedRequestFields)
+  next()
+}
+
 export default defineMiddlewares({
   routes: [
+    {
+      // No method: a global middleware, ahead of the routes.
+      matcher: "/",
+      middlewares: [redactCredentialsInRequestLog],
+    },
     {
       matcher: "/store/payment-collections/:id/payment-sessions",
       method: ["POST"],

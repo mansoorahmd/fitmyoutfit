@@ -3,6 +3,7 @@
  * No Medusa imports, so they can be unit tested without booting the app.
  * medusa-config.ts only calls `buildMedusaConfig`.
  */
+import { buildAdminConfig } from "./admin-page"
 import {
   databaseHostProblem,
   databaseUrlReadings,
@@ -504,5 +505,7 @@ export function buildMedusaConfig(env: Env) {
       http: buildHttpConfig(env),
     },
     modules: buildModules(env),
+    // The admin's reset link keeps its token out of every request (admin-page.ts).
+    admin: buildAdminConfig(),
   }
 }
