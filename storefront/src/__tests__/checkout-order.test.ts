@@ -117,10 +117,10 @@ describe("placeOrderFlow (contract 6 and 8.1)", () => {
     expect(complete).toHaveBeenCalledTimes(2)
   })
 
-  it("409 twice: unknown, never a third try", async () => {
+  it("409 every time: unknown after the first try and two more, never a fourth (contract 9)", async () => {
     const complete = vi.fn(async (): Promise<BackendCall<any>> => ({ ok: false, status: 409 }))
     expect(await placeOrderFlow({ ensureSession: async () => ok, complete })).toEqual({ kind: "unknown" })
-    expect(complete).toHaveBeenCalledTimes(2)
+    expect(complete).toHaveBeenCalledTimes(3)
   })
 
   it("no answer at completion: unknown (the order may exist)", async () => {

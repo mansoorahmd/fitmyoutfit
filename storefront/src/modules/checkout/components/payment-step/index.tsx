@@ -23,6 +23,7 @@ import Alert from "@modules/common/components/alert"
 import Amount from "@modules/common/components/amount"
 import { Button, ButtonLink } from "@modules/common/components/button"
 import Spinner from "@modules/common/icons/spinner"
+import { useRushSaving } from "@modules/cart/components/rush-choice"
 import LineIcon from "@modules/home/components/line-icon"
 
 import { forgetAddressDraft, takeStepFocus } from "../../step-memory"
@@ -88,6 +89,8 @@ const PaymentStep = ({ view, open }: { view: CheckoutView; open: boolean }) => {
   const [selectFailed, setSelectFailed] = useState(false)
   const [phase, setPhase] = useState<Phase>("idle")
   const [alert, setAlert] = useState<{ state: PlaceOrderAlertState; key: number } | null>(null)
+  // a delivery speed choice is saving: the total isn't known yet, so nothing is placed meanwhile
+  const rushSaving = useRushSaving()
   const placing = useRef(false)
   const headingRef = useRef<HTMLHeadingElement>(null)
   const groupRef = useRef<HTMLDivElement>(null)
@@ -287,7 +290,10 @@ const PaymentStep = ({ view, open }: { view: CheckoutView; open: boolean }) => {
 
     let result: PlaceOrderResult | "timeout"
     try {
-      result = await withTimeout(placeOrder(chosen, view.countryCode), PLACE_ORDER_TIMEOUT_MS)
+      result = await withTimeout(
+        placeOrder(chosen, view.countryCode, view.totalAmount),
+        PLACE_ORDER_TIMEOUT_MS
+      )
     } catch (error) {
       if (isRedirectError(error)) {
         leaving()
@@ -301,6 +307,10 @@ const PaymentStep = ({ view, open }: { view: CheckoutView; open: boolean }) => {
     } else if (result.kind === "refused") {
       setPhase("checking")
       show({ kind: "refusal", refusal: await explain() })
+      router.refresh()
+    } else if (result.kind === "total_changed") {
+      // nothing placed: the page shows the new total, and the next press places it
+      show({ kind: "total_changed", total: result.total, currencyCode: result.currencyCode })
       router.refresh()
     } else {
       show({ kind: result.kind })
@@ -399,6 +409,7 @@ const PaymentStep = ({ view, open }: { view: CheckoutView; open: boolean }) => {
             selectFailed={selectFailed}
             onChoose={choose}
             groupRef={groupRef}
+            rushHint={view.codRushHint}
           />
 
           <OrderCheck view={view} />
@@ -409,7 +420,11 @@ const PaymentStep = ({ view, open }: { view: CheckoutView; open: boolean }) => {
                 <LineIcon name="payment" className="h-6 w-6 shrink-0" />
                 <span>
                   {fillParts(words.payment.codWillPay, {
-                    total: <Amount className="font-semibold">{view.summary.total}</Amount>,
+                    total: (
+                      <Amount loading={rushSaving} className="font-semibold">
+                        {view.summary.total}
+                      </Amount>
+                    ),
                   }).map((part, i) => (
                     <Fragment key={i}>{part}</Fragment>
                   ))}
@@ -473,7 +488,7 @@ const PaymentStep = ({ view, open }: { view: CheckoutView; open: boolean }) => {
               <div onClick={block ? onBlockedPress : undefined} className="w-full md:w-auto md:self-start">
                 <Button
                   onClick={place}
-                  disabled={!!block || phase === "checking"}
+                  disabled={!!block || phase === "checking" || rushSaving}
                   isLoading={busy}
                   loadingText={words.placeOrder.placing}
                   aria-describedby={reasonId}

@@ -105,6 +105,44 @@ export const cartContent = {
     /** "× 4" on the added line. */
     times: "× {quantity}",
   },
+  /**
+   * The rush option (contract section 9; the coordinator's design for task
+   * S1-6c): the "Delivery speed" control on the cart page and in checkout
+   * step 2, and the "Rush production" row in the summaries. Dates, amounts
+   * and the percentage come from the backend's rules; none is written here.
+   */
+  rush: {
+    // DRAFT WORDING. No id: the control's heading and the radio group's name.
+    title: "Delivery speed",
+    // DRAFT WORDING. No id: the first card's title.
+    standard: "Standard",
+    // DRAFT WORDING. No id: the second card's title.
+    rush: "Rush",
+    // DRAFT WORDING. No id (P): each card's date, {date} from the rules ("Friday 27 November").
+    deliveredBy: "Delivered by {date}",
+    // DRAFT WORDING. No id (P): where the Standard card's price would be.
+    included: "Included",
+    // DRAFT WORDING. No id (P): the Rush card's price, {amount} the rules' figure for this cart.
+    price: "+ {amount}",
+    // DRAFT WORDING. No id (P): the quiet line under the Rush card, {percentage} from the rules.
+    note: "We make your order first. Adds {percentage}% to your garments.",
+    // DRAFT WORDING. No id: the summary row, between the items and the delivery.
+    row: "Rush production",
+    // DRAFT WORDING. No id: saving the choice failed; the choice went back.
+    failed: "We couldn't change the delivery speed. Try again.",
+    // DRAFT WORDING. No id: its action.
+    tryAgain: "Try again",
+    // DRAFT WORDING. No id (P): announced once the choice is saved, {date} from the rules.
+    chosenRush: "Rush chosen. Delivered by {date}.",
+    // DRAFT WORDING. No id (P): the same for Standard.
+    chosenStandard: "Standard chosen. Delivered by {date}.",
+    // DRAFT WORDING. No id (P): with the cash on delivery over-limit note while the cart holds rush.
+    codHint: "Choosing Standard delivery removes the rush charge and lowers your total.",
+    // DRAFT WORDING. No id: its action, one tap to Standard.
+    chooseStandard: "Choose Standard delivery",
+    // DRAFT WORDING. No id (P): the store stopped offering rush; the page took it off the cart.
+    dropped: "Rush isn't available at the moment, so your order is on standard delivery.",
+  },
   /** The header's cart link (05, 4.7, "Header badge"). */
   badge: {
     label: { one: "Cart, 1 item", other: "Cart, {n} items" },

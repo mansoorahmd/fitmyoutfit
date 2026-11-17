@@ -8,6 +8,7 @@ import { fill } from "@lib/util/wording"
 import FieldError from "@modules/common/components/field-error"
 import LocalizedClientLink from "@modules/common/components/localized-client-link"
 import RadioCard from "@modules/common/components/radio-card"
+import { RushCodHint } from "@modules/cart/components/rush-choice"
 import LineIcon from "@modules/home/components/line-icon"
 
 export const PAYMENT_GROUP_ID = "checkout-payment-group"
@@ -29,6 +30,7 @@ const PaymentChoice = ({
   selectFailed,
   onChoose,
   groupRef,
+  rushHint = false,
 }: {
   choice: PaymentChoiceView
   chosen: string | null
@@ -36,6 +38,8 @@ const PaymentChoice = ({
   selectFailed: boolean
   onChoose: (id: string) => void
   groupRef?: React.Ref<HTMLDivElement>
+  /** Over the limit with rush in the cart: the hint adds "Choose Standard delivery" (contract 9). */
+  rushHint?: boolean
 }) => {
   const errorId = `${PAYMENT_GROUP_ID}-error`
 
@@ -94,6 +98,7 @@ const PaymentChoice = ({
           </LocalizedClientLink>
         </p>
       )}
+      {choice.notice === "over_limit" && rushHint && <RushCodHint />}
       {choice.notice === "cod_failed" && (
         <p className="type-small text-brand-ink-muted" data-testid="cod-failed">
           {words.cod.failed}

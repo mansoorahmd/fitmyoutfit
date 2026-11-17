@@ -30,6 +30,13 @@ import {
   newestFirst,
   pieceCount,
 } from "./cart-view"
+import {
+  RushControlView,
+  codHintMentionsRush,
+  rushControlView,
+  summaryAmounts,
+  withoutRush,
+} from "./rush"
 
 export type CheckoutStep = "address" | "payment"
 
@@ -41,7 +48,11 @@ export type CheckoutStep = "address" | "payment"
 export const openStep = (param: string | null | undefined, addressDone: boolean): CheckoutStep =>
   param === "payment" && addressDone ? "payment" : "address"
 
-/** One line in the order summary and the order check (05, 6.3 and 6.5 c). */
+/**
+ * One line in the order summary and the order check (05, 6.3 and 6.5 c),
+ * and on the order pages. The rush line is never one of them: it is its own
+ * summary row (contract 9).
+ */
 export type SummaryLineView = {
   id: string
   title: string
@@ -56,7 +67,7 @@ export const summaryLines = (
   items: HttpTypes.StoreCartLineItem[] | null | undefined,
   currencyCode: string
 ): SummaryLineView[] =>
-  newestFirst(items).map((item) => ({
+  newestFirst(withoutRush(items)).map((item) => ({
     id: item.id,
     title: item.product_title || item.title,
     size: lineSize(item),
@@ -93,7 +104,10 @@ export type CheckoutView = {
   /** The summary rows, as the cart's CartSummary takes them. */
   summary: {
     pieces: number
+    /** The garments and the fit kit, never rush. */
     itemSubtotal: string
+    /** The "Rush production" row, or null. */
+    rush: string | null
     total: string
     delivery: DeliveryRow | null
     deliveryAmount?: string
@@ -118,6 +132,12 @@ export type CheckoutView = {
   /** The cart has its delivery method (otherwise step 2 shows W-K14). */
   deliveryReady: boolean
   payment: PaymentChoiceView & { sessionProviderId: string | null }
+  /** The "Delivery speed" control in the delivery box, or null when rush isn't offered. */
+  rushControl: RushControlView | null
+  /** Cash on delivery is over the limit with rush in the cart: the hint offers Standard. */
+  codRushHint: boolean
+  /** The page took off a rush line that is no longer offered: a quiet line says so. */
+  rushDropped: boolean
   /** The minimum, only when it shows (export regions with garments). */
   minimum: MinimumView | null
   /** The minimum isn't met: the alert at the top and "Place order" inactive (05, 5.4). */
@@ -138,6 +158,7 @@ export const checkoutView = ({
   providerIds,
   customer,
   countryCode,
+  rushDropped = false,
 }: {
   cart: HttpTypes.StoreCart
   rules: CheckoutRules | null
@@ -146,8 +167,10 @@ export const checkoutView = ({
   providerIds: string[] | null
   customer: CustomerLike
   countryCode: string
+  rushDropped?: boolean
 }): CheckoutView => {
   const currency = cart.currency_code
+  const amounts = summaryAmounts(cart.item_subtotal, cart.items)
   const countries: CountryChoice[] = (cart.region?.countries ?? [])
     .filter((c) => !!c.iso_2)
     .map((c) => ({
@@ -220,7 +243,8 @@ export const checkoutView = ({
     pieces,
     summary: {
       pieces,
-      itemSubtotal: money(cart.item_subtotal, currency),
+      itemSubtotal: money(amounts.items, currency),
+      rush: amounts.rush === null ? null : money(amounts.rush, currency),
       total: money(cart.total, currency),
       delivery,
       deliveryAmount: delivery?.kind === "amount" ? money(delivery.amount, currency) : undefined,
@@ -254,6 +278,9 @@ export const checkoutView = ({
       ...paymentChoice({ providerIds: providerIds ?? [], rules }),
       sessionProviderId: sessionProviderId(cart),
     },
+    rushControl: rushControlView(rules, currency),
+    codRushHint: codHintMentionsRush(rules),
+    rushDropped,
     minimum,
     minimumBlocks: !!minimum && !minimum.reached,
   }

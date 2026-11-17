@@ -381,5 +381,9 @@ export const checkoutContent = {
     tryAgain: "Try again",
     // DRAFT WORDING. W-M9: W-E4's link.
     backToCart: "Back to cart",
+    // DRAFT WORDING. No id (P): the cart's total changed at "Place order" (the rush price changed at that moment, contract 9). Nothing was placed.
+    totalChangedTitle: "Your total has changed",
+    // DRAFT WORDING. No id (P): its text, {total} the cart's new total.
+    totalChangedText: "It's now {total}. Your order isn't placed yet: check it, then press Place order again.",
   },
 }

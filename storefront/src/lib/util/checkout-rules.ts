@@ -26,14 +26,30 @@ export type DeliveryPromise = {
   based_on: string
   standard: DeliveryDate
   rush?: DeliveryDate | null
-  /** Contract section 8: which date applies. Always "standard" until rush exists. */
+  /** Contract sections 8 and 9: which date applies, "rush" while the cart holds the rush line. */
   applies?: "standard" | "rush"
+}
+
+/**
+ * Contract section 9: whether rush is offered for this cart, whether the
+ * cart holds it, and the rule's figure for it (in currency units, like
+ * `cod_max_total`; it can have decimals). `available` false (no garment,
+ * or a percentage of 0) means the storefront offers nothing.
+ */
+export type RushRule = {
+  available: boolean
+  in_cart: boolean
+  percentage: number
+  amount: number
+  currency_code: string
 }
 
 export type CheckoutRules = {
   minimum_quantity: MinimumQuantity | null
   cash_on_delivery: CashOnDelivery | null
   delivery_promise: DeliveryPromise | null
+  /** Contract section 9. Missing (an older backend, or unreadable): nothing about rush is offered. */
+  rush?: RushRule | null
 }
 
 const isObject = (value: unknown): value is Record<string, unknown> =>
@@ -101,6 +117,31 @@ const readPromise = (value: unknown): DeliveryPromise | null => {
   }
 }
 
+const isAmount = (value: unknown): value is number =>
+  typeof value === "number" && Number.isFinite(value) && value >= 0
+
+const readRush = (value: unknown): RushRule | null => {
+  if (
+    !isObject(value) ||
+    typeof value.available !== "boolean" ||
+    typeof value.in_cart !== "boolean" ||
+    !isAmount(value.percentage) ||
+    !isAmount(value.amount) ||
+    typeof value.currency_code !== "string"
+  ) {
+    return null
+  }
+  return {
+    available: value.available,
+    in_cart: value.in_cart,
+    percentage: value.percentage,
+    amount: value.amount,
+    currency_code: value.currency_code,
+  }
+}
+
+const withRush = (rush: RushRule | null): { rush?: RushRule } => (rush ? { rush } : {})
+
 /**
  * The route's JSON as CheckoutRules, or null when it is not an object.
  * Each part is read on its own: a malformed part is null (left out of the
@@ -114,6 +155,8 @@ export const parseCheckoutRules = (json: unknown): CheckoutRules | null => {
     minimum_quantity: readMinimum(json.minimum_quantity),
     cash_on_delivery: readCod(json.cash_on_delivery),
     delivery_promise: readPromise(json.delivery_promise),
+    // left out when the route has no readable rush part (an older backend)
+    ...withRush(readRush(json.rush)),
   }
 }
 

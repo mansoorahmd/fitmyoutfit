@@ -13,6 +13,7 @@ import CartLine from "../components/cart-line"
 import CartSummary from "../components/cart-summary"
 import CheckoutAction from "../components/checkout-action"
 import MinimumProgress from "../components/minimum-progress"
+import RushChoice, { RushChoiceProvider } from "../components/rush-choice"
 import StickyCheckoutBar, {
   useStickyCheckoutBar,
 } from "../components/sticky-checkout-bar"
@@ -25,6 +26,10 @@ import { cartLayout } from "./layout"
  * button and, for guests, the sign-in line; and the sticky checkout bar on
  * phones. It keeps which lines are being saved, so the totals and the
  * button can show that a change is on its way.
+ *
+ * The "Delivery speed" control (rush or standard) heads the summary
+ * column: under the lines on a phone, above the totals from 1024 px. It
+ * is shown only when the backend offers rush for this cart.
  */
 const CartView = ({
   lines,
@@ -33,6 +38,7 @@ const CartView = ({
   isGuest,
   minimum,
   rulesFailed,
+  rushControl,
   ...summary
 }: CartPageView) => {
   const alertRef = useRef<HTMLDivElement>(null)
@@ -49,6 +55,11 @@ const CartView = ({
     })
   }, [])
 
+  const onRushSaving = useCallback(
+    (isSaving: boolean) => onSaving("rush", isSaving),
+    [onSaving]
+  )
+
   const updating = saving.size > 0
   // The rules didn't load: no minimum anywhere, and checkout stays usable.
   const shownMinimum = rulesFailed ? null : minimum
@@ -64,99 +75,108 @@ const CartView = ({
   }
 
   return (
-    <div className={cartLayout.page} data-testid="cart-container">
-      <div className={cartLayout.columns}>
-        <div className={cartLayout.main}>
-          <h1 className="flex flex-wrap items-baseline gap-x-3 type-h1 text-brand-ink">
-            {cartContent.title}
-            <span
-              className="font-sans type-body font-normal normal-case text-brand-ink-muted"
-              data-testid="cart-piece-count"
-            >
-              {countWords(summary.pieces, cartContent.pieces)}
-            </span>
-          </h1>
-
-          {blocked && shownMinimum && (
-            <Alert
-              ref={alertRef}
-              focusable
-              variant="info"
-              icon="team"
-              title={fill(cartContent.minimum.progress, {
-                counted: shownMinimum.counted,
-                required: shownMinimum.required,
-              })}
-              data-testid="cart-minimum-alert"
-            >
-              <MinimumProgress
-                minimum={shownMinimum}
-                showTitle={false}
-                missingId={missingId}
-                className="pt-1"
-              />
-            </Alert>
-          )}
-
-          <ul
-            className="flex flex-col divide-y divide-brand-border border-y border-brand-border"
-            data-testid="cart-lines"
-          >
-            {lines.map((line) => (
-              <CartLine
-                key={line.id}
-                line={line}
-                exportRegion={exportRegion}
-                onSaving={onSaving}
-              />
-            ))}
-          </ul>
-        </div>
-
-        <div className={cartLayout.aside}>
-          <div className={cartLayout.summaryBox}>
-            <CartSummary
-              {...summary}
-              minimum={shownMinimum}
-              rulesFailed={rulesFailed}
-              updating={updating}
-            />
-          </div>
-          <div ref={buttonBoxRef}>
-            <CheckoutAction
-              href={checkoutHref}
-              label={cartContent.checkout}
-              blocked={blocked}
-              reasonId={blocked ? missingId : undefined}
-              updating={updating}
-              onBlockedPress={goToMinimum}
-              data-testid="checkout-button"
-            />
-          </div>
-          {isGuest && (
-            <p className="type-body text-brand-ink" data-testid="cart-sign-in">
-              {cartContent.signIn.prompt}{" "}
-              <LocalizedClientLink
-                href={cartContent.signIn.href}
-                className="inline-flex min-h-[44px] items-center font-semibold underline underline-offset-4 hover:decoration-2"
+    <RushChoiceProvider
+      control={rulesFailed ? null : rushControl}
+      onSaving={onRushSaving}
+    >
+      <div className={cartLayout.page} data-testid="cart-container">
+        <div className={cartLayout.columns}>
+          <div className={cartLayout.main}>
+            <h1 className="flex flex-wrap items-baseline gap-x-3 type-h1 text-brand-ink">
+              {cartContent.title}
+              <span
+                className="font-sans type-body font-normal normal-case text-brand-ink-muted"
+                data-testid="cart-piece-count"
               >
-                {cartContent.signIn.link}
-              </LocalizedClientLink>
-            </p>
-          )}
-        </div>
-      </div>
+                {countWords(summary.pieces, cartContent.pieces)}
+              </span>
+            </h1>
 
-      <StickyCheckoutBar
-        show={showBar}
-        total={summary.total}
-        minimum={shownMinimum}
-        href={checkoutHref}
-        updating={updating}
-        reasonId={blocked ? missingId : undefined}
-        onBlockedPress={goToMinimum}
-      />
-    </div>
+            {blocked && shownMinimum && (
+              <Alert
+                ref={alertRef}
+                focusable
+                variant="info"
+                icon="team"
+                title={fill(cartContent.minimum.progress, {
+                  counted: shownMinimum.counted,
+                  required: shownMinimum.required,
+                })}
+                data-testid="cart-minimum-alert"
+              >
+                <MinimumProgress
+                  minimum={shownMinimum}
+                  showTitle={false}
+                  missingId={missingId}
+                  className="pt-1"
+                />
+              </Alert>
+            )}
+
+            <ul
+              className="flex flex-col divide-y divide-brand-border border-y border-brand-border"
+              data-testid="cart-lines"
+            >
+              {lines.map((line) => (
+                <CartLine
+                  key={line.id}
+                  line={line}
+                  exportRegion={exportRegion}
+                  onSaving={onSaving}
+                />
+              ))}
+            </ul>
+          </div>
+
+          <div className={cartLayout.aside}>
+            <div className={cartLayout.summaryBox}>
+              <RushChoice />
+              <CartSummary
+                {...summary}
+                minimum={shownMinimum}
+                rulesFailed={rulesFailed}
+                updating={updating}
+              />
+            </div>
+            <div ref={buttonBoxRef}>
+              <CheckoutAction
+                href={checkoutHref}
+                label={cartContent.checkout}
+                blocked={blocked}
+                reasonId={blocked ? missingId : undefined}
+                updating={updating}
+                onBlockedPress={goToMinimum}
+                data-testid="checkout-button"
+              />
+            </div>
+            {isGuest && (
+              <p
+                className="type-body text-brand-ink"
+                data-testid="cart-sign-in"
+              >
+                {cartContent.signIn.prompt}{" "}
+                <LocalizedClientLink
+                  href={cartContent.signIn.href}
+                  className="inline-flex min-h-[44px] items-center font-semibold underline underline-offset-4 hover:decoration-2"
+                >
+                  {cartContent.signIn.link}
+                </LocalizedClientLink>
+              </p>
+            )}
+          </div>
+        </div>
+
+        <StickyCheckoutBar
+          show={showBar}
+          total={summary.total}
+          minimum={shownMinimum}
+          href={checkoutHref}
+          updating={updating}
+          reasonId={blocked ? missingId : undefined}
+          onBlockedPress={goToMinimum}
+        />
+      </div>
+    </RushChoiceProvider>
   )
 }
 

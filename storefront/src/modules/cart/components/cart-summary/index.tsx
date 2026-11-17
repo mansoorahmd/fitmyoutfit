@@ -10,11 +10,14 @@ import DeliveryDateLine from "@modules/common/components/delivery-date-line"
 import LineIcon from "@modules/home/components/line-icon"
 
 import MinimumProgress from "../minimum-progress"
+import { RushCodHint } from "../rush-choice"
 
 export type CartSummaryProps = {
   pieces: number
-  /** Formatted amounts. */
+  /** Formatted amounts. `itemSubtotal` counts the garments and the fit kit, never rush. */
   itemSubtotal: string
+  /** The "Rush production" row's amount, or null (no row) when the cart holds no rush line. */
+  rush?: string | null
   total: string
   /** The delivery row; `amount` is formatted by the caller as `deliveryAmount`. */
   delivery: DeliveryRow | null
@@ -24,6 +27,10 @@ export type CartSummaryProps = {
   deliveryDate: string | null
   /** Formatted cash on delivery limit when the cart is over it (Pakistan). */
   codLimit: string | null
+  /** Over the cash on delivery limit with rush in the cart: the note adds "Choose Standard delivery". */
+  codRushHint?: boolean
+  /** A rush line the store no longer offers was taken off: a quiet line says so. */
+  rushDropped?: boolean
   minimum: MinimumView | null
   rulesFailed: boolean
   /** A change is being saved: the amounts show grey bars. */
@@ -47,8 +54,8 @@ const Row = ({
 )
 
 /**
- * The cart's summary (docs/design/05-m1-pages.md, 4.4): items, the delivery
- * line, the total, the tax note, the delivery date, the cash on delivery
+ * The cart's summary (docs/design/05-m1-pages.md, 4.4): items, rush
+ * production (when the cart holds it; contract 9), the delivery line, the total, the tax note, the delivery date, the cash on delivery
  * note in Pakistan and the minimum in export regions. No "Taxes" row while
  * the tax isn't final, and no amount for delivery before it is chosen.
  * When the backend's rules didn't load, the date and the minimum are left
@@ -57,12 +64,15 @@ const Row = ({
 const CartSummary = ({
   pieces,
   itemSubtotal,
+  rush = null,
   total,
   delivery,
   deliveryAmount,
   showTaxNote,
   deliveryDate,
   codLimit,
+  codRushHint = false,
+  rushDropped = false,
   minimum,
   rulesFailed,
   updating,
@@ -76,6 +86,11 @@ const CartSummary = ({
         <Row label={fill(summary.items, { n: pieces })} testId="summary-items">
           <Amount loading={updating}>{itemSubtotal}</Amount>
         </Row>
+        {rush && (
+          <Row label={cartContent.rush.row} testId="summary-rush">
+            <Amount loading={updating}>{rush}</Amount>
+          </Row>
+        )}
         {delivery && (
           <Row label={<bdi>{delivery.label}</bdi>} testId="summary-delivery">
             {delivery.kind === "included" && summary.deliveryIncluded}
@@ -106,13 +121,22 @@ const CartSummary = ({
         </p>
       )}
 
-      {!rulesFailed && <DeliveryDateLine date={deliveryDate} />}
+      {!rulesFailed && <DeliveryDateLine date={deliveryDate} loading={updating && !!deliveryDate} />}
+
+      {rushDropped && (
+        <p role="status" className="type-small text-brand-ink-muted" data-testid="summary-rush-dropped">
+          {cartContent.rush.dropped}
+        </p>
+      )}
 
       {codLimit && (
-        <p className="flex gap-2 type-small text-brand-ink" data-testid="summary-cod-note">
-          <LineIcon name="payment" className="h-5 w-5 shrink-0" />
-          {fill(summary.codOverLimit, { limit: codLimit })}
-        </p>
+        <div className="flex flex-col gap-1" data-testid="summary-cod">
+          <p className="flex gap-2 type-small text-brand-ink" data-testid="summary-cod-note">
+            <LineIcon name="payment" className="h-5 w-5 shrink-0" />
+            {fill(summary.codOverLimit, { limit: codLimit })}
+          </p>
+          {codRushHint && <RushCodHint className="ps-7" />}
+        </div>
       )}
 
       {!rulesFailed && minimum && <MinimumProgress minimum={minimum} compact />}
