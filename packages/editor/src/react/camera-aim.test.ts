@@ -177,3 +177,28 @@ describe("an item that moves while it is selected (E3e)", () => {
     expect(first).toBeLessThan(end - 0.005);
   });
 });
+
+describe("frames asked for by the aim (E3e, speed)", () => {
+  it("an item that moves while the camera is not zoomed in asks for no frame; one that moves the aim does", () => {
+    let asked = 0;
+    const camera = new PerspectiveCamera(35, 360 / 520, 0.05, 50);
+    let now = 0;
+    const rig = new CameraRig(camera, () => asked++, () => now);
+    const framing = frameInFreeArea(SIZE, 35, { width: 360, height: 520 });
+    rig.update({}, CENTER, SIZE, { framing, viewport: { width: 360, height: 520 }, reducedMotion: false, fovDegrees: 35, onTarget: () => undefined, onChange: () => undefined });
+    rig.setItem([CENTER[0], CENTER[1] + 0.05, CENTER[2]]);
+    asked = 0;
+    for (let k = 1; k <= 20; k++) rig.setItem([CENTER[0], CENTER[1] + 0.05 + k * 0.004, CENTER[2]]);
+    expect(asked).toBe(0);
+    for (let k = 0; k < 6; k++) {
+      rig.zoom("in");
+      for (let t = 0; t <= 600; t += 16) {
+        now += 16;
+        rig.frame();
+      }
+    }
+    asked = 0;
+    rig.setItem([CENTER[0], CENTER[1] + 0.2, CENTER[2]]);
+    expect(asked).toBeGreaterThan(0);
+  });
+});

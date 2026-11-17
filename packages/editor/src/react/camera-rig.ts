@@ -223,7 +223,9 @@ export class CameraRig {
     if (next === null) this.itemMin = 0;
     if (next !== null) this.pointerY = null;
     if (released) this.releaseItemZoom();
-    this.invalidate();
+    // A frame only when the aim has something to do: every frame asked for here is a full draw of the scene, and
+    // an item that moves (a drag) asks every frame (E3e: the desktop drag drew 1.7 frames per pointer move).
+    if (released || !near(this.aimAt(this.orbit().distance), this.aim, 1e-5)) this.invalidate();
   }
 
   /**
