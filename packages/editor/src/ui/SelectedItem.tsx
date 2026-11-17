@@ -13,7 +13,7 @@ import { isClipped, moveInside } from "../design/print-area.js";
 import { applyReadabilityRemedy } from "../design/readability.js";
 import { readabilityWarnings, remedyWords } from "./checks.js";
 import { logoIsBlurry, makeLogoSharp, sharpWidth } from "./logos.js";
-import { coveredItem, moveClear } from "./overlap.js";
+import { clearAnnouncement, clearFix, coveredItem } from "./overlap.js";
 import type { DesignDocument, Layer } from "../design/schema.js";
 import type { EditLabel } from "../state/history.js";
 import type { SelectionGeometry } from "../react/DesignCanvas.js";
@@ -153,6 +153,8 @@ function SelectedWarningsView() {
   const layer = useSelectedLayer();
   const { design, product, palette, wording } = api;
   const readability = useMemo(() => (layer && (layer.kind === "text" || layer.kind === "number") ? readabilityWarnings(wording, product, design, palette, null, api.coachColoured).find((w) => w.layerIds.includes(layer.id)) ?? null : null), [layer, wording, product, design, palette, api.coachColoured]);
+  // The button is offered only when a fix exists (E3e, B1): the search is run once per design, not per render.
+  const fix = useMemo(() => (layer && coveredItem(design, layer) ? clearFix(design, layer.id, product) : null), [design, layer, product]);
   if (!layer) return null;
   const lw = wording.logos;
   const logo = layer.kind === "logo" ? layer : null;
@@ -167,14 +169,24 @@ function SelectedWarningsView() {
       {covered && (
         <Alert kind="warning" testId={`covers-${layer.id}`}>
           <p>{fill(wording.selection.covers, { item: itemWords(wording, product, covered).kind.toLowerCase() })}</p>
-          <button
-            type="button"
-            className="fmo-btn"
-            onClick={() => api.commit((d) => moveClear(d, layer.id, product) ?? d, "move")}
-            data-testid={`move-clear-${layer.id}`}
-          >
-            {wording.selection.moveClear}
-          </button>
+          {fix ? (
+            <button
+              type="button"
+              className="fmo-btn"
+              onClick={() => {
+                api.commit((d) => clearFix(d, layer.id, product)?.design ?? d, fix.how === "smaller" ? "resize" : "move");
+                const said = clearAnnouncement(wording, fix, itemWords(wording, product, covered).kind);
+                if (said) api.announce(said);
+              }}
+              data-testid={`move-clear-${layer.id}`}
+            >
+              {wording.selection.moveClear}
+            </button>
+          ) : (
+            <p className="fmo-muted" data-testid={`move-clear-none-${layer.id}`}>
+              {wording.selection.coversNoRoom}
+            </p>
+          )}
         </Alert>
       )}
       {readability && (
