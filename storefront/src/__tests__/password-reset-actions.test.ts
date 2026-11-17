@@ -100,7 +100,7 @@ describe("requestPasswordResetForMe (the profile's Password row)", () => {
 describe("resetPassword (the page a link opens)", () => {
   it("puts the token in the Authorization header and sends only { password }", async () => {
     await putLink()
-    const result = await resetPassword({ password: "a-good-password" }, "pk")
+    const result = await resetPassword({ password: "a-good-password", email: "ali@example.com" }, "pk")
     expect(result).toEqual({
       kind: "changed",
       href: "/pk/account?view=signin&email=ali%40example.com&notice=password-changed",
@@ -116,18 +116,18 @@ describe("resetPassword (the page a link opens)", () => {
   it("checks the password before anything is sent: a short one or only spaces uses no link up", async () => {
     await putLink()
     for (const password of ["1234567", "        ", ""]) {
-      const result = await resetPassword({ password }, "pk")
+      const result = await resetPassword({ password, email: "ali@example.com" }, "pk")
       expect(result.kind, password).toBe("invalid")
     }
     expect(state.fetches).toHaveLength(0)
     // the link is still there for a good password
     expect(state.jar.has(RESET_COOKIE)).toBe(true)
-    expect((await resetPassword({ password: "a-good-password" }, "pk")).kind).toBe("changed")
+    expect((await resetPassword({ password: "a-good-password", email: "ali@example.com" }, "pk")).kind).toBe("changed")
   })
 
   it("clears the link's cookie, on its own path, once the password is changed", async () => {
     await putLink()
-    await resetPassword({ password: "a-good-password" }, "gb")
+    await resetPassword({ password: "a-good-password", email: "ali@example.com" }, "gb")
     expect(state.jar.has(RESET_COOKIE)).toBe(false)
     expect(state.set.at(-1)).toMatchObject({ name: RESET_COOKIE, value: "", options: { path: "/gb/account/reset-password", maxAge: 0 } })
   })
@@ -135,16 +135,16 @@ describe("resetPassword (the page a link opens)", () => {
   it("an expired, used or wrong link (401) is gone, and its cookie is cleared", async () => {
     await putLink()
     state.answer = () => new Response(null, { status: 401 })
-    expect(await resetPassword({ password: "a-good-password" }, "pk")).toEqual({ kind: "gone" })
+    expect(await resetPassword({ password: "a-good-password", email: "ali@example.com" }, "pk")).toEqual({ kind: "gone" })
     expect(state.jar.has(RESET_COOKIE)).toBe(false)
   })
 
   it("with no cookie, or one that is altered or expired, it is gone and nothing is sent", async () => {
-    expect(await resetPassword({ password: "a-good-password" }, "pk")).toEqual({ kind: "gone" })
+    expect(await resetPassword({ password: "a-good-password", email: "ali@example.com" }, "pk")).toEqual({ kind: "gone" })
     state.jar.set(RESET_COOKIE, "v1.AAAA.BBBB")
-    expect(await resetPassword({ password: "a-good-password" }, "pk")).toEqual({ kind: "gone" })
+    expect(await resetPassword({ password: "a-good-password", email: "ali@example.com" }, "pk")).toEqual({ kind: "gone" })
     state.jar.set(RESET_COOKIE, await sealReset({ token: TOKEN, email: "a@b.co" }, resetSecret(), Date.now() - 16 * 60 * 1000))
-    expect(await resetPassword({ password: "a-good-password" }, "pk")).toEqual({ kind: "gone" })
+    expect(await resetPassword({ password: "a-good-password", email: "ali@example.com" }, "pk")).toEqual({ kind: "gone" })
     expect(state.fetches).toHaveLength(0)
   })
 
@@ -153,17 +153,53 @@ describe("resetPassword (the page a link opens)", () => {
     state.answer = () => {
       throw new TypeError("fetch failed")
     }
-    expect(await resetPassword({ password: "a-good-password" }, "pk")).toEqual({ kind: "failed" })
+    expect(await resetPassword({ password: "a-good-password", email: "ali@example.com" }, "pk")).toEqual({ kind: "failed" })
     state.answer = () => new Response(null, { status: 502 })
-    expect(await resetPassword({ password: "a-good-password" }, "pk")).toEqual({ kind: "failed" })
+    expect(await resetPassword({ password: "a-good-password", email: "ali@example.com" }, "pk")).toEqual({ kind: "failed" })
     expect(state.jar.has(RESET_COOKIE)).toBe(true)
     state.answer = () => new Response(null, { status: 200 })
-    expect((await resetPassword({ password: "a-good-password" }, "pk")).kind).toBe("changed")
+    expect((await resetPassword({ password: "a-good-password", email: "ali@example.com" }, "pk")).kind).toBe("changed")
+  })
+
+  it("sends the update only when the email the form shows is the cookie's (trimmed, any case)", async () => {
+    await putLink(TOKEN, "ali@example.com")
+    const result = await resetPassword({ password: "a-good-password", email: "  Ali@Example.COM " }, "pk")
+    expect(result.kind).toBe("changed")
+    expect(state.fetches).toHaveLength(1)
+  })
+
+  it("another link's cookie (a second link opened in another tab): nothing is sent, the cookie stays, the answer is 'stale'", async () => {
+    await putLink(TOKEN, "bob@example.com")
+    const before = state.jar.get(RESET_COOKIE)
+    expect(await resetPassword({ password: "a-good-password", email: "ali@example.com" }, "pk")).toEqual({ kind: "stale" })
+    expect(state.fetches).toHaveLength(0)
+    expect(state.set).toHaveLength(0)
+    expect(state.jar.get(RESET_COOKIE)).toBe(before)
+    // the page that really belongs to the cookie's link still works afterwards
+    expect((await resetPassword({ password: "a-good-password", email: "bob@example.com" }, "pk")).kind).toBe("changed")
+    expect(state.fetches).toHaveLength(1)
+  })
+
+  it("a form that sent no email (or a blank or odd one) cannot be matched: nothing is sent, the cookie stays", async () => {
+    await putLink()
+    for (const email of [undefined, "", "   ", null, 42, "not an email"]) {
+      const result = await resetPassword({ password: "a-good-password", email } as unknown as { password: string; email: string }, "pk")
+      expect(result, String(email)).toEqual({ kind: "stale" })
+    }
+    expect(await resetPassword({ password: "a-good-password" } as unknown as { password: string; email: string }, "pk")).toEqual({ kind: "stale" })
+    expect(state.fetches).toHaveLength(0)
+    expect(state.jar.has(RESET_COOKIE)).toBe(true)
+    expect(state.set).toHaveLength(0)
+  })
+
+  it("a dead cookie is still 'gone' (and cleared) whatever email the form sent", async () => {
+    expect(await resetPassword({ password: "a-good-password", email: "ali@example.com" }, "pk")).toEqual({ kind: "gone" })
+    expect(state.fetches).toHaveLength(0)
   })
 
   it("refuses a country code that is not two letters", async () => {
     await putLink()
-    expect(await resetPassword({ password: "a-good-password" }, "../x")).toEqual({ kind: "gone" })
+    expect(await resetPassword({ password: "a-good-password", email: "ali@example.com" }, "../x")).toEqual({ kind: "gone" })
     expect(state.fetches).toHaveLength(0)
   })
 })

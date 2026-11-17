@@ -164,6 +164,11 @@ export const accountContent = {
     goneBody: "A reset link works once, for {minutes} minutes. Ask for a new one to set your password.",
     // DRAFT WORDING. No id: the button that leads to the forgot-password page.
     goneButton: "Ask for a new link",
+    // DRAFT WORDING. No id: the heading when another reset link was opened in this browser after this page.
+    staleTitle: "This page is out of date",
+    // DRAFT WORDING. No id: says why, and what to do. Not the "link no longer works" message: the link may still be good.
+    staleBody:
+      "You opened another reset link in this browser after this one, so this page is out of date. Your password has not been changed. Open the link from your email again to set it.",
   },
 
   /** The account's frame (05, 9.1). */

@@ -221,12 +221,12 @@ describe("the page a reset link opens", () => {
     expect(calls.reset).toHaveLength(0)
   })
 
-  it("sends the password only (no token, no email) with the country, and goes to sign-in on success", async () => {
+  it("sends the password and the email the form shows (never a token) with the country, and goes to sign-in on success", async () => {
     calls.resetAnswer = { kind: "changed", href: "/pk/account?view=signin&email=ali%40example.com&notice=password-changed" }
     render(<ResetPasswordTemplate email="ali@example.com" />)
     type("New password", "a-good-password")
     await press("reset-submit")
-    expect(calls.reset).toEqual([[{ password: "a-good-password" }, "pk"]])
+    expect(calls.reset).toEqual([[{ password: "a-good-password", email: "ali@example.com" }, "pk"]])
     expect(calls.loaded).toEqual(["/pk/account?view=signin&email=ali%40example.com&notice=password-changed"])
   })
 
@@ -258,6 +258,23 @@ describe("the page a reset link opens", () => {
     ask.addEventListener("click", (event) => event.preventDefault())
     fireEvent.click(ask)
     expect(window.sessionStorage.getItem("fmo.forgot-email")).toBe("ali@example.com")
+    expect(document.activeElement).toBe(screen.getByRole("heading", { level: 1 }))
+  })
+
+  it("a page the server calls out of date says so in plain words, not that the link no longer works", async () => {
+    calls.resetAnswer = { kind: "stale" }
+    render(<ResetPasswordTemplate email="ali@example.com" />)
+    type("New password", "a-good-password")
+    await press("reset-submit")
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("This page is out of date")
+    const message = screen.getByTestId("reset-stale")
+    expect(message).toHaveTextContent("You opened another reset link in this browser after this one")
+    expect(message).toHaveTextContent("Open the link from your email again")
+    expect(message).toHaveTextContent("Your password has not been changed")
+    expect(screen.queryByTestId("reset-gone")).toBeNull()
+    expect(screen.queryByText("This link no longer works")).toBeNull()
+    expect(screen.queryByLabelText("New password")).toBeNull()
+    expect(screen.queryByTestId("reset-ask-again")).toBeNull()
     expect(document.activeElement).toBe(screen.getByRole("heading", { level: 1 }))
   })
 

@@ -15,6 +15,7 @@ import {
   validateNewPassword,
 } from "@lib/util/password-reset"
 import { RESET_COOKIE, openReset, resetSecret } from "@lib/util/reset-cookie"
+import { cleanEmail } from "@lib/util/reset-link"
 
 import { customerState } from "./customer"
 
@@ -98,6 +99,12 @@ export type ResetResult =
   | { kind: "invalid"; errors: NewPasswordErrors }
   /** The link is expired, used, wrong or missing: it will not work again. */
   | { kind: "gone" }
+  /**
+   * The page was opened for one email, but the browser's cookie now holds
+   * another reset link (a second link was opened in another tab). Nothing was
+   * sent and neither link is used up; the customer opens the link again.
+   */
+  | { kind: "stale" }
   /** No answer or a server error: the link may still be good, the customer tries again. */
   | { kind: "failed" }
 
@@ -112,8 +119,14 @@ const clearLink = async (countryCode: string) => {
  * opened from the cookie and sent in an Authorization header with a body of
  * only { password }. The link's cookie goes when the link is used or dead,
  * and stays when the link may still work.
+ *
+ * `values.email` is the email the form shows. The cookie holds whichever link
+ * was opened last in this browser, so it is compared (trimmed, lower case)
+ * with the email inside the cookie before anything is sent: when they differ
+ * (or the form sent none) nothing goes to the backend, no link is used up and
+ * the cookie stays as it is.
  */
-export async function resetPassword(values: { password: string }, countryCode: string): Promise<ResetResult> {
+export async function resetPassword(values: { password: string; email: string }, countryCode: string): Promise<ResetResult> {
   const errors = validateNewPassword({ password: values?.password })
   if (Object.keys(errors).length > 0) return { kind: "invalid", errors }
   if (!/^[a-z]{2}$/.test(countryCode)) return { kind: "gone" }
@@ -124,6 +137,7 @@ export async function resetPassword(values: { password: string }, countryCode: s
     await clearLink(countryCode)
     return { kind: "gone" }
   }
+  if (cleanEmail(values?.email) !== link.email) return { kind: "stale" }
 
   const outcome = updateOutcome(
     await post("/auth/customer/emailpass/update", updateBody(values.password), { authorization: `Bearer ${link.token}` })

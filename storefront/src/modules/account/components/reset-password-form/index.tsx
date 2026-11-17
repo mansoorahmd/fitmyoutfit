@@ -47,6 +47,29 @@ const LinkGone = ({ email, focusHeading }: { email: string | null; focusHeading:
 }
 
 /**
+ * What the page shows when another reset link was opened in this browser
+ * after this page: the browser's one cookie now holds that link, so this
+ * form must not use it. Nothing was sent and no link is used up; the
+ * customer opens the link from their email again.
+ */
+const PageStale = () => {
+  const heading = useRef<HTMLHeadingElement>(null)
+  useEffect(() => {
+    heading.current?.focus()
+  }, [])
+  return (
+    <>
+      <h1 ref={heading} tabIndex={-1} className="type-h1 uppercase text-brand-ink outline-none" data-testid="reset-title">
+        {words.staleTitle}
+      </h1>
+      <p className="type-body text-brand-ink-muted" data-testid="reset-stale">
+        {words.staleBody}
+      </p>
+    </>
+  )
+}
+
+/**
  * The page a reset link opens (contract m1-password-reset, section 3):
  * the account's email (not editable) and one new-password field with
  * create-account's rule. The password is checked here and again on the
@@ -54,6 +77,9 @@ const LinkGone = ({ email, focusHeading }: { email: string | null; focusHeading:
  * password would use the link up. A second press while the first is
  * running is ignored. The token is never in this component: it stays in
  * the sealed cookie the server action opens (lib/util/reset-cookie.ts).
+ *
+ * The form sends the email it shows with the password; the server refuses
+ * when the cookie holds another link's email (see resetPassword).
  *
  * `email` is null when the page has no usable link (no cookie, expired or
  * altered): it then shows the "link no longer works" message.
@@ -65,12 +91,14 @@ const ResetPasswordForm = ({ email }: { email: string | null }) => {
   const [problem, setProblem] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [gone, setGone] = useState(false)
+  const [stale, setStale] = useState(false)
   const busy = useRef(false)
   const field = useRef<HTMLInputElement>(null)
 
   if (email === null || gone) {
     return <LinkGone email={email} focusHeading={gone} />
   }
+  if (stale) return <PageStale />
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault()
@@ -88,7 +116,7 @@ const ResetPasswordForm = ({ email }: { email: string | null }) => {
 
     let result: ResetResult
     try {
-      result = await resetPassword({ password }, countryCode)
+      result = await resetPassword({ password, email }, countryCode)
     } catch {
       result = { kind: "failed" }
     }
@@ -101,6 +129,10 @@ const ResetPasswordForm = ({ email }: { email: string | null }) => {
     setSubmitting(false)
     if (result.kind === "gone") {
       setGone(true)
+      return
+    }
+    if (result.kind === "stale") {
+      setStale(true)
       return
     }
     if (result.kind === "invalid") {
