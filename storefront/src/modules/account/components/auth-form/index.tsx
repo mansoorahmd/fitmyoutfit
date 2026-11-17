@@ -164,7 +164,6 @@ const AuthForm = ({
   ) => (
     <TextField
       id={fieldId(key)}
-      name={key}
       label={label}
       error={errors[key]}
       value={values[key]}
@@ -218,7 +217,6 @@ const AuthForm = ({
           })}
         <PasswordField
           id={fieldId("password")}
-          name="password"
           label={words.fields.password}
           hint={creating ? fill(words.fields.passwordHint, { min: MIN_PASSWORD_LENGTH }) : undefined}
           error={errors.password}

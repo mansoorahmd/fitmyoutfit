@@ -380,6 +380,18 @@ describe("cart page", () => {
     })
   })
 
+  it("leaves room for the sticky bar: the page ends below it and what can be tapped scrolls into view above it (S1-11)", () => {
+    renderCart()
+    const container = screen.getByTestId("cart-container")
+    // the bar is 64 px and the safe-area inset: 112 px of space at the foot below 1024 px, where the bar is hidden
+    expect(container).toHaveClass("pb-28", "lg:pb-12")
+    const columns = container.firstElementChild as HTMLElement
+    expect(columns).toHaveClass(
+      "[&_:is(a,button,input,section)]:scroll-mb-28",
+      "lg:[&_:is(a,button,input,section)]:scroll-mb-0"
+    )
+  })
+
   it("has a sticky checkout bar for phones, hidden while the summary's button is on screen", () => {
     renderCart()
     const bar = screen.getByTestId("sticky-checkout-bar")

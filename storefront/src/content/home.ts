@@ -103,9 +103,9 @@ export const heroImageFor = (nodeEnv: string | undefined): HomeImage | null =>
   nodeEnv === "production" ? null : DEV_HERO_IMAGE
 
 export const homeContent: HomeContent = {
-  headline: "Design the kit. Drop the link.",
+  headline: "Design the kit. Add your team.",
   subline:
-    "Build your team's jersey in 3D, then share one link. Every player adds their own name, number and size.",
+    "Build your team's jersey in 3D, add every player's name, number and size in one list, and see each shirt before you order.",
   button: {
     label: "Start your team kit",
     // A path without the country code. The hero passes it to the localized
@@ -160,9 +160,9 @@ export const homeContent: HomeContent = {
     title: "How team orders work",
     steps: [
       "Design your kit in 3D.",
-      "Share one link with your team.",
-      "Each player adds their name, number and size. Players don't pay.",
-      "Check and sign the roster proof. We make and deliver the kit.",
+      "Add your players in one list: name, number and size.",
+      "See each player's shirt, then check and sign the roster proof.",
+      "We make and deliver the kit.",
     ],
     paymentLine:
       "The organizer pays 50% when the proof is approved and 50% before shipping.",

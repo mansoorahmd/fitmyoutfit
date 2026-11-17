@@ -151,6 +151,7 @@ describe("the checkout after staff changed the rush percentage", () => {
     const view = await checkoutProps()
     expect(backend.repriceCalls).toBe(1)
     expect(plain(view.rushControl?.amount)).toBe("PKR 466")
+    expect(view.rushControl?.percentage).toBe(7.77)
     expect(view.totalAmount).toBe(6716)
   })
 
@@ -164,6 +165,8 @@ describe("the checkout after staff changed the rush percentage", () => {
     backend.repriceAnswer = false
     const view = await checkoutProps()
     expect(plain(view.rushControl?.amount)).toBe("PKR 1,200")
+    // the card shows the line's amount, so its note names no percentage (S1-11)
+    expect(view.rushControl?.percentage).toBeNull()
     expect(view.totalAmount).toBe(7450)
   })
 })

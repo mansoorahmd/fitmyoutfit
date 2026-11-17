@@ -92,13 +92,23 @@ describe("afterSignInPath", () => {
     expect(afterSignInPath("//evil", "/cart")).toBe("/cart")
   })
 
+  it("a country in capitals is read without regard to case; an unknown country goes to the account (S1-11)", () => {
+    const served = ["pk", "gb", "ae", "us"]
+    expect(afterSignInPath("pk", "/GB/cart", served)).toBe("/gb/cart")
+    expect(afterSignInPath("pk", "/Gb/account/orders?shown=20#x", served)).toBe("/gb/account/orders?shown=20#x")
+    expect(afterSignInPath("pk", "/AE", served)).toBe("/ae")
+    expect(afterSignInPath("pk", "/de/cart", served)).toBe("/pk/account")
+    expect(afterSignInPath("gb", "/DE", served)).toBe("/gb/account")
+    // the store's countries could not be read: no two-letter first segment can be trusted
+    expect(afterSignInPath("pk", "/gb/cart", [])).toBe("/pk/account")
+  })
+
   it("a next that already starts with a country the store serves is used as it is (QA S1-4c, m7)", () => {
     const served = ["pk", "gb", "ae", "us"]
     expect(afterSignInPath("pk", "/gb/cart", served)).toBe("/gb/cart")
     expect(afterSignInPath("pk", "/us", served)).toBe("/us")
     expect(afterSignInPath("gb", "/pk/account/orders?shown=20", served)).toBe("/pk/account/orders?shown=20")
-    // a first segment that isn't a served country is a path in the visitor's country
-    expect(afterSignInPath("pk", "/fr/cart", served)).toBe("/pk/fr/cart")
+    // a first segment that is not two letters is a path in the visitor's country
     expect(afterSignInPath("pk", "/gbx/cart", served)).toBe("/pk/gbx/cart")
     expect(afterSignInPath("pk", "/cart", served)).toBe("/pk/cart")
     // every refusal still holds: the account in the visitor's country

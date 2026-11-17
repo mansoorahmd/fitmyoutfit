@@ -81,8 +81,12 @@ export type RushControlView = {
   rushDate: string | null
   /** The rules' `rush.amount`, formatted in the cart's currency: "PKR 400". */
   amount: string
-  /** The rules' `rush.percentage`, as the backend gave it (20, or 12.5). */
-  percentage: number
+  /**
+   * The rules' `rush.percentage`, as the backend gave it (20, or 12.5); null
+   * while the cart's rush line is out of line with it, because the card then
+   * shows the line's amount and the percentage would not match it (S1-11).
+   */
+  percentage: number | null
 }
 
 /**
@@ -103,14 +107,15 @@ export const rushControlView = (
   // The cart's own rush line is what the summary and the total show; if it
   // still holds another figure than the rules' (and couldn't be brought in
   // line), the card shows the line's, so a screen never has two amounts.
-  const amount = rushOutOfLine(rules, items) ? (rushLineAmount(items) ?? rush.amount) : rush.amount
+  const outOfLine = rushOutOfLine(rules, items)
+  const amount = outOfLine ? (rushLineAmount(items) ?? rush.amount) : rush.amount
   const promise = rules?.delivery_promise
   return {
     chosen: rush.in_cart ? "rush" : "standard",
     standardDate: promise?.standard?.date ?? null,
     rushDate: promise?.rush?.date ?? null,
     amount: convertToLocale({ amount, currency_code: currencyCode || rush.currency_code }),
-    percentage: rush.percentage,
+    percentage: outOfLine ? null : rush.percentage,
   }
 }
 

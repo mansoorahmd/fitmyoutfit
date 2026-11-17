@@ -137,7 +137,6 @@ const AddressForm = ({
   ) => (
     <TextField
       id={fieldId(key)}
-      name={key}
       label={label}
       error={errors[key]}
       value={key === "phone" ? values.phone : a[key]}
@@ -168,7 +167,6 @@ const AddressForm = ({
         {text("company", fieldWords.company, { autoComplete: "organization", dir: "auto" })}
         <SelectField
           id={fieldId("country_code")}
-          name="country_code"
           label={fieldWords.country}
           value={a.country_code}
           error={errors.country_code}
@@ -183,7 +181,6 @@ const AddressForm = ({
         {rules.province.shown && (
           <SelectField
             id={fieldId("province")}
-            name="province"
             label={rules.province.label}
             value={a.province}
             placeholder={rules.province.placeholder}

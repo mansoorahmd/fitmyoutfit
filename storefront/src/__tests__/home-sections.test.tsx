@@ -88,9 +88,9 @@ describe("how team orders work", () => {
     expect(list.tagName).toBe("OL")
     expect(within(list).getAllByRole("listitem").map((li) => li.querySelector("p")?.textContent)).toEqual([
       "Design your kit in 3D.",
-      "Share one link with your team.",
-      "Each player adds their name, number and size. Players don't pay.",
-      "Check and sign the roster proof. We make and deliver the kit.",
+      "Add your players in one list: name, number and size.",
+      "See each player's shirt, then check and sign the roster proof.",
+      "We make and deliver the kit.",
     ])
     expect(screen.getByTestId("how-it-works-payment")).toHaveTextContent(
       "The organizer pays 50% when the proof is approved and 50% before shipping."
