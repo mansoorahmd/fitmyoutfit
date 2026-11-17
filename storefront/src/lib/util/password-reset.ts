@@ -15,8 +15,8 @@ import { checkoutContent } from "@content/checkout"
 import { Call, newPasswordError, normalEmail } from "./account-auth"
 import { FIELD_MAX, isEmail, tooLong } from "./checkout-address"
 
-/** How long a link works, in minutes. Fixed by the backend (contract sections 1 and 2); the sentences take it as {minutes}. */
-export const RESET_LINK_MINUTES = 15
+// the link's life and the address's parts live in ./reset-link, which the middleware can import
+export { RESET_LINK_MINUTES, cleanEmail, cleanToken } from "./reset-link"
 
 export type ForgotErrors = { email?: string }
 
@@ -63,23 +63,6 @@ export type NewPasswordErrors = { password?: string }
 export const validateNewPassword = (values: { password: string }): NewPasswordErrors => {
   const message = newPasswordError(values.password)
   return message ? { password: message } : {}
-}
-
-/**
- * The token as the link gives it: one non-empty string of the characters a
- * Medusa token (a JWT) is made of, at most 4,096 of them. Anything else is
- * treated as no token. Never trimmed or guessed at.
- */
-export const cleanToken = (value: unknown): string | null =>
-  typeof value === "string" && value.length > 0 && value.length <= 4096 && /^[A-Za-z0-9._~+/=-]+$/.test(value)
-    ? value
-    : null
-
-/** The email as the link gives it, trimmed and in lower case, or null when it is not a plain email. */
-export const cleanEmail = (value: unknown): string | null => {
-  if (typeof value !== "string") return null
-  const email = normalEmail(value)
-  return email.length <= FIELD_MAX.email && isEmail(email) ? email : null
 }
 
 /** The page the link opens, for a country. */

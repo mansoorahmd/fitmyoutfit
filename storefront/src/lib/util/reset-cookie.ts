@@ -13,7 +13,7 @@
 // Only the server (the page, then the update's server action) opens it. Web
 // Crypto only, so the middleware (edge) and the server (Node) share this file.
 
-import { RESET_LINK_MINUTES, cleanEmail, cleanToken } from "./password-reset"
+import { RESET_LINK_MINUTES, cleanEmail, cleanToken } from "./reset-link"
 
 export const RESET_COOKIE = "fmo_reset"
 

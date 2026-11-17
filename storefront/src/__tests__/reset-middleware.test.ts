@@ -1,5 +1,7 @@
 // @vitest-environment node
+import fs from "node:fs"
 import { createRequire } from "node:module"
+import path from "node:path"
 import { NextRequest } from "next/server"
 import { beforeAll, describe, expect, it, vi } from "vitest"
 
@@ -91,5 +93,42 @@ describe("the headers of the pages a link touches (next.config.js)", () => {
       expect(rule.headers).toContainEqual({ key: "Referrer-Policy", value: "no-referrer" })
       expect(rule.headers).toContainEqual({ key: "Cache-Control", value: "no-store" })
     }
+  })
+})
+
+describe("the middleware runs on the edge, which refuses some code (the production build failed once on it)", () => {
+  const src = path.resolve(__dirname, "..")
+  const alias: Record<string, string> = { "@lib/": "lib/", "@content/": "content/", "@modules/": "modules/", "types/": "types/", "styles/": "styles/" }
+
+  /** Every file middleware.ts reaches through its imports, and every package it names. */
+  const graph = () => {
+    const files = new Set<string>()
+    const packages = new Set<string>()
+    const visit = (file: string) => {
+      if (files.has(file)) return
+      files.add(file)
+      const text = fs.readFileSync(file, "utf8")
+      for (const m of Array.from(text.matchAll(/(?:from|import)\s*\(?\s*["']([^"']+)["']/g))) {
+        const spec = m[1]
+        const prefix = Object.keys(alias).find((a) => spec.startsWith(a))
+        const base = prefix ? path.join(src, alias[prefix], spec.slice(prefix.length)) : spec.startsWith(".") ? path.resolve(path.dirname(file), spec) : null
+        if (!base) {
+          packages.add(spec)
+          continue
+        }
+        const found = [".ts", ".tsx", "/index.ts", "/index.tsx"].map((e) => base + e).find((f) => fs.existsSync(f))
+        if (found) visit(found)
+      }
+    }
+    visit(path.join(src, "middleware.ts"))
+    return { files: Array.from(files).map((f) => path.relative(src, f).split(path.sep).join("/")), packages: Array.from(packages) }
+  }
+
+  it("reaches no lodash, and not the checkout's address helpers that use it", () => {
+    const { files, packages } = graph()
+    expect(files).toContain("lib/util/reset-cookie.ts")
+    expect(files).toContain("lib/util/reset-link.ts")
+    expect(packages.filter((p) => /lodash/.test(p))).toEqual([])
+    expect(files.filter((f) => /checkout-address|compare-addresses|password-reset\.ts|account-auth/.test(f))).toEqual([])
   })
 })
