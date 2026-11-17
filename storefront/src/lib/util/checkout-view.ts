@@ -278,7 +278,7 @@ export const checkoutView = ({
       ...paymentChoice({ providerIds: providerIds ?? [], rules }),
       sessionProviderId: sessionProviderId(cart),
     },
-    rushControl: rushControlView(rules, currency),
+    rushControl: rushControlView(rules, currency, cart.items),
     codRushHint: codHintMentionsRush(rules),
     rushDropped,
     minimum,

@@ -102,7 +102,7 @@ export const cartPageView = ({
     deliveryDate: promisedDate(rules),
     codLimit: codLimitNote(rules),
     codRushHint: codHintMentionsRush(rules),
-    rushControl: rushControlView(rules, currency),
+    rushControl: rushControlView(rules, currency, cart.items),
     rushDropped,
     minimum: rules ? minimumView(rules) : null,
     rulesFailed: rules === null,

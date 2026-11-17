@@ -74,7 +74,7 @@ vi.mock("@lib/data/locale-actions", () => ({ getLocale: async () => null }))
 
 import { retrieveCartForPage } from "@lib/data/cart"
 import { placeOrder, retrieveCheckoutCart } from "@lib/data/checkout"
-import { chooseRush, dropStaleRush } from "@lib/data/rush"
+import { chooseRush, dropStaleRush, repriceRush } from "@lib/data/rush"
 
 const rushCalls = () => state.calls.filter((c) => c.path.endsWith("/rush"))
 const completions = () => state.calls.filter((c) => c.path.endsWith("/complete"))
@@ -191,6 +191,23 @@ describe("dropStaleRush", () => {
   it("false when the backend refuses", async () => {
     state.rush = [() => fail(500)]
     expect(await dropStaleRush()).toBe(false)
+  })
+})
+
+describe("repriceRush", () => {
+  it("POSTs rush again on the visitor's own cart (the backend prices the line anew), true on 200", async () => {
+    expect(await repriceRush()).toBe(true)
+    expect(rushCalls()).toEqual([{ path: "/store/carts/cart_1/rush", method: "POST", query: { fields: "id" }, signal: true }])
+    state.cartId = null
+    expect(await repriceRush()).toBe(false)
+    expect(rushCalls()).toHaveLength(1)
+  })
+
+  it("false when the backend refuses or fails, so the page shows the line's own amount", async () => {
+    state.rush = [() => fail(500)]
+    expect(await repriceRush()).toBe(false)
+    state.rush = [() => fail(409)]
+    expect(await repriceRush()).toBe(false)
   })
 })
 

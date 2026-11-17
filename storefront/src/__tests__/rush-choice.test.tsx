@@ -46,6 +46,7 @@ import { accountOrderView } from "@lib/util/account-orders"
 import { parseCheckoutRules } from "@lib/util/checkout-rules"
 import { orderConfirmationView } from "@lib/util/order-confirmation"
 import { rushControlView } from "@lib/util/rush"
+import { SETTLE_LIMIT_MS } from "@modules/cart/components/rush-choice"
 import { RushChoiceProvider, useRushChoice } from "@modules/cart/components/rush-choice"
 import AccountOrderTemplate from "@modules/account/templates/account-order-template"
 import { UndoToastProvider } from "@modules/cart/components/undo-toast/provider"
@@ -192,6 +193,155 @@ describe("the Delivery speed control on the cart page", () => {
     expect(radios().rush.checked).toBe(true)
     expect(screen.queryByTestId("speed-error")).toBeNull()
     expect(screen.getByTestId("speed-announcement")).toHaveTextContent("Rush chosen.")
+  })
+
+  it("no answer, the backend answers late: the page reads the cart again by itself at 5 s and at 15 s, and no more", async () => {
+    vi.useFakeTimers()
+    try {
+      rush.answer = async () => ({ ok: false, kind: "no_answer" })
+      const { rerender } = render(page(plainCart(), rulesPkRushOffered))
+      await act(async () => {
+        fireEvent.click(radios().rush)
+      })
+      expect(screen.getByTestId("speed-error")).toBeInTheDocument()
+      expect(radios().standard.checked).toBe(true)
+      expect(nav.refreshed).toBe(1)
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(4999)
+      })
+      expect(nav.refreshed).toBe(1)
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1)
+      })
+      expect(nav.refreshed).toBe(2)
+      // the cart read again holds rush now (the backend answered at 19 s): control, summary and message follow
+      rerender(page(rushCart(), rulesPkRushInCart))
+      expect(radios().rush.checked).toBe(true)
+      expect(screen.queryByTestId("speed-error")).toBeNull()
+      expect(plain(screen.getByTestId("summary-total").textContent)).toBe("TotalPKR 5,050")
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(60_000)
+      })
+      expect(nav.refreshed).toBe(2) // the error went away: the second read is not needed
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("no answer and the cart still holds the old choice: two later reads, 5 s and 15 s after, never a loop", async () => {
+    vi.useFakeTimers()
+    try {
+      rush.answer = async () => ({ ok: false, kind: "no_answer" })
+      render(page(plainCart(), rulesPkRushOffered))
+      await act(async () => {
+        fireEvent.click(radios().rush)
+      })
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(14_999)
+      })
+      expect(nav.refreshed).toBe(2) // the first at 5 s
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1)
+      })
+      expect(nav.refreshed).toBe(3) // the second at 15 s
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10 * 60_000)
+      })
+      expect(nav.refreshed).toBe(3)
+      expect(screen.getByTestId("speed-error")).toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("a failure that is not 'no answer' has no later reads, and Try again stops the ones waiting", async () => {
+    vi.useFakeTimers()
+    try {
+      rush.answer = async () => ({ ok: false, kind: "server" })
+      render(page(plainCart(), rulesPkRushOffered))
+      await act(async () => {
+        fireEvent.click(radios().rush)
+      })
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(60_000)
+      })
+      expect(nav.refreshed).toBe(1)
+
+      rush.answer = async () => ({ ok: false, kind: "no_answer" })
+      await act(async () => {
+        fireEvent.click(screen.getByTestId("speed-try-again"))
+      })
+      expect(nav.refreshed).toBe(2)
+      rush.answer = async () => ({ ok: false, kind: "server" }) // the next try ends otherwise: the waiting reads are cancelled
+      await act(async () => {
+        fireEvent.click(screen.getByTestId("speed-try-again"))
+      })
+      expect(nav.refreshed).toBe(3)
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(60_000)
+      })
+      expect(nav.refreshed).toBe(3)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("the totals wait for the new cart for 8 seconds, not a moment longer", async () => {
+    vi.useFakeTimers()
+    try {
+      expect(SETTLE_LIMIT_MS).toBe(8000)
+      render(page(plainCart(), rulesPkRushOffered))
+      await act(async () => {
+        fireEvent.click(radios().rush)
+      })
+      const total = () => within(screen.getByTestId("summary-total")).getByText(/PKR/)
+      expect(total()).toHaveAttribute("data-loading", "true")
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(7999)
+      })
+      expect(total()).toHaveAttribute("data-loading", "true")
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1)
+      })
+      expect(total()).not.toHaveAttribute("data-loading")
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("pressing the card the cart already holds clears the 'couldn't change' message and sends nothing", async () => {
+    rush.answer = async () => ({ ok: false, kind: "server" })
+    render(page(plainCart(), rulesPkRushOffered))
+    await act(async () => {
+      fireEvent.click(radios().rush)
+    })
+    expect(screen.getByTestId("speed-error")).toBeInTheDocument()
+    expect(rush.calls).toEqual([true])
+    const refreshed = nav.refreshed
+    await act(async () => {
+      fireEvent.click(radios().standard) // Standard is what the cart holds; a checked radio sends no change event, only a click
+    })
+    expect(screen.queryByTestId("speed-error")).toBeNull()
+    expect(rush.calls).toEqual([true])
+    expect(nav.refreshed).toBe(refreshed)
+    expect(radios().standard.checked).toBe(true)
+  })
+
+  it("the same for the Rush card when the cart holds rush and Standard could not be saved", async () => {
+    rush.answer = async () => ({ ok: false, kind: "server" })
+    render(page(rushCart(), rulesPkRushInCart))
+    await act(async () => {
+      fireEvent.click(radios().standard)
+    })
+    expect(screen.getByTestId("speed-error")).toBeInTheDocument()
+    expect(radios().rush.checked).toBe(true)
+    await act(async () => {
+      fireEvent.click(radios().rush)
+    })
+    expect(screen.queryByTestId("speed-error")).toBeNull()
+    expect(rush.calls).toEqual([false])
   })
 
   it("a choice asked for from elsewhere on the page (the hint's button) that is chosen already sends nothing", async () => {
