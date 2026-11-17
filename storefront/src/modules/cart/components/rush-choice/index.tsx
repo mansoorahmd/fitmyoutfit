@@ -7,7 +7,7 @@ import React, { Fragment, createContext, useCallback, useContext, useEffect, use
 import { cartContent } from "@content/cart"
 import { chooseRush } from "@lib/data/rush"
 import { formatDeliveryDate } from "@lib/util/calendar-date"
-import { DeliverySpeed, RushControlView } from "@lib/util/rush"
+import { DeliverySpeed, RUSH_LATE_READ_FIRST_MS, RUSH_LATE_READ_SECOND_MS, RushControlView } from "@lib/util/rush"
 import { fill, fillParts } from "@lib/util/wording"
 import Amount from "@modules/common/components/amount"
 import FieldError from "@modules/common/components/field-error"
@@ -87,6 +87,8 @@ export const RushChoiceProvider = ({
   const [saving, setSaving] = useState<DeliverySpeed | null>(null)
   const [settling, setSettling] = useState(false)
   const [failed, setFailed] = useState<DeliverySpeed | null>(null)
+  // The last save ended with "no answer": the backend may still make the change.
+  const [unanswered, setUnanswered] = useState(false)
   const [announcement, setAnnouncement] = useState<string | null>(null)
   const busy = useRef(false)
   const reportSaving = useRef(onSaving)
@@ -115,6 +117,19 @@ export const RushChoiceProvider = ({
     }
   }, [chosen, control, failed, saving])
 
+  // No answer within the page's limit: the backend may still answer later
+  // (QA's 19 s case), so the cart is read again by itself, twice, and no
+  // more. A new choice or the error going away stops it.
+  useEffect(() => {
+    if (!unanswered || failed === null) return
+    const first = setTimeout(() => router.current?.refresh(), RUSH_LATE_READ_FIRST_MS)
+    const second = setTimeout(() => router.current?.refresh(), RUSH_LATE_READ_SECOND_MS)
+    return () => {
+      clearTimeout(first)
+      clearTimeout(second)
+    }
+  }, [unanswered, failed])
+
   useEffect(() => {
     if (!settling) return
     const timer = setTimeout(() => {
@@ -127,14 +142,23 @@ export const RushChoiceProvider = ({
   const choose = useCallback(
     async (speed: DeliverySpeed) => {
       if (busy.current || !control) return
-      if (speed === chosen && saving === null) return
+      if (speed === chosen && saving === null) {
+        // the cart holds this already: nothing to send, and an old "couldn't change" is no longer true
+        setFailed(null)
+        setUnanswered(false)
+        return
+      }
       busy.current = true
       setSaving(speed)
       setFailed(null)
+      setUnanswered(false)
       setAnnouncement(null)
       let ok = false
+      let noAnswer = false
       try {
-        ok = (await chooseRush(speed === "rush")).ok
+        const result = await chooseRush(speed === "rush")
+        ok = result.ok
+        noAnswer = !result.ok && result.kind === "no_answer"
       } catch {
         ok = false
       }
@@ -144,6 +168,7 @@ export const RushChoiceProvider = ({
       } else {
         setSaving(null)
         setFailed(speed)
+        setUnanswered(noAnswer)
       }
       // the cart as the backend has it now: the new figures, or the true state after a failure
       router.current?.refresh()
@@ -233,6 +258,7 @@ const RushChoice = ({
           value="standard"
           checked={shown === "standard"}
           onSelect={() => choose("standard")}
+          onReselect={() => choose("standard")}
           title={<CardTitle label={words.standard} price={words.included} />}
           loading={saving === "standard"}
           busy={saving !== null && saving !== "standard"}
@@ -246,6 +272,7 @@ const RushChoice = ({
           value="rush"
           checked={shown === "rush"}
           onSelect={() => choose("rush")}
+          onReselect={() => choose("rush")}
           title={
             <CardTitle
               label={words.rush}
