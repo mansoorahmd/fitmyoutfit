@@ -38,8 +38,12 @@ export const placeOrderBlock = ({
   return null
 }
 
-/** A call to the backend, as the data layer reports it: the body, or the HTTP status (none: no answer). */
-export type BackendCall<T> = { ok: true; body: T } | { ok: false; status?: number }
+/**
+ * A call to the backend, as the data layer reports it: the body, or the
+ * HTTP status (none: no answer) with the backend's message, which is read
+ * only where the contract names an answer by it (completionRetry).
+ */
+export type BackendCall<T> = { ok: true; body: T } | { ok: false; status?: number; message?: string }
 
 /** What completing the cart came to. */
 export type CompletionResult =
@@ -89,40 +93,124 @@ export const readCompletion = (call: BackendCall<CompleteBody>): CompletionResul
 /** What the customer sees after pressing "Place order", once the backend has answered. */
 export type PlaceOrderOutcome =
   | Exclude<CompletionResult, { kind: "conflict" } | { kind: "no_answer" }>
-  /** Unknown: the connection was lost, or completing failed twice with 409 ("Check my order"). */
+  /** Unknown: the connection was lost, or completing kept answering 409 ("Check my order"). */
   | { kind: "unknown" }
+  /**
+   * The cart's total is not the one the customer saw (the rush price
+   * changed at that moment, contract 9): nothing was placed; the page shows
+   * the new total and the customer presses "Place order" again.
+   */
+  | { kind: "total_changed"; total: number; currencyCode: string }
+
+/**
+ * The completion answers that mean "make sure of the payment session and
+ * complete again" (contract 9), or null for any other answer:
+ * - 409 `conflict`: another request changed the cart during completion;
+ * - 400 "Payment sessions are required to complete cart": the rush price
+ *   changed at that moment and Medusa dropped the session;
+ * - 404 naming a payment session (Medusa's own race, rare).
+ * The two last are told from other refusals by the backend's message, as
+ * the contract names them; a 400 or 404 without it is what it always was
+ * (a refusal; the cart is gone).
+ */
+export const completionRetry = (
+  call: BackendCall<unknown>
+): "conflict" | "session_required" | "session_missing" | null => {
+  if (call.ok) return null
+  if (call.status === 409) return "conflict"
+  if (call.status === 400 && /payment sessions are required/i.test(call.message ?? "")) {
+    return "session_required"
+  }
+  if (call.status === 404 && /payment[ _-]?session/i.test(call.message ?? "")) {
+    return "session_missing"
+  }
+  return null
+}
+
+/** How many times a completion is tried again after one of those answers (the brief: at most twice). */
+export const COMPLETION_RETRIES = 2
+
+/**
+ * Whether the cart's total differs from the one the customer saw. Unknown
+ * on either side: no difference is claimed.
+ */
+export const totalChanged = (
+  expected: number | null | undefined,
+  actual: number | null | undefined
+): boolean =>
+  typeof expected === "number" &&
+  typeof actual === "number" &&
+  Number.isFinite(expected) &&
+  Number.isFinite(actual) &&
+  Math.abs(expected - actual) >= 0.005
+
+/** The cart as ensureSession read it: whether it is an order already, and its total. */
+type SessionCart = {
+  completed_at?: string | Date | null
+  total?: number | null
+  currency_code?: string | null
+}
 
 /**
  * The server side of "Place order":
  * 1. make sure the cart has a payment session for the chosen method, since
  *    Medusa drops it after any cart change (a refusal here, such as cash on
  *    delivery over the limit, is explained like a refused order);
- * 2. complete the cart; on HTTP 409 complete once more, and if that fails
- *    too, the result is unknown.
+ * 2. if the cart's total is not `expectedTotal` (the one the page showed),
+ *    stop: "total_changed", nothing placed;
+ * 3. complete the cart. On one of the answers that mean "try again"
+ *    (completionRetry: 409, the dropped session, the missing session),
+ *    steps 1 and 2 again and complete again, at most COMPLETION_RETRIES
+ *    times. When the tries run out: after a 409 the result is unknown
+ *    ("Check my order", as before); after the other two nothing was
+ *    placed, a refusal.
  * Completing a cart that is already an order returns that order, so a
- * second press, or a second try, never makes a second order.
+ * second press, or a second try, never makes a second order; and a cart
+ * that is an order already is never stopped for its total.
  */
 export const placeOrderFlow = async ({
   ensureSession,
   complete,
+  expectedTotal,
 }: {
   ensureSession: () => Promise<BackendCall<unknown>>
   complete: () => Promise<BackendCall<CompleteBody>>
+  /** The total the customer saw; without it the total is not checked. */
+  expectedTotal?: number | null
 }): Promise<PlaceOrderOutcome> => {
-  const session = await ensureSession()
-  if (!session.ok) {
-    const kind = failureKind(session.status)
-    if (kind === "conflict" || kind === "no_answer") return { kind: "unknown" }
-    return { kind } as PlaceOrderOutcome
+  /** Steps 1 and 2: null when the cart is ready to complete, else the outcome. */
+  const ready = async (): Promise<PlaceOrderOutcome | null> => {
+    const session = await ensureSession()
+    if (!session.ok) {
+      const kind = failureKind(session.status)
+      if (kind === "conflict" || kind === "no_answer") return { kind: "unknown" }
+      return { kind } as PlaceOrderOutcome
+    }
+    const cart = (session.body ?? {}) as SessionCart
+    if (!cart.completed_at && totalChanged(expectedTotal, cart.total)) {
+      return { kind: "total_changed", total: cart.total as number, currencyCode: cart.currency_code ?? "" }
+    }
+    return null
   }
 
-  for (let attempt = 0; attempt < 2; attempt++) {
-    const result = readCompletion(await complete())
-    if (result.kind === "conflict") continue
-    if (result.kind === "no_answer") return { kind: "unknown" }
+  const first = await ready()
+  if (first) return first
+
+  for (let retry = 0; ; retry++) {
+    const answer = await complete()
+    const again = completionRetry(answer)
+    if (again) {
+      if (retry >= COMPLETION_RETRIES) {
+        return again === "conflict" ? { kind: "unknown" } : { kind: "refused" }
+      }
+      const stop = await ready()
+      if (stop) return stop
+      continue
+    }
+    const result = readCompletion(answer as BackendCall<CompleteBody>)
+    if (result.kind === "no_answer" || result.kind === "conflict") return { kind: "unknown" }
     return result
   }
-  return { kind: "unknown" }
 }
 
 /** The cart as it is now ("Check my order", lib/util/order-status.ts). */

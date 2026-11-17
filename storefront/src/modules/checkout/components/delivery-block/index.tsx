@@ -5,7 +5,9 @@ import { useState } from "react"
 
 import { checkoutContent } from "@content/checkout"
 import { retryDelivery } from "@lib/data/checkout"
+import { cartContent } from "@content/cart"
 import { CheckoutView } from "@lib/util/checkout-view"
+import RushChoice, { useRushSaving } from "@modules/cart/components/rush-choice"
 import Alert from "@modules/common/components/alert"
 import Amount from "@modules/common/components/amount"
 import { Button } from "@modules/common/components/button"
@@ -19,13 +21,16 @@ const words = checkoutContent.deliveryBlock
  * Step 2's delivery block (docs/design/05-m1-pages.md, 6.5 a): the region's
  * one option as a line, not a choice: "Delivery in Pakistan · PKR 250", or
  * "Shipping & duties included · Included" (never "GBP 0.00", which would
- * read as free shipping). Under it the delivery date. Never a duties line.
+ * read as free shipping). Under it the "Delivery speed" control (when rush
+ * is offered; contract 9), then the delivery date, which is the rush date
+ * while the cart holds rush. Never a duties line.
  * When the option couldn't be added on save: W-K14 with "Try again".
  */
 const DeliveryBlock = ({ view }: { view: CheckoutView }) => {
   const router = useRouter()
   const [retrying, setRetrying] = useState(false)
   const [failedAgain, setFailedAgain] = useState(0)
+  const updating = useRushSaving()
   const row = view.summary.delivery
 
   if (!view.deliveryReady) {
@@ -74,7 +79,15 @@ const DeliveryBlock = ({ view }: { view: CheckoutView }) => {
           )}
         </p>
       )}
-      {!view.summary.rulesFailed && <DeliveryDateLine date={view.summary.deliveryDate} />}
+      <RushChoice heading="h3" />
+      {view.rushDropped && (
+        <p role="status" className="type-small text-brand-ink-muted" data-testid="delivery-rush-dropped">
+          {cartContent.rush.dropped}
+        </p>
+      )}
+      {!view.summary.rulesFailed && (
+        <DeliveryDateLine date={view.summary.deliveryDate} loading={updating} />
+      )}
     </div>
   )
 }

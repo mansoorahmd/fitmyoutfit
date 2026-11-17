@@ -80,6 +80,14 @@ const AccountOrderTemplate = ({ view }: { view: AccountOrderView }) => (
               <Amount>{view.itemSubtotal}</Amount>
             </dd>
           </div>
+          {view.rush && (
+            <div className="flex items-baseline justify-between gap-4" data-testid="order-rush">
+              <dt className="min-w-0 type-body text-brand-ink">{words.summary.rush}</dt>
+              <dd className="type-body text-brand-ink">
+                <Amount>{view.rush}</Amount>
+              </dd>
+            </div>
+          )}
           {view.delivery && (
             <div className="flex items-baseline justify-between gap-4" data-testid="order-delivery">
               <dt className="min-w-0 type-body text-brand-ink">

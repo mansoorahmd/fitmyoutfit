@@ -5,7 +5,7 @@
  * (font, colour, outline, size). A readability warning with a one-tap fix
  * appears when letters are hard to read on the kit.
  */
-import { useId, useState, type ReactNode, useMemo } from "react";
+import { useId, useState, type ReactNode, useMemo, memo } from "react";
 import { addCatalogFont } from "../design/font-catalog.js";
 import { updateLayer } from "../design/edit.js";
 import { coloursCommonFirst, paletteColourRef } from "../design/palette.js";
@@ -22,7 +22,7 @@ import type { EditLabel } from "../state/history.js";
 import { fill, presetWords } from "./content.js";
 import { useEditor, type EditorApi } from "./context.js";
 import { EditorIcon } from "./icons.js";
-import { convertDigits, digitChoiceOf, fieldCheck, fieldStep, playerSwitches, presetsFor, type DigitChoice, type FieldState } from "./lettering.js";
+import { commonColoursAfterTeam, convertDigits, digitChoiceOf, fieldCheck, fieldStep, fontDisplayName, playerSwitches, presetsFor, type DigitChoice, type FieldState } from "./lettering.js";
 import { Alert, PresetChips, Segmented, Swatch, SwitchRow } from "./parts.js";
 import { colourName } from "./stage-logic.js";
 
@@ -88,7 +88,7 @@ function StyleControls({ roles, fontRoles, onFonts }: { roles: ValueRole[]; font
 
   return (
     <section className="fmo-section" aria-label={w.style}>
-      <span className="fmo-label">{w.style}</span>
+      <span className="fmo-section-title">{w.style}</span>
       {fontRoles.map(({ role, label }) => {
         const l = roleLayers(design, role)[0];
         const font = l && api.fonts.fonts.find((f) => f.id === l.fontId);
@@ -96,7 +96,7 @@ function StyleControls({ roles, fontRoles, onFonts }: { roles: ValueRole[]; font
         return (
           <button key={role} type="button" className="fmo-btn fmo-btn-block fmo-font-button" onClick={() => onFonts(role)} data-testid={`font-${role}`}>
             <span>{label}</span>
-            <span style={{ fontFamily: font ? `"${font.family}"` : undefined, fontWeight: font?.weight }}>{font?.name ?? l.fontId}</span>
+            <span style={{ fontFamily: font ? `"${font.family}"` : undefined, fontWeight: font?.weight }}>{font ? fontDisplayName(font) : l.fontId}</span>
           </button>
         );
       })}
@@ -105,9 +105,7 @@ function StyleControls({ roles, fontRoles, onFonts }: { roles: ValueRole[]; font
         <div className="fmo-scroll-row">
           {roleSwatches(layer.fill, (r) => commit((d, l) => updateLayer(d, l.id, { fill: teamColourValue(d, r) }, { product }), "colour"), `fill-${roles[0]}`)}
           <span className="fmo-divider" />
-          {coloursCommonFirst(palette)
-            .slice(0, 8)
-            .map((c) => {
+          {commonColoursAfterTeam(coloursCommonFirst(palette), design.teamColors, 8).map((c) => {
               const selected = layer.fill.id === c.id && !layer.fill.teamColor;
               return <Swatch key={c.id} hex={c.hex} label={selected ? fill(wording.colours.selected, { colour: c.name }) : c.name} selected={selected} onPick={() => commit((d, l) => updateLayer(d, l.id, { fill: paletteColourRef(c) }, { product }), "colour")} testId={`fill-${roles[0]}-${c.id}`} />;
             })}
@@ -133,9 +131,7 @@ function StyleControls({ roles, fontRoles, onFonts }: { roles: ValueRole[]; font
           <div className="fmo-swatches">
             {roleSwatches(outlineRole ? { ...layer.outline.color } : undefined, (r) => commit((d, l) => setOutline(d, l.id, { step: outlineStepOf(l) ?? "thin", color: teamColourValue(d, r) }, { product }), "outline"), `outline-${roles[0]}`)}
             <span className="fmo-divider" />
-            {coloursCommonFirst(palette)
-              .slice(0, 6)
-              .map((c) => {
+            {commonColoursAfterTeam(coloursCommonFirst(palette), design.teamColors, 6).map((c) => {
                 const selected = !outlineRole && layer.outline?.color.id === c.id;
                 return <Swatch key={c.id} hex={c.hex} label={selected ? fill(wording.colours.selected, { colour: c.name }) : c.name} selected={selected} onPick={() => commit((d, l) => setOutline(d, l.id, { step: outlineStepOf(l) ?? "thin", color: paletteColourRef(c) }, { product }), "outline")} testId={`outline-${roles[0]}-${c.id}`} />;
               })}
@@ -192,12 +188,12 @@ function FontList({ role, sample, onBack }: { role: ValueRole; sample: string; o
                 data-testid={`font-option-${f.id}`}
               >
                 <span className="fmo-muted">
-                  {f.name} {current === f.id && <EditorIcon name="check" size={16} />}
+                  {fontDisplayName(f)} {current === f.id && <EditorIcon name="check" size={16} />}
                 </span>
                 <span className="fmo-font-sample fmo-bdi" dir="auto" style={{ fontFamily: `"${f.family}"${fallback ? `, "${fallback.family}"` : ""}`, fontWeight: f.weight }}>
                   {sample}
                 </span>
-                {latinOnly && fallback && <span className="fmo-muted">{fill(wording.lettering.latinOnly, { font: fallback.name })}</span>}
+                {latinOnly && fallback && <span className="fmo-muted">{fill(wording.lettering.latinOnly, { font: fontDisplayName(fallback) })}</span>}
               </button>
             );
           })}
@@ -213,7 +209,9 @@ function ReadabilityWarnings({ roles }: { roles: ValueRole[] }) {
   // Computed once per design (the panel re-renders often; this samples every colour under every item).
   const roleKey = roles.join(",");
   const coachColoured = api.coachColoured;
-  const warnings = useMemo(() => readabilityWarnings(wording, product, design, palette, roleKey.split(",") as ValueRole[], coachColoured), [wording, product, design, palette, roleKey, coachColoured]);
+  const all = useMemo(() => readabilityWarnings(wording, product, design, palette, roleKey.split(",") as ValueRole[], coachColoured), [wording, product, design, palette, roleKey, coachColoured]);
+  // R15: the selected item's warning leads the panel (SelectedWarnings); it is not repeated here.
+  const warnings = api.selectedId ? all.filter((w) => !w.layerIds.includes(api.selectedId!)) : all;
   if (warnings.length === 0) return null;
   return (
     <>
@@ -320,7 +318,7 @@ function ValueField({
   );
 }
 
-export function TeamTool() {
+function TeamToolView() {
   const api = useEditor();
   const { design, product, wording } = api;
   const w = wording.lettering;
@@ -348,7 +346,7 @@ export function TeamTool() {
       <ValueField label={w.teamName} value={design.teamName} placeholder={wording.start.namePlaceholder} layerId={layers[0]?.id ?? null} onType={(v) => api.preview((d) => setTeamName(d, v))} testId="team-name" editLabel="team-name" />
       {hasPictographs(design.teamName) && <PictographAlert onRemove={(d) => setTeamName(d, stripPictographs(d.teamName))} testId="pictographs-team-name" />}
       <div>
-        <span className="fmo-label">{w.where}</span>
+        <span className="fmo-section-title">{w.where}</span>
         <PresetChips product={product} presets={presets} current={at} words={(p) => presetWords(wording, p)} onPick={place} offLabel={w.off} onOff={off} testIdPrefix="team-where" />
       </div>
       <ReadabilityWarnings roles={["team-name"]} />
@@ -357,7 +355,7 @@ export function TeamTool() {
   );
 }
 
-export function PlayersTool() {
+function PlayersToolView() {
   const api = useEditor();
   const { design, product, wording, textFits } = api;
   const w = wording.lettering;
@@ -374,7 +372,7 @@ export function PlayersTool() {
   return (
     <>
       <p className="fmo-muted">{w.fromTeamList}</p>
-      <span className="fmo-label" data-keep-typing>
+      <span className="fmo-section-title" data-keep-typing>
         {w.previewAs}
       </span>
       <div className="fmo-fields" data-keep-typing>
@@ -383,7 +381,7 @@ export function PlayersTool() {
       </div>
       {hasPictographs(design.samplePlayer.name) && <PictographAlert onRemove={(d) => setSamplePlayer(d, { name: stripPictographs(d.samplePlayer.name) })} testId="pictographs-player-name" />}
       <section className="fmo-section" aria-label={w.onTheShirt}>
-        <span className="fmo-label">{w.onTheShirt}</span>
+        <span className="fmo-section-title">{w.onTheShirt}</span>
         {playerSwitches(product, wording).map((s) => (
           <SwitchRow
             key={`${s.role}-${s.preset.id}`}
@@ -423,3 +421,9 @@ export function PlayersTool() {
     </>
   );
 }
+
+/** E3d (speed): re-renders only when its props or the editor's data change. */
+export const TeamTool = memo(TeamToolView);
+
+/** E3d (speed): re-renders only when its props or the editor's data change. */
+export const PlayersTool = memo(PlayersToolView);

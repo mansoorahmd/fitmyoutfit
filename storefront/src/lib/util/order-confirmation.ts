@@ -12,6 +12,7 @@ import { addressLines } from "./checkout-address"
 import { COD_PROVIDER_ID, TEST_PROVIDER_ID } from "./checkout-payment"
 import { SummaryLineView, summaryLines } from "./checkout-view"
 import { isExportRegion, money, pieceCount } from "./cart-view"
+import { summaryAmounts } from "./rush"
 
 export type OrderPromise = {
   date: string
@@ -182,7 +183,10 @@ export type OrderConfirmationView = {
   payment: OrderPaymentKind
   lines: SummaryLineView[]
   pieces: number
+  /** The garments and the fit kit, never rush. */
   itemSubtotal: string
+  /** The "Rush production" row, or null when the order has no rush line. */
+  rush: string | null
   delivery: OrderDeliveryRow | null
   total: string
   addressLines: string[]
@@ -202,6 +206,7 @@ export const orderConfirmationView = ({
   const currency = order.currency_code
   const address = order.shipping_address
   const items = (order.items ?? []) as unknown as HttpTypes.StoreCartLineItem[]
+  const amounts = summaryAmounts(order.item_subtotal, items)
 
   return {
     orderId: order.id,
@@ -213,7 +218,8 @@ export const orderConfirmationView = ({
     payment: orderPaymentKind(order.payment_collections as PaymentCollectionLike[] | undefined),
     lines: summaryLines(items, currency),
     pieces: pieceCount(items),
-    itemSubtotal: money(order.item_subtotal, currency),
+    itemSubtotal: money(amounts.items, currency),
+    rush: amounts.rush === null ? null : money(amounts.rush, currency),
     delivery: orderDeliveryRow({
       methods: order.shipping_methods,
       shippingTotal: order.shipping_subtotal,

@@ -209,6 +209,11 @@ describe("the selected layer", () => {
     expect(strokes("name")).toBe(2);
     expect(strokes("nope")).toBe(0);
   });
+  it("E3d (R36): in the 3D overlay's two tones, white under ink (not blue)", () => {
+    const design = addLayer(base, text(), { product });
+    const styles = render(design, { selectedLayerId: "name" }).ctx.calls.filter((c) => c.op === "stroke").map((c) => String(c.style).toUpperCase());
+    expect(styles).toEqual(["#FFFFFF", "#0B1530"]);
+  });
 });
 
 describe("layers on a piece the product does not have", () => {

@@ -9,6 +9,7 @@ import type { SelectionGeometry } from "../react/DesignCanvas";
 import { EDITOR_WORDING as W } from "./content";
 import { HANDLE_HIT, createBus, resizeFactor, snapAngle, turnDelta } from "./handles";
 import { SelectionOverlay } from "./SelectionOverlay";
+import type { ItemBox } from "../react/DesignCanvas";
 
 describe("handle gestures", () => {
   it("a corner drag scales by the pointer's distance from the centre", () => {
@@ -17,6 +18,13 @@ describe("handle gestures", () => {
     expect(resizeFactor(c, { x: 130, y: 140 }, { x: 115, y: 120 })).toBeCloseTo(0.5);
     expect(resizeFactor(c, { x: 100.2, y: 100 }, { x: 300, y: 100 })).toBe(1); // a press on the centre: no change
     expect(resizeFactor(c, { x: 150, y: 100 }, { x: 100, y: 100 })).toBeGreaterThan(0); // never zero
+  });
+
+  it("E3d (R32): with the handle outset beyond the item's corner, the item's corner follows the pointer", () => {
+    const c = { x: 100, y: 100 };
+    // The item's corner is 50 px out, its handle 60 px: dragging the handle to 110 px puts the corner at 100 px.
+    expect(resizeFactor(c, { x: 160, y: 100 }, { x: 210, y: 100 }, 10)).toBeCloseTo(2);
+    expect(resizeFactor(c, { x: 160, y: 100 }, { x: 210, y: 100 })).toBeCloseTo(110 / 60);
   });
 
   it("the turn handle turns by the pointer's angle round the centre, clockwise on screen", () => {
@@ -63,6 +71,7 @@ function geometry(facing: boolean): SelectionGeometry {
       { x: 140, y: 320 },
     ],
     cornerSources: ["surface", "surface", "surface", "plane"],
+    centreWorld: [0, 0, 0],
     outline: [
       { x: 140, y: 280 },
       { x: 260, y: 280 },
@@ -100,6 +109,49 @@ describe("the selection overlay", () => {
     expect(html).not.toContain("handle-corner");
     expect(html).toContain('data-testid="turn-to-edit"');
     expect(html).toContain(W.selection.turnToEdit);
+  });
+
+  it("E3d (R31): the box is four straight lines, and each corner handle sits on one of its four points", () => {
+    const html = render(true);
+    const line = html.match(/<polygon points="([^"]+)" class="fmo-box-line"/);
+    expect(line).not.toBeNull();
+    const pts = line![1]!.trim().split(/\s+/).map((p) => p.split(",").map(Number) as [number, number]);
+    expect(pts).toHaveLength(4);
+    const squares = [...html.matchAll(/<rect x="([-\d.]+)" y="([-\d.]+)" width="14" height="14" class="fmo-handle"/g)].map((m) => [Number(m[1]) + 7, Number(m[2]) + 7]);
+    expect(squares).toHaveLength(4);
+    squares.forEach(([x, y], k) => {
+      expect(x).toBeCloseTo(pts[k]![0], 0);
+      expect(y).toBeCloseTo(pts[k]![1], 0);
+    });
+    // R32: outset 8 px from the item (140..260 x 280..320).
+    expect(pts[0]).toEqual([132, 272]);
+    expect(pts[2]).toEqual([268, 328]);
+  });
+
+  it("E3d (R33): the turn handle goes below the box when another item sits above it", () => {
+    const name: ItemBox = { layerId: "player-name-1", corners: [{ x: 150, y: 230 }, { x: 250, y: 230 }, { x: 250, y: 262 }, { x: 150, y: 262 }], centre: { x: 200, y: 246 }, facing: true };
+    const items = createBus<ItemBox[]>([name]);
+    const html = renderToStaticMarkup(<SelectionOverlay bus={createBus<SelectionGeometry | null>(geometry(true))} items={items} wording={W} insets={{ top: 0, right: 0, bottom: 0, left: 0 }} top={24} onResize={() => undefined} onRotate={() => undefined} onTurnTo={() => undefined} />);
+    expect(html).toContain('data-turn-place="bottom"');
+    const knob = html.match(/data-testid="handle-turn"><circle cx="([-\d.]+)" cy="([-\d.]+)"/);
+    expect(Number(knob![2])).toBeGreaterThan(328);
+  });
+
+  it("E3d (R15, R34): a badge on each unselected item with a warning, named by it; none on the selected item", () => {
+    const other: ItemBox = { layerId: "logo-1", corners: [{ x: 20, y: 20 }, { x: 60, y: 20 }, { x: 60, y: 60 }, { x: 20, y: 60 }], centre: { x: 40, y: 40 }, facing: true };
+    const self: ItemBox = { layerId: "team-name-1", corners: geometry(true).corners, centre: { x: 200, y: 300 }, facing: true };
+    const warnings = new Map([
+      ["logo-1", "Needs a look: may print blurry at this size."],
+      ["team-name-1", "Needs a look: hard to read on White."],
+    ]);
+    const html = renderToStaticMarkup(<SelectionOverlay bus={createBus<SelectionGeometry | null>(geometry(true))} items={createBus<ItemBox[]>([other, self])} warnings={warnings} wording={W} insets={{ top: 0, right: 0, bottom: 0, left: 0 }} top={24} onResize={() => undefined} onRotate={() => undefined} onTurnTo={() => undefined} />);
+    expect(html).toContain('data-testid="item-badge-logo-1"');
+    expect(html).toContain('aria-label="Needs a look: may print blurry at this size."');
+    expect(html).toContain('title="Needs a look: may print blurry at this size."');
+    expect(html).not.toContain("item-badge-team-name-1");
+    // Nothing selected: the badges still show.
+    const none = renderToStaticMarkup(<SelectionOverlay bus={createBus<SelectionGeometry | null>(null)} items={createBus<ItemBox[]>([other, self])} warnings={warnings} wording={W} insets={{ top: 0, right: 0, bottom: 0, left: 0 }} top={24} onResize={() => undefined} onRotate={() => undefined} onTurnTo={() => undefined} />);
+    expect(none.match(/item-badge-/g)).toHaveLength(2);
   });
 
   it("draws nothing without a selection", () => {

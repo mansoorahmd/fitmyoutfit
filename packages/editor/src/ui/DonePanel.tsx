@@ -37,6 +37,8 @@ export interface DonePanelProps {
   onClose: () => void;
   /** "Show" on a check: the panel closes and the item is selected, with the camera on it. */
   onShow: (check: DesignCheck) => void;
+  /** E3d (R37): the panel's height as shown (a phone's sheet is as tall as its content), for the stage's framing. */
+  onSize?: (height: number) => void;
 }
 
 export function DonePanel(props: DonePanelProps) {
@@ -54,7 +56,24 @@ export function DonePanel(props: DonePanelProps) {
     if (props.open && !dialog.open) {
       if (typeof dialog.showModal === "function") dialog.showModal();
       else dialog.setAttribute("open", "");
+      // showModal() puts the focus on the first control (the close button): the main action keeps it (11.2).
+      dialog.querySelector<HTMLElement>("[data-done-focus], .fmo-primary")?.focus({ preventScroll: true });
     } else if (!props.open && dialog.open) dialog.close();
+  }, [props.open]);
+  // R37: the sheet's real height, for the stage (the garment is framed above it).
+  const report = useRef(props.onSize);
+  useEffect(() => {
+    report.current = props.onSize;
+  });
+  useEffect(() => {
+    const dialog = ref.current;
+    if (!dialog || !props.open) return;
+    const measure = () => report.current?.(dialog.offsetHeight);
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(dialog);
+    return () => observer.disconnect();
   }, [props.open]);
   const count = checks.length;
   const primary = typeof props.primaryAction === "function" ? props.primaryAction(design) : props.primaryAction;
@@ -76,7 +95,7 @@ export function DonePanel(props: DonePanelProps) {
             <h2 className="fmo-panel-title" id="fmo-done-title">
               {w.title}
             </h2>
-            <button type="button" className="fmo-round" style={{ border: 0, background: "none" }} aria-label={w.close} title={w.close} onClick={props.onClose} data-testid="done-close">
+            <button type="button" className="fmo-icon-btn" aria-label={w.close} title={w.close} onClick={props.onClose} data-testid="done-close">
               <EditorIcon name={props.layout === "compact" ? "chevronDown" : "close"} />
             </button>
           </div>
@@ -111,7 +130,7 @@ export function DonePanel(props: DonePanelProps) {
           )}
           {primary ?? (
             <>
-              <button type="button" className="fmo-primary" onClick={props.onSaveAndGoBack} data-testid="done-save-and-go-back" autoFocus>
+              <button type="button" className="fmo-primary" onClick={props.onSaveAndGoBack} data-testid="done-save-and-go-back" data-done-focus autoFocus>
                 {w.saveAndGoBack}
               </button>
               <p className="fmo-muted" data-testid="done-team-orders">
@@ -120,7 +139,7 @@ export function DonePanel(props: DonePanelProps) {
             </>
           )}
           {props.share && <div data-testid="done-share">{props.share}</div>}
-          <button type="button" className="fmo-btn fmo-btn-text" onClick={props.onClose} data-testid="done-keep-designing">
+          <button type="button" className="fmo-btn fmo-btn-text fmo-btn-pad" onClick={props.onClose} data-testid="done-keep-designing">
             {w.keepDesigning}
           </button>
         </div>

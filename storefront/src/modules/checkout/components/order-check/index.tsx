@@ -7,6 +7,7 @@ import { checkoutContent } from "@content/checkout"
 import { CheckoutView, linesShownFirst } from "@lib/util/checkout-view"
 import { fill } from "@lib/util/wording"
 import CartSummary from "@modules/cart/components/cart-summary"
+import { useRushSaving } from "@modules/cart/components/rush-choice"
 
 import { checkoutLayout } from "../../templates/checkout-page/layout"
 import SummaryLines from "../summary-lines"
@@ -31,6 +32,7 @@ const words = checkoutContent
  */
 const OrderCheck = ({ view }: { view: CheckoutView }) => {
   const [all, setAll] = useState(false)
+  const updating = useRushSaving()
   const first = linesShownFirst(view.lines.length)
   const lines = all ? view.lines : view.lines.slice(0, first)
 
@@ -62,7 +64,7 @@ const OrderCheck = ({ view }: { view: CheckoutView }) => {
         )}
       </div>
       <div className="border-t border-brand-border pt-4">
-        <CartSummary {...view.summary} deliveryDate={null} codLimit={null} minimum={null} updating={false} />
+        <CartSummary {...view.summary} deliveryDate={null} codLimit={null} minimum={null} updating={updating} />
       </div>
     </section>
   )

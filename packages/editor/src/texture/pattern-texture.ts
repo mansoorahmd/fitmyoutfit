@@ -118,6 +118,8 @@ export interface DrawPatternOptions {
   images?: AssetImageLookup;
   /** A layer to outline as selected, in the editor's view. */
   selectedLayerId?: string | null;
+  /** Device pixels per CSS pixel (the selection line keeps its CSS width, E3d R36). */
+  pixelRatio?: number;
   /** A colour zone or a group of shapes to show (the zone flash, editor only; never for proofs). */
   highlight?: ZoneHighlight | null;
 }
@@ -237,6 +239,7 @@ export function drawPatternTexture(
   const layers = drawLayers(ctx, design, pieces, (piece) => pieceTransform(piece, size), {
     images: options.images,
     selectedLayerId: options.selectedLayerId,
+    pixelRatio: options.pixelRatio,
   });
   if (options.highlight) drawZoneHighlight(ctx, product, design, options.highlight, (piece) => pieceTransform(piece, size), size / DEFAULT_TEXTURE_SIZE);
   ctx.setTransform(1, 0, 0, 1, 0, 0);

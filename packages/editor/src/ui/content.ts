@@ -72,6 +72,10 @@ export const EDITOR_WORDING = {
     allColours: "All colours", // W-ED44
     clearSlot: "Remove {role}", // NEW: accessible name of a filled colour slot
     emptySlot: "{role}: not chosen", // NEW
+    skipLater: "Skip for now: you can change everything later", // NEW (E3d, R5): the skip line and the reassurance in one line
+    pickedAs: "{colour}, {role}", // NEW (E3d, R5): a picked swatch's accessible name ("Red, Main"); tap again to remove
+    pickedRole: "{role}: {colour}", // NEW (E3d, R5): one pick in the line under the swatches ("Main: Red")
+    pickedJoin: " · ", // NEW (E3d, R5): between the picks in that line
   },
   /** Design (`templates`). */
   templates: {
@@ -91,6 +95,7 @@ export const EDITOR_WORDING = {
     all: "All colours", // W-ED44
     editTeam: "Edit team colours", // W-ED45
     swap: "Swap main and second", // W-ED46
+    swapShort: "Swap", // NEW (E3d, R21): the swap chip's visible word (its accessible name stays "Swap main and second")
     tapKit: "Tap the kit to choose a part.", // W-ED47
     matchCode: "Match a colour code", // W-ED48
     codeLabel: "Enter a colour code, like #1F4E9C", // W-ED49
@@ -241,6 +246,9 @@ export const EDITOR_WORDING = {
     fromDesign: "From the design", // W-ED132
     locked: "Locked", // W-ED132
     moreFor: "More for {item}", // NEW: a row's menu button (accessible name)
+    needsLook: "Needs a look: {reason}", // NEW (E3d, R15): a warning badge on the model (its name and tooltip; a tap selects the item)
+    covers: "This covers the {item}.", // NEW (E3d): the selected item lies over another one
+    moveClear: "Move it clear", // NEW (E3d): the one-tap fix (moves it to the nearest free place, or makes it smaller)
     needsALook: "Needs a look", // NEW: the warning badge's accessible name
     colourAction: "Colour", // NEW: the only action for the design's shapes
   },
@@ -285,6 +293,7 @@ export const EDITOR_WORDING = {
     continueTitle: "Continue your last design?", // W-ED142
     continue: "Continue", // W-ED142
     startAgain: "Start again", // W-ED142
+    continueBody: "We kept the kit you were working on, on this device.", // NEW (E3d, R40): DRAFT WORDING, founders to confirm
     noWebgl: "The 3D view can't run on this device. You can still design your kit here.", // W-ED143
     restarting: "Restarting the 3D view…", // W-ED144
     changeFailed: "That change couldn't be made.", // W-ED149
@@ -306,6 +315,7 @@ export const EDITOR_WORDING = {
     show: "Show", // W-ED161
     checkLine: "{item}: {reason}", // NEW: one line of the summary ("Logo on the left chest: may print blurry at this size.")
     checkHardToRead: "hard to read on {colour}.", // NEW (W-ED85 in the summary)
+    checkCovers: "covers the {item}.", // NEW (E3d): an item over another one ("covers the player name.")
     checks: { clipped: "part of it is cut off at the seam.", blurry: "may print blurry at this size.", box: "prints as a box with its background colour.", "hard-to-read": "hard to read.", pictographs: "has emoji or picture symbols, which can't be printed.", missing: "its picture is missing on this device." } as Record<"clipped" | "blurry" | "box" | "hard-to-read" | "pictographs" | "missing", string>, // pictographs, missing: NEW (E3c, S5, S2) // NEW (W-ED111, W-ED96, W-ED95 in the summary)
     price: "Price", // W-ED168 (the host fills the slot)
     kitLine: "{product} · {team}", // NEW: the Done panel's line ("Jersey · Lahore Lions")

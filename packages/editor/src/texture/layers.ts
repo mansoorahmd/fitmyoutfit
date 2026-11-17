@@ -154,6 +154,8 @@ export interface DrawLayersOptions {
   images?: AssetImageLookup;
   /** The layer to outline as selected (the editor's view only; never pass it for proofs). */
   selectedLayerId?: string | null;
+  /** Device pixels per CSS pixel of the canvas drawn on (the selection line keeps its CSS width). */
+  pixelRatio?: number;
 }
 
 export interface DrawLayersResult {
@@ -168,7 +170,11 @@ export interface DrawLayersResult {
 }
 
 const PLACEHOLDER_FILL = "rgba(127, 127, 127, 0.35)";
-const SELECTION_COLOURS = ["#FFFFFF", "#0A66FF"] as const;
+/** E3d (R36): the selection's two-tone line, as on the 3D view's overlay: 3.5 px white under 1.5 px ink (CSS px). */
+export const SELECTION_LINE = [
+  { colour: "#FFFFFF", width: 3.5 },
+  { colour: "#0B1530", width: 1.5 },
+] as const;
 
 /**
  * Draws every layer of the design, bottom to top, each in `pieceTransform`
@@ -221,9 +227,10 @@ export function drawLayers(
     ctx.translate(selected.position.x, selected.position.y);
     ctx.rotate((selected.rotation * Math.PI) / 180);
     const { width, height } = selected.size;
-    SELECTION_COLOURS.forEach((colour, k) => {
+    const ratio = options.pixelRatio ?? 1;
+    SELECTION_LINE.forEach(({ colour, width: line }) => {
       ctx.strokeStyle = colour;
-      ctx.lineWidth = (k === 0 ? 5 : 2.5) / pxPerMm;
+      ctx.lineWidth = (line * ratio) / pxPerMm;
       ctx.beginPath();
       ctx.rect(-width / 2, -height / 2, width, height);
       ctx.stroke();

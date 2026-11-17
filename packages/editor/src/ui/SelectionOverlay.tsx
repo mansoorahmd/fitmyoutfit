@@ -1,8 +1,9 @@
 /**
- * The selected item's handles over the 3D model (06-editor.md 5.2): the box
- * as a two-tone line that follows the cloth, four corner handles that resize
- * evenly, a turn handle on a stem, and the snapping guides and print area
- * while placing. Drawn as SVG over the canvas, never into the texture, so a
+ * The selected item's handles over the 3D model (06-editor.md 5.2; E3d, 07-editor-review 4.5): the box as
+ * four straight two-tone lines between the item's projected corners, outset 8 px and at least 44 px (never a
+ * line along the cloth), four corner handles on those corners that resize evenly, a turn handle on a stem that
+ * keeps off other items and the stage's controls, the snapping guides and print area while placing (never
+ * through the item), and a warning badge on each unselected item that needs a look. Drawn as SVG over the canvas, never into the texture, so a
  * handle never waits for a repaint. Its geometry comes from the canvas (the
  * UV lookup, N9) through a small store, so only this overlay re-renders as the
  * camera turns.
@@ -11,11 +12,12 @@
  * "Turn to edit", turns the garment to it.
  */
 import { useCallback, useEffect, useRef, useSyncExternalStore, type PointerEvent as ReactPointerEvent } from "react";
-import type { SelectionGeometry } from "../react/DesignCanvas.js";
+import type { ItemBox, SelectionGeometry } from "../react/DesignCanvas.js";
 import type { ViewInsets } from "../react/camera.js";
 import type { EditorWording } from "./content.js";
 import { EditorIcon } from "./icons.js";
 import { HANDLE_HIT, HANDLE_SIZE, TURN_KNOB, resizeFactor, turnDelta, type Bus, type Pt } from "./handles.js";
+import { boundsOf, clipRunsOutside, selectionFrame, type Rect } from "./selection-box.js";
 import type { GestureEndReason, GesturePhase } from "./item-gestures.js";
 
 export type { GesturePhase };
@@ -48,15 +50,33 @@ export interface SelectionOverlayProps {
   onInterrupt?: (reason: GestureEndReason) => void;
   /** Hidden while the coach types (the keyboard leaves room for the item only). */
   hidden?: boolean;
-  /** The item has a warning (blurry, cut off, a box, hard to read): a badge at its top right corner (4.6). */
-  warn?: boolean;
+  /**
+   * E3d (R15, D2): every item's box (the turn handle keeps off them, R33), the items with a warning and what it
+   * is (a badge on each unselected one, with that as its name; none on the selected item: its warning leads the
+   * panel), and what a badge does (selects its item).
+   */
+  items?: Bus<ItemBox[]>;
+  warnings?: ReadonlyMap<string, string>;
+  onSelectItem?: (layerId: string) => void;
+  /** The free stage (4.5): the overlay is clipped to it, and its edges are obstacles for the turn handle. */
+  clip?: { top: number; right: number; bottom: number; left: number };
+  /** Controls floating on the stage ("On this kit"), in the overlay's coordinates: the turn handle keeps off them (4.5). */
+  controls?: readonly Rect[];
+}
+
+const NO_ITEMS = createEmptyItems();
+function createEmptyItems(): Bus<ItemBox[]> {
+  const empty: ItemBox[] = [];
+  return { emit: () => undefined, get: () => empty, subscribe: () => () => undefined };
 }
 
 const points = (list: readonly Pt[]) => list.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
 
 export function SelectionOverlay(props: SelectionOverlayProps) {
   const geometry = useSyncExternalStore(props.bus.subscribe, props.bus.get, props.bus.get);
-  const gesture = useRef<{ kind: "resize" | "rotate"; pointerId: number; centre: Pt; start: Pt; mirrored: boolean } | null>(null);
+  const itemsBus = props.items ?? NO_ITEMS;
+  const items = useSyncExternalStore(itemsBus.subscribe, itemsBus.get, itemsBus.get);
+  const gesture = useRef<{ kind: "resize" | "rotate"; pointerId: number; centre: Pt; start: Pt; mirrored: boolean; outset: number } | null>(null);
   // The one way out of a gesture that no release will end.
   const propsRef = useRef(props);
   useEffect(() => {
@@ -86,9 +106,49 @@ export function SelectionOverlay(props: SelectionOverlayProps) {
       interrupt("unmount");
     };
   }, [interrupt]);
-  if (!geometry || props.hidden) return null;
+  const clip = props.clip ?? { top: 0, right: 0, bottom: 0, left: 0 };
+  const clipPath = `inset(${clip.top}px ${clip.right}px ${clip.bottom}px ${clip.left}px)`;
+  // Badges on unselected items with a warning (R15, D2): a button that selects the item, named by its warning.
+  const badges =
+    props.warnings && props.warnings.size > 0 && !props.hidden
+      ? items.filter((b) => b.facing && b.layerId !== geometry?.layerId && props.warnings!.has(b.layerId)).map((b) => {
+          const r = boundsOf(b.corners);
+          const label = props.warnings!.get(b.layerId)!;
+          return (
+            <button
+              key={b.layerId}
+              type="button"
+              className="fmo-badge fmo-overlay-badge fmo-badge-button"
+              style={{ left: r.x + r.width, top: r.y }}
+              aria-label={label}
+              title={label}
+              onClick={() => props.onSelectItem?.(b.layerId)}
+              data-testid={`item-badge-${b.layerId}`}
+            >
+              <EditorIcon name="alert" size={16} />
+            </button>
+          );
+        })
+      : null;
+  if (!geometry || props.hidden) {
+    return badges && badges.length > 0 ? (
+      <div className="fmo-overlay" style={{ clipPath }} data-testid="selection-overlay-badges">
+        {badges}
+      </div>
+    ) : null;
+  }
   const g = geometry;
   const w = props.wording.selection;
+  // R31, R32, R33: four straight lines round the item, outset 8 px (at least 44 px), handles on those corners, the
+  // turn handle above, or below or at the end side when it would touch another item or the edge of the free stage.
+  const obstacles: Rect[] = [
+    ...items.filter((b) => b.layerId !== g.layerId && b.facing).map((b) => boundsOf(b.corners)),
+    { x: -1e4, y: -1e4, width: 2e4, height: 1e4 + clip.top },
+    { x: -1e4, y: g.height - clip.bottom, width: 2e4, height: 1e4 },
+    ...(props.controls ?? []),
+  ];
+  const frame = selectionFrame(g.corners, g.centre, obstacles);
+  const handles = frame.corners;
 
   const local = (event: ReactPointerEvent<Element>): Pt => {
     const svg = (event.currentTarget as Element).closest("svg")!.getBoundingClientRect();
@@ -100,7 +160,12 @@ export function SelectionOverlay(props: SelectionOverlayProps) {
     event.stopPropagation();
     event.preventDefault();
     event.currentTarget.setPointerCapture?.(event.pointerId);
-    gesture.current = { kind, pointerId: event.pointerId, centre: g.centre, start: local(event), mirrored: g.mirrored };
+    const start = local(event);
+    // How far the handle sits beyond the item's corner it stands for (the item's corner follows the pointer).
+    const k = Number(event.currentTarget.dataset.corner ?? -1);
+    const itemCorner = g.corners[k];
+    const outset = kind === "resize" && itemCorner ? Math.max(0, Math.hypot(start.x - g.centre.x, start.y - g.centre.y) - Math.hypot(itemCorner.x - g.centre.x, itemCorner.y - g.centre.y)) : 0;
+    gesture.current = { kind, pointerId: event.pointerId, centre: g.centre, start, mirrored: g.mirrored, outset };
     if (kind === "resize") props.onResize("start", 1);
     else props.onRotate("start", 0, event.altKey);
   };
@@ -109,7 +174,7 @@ export function SelectionOverlay(props: SelectionOverlayProps) {
     if (!s || s.pointerId !== event.pointerId) return;
     event.preventDefault();
     const now = local(event);
-    if (s.kind === "resize") props.onResize("move", resizeFactor(s.centre, s.start, now));
+    if (s.kind === "resize") props.onResize("move", resizeFactor(s.centre, s.start, now, s.outset));
     else props.onRotate("move", turnDelta(s.centre, s.start, now, s.mirrored), event.altKey);
   };
   const onLost = (event: ReactPointerEvent<SVGElement>) => {
@@ -121,7 +186,7 @@ export function SelectionOverlay(props: SelectionOverlayProps) {
     if (!s || s.pointerId !== event.pointerId) return;
     gesture.current = null;
     const phase = event.type === "pointercancel" ? "cancel" : "end";
-    if (s.kind === "resize") props.onResize(phase, resizeFactor(s.centre, s.start, local(event)));
+    if (s.kind === "resize") props.onResize(phase, resizeFactor(s.centre, s.start, local(event), s.outset));
     else props.onRotate(phase, turnDelta(s.centre, s.start, local(event), s.mirrored), event.altKey);
   };
 
@@ -129,10 +194,18 @@ export function SelectionOverlay(props: SelectionOverlayProps) {
   const half = HANDLE_SIZE / 2;
   const hit = HANDLE_HIT / 2;
   return (
-    <div className="fmo-overlay" data-testid="selection-overlay" data-facing={g.facing} data-box={JSON.stringify({ centre: g.centre, corners: g.corners, turn: g.turn, angle: Math.round(g.angle) })}>
+    <div
+      className="fmo-overlay"
+      style={{ clipPath }}
+      data-testid="selection-overlay"
+      data-facing={g.facing}
+      data-turn-place={frame.turnPlace}
+      data-box={JSON.stringify({ centre: g.centre, corners: handles, item: g.corners, turn: frame.turn, angle: Math.round(g.angle) })}
+    >
       <svg width={g.width} height={g.height} aria-hidden="true">
         {g.guides.map((guide, k) =>
-          guide.runs.map((run, j) => (
+          // R35: a guide is never drawn through the item being placed.
+          (guide.kind === "guide" ? clipRunsOutside(guide.runs, handles, 4) : guide.runs).map((run, j) => (
             <g key={`${k}-${j}`} className={guide.kind === "area" ? "fmo-area" : "fmo-guide"} data-testid={guide.kind === "area" ? "print-area-line" : "snap-guide"}>
               <polyline points={points(run)} className="fmo-guide-halo" />
               <polyline points={points(run)} className="fmo-guide-line" />
@@ -141,28 +214,24 @@ export function SelectionOverlay(props: SelectionOverlayProps) {
         )}
         {g.facing && (
           <>
-            <polygon points={points(g.outline)} className="fmo-box-halo" />
-            <polygon points={points(g.outline)} className="fmo-box-line" />
-            <line x1={g.top.x} y1={g.top.y} x2={g.turn.x} y2={g.turn.y} className="fmo-stem-halo" />
-            <line x1={g.top.x} y1={g.top.y} x2={g.turn.x} y2={g.turn.y} className="fmo-stem" />
-            {g.corners.map((c, k) => (
+            <polygon points={points(handles)} className="fmo-box-halo" />
+            <polygon points={points(handles)} className="fmo-box-line" />
+            <line x1={frame.stemFrom.x} y1={frame.stemFrom.y} x2={frame.turn.x} y2={frame.turn.y} className="fmo-stem-halo" />
+            <line x1={frame.stemFrom.x} y1={frame.stemFrom.y} x2={frame.turn.x} y2={frame.turn.y} className="fmo-stem" />
+            {handles.map((c, k) => (
               <g key={k} data-testid={`handle-corner-${k}`}>
                 <rect x={c.x - half} y={c.y - half} width={HANDLE_SIZE} height={HANDLE_SIZE} className="fmo-handle" />
-                <rect x={c.x - hit} y={c.y - hit} width={HANDLE_HIT} height={HANDLE_HIT} className="fmo-hit" data-kind="resize" data-cursor={k % 2 === 0 ? "nwse" : "nesw"} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp} onLostPointerCapture={onLost} />
+                <rect x={c.x - hit} y={c.y - hit} width={HANDLE_HIT} height={HANDLE_HIT} className="fmo-hit" data-kind="resize" data-corner={k} data-cursor={k % 2 === 0 ? "nwse" : "nesw"} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp} onLostPointerCapture={onLost} />
               </g>
             ))}
             <g data-testid="handle-turn">
-              <circle cx={g.turn.x} cy={g.turn.y} r={TURN_KNOB / 2} className="fmo-handle" />
-              <circle cx={g.turn.x} cy={g.turn.y} r={hit} className="fmo-hit fmo-hit-turn" data-kind="rotate" onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp} onLostPointerCapture={onLost} />
+              <circle cx={frame.turn.x} cy={frame.turn.y} r={TURN_KNOB / 2} className="fmo-handle" />
+              <circle cx={frame.turn.x} cy={frame.turn.y} r={hit} className="fmo-hit fmo-hit-turn" data-kind="rotate" onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp} onLostPointerCapture={onLost} />
             </g>
           </>
         )}
       </svg>
-      {g.facing && props.warn && (
-        <span className="fmo-badge fmo-overlay-badge" style={{ left: g.corners[1]!.x + 14, top: g.corners[1]!.y - 14 }} aria-hidden="true" data-testid="selection-badge">
-          <EditorIcon name="alert" size={16} />
-        </span>
-      )}
+      {badges}
       {!g.facing && (
         <button type="button" className="fmo-chip fmo-turn-to" style={{ top: props.top + 8, left: freeCentre }} onClick={props.onTurnTo} data-testid="turn-to-edit">
           <EditorIcon name="reset" size={20} />

@@ -1,5 +1,6 @@
 import { defineConfig } from "vite";
 import { resolve } from "node:path";
+import { minifyEditorCss } from "./scripts/minify-editor-css";
 
 // Library build: ES modules only. React, Three.js and the other runtime
 // dependencies stay external, so the host app supplies (and dedupes) them.
@@ -12,6 +13,7 @@ const external = [
 ];
 
 export default defineConfig({
+  plugins: [minifyEditorCss()],
   build: {
     lib: {
       entry: {

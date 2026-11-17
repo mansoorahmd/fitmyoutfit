@@ -9,6 +9,21 @@ import type { ToolId } from "./context.js";
 /** The contextual bar's height on a phone (06-editor.md 5.2). */
 export const CONTEXT_BAR_HEIGHT = 48;
 
+/**
+ * The one hint ("Drag to turn. Tap something to change it.", 7.4; E3d, R26): how long it may stay, and when it
+ * shows. It goes for good at the first press on the stage, the first selection, the first tool change, or after
+ * `HINT_MS`; it never shares the top row with the contextual bar, the status line or "Turn to edit" (4.7).
+ */
+export const HINT_MS = 8000;
+export function hintShows(input: { pending: boolean; selected: boolean; status: boolean }): boolean {
+  return input.pending && !input.selected && !input.status;
+}
+
+/** Whether something the coach did ends the hint: a selection, or a tool other than the one open when it showed. */
+export function hintEnds(input: { selected: boolean; toolAtShow: string | null; tool: string | null }): boolean {
+  return input.selected || input.tool !== input.toolAtShow;
+}
+
 export interface Box {
   x: number;
   y: number;
@@ -44,6 +59,19 @@ export function contextBarPlacement(input: { top: number; freeBottom: number; he
   if (atTop === 0) return "top";
   const atBottom = overlapHeight(input.item, input.freeBottom - h, input.freeBottom);
   return atBottom < atTop ? "bottom" : "top";
+}
+
+/**
+ * What a tap or click on the model does to the panels (E3d, R1): on an item, its tool opens (when it is not the
+ * one open already); while the start card is open, the card closes as "Skip" (what was picked is kept) and the
+ * item's tool opens, so nothing is ever edited with no tool in view. A tap on empty stage or bare fabric (no item)
+ * changes no panel: turning and zooming leave the start card open.
+ */
+export function modelTapAction(input: { startCard: boolean; itemTool: ToolId | null; activeTool: ToolId | null; tools: readonly ToolId[] }): { closeStartCard: boolean; openTool: ToolId | null } {
+  if (input.itemTool === null) return { closeStartCard: false, openTool: null };
+  const available = input.tools.includes(input.itemTool) ? input.itemTool : null;
+  if (input.startCard) return { closeStartCard: true, openTool: available };
+  return { closeStartCard: false, openTool: available !== input.activeTool ? available : null };
 }
 
 /** The tool that edits an item: the team name in Team, names and numbers in Players, logos in Logos, free text in Text. */

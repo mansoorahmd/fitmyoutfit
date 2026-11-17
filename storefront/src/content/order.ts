@@ -59,6 +59,8 @@ export const orderContent = {
     title: "Your order",
     // DRAFT WORDING. No id: "Items" (05, 7.1, item 5), with the piece count as in the cart.
     items: "Items ({n})",
+    // DRAFT WORDING. No id: the rush row, between the items and the delivery (contract 9).
+    rush: "Rush production",
     // DRAFT WORDING. No id: "Total" (05, 7.1, item 5).
     total: "Total",
     // DRAFT WORDING. W-C12 (P): beside "Shipping & duties included".

@@ -19,14 +19,16 @@ export function ResumePrompt({ open, onContinue, onStartAgain, wording }: { open
       <ConfirmDialog
         open={open}
         title={w.states.continueTitle}
+        body={w.states.continueBody}
         onCancel={onContinue}
         testId="resume-prompt"
         actions={
           <>
+            {/* E3d (R40, 4.11): the safe action last, filled ink (the one red button stays Done), with the focus. */}
             <button type="button" className="fmo-btn" onClick={onStartAgain} data-testid="resume-start-again">
               {w.states.startAgain}
             </button>
-            <button type="button" className="fmo-btn" onClick={onContinue} data-testid="resume-continue" autoFocus>
+            <button type="button" className="fmo-btn fmo-btn-ink" onClick={onContinue} data-testid="resume-continue" data-dialog-focus autoFocus>
               {w.states.continue}
             </button>
           </>
@@ -47,7 +49,7 @@ export function DoneNotice({ open, onClose, wording }: { open: boolean; onClose:
         onCancel={onClose}
         testId="done-notice"
         actions={
-          <button type="button" className="fmo-btn" onClick={onClose} data-testid="done-keep-designing" autoFocus>
+          <button type="button" className="fmo-btn" onClick={onClose} data-testid="done-keep-designing" data-dialog-focus autoFocus>
             {w.done.keepDesigning}
           </button>
         }
