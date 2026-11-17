@@ -168,7 +168,6 @@ const ProfileRows = ({
     return (
       <TextField
         id={`profile-${key}`}
-        name={key}
         label={label}
         value={draft[key]}
         error={errors[key]}
