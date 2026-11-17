@@ -143,3 +143,16 @@ describe("R5, R7: the start card's pick order on the swatch", () => {
     expect(html).toMatch(/<span class="fmo-swatch-order" aria-hidden="true">1<\/span>/);
   });
 });
+
+describe("E3d (R5): the view buttons over a phone's stage", () => {
+  it("only Reset with the start card when the stage above it is short; all of them when there is room", async () => {
+    const { viewControlsFor } = await import("./layout");
+    const base = { layout: "compact" as const, typing: false, panelOpen: false, detent: "normal" as const, startCard: true };
+    expect(viewControlsFor({ ...base, stageHeight: 212 })).toBe("reset-only");
+    expect(viewControlsFor({ ...base, stageHeight: 416 })).toBe("full");
+    expect(viewControlsFor({ ...base, startCard: false, stageHeight: 212 })).toBe("full");
+    expect(viewControlsFor({ ...base, typing: true, stageHeight: 416 })).toBe("none");
+    expect(viewControlsFor({ ...base, startCard: false, panelOpen: true, detent: "expanded", stageHeight: 416 })).toBe("reset-only");
+    expect(viewControlsFor({ ...base, layout: "wide", stageHeight: 100 })).toBe("full");
+  });
+});

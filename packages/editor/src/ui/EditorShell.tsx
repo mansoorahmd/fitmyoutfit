@@ -38,7 +38,7 @@ import { EditorContext, type ColourTarget, type EditorApi, type EditorAssets, ty
 import { CARD_HEIGHT, CARD_WIDTH, DesignTool } from "./DesignTool.js";
 import { PlayersTool, TeamTool } from "./LetteringTools.js";
 import { LogosTool, TextTool } from "./LogosTool.js";
-import { LAYOUT_SIZES, START_CARD_STAGE_MIN, chooseLayout, panelHeights, saveStateWords, stageInsets, type PanelDetent } from "./layout.js";
+import { LAYOUT_SIZES, START_CARD_STAGE_MIN, chooseLayout, panelHeights, saveStateWords, stageInsets, viewControlsFor, type PanelDetent } from "./layout.js";
 import { ConfirmDialog } from "./parts.js";
 import { Stage, type StageLoad } from "./Stage.js";
 import { StartCard } from "./StartCard.js";
@@ -1113,7 +1113,7 @@ export function EditorShell(props: EditorShellProps) {
                 </div>
               ) : null
             }
-            viewControls={layout === "compact" && typing ? "none" : layout === "compact" && panelOpen && detent === "expanded" ? "reset-only" : "full"}
+            viewControls={viewControlsFor({ layout, typing, panelOpen, detent, startCard, stageHeight: (size.height || 844) - LAYOUT_SIZES.compact.topBar - (startCard ? panelSize.height : 0) })}
           />
           {layout !== "wide" && (start ?? panel)}
         </div>

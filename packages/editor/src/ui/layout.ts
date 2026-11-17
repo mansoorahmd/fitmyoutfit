@@ -36,6 +36,21 @@ export const PANEL_EXPANDED_SHARE = 0.6;
 /** The start card is the one panel taller than normal (06-editor.md 7.2): it keeps the stage at least this tall. */
 export const START_CARD_STAGE_MIN = 160;
 
+/**
+ * The view buttons over the stage (4.7): all of them; only Reset; or none. On a phone: none while typing (the
+ * keyboard leaves room for the item only), only Reset with an expanded panel (06-editor.md 3.3) and, E3d (R5),
+ * with the start card when the stage left above it is short: the sides' row would take the room the garment
+ * needs to be seen recolouring (at least 120 px tall at 360 x 640). Turning by hand still works.
+ */
+export const START_CARD_FULL_CONTROLS_STAGE = 280;
+export function viewControlsFor(input: { layout: EditorLayout; typing: boolean; panelOpen: boolean; detent: PanelDetent; startCard: boolean; stageHeight: number }): "full" | "reset-only" | "none" {
+  if (input.layout !== "compact") return "full";
+  if (input.typing) return "none";
+  if (input.panelOpen && input.detent === "expanded") return "reset-only";
+  if (input.startCard && input.stageHeight < START_CARD_FULL_CONTROLS_STAGE) return "reset-only";
+  return "full";
+}
+
 export type PanelDetent = "closed" | "normal" | "expanded";
 
 /** The heights a compact panel may take at this visible height (header included). */
