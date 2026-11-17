@@ -53,7 +53,7 @@ import { namedLabel } from "./items.js";
 import { KitButton, OnThisKit } from "./OnThisKit.js";
 import { DonePanel } from "./DonePanel.js";
 import { warningNames, type LogoNote } from "./checks.js";
-import { ClippedNote, ContextBar, FineTune, keyEdit } from "./SelectedItem.js";
+import { ClippedNote, ContextBar, FineTune, SelectedWarnings, keyEdit } from "./SelectedItem.js";
 import { nudgeLayer, rotateLayerBy, scaleLayerBy } from "../design/item-edits.js";
 import { removeLayer } from "../design/edit.js";
 
@@ -952,6 +952,7 @@ export function EditorShell(props: EditorShellProps) {
         {selectedLayer && layout === "wide" && <ContextBar variant="panel" />}
         {selectedLayer && toolForLayer(selectedLayer) === activeTool && (
           <div className="fmo-stack" data-testid="selected-item-section">
+            <SelectedWarnings />
             <ClippedNote />
             <FineTune />
           </div>

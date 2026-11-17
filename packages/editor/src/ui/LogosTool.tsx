@@ -323,7 +323,8 @@ function LogoCard({ logo, onReplace }: { logo: LogoLayer; onReplace: () => void 
           </button>
         </div>
       </div>
-      {note?.box && !note.kept && (
+      {/* R15: a selected logo's warnings lead the panel (SelectedWarnings); not repeated here. */}
+      {!selected && note?.box && !note.kept && (
         <Alert kind="warning" testId={`logo-box-${logo.id}`}>
           <p>{w.noTransparency}</p>
           <p className="fmo-muted">{w.designHelp}</p>
@@ -332,7 +333,7 @@ function LogoCard({ logo, onReplace }: { logo: LogoLayer; onReplace: () => void 
           </button>
         </Alert>
       )}
-      {blurry && (
+      {!selected && blurry && (
         <Alert kind="warning" testId={`logo-blurry-${logo.id}`}>
           <p>{fill(w.blurry, { size: fill(w.sharpSize, { cm: sharpWidth(logo).cm }) })}</p>
           <button type="button" className="fmo-btn" onClick={() => api.commit((d) => makeLogoSharp(d, logo.id, { product }), "resize")} data-testid={`make-sharp-${logo.id}`}>

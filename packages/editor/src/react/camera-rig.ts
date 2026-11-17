@@ -59,11 +59,29 @@ export function aimFor(goal: number, factor: number, halfView: number): number {
   return Math.max(-limit, Math.min(limit, goal * weight));
 }
 
+type V3 = [number, number, number];
+
+/**
+ * The same in three dimensions (an item off the centre line, a logo on the left chest): up and down as `aimFor`
+ * against half the free height, across (x and z together) against half the free width.
+ */
+export function aimVectorFor(goal: V3, factor: number, halfHeight: number, halfWidth: number): V3 {
+  const y = aimFor(goal[1], factor, halfHeight);
+  const weight = Math.min(1, Math.max(0, (1 - factor) / 0.25));
+  const across = Math.hypot(goal[0], goal[2]) * weight;
+  const limit = 0.85 * Math.max(0, halfWidth);
+  const k = across > limit && across > 0 ? limit / across : 1;
+  return [goal[0] * weight * k, y, goal[2] * weight * k];
+}
+
+const ZERO: V3 = [0, 0, 0];
+const near = (a: V3, b: V3, eps: number) => Math.abs(a[0] - b[0]) < eps && Math.abs(a[1] - b[1]) < eps && Math.abs(a[2] - b[2]) < eps;
+
 export class CameraRig {
-  private anim: { from: Orbit; to: Orbit; fromOffset: Offset; toOffset: Offset; fromAim: number; toAim: number; start: number; duration: number; ease: (t: number) => number } | null = null;
-  /** E3d (R24): the target's height above the garment's centre (world units), and what it aims at. */
-  private aim = 0;
-  private itemY: number | null = null;
+  private anim: { from: Orbit; to: Orbit; fromOffset: Offset; toOffset: Offset; fromAim: V3; toAim: V3; start: number; duration: number; ease: (t: number) => number } | null = null;
+  /** E3d (R24): the target's offset from the garment's centre (world units), and what it aims at. */
+  private aim: V3 = ZERO;
+  private item: V3 | null = null;
   private pointerY: number | null = null;
   /** E3d (4.6): the closest the camera may come while an item is selected (its box and handles stay in view). */
   private itemMin = 0;
@@ -98,7 +116,7 @@ export class CameraRig {
       this.zoomFactor = 1;
       this.focus = null;
       this.anim = null;
-      this.aim = 0;
+      this.aim = ZERO;
       this.itemZoom = null;
       this.pointerY = null;
       this.place({ azimuth: SIDE_AZIMUTH.front, polar: SIDE_POLAR, distance: config.framing.fit }, { ...config.framing.offset });
@@ -123,7 +141,7 @@ export class CameraRig {
     }
     const t = Math.min(1, (this.now() - anim.start) / anim.duration);
     const k = anim.ease(t);
-    this.aim = anim.fromAim + (anim.toAim - anim.fromAim) * k;
+    this.aim = [0, 1, 2].map((i) => anim.fromAim[i]! + (anim.toAim[i]! - anim.fromAim[i]!) * k) as V3;
     this.place(tweenOrbit(anim.from, anim.to, k), { x: anim.fromOffset.x + (anim.toOffset.x - anim.fromOffset.x) * k, y: anim.fromOffset.y + (anim.toOffset.y - anim.fromOffset.y) * k });
     if (t >= 1) {
       this.anim = null;
@@ -189,15 +207,15 @@ export class CameraRig {
   }
 
   /**
-   * E3d (R24): the selected item's centre (world y), or null. Zooming in then aims at it; without one, the wheel
+   * E3d (R24): the selected item's centre (world), or null. Zooming in then aims at it; without one, the wheel
    * aims at the point under the pointer (`aimAtPointer`) and the buttons at the garment's centre. Letting the
    * item go gives back a zoom the camera made for it (R22).
    */
-  setItem(worldY: number | null): void {
-    const next = worldY === null ? null : worldY - this.center[1];
-    if (next === this.itemY) return;
-    const released = next === null && this.itemY !== null;
-    this.itemY = next;
+  setItem(world: readonly [number, number, number] | null): void {
+    const next: V3 | null = world === null ? null : [world[0] - this.center[0], world[1] - this.center[1], world[2] - this.center[2]];
+    if (next === null ? this.item === null : this.item !== null && near(next, this.item, 1e-6)) return;
+    const released = next === null && this.item !== null;
+    this.item = next;
     if (next === null) this.itemMin = 0;
     if (next !== null) this.pointerY = null;
     if (released) this.releaseItemZoom();
@@ -228,9 +246,9 @@ export class CameraRig {
 
   /** E3d (R24): the wheel zooms towards the height under the pointer (`fraction`: 0 the free area's top, 1 its bottom). */
   aimAtPointer(fraction: number): void {
-    if (!this.config || this.itemY !== null) return;
+    if (!this.config || this.item !== null) return;
     const half = this.halfView(this.orbit().distance);
-    this.pointerY = this.aim + (0.5 - Math.min(1, Math.max(0, fraction))) * 2 * half;
+    this.pointerY = this.aim[1] + (0.5 - Math.min(1, Math.max(0, fraction))) * 2 * half;
   }
 
   /**
@@ -260,27 +278,27 @@ export class CameraRig {
     this.moveTo({ ...from, distance: f.fit * this.zoomFactor }, this.targetOffset(), CAMERA_REFRAME_MS, easeOut);
   }
 
-  /** Half the free area's height in world units at a distance. */
-  private halfView(distance: number): number {
+  /** Half the free area's height (or width) in world units at a distance. */
+  private halfView(distance: number, across = false): number {
     const f = this.config?.framing;
     const viewport = this.config?.viewport;
     if (!f || !viewport) return 0;
-    return distance * Math.tan(((this.config?.fovDegrees ?? 35) * Math.PI) / 360) * (f.free.height / Math.max(1, viewport.height));
+    return distance * Math.tan(((this.config?.fovDegrees ?? 35) * Math.PI) / 360) * ((across ? f.free.width : f.free.height) / Math.max(1, viewport.height));
   }
 
   /** The aim for a camera distance: towards the item (or the pointer); none while typing zooms in (it has its own offset). */
-  private aimAt(distance: number): number {
+  private aimAt(distance: number): V3 {
     const f = this.config?.framing;
-    if (!f || this.focus) return 0;
-    const goal = this.itemY ?? this.pointerY ?? 0;
-    return aimFor(goal, distance / f.fit, this.halfView(distance));
+    if (!f || this.focus) return ZERO;
+    const goal: V3 = this.item ?? [0, this.pointerY ?? 0, 0];
+    return aimVectorFor(goal, distance / f.fit, this.halfView(distance), this.halfView(distance, true));
   }
 
   /** After a zoom by hand (wheel, pinch) or a new aim: the target follows at once, the camera keeping its angle. */
   private followAim(): void {
     const orbit = this.orbit();
     const want = this.aimAt(orbit.distance);
-    if (Math.abs(want - this.aim) < 1e-5) return;
+    if (near(want, this.aim, 1e-5)) return;
     this.aim = want;
     this.place(orbit, this.offset);
     this.invalidate();
@@ -324,9 +342,9 @@ export class CameraRig {
     return { x: f.x + focus.x, y: f.y + focus.y };
   }
 
-  /** The point the camera looks at: the garment's centre, raised or lowered by the aim (R24). */
+  /** The point the camera looks at: the garment's centre, moved by the aim (R24). */
   private target(): [number, number, number] {
-    return [this.center[0], this.center[1] + this.aim, this.center[2]];
+    return [this.center[0] + this.aim[0], this.center[1] + this.aim[1], this.center[2] + this.aim[2]];
   }
 
   private orbit(): Orbit {

@@ -14,7 +14,8 @@ import { EditorContext, type EditorApi } from "./context";
 import { DonePanel } from "./DonePanel";
 import { createBus } from "./handles";
 import { sheetUnderDone } from "./layout";
-import { StageContextBar } from "./SelectedItem";
+import { SelectedWarnings, StageContextBar } from "./SelectedItem";
+import { TeamTool } from "./LetteringTools";
 import { EDITOR_CSS } from "./styles";
 import { ToolPanel } from "./ToolPanel";
 import { loadPlaceholderFonts, loadPlaceholderPalette, loadStandInJerseyProduct } from "../test/fixtures";
@@ -79,5 +80,26 @@ describe("R16: focus after a selection from a list", () => {
     );
     expect(html).toMatch(/<h2 class="fmo-panel-title" id="fmo-panel-title" tabindex="-1">/);
     expect(EDITOR_CSS).toContain(".fmo-panel-title:focus { outline: none; }");
+  });
+});
+
+describe("R15, D2: a selected item's warning leads its panel", () => {
+  const navy = { id: "placeholder-navy", hex: "#1B2A5C" };
+  let d = design;
+  for (const zone of Object.keys(d.zones)) d = { ...d, zones: { ...d.zones, [zone]: navy } };
+  d = { ...d, layers: d.layers.map((l) => (l.role === "team-name" ? { ...l, fill: navy } : l)) };
+  const team = d.layers.find((l) => l.role === "team-name")!;
+  it("the warning and its fix head the selected item's section; the tool does not repeat it", () => {
+    const top = inEditor(<SelectedWarnings />, { design: d, selectedId: team.id, layout: "wide" });
+    expect(top).toContain('data-testid="selected-warnings"');
+    expect(top).toContain(`data-testid="readability-${team.id}"`);
+    expect(top).toContain(`data-testid="readability-fix-${team.id}"`);
+    expect(top).toContain("hard to read on Navy");
+    const tool = inEditor(<TeamTool />, { design: d, selectedId: team.id, layout: "wide" });
+    expect(tool).not.toContain(`data-testid="readability-${team.id}"`);
+  });
+  it("not selected: no warning at the top; the tool shows it as before", () => {
+    expect(inEditor(<SelectedWarnings />, { design: d, selectedId: null })).toBe("");
+    expect(inEditor(<TeamTool />, { design: d, selectedId: null })).toContain(`data-testid="readability-${team.id}"`);
   });
 });

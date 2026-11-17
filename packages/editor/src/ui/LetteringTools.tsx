@@ -213,7 +213,9 @@ function ReadabilityWarnings({ roles }: { roles: ValueRole[] }) {
   // Computed once per design (the panel re-renders often; this samples every colour under every item).
   const roleKey = roles.join(",");
   const coachColoured = api.coachColoured;
-  const warnings = useMemo(() => readabilityWarnings(wording, product, design, palette, roleKey.split(",") as ValueRole[], coachColoured), [wording, product, design, palette, roleKey, coachColoured]);
+  const all = useMemo(() => readabilityWarnings(wording, product, design, palette, roleKey.split(",") as ValueRole[], coachColoured), [wording, product, design, palette, roleKey, coachColoured]);
+  // R15: the selected item's warning leads the panel (SelectedWarnings); it is not repeated here.
+  const warnings = api.selectedId ? all.filter((w) => !w.layerIds.includes(api.selectedId!)) : all;
   if (warnings.length === 0) return null;
   return (
     <>

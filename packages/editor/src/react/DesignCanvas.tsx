@@ -618,7 +618,7 @@ function ModelView({
       return;
     }
     // R24: zooming in aims at the selected item. R22: a small item is zoomed in on once, when nothing is pressed.
-    rig.setItem(on.centreWorld[1]);
+    rig.setItem(on.centreWorld);
     // 4.6: the closest zoom keeps the item, its outset box and its handles inside the free stage.
     // The box grows as the camera nears the item; the rig's distances are to the point it turns round (nearer or
     // farther by the same amount), so the limit is moved by the difference.

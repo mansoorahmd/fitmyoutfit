@@ -4,7 +4,7 @@
  */
 import { PerspectiveCamera } from "three";
 import { describe, expect, it } from "vitest";
-import { CameraRig, aimFor } from "./camera-rig";
+import { CameraRig, aimFor, aimVectorFor } from "./camera-rig";
 import { frameInFreeArea, orbitOf } from "./camera";
 import { itemFitDistance, itemLongSide } from "./DesignCanvas";
 
@@ -41,10 +41,30 @@ describe("aimFor", () => {
   });
 });
 
+describe("aimVectorFor", () => {
+  it("an item off the centre line (a left-chest logo): aimed at across as well, within the free width", () => {
+    const [x, y, z] = aimVectorFor([0.1, 0.15, 0.12], 0.5, 1, 1);
+    expect([x, y, z]).toEqual([0.1, 0.15, 0.12]);
+    const far = aimVectorFor([0.6, 0, 0.8], 0.5, 1, 0.5);
+    expect(Math.hypot(far[0], far[2])).toBeCloseTo(0.425, 9);
+    expect(aimVectorFor([0.1, 0.1, 0.1], 1.2, 1, 1)).toEqual([0, 0, 0]);
+  });
+});
+
 describe("the camera's aim (R24)", () => {
+  it("zooming in on an item to one side moves the target to that side too", () => {
+    const { rig, run, target } = setup();
+    rig.setItem([CENTER[0] - 0.1, CENTER[1] + 0.1, CENTER[2] + 0.1]);
+    for (let k = 0; k < 6; k++) {
+      rig.zoom("in");
+      run();
+    }
+    expect(target()[0]).toBeLessThan(CENTER[0] - 0.05);
+  });
+
   it("zooming in with an item selected moves the target towards the item; Reset brings it back", () => {
     const { rig, run, target } = setup();
-    rig.setItem(CENTER[1] + 0.15);
+    rig.setItem([CENTER[0], CENTER[1] + 0.15, CENTER[2]]);
     for (let k = 0; k < 6; k++) {
       rig.zoom("in");
       run();
@@ -74,7 +94,7 @@ describe("zooming in on a small selected item (R22)", () => {
   it("zooms until the item's box is the minimum, and gives the zoom back when the item is let go", () => {
     const { rig, run, distance, framing } = setup();
     const before = distance();
-    rig.setItem(CENTER[1]);
+    rig.setItem(CENTER);
     rig.zoomToItem(60, 120);
     run();
     expect(distance()).toBeCloseTo(Math.max(framing.minDistance, before / 2), 6);
@@ -96,7 +116,7 @@ describe("zooming in on a small selected item (R22)", () => {
 
   it("keeps a zoom the coach changed afterwards", () => {
     const { rig, run, distance } = setup();
-    rig.setItem(CENTER[1]);
+    rig.setItem(CENTER);
     rig.zoomToItem(60, 120);
     run();
     rig.zoom("out");
@@ -125,7 +145,7 @@ describe("the selected item's zoom limit (4.6)", () => {
   it("zooming in stops there, and the zoom-in button says so", () => {
     const { rig, run, distance, framing, infos } = setup();
     const limit = framing.fit * 0.8;
-    rig.setItem(CENTER[1]);
+    rig.setItem(CENTER);
     rig.setItemLimit(limit);
     for (let k = 0; k < 6; k++) {
       rig.zoom("in");
