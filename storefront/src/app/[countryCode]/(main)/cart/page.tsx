@@ -6,9 +6,9 @@ import { getCheckoutRules } from "@lib/data/checkout-rules"
 import { getGarmentsCollection } from "@lib/data/collections"
 import { retrieveCustomer } from "@lib/data/customer"
 import { getRegion } from "@lib/data/regions"
-import { dropStaleRush } from "@lib/data/rush"
+import { dropStaleRush, repriceRush } from "@lib/data/rush"
 import { cartInOtherRegion } from "@lib/util/checkout-view"
-import { rushIsStale } from "@lib/util/rush"
+import { rushIsStale, rushOutOfLine } from "@lib/util/rush"
 import EmptyCartMessage from "@modules/cart/components/empty-cart-message"
 import MoveCartToRegion from "@modules/cart/components/move-cart-to-region"
 import RegionMovedNotice from "@modules/cart/components/region-moved-notice"
@@ -93,6 +93,16 @@ export default async function Cart(props: {
       cart = fresh.cart
       rules = await getCheckoutRules(cart.id, { again: true })
       rushDropped = true
+    }
+  } else if (rushOutOfLine(rules, cart.items) && (await repriceRush())) {
+    // The line kept an older figure after staff changed the percentage:
+    // the backend prices it again, and the page shows that cart, so one
+    // screen never has two rush amounts. If it can't, the card shows the
+    // line's own amount (rushControlView).
+    const fresh = await retrieveCartForPage({ again: true })
+    if (fresh.cart && !fresh.cart.completed_at && fresh.cart.items?.length) {
+      cart = fresh.cart
+      rules = await getCheckoutRules(cart.id, { again: true })
     }
   }
 
