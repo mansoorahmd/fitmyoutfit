@@ -9,7 +9,7 @@
 import { addLayer, moveLayer, updateLayer, type EditOptions } from "./edit.js";
 import { nextLayerId } from "./new-layers.js";
 import { normalizeRotation, round3, scaleLayer } from "./placement.js";
-import { fitLayerToArea, maxScaleInArea, minItemSide, printAreaOf } from "./print-area.js";
+import { clampIntoArea, fitLayerToArea, maxScaleInArea, minItemSide, printAreaOf } from "./print-area.js";
 import type { DesignDocument, Layer, ProductDefinition } from "./schema.js";
 
 type Options = EditOptions & { product: ProductDefinition };
@@ -51,6 +51,11 @@ export function placeLayer(
 export function nudgeLayer(design: DesignDocument, layerId: string, dx: number, dy: number, options: Options): DesignDocument {
   const layer = find(design, layerId);
   return placeLayer(design, layerId, { position: { x: round3(layer.position.x + dx), y: round3(layer.position.y + dy) } }, options);
+}
+
+/** Whether the print area stopped a step: the item ended less far than the step asked (E3e: a step at the limit gives feedback). */
+export function stoppedByArea(before: Pick<Layer, "position">, after: Pick<Layer, "position">, dx: number, dy: number): boolean {
+  return Math.abs(after.position.x - (before.position.x + dx)) > 0.01 || Math.abs(after.position.y - (before.position.y + dy)) > 0.01;
 }
 
 /**
@@ -97,14 +102,36 @@ export function canDuplicate(layer: Pick<Layer, "kind" | "role">): boolean {
   return layer.kind === "logo" || layer.kind === "clipart" || (layer.kind === "text" && layer.role === "text");
 }
 
-/** A copy of the item just above it, a little down and right, inside the print area; the copy's id is returned with the design. */
+/**
+ * Where a copy lands (E3e): `DUPLICATE_OFFSET_MM` from the original along each axis, down and right unless that side is short of room, but never so far that the copy stands on the print area's limit where the original could still move: it
+ * keeps `NUDGE_MM` of room on the side it was offset to. An axis where the original has no room stays put.
+ */
+export function duplicatePlace(product: ProductDefinition, layer: Layer): { x: number; y: number } {
+  const piece = product.pieces.find((p) => p.id === layer.pieceId);
+  if (!piece) return { x: round3(layer.position.x + DUPLICATE_OFFSET_MM), y: round3(layer.position.y + DUPLICATE_OFFSET_MM) };
+  const area = printAreaOf(piece);
+  const far = 1e6;
+  const low = clampIntoArea(area, layer, { x: -far, y: -far });
+  const high = clampIntoArea(area, layer, { x: far, y: far });
+  const along = (at: number, min: number, max: number) => {
+    const back = Math.max(0, at - min);
+    const forward = Math.max(0, max - at);
+    // Down and right when there is room for the offset and a step more; otherwise towards the side with more room.
+    const sign = forward >= DUPLICATE_OFFSET_MM + NUDGE_MM || forward >= back ? 1 : -1;
+    const room = sign === 1 ? forward : back;
+    return at + sign * Math.min(DUPLICATE_OFFSET_MM, Math.max(0, room - NUDGE_MM));
+  };
+  return { x: round3(along(layer.position.x, low.x, high.x)), y: round3(along(layer.position.y, low.y, high.y)) };
+}
+
+/** A copy of the item just above it, a little down and right (or towards the side with more room), inside the print area; the copy's id is returned with the design. */
 export function duplicateLayer(design: DesignDocument, layerId: string, options: Options): { design: DesignDocument; id: string } {
   const layer = find(design, layerId);
   if (!canDuplicate(layer)) throw new RangeError(`a ${layer.role} item cannot be duplicated`);
   const id = nextLayerId(design, layer.kind === "text" ? "text" : "logo");
   const { preset: _preset, ...rest } = layer;
   void _preset;
-  const position = { x: round3(layer.position.x + DUPLICATE_OFFSET_MM), y: round3(layer.position.y + DUPLICATE_OFFSET_MM) };
+  const position = duplicatePlace(options.product, layer);
   const copy = fitLayerToArea(options.product, { ...rest, id, position } as Layer);
   const added = addLayer(design, copy, options);
   const from = added.layers.findIndex((l) => l.id === id);

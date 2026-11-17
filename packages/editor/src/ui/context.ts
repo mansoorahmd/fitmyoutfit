@@ -69,6 +69,8 @@ export interface EditorApi {
   /** Asks the camera to show a side or an item (it may refuse: the coach is turning the garment). */
   showSide(side: "front" | "back" | "left" | "right"): void;
   focusOn(layerId: string | null, options?: { zoom?: boolean }): void;
+  /** Moves an item by a step in mm (one undo step); when the print area stops it, the area's lines show for a moment (E3e). */
+  nudge(layerId: string, dx: number, dy: number): void;
   /** Shows a message in the status line; with `undo`, an Undo button beside it. */
   announce(text: string, options?: { undo?: boolean; ms?: number }): void;
   /** The Colours tool's chosen zone or shapes, and choosing one (with the flash on the model). */

@@ -296,10 +296,10 @@ function FineTuneView() {
           </div>
           <div className="fmo-ft-row">
             <span className="fmo-label">{w.move}</span>
-            <RepeatButton label={w.moveLeft} icon="arrowLeft" onStep={() => api.commit((d) => nudgeLayer(d, id, -NUDGE_MM, 0, opts), "move")} testId="ft-left" />
-            <RepeatButton label={w.moveRight} icon="arrowRight" onStep={() => api.commit((d) => nudgeLayer(d, id, NUDGE_MM, 0, opts), "move")} testId="ft-right" />
-            <RepeatButton label={w.moveUp} icon="arrowUp" onStep={() => api.commit((d) => nudgeLayer(d, id, 0, -NUDGE_MM, opts), "move")} testId="ft-up" />
-            <RepeatButton label={w.moveDown} icon="arrowDown" onStep={() => api.commit((d) => nudgeLayer(d, id, 0, NUDGE_MM, opts), "move")} testId="ft-down" />
+            <RepeatButton label={w.moveLeft} icon="arrowLeft" onStep={() => api.nudge(id, -NUDGE_MM, 0)} testId="ft-left" />
+            <RepeatButton label={w.moveRight} icon="arrowRight" onStep={() => api.nudge(id, NUDGE_MM, 0)} testId="ft-right" />
+            <RepeatButton label={w.moveUp} icon="arrowUp" onStep={() => api.nudge(id, 0, -NUDGE_MM)} testId="ft-up" />
+            <RepeatButton label={w.moveDown} icon="arrowDown" onStep={() => api.nudge(id, 0, NUDGE_MM)} testId="ft-down" />
           </div>
           <div className="fmo-row">
             <button type="button" className="fmo-btn" onClick={step((d) => centreLayer(d, id, opts), "move")} data-testid="ft-centre">

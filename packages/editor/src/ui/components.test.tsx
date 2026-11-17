@@ -40,7 +40,7 @@ function api(overrides: Partial<EditorApi> = {}): EditorApi {
     product, palette, fonts, templates, wording: W, assets, layout: "compact", detent: "normal", setDetent: noop, design,
     commit: () => true, begin: noop, preview: noop, end: noop, hoverPreview: noop, textFits: [], fontsLoading: false, fontsFailed: false,
     garmentView: null, showSide: noop, focusOn: noop, announce: noop, colourTarget: { kind: "zone", id: "body_front" }, chooseColourTarget: noop,
-    recentColours: [], useColour: noop, setTyping: noop, openTool: noop, reducedMotion: false, markTiming: noop, snapping: true, setSnapping: noop, selectedId: null, select: noop, logoNotes: {}, setLogoNote: noop,
+    recentColours: [], useColour: noop, setTyping: noop, openTool: noop, nudge: noop, reducedMotion: false, markTiming: noop, snapping: true, setSnapping: noop, selectedId: null, select: noop, logoNotes: {}, setLogoNote: noop,
     ...overrides,
   };
 }
