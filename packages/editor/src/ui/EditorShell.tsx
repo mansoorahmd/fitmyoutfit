@@ -52,7 +52,7 @@ import { modelTapAction, toolForLayer } from "./selection.js";
 import { namedLabel } from "./items.js";
 import { KitButton, OnThisKit } from "./OnThisKit.js";
 import { DonePanel } from "./DonePanel.js";
-import { itemChecks, type LogoNote } from "./checks.js";
+import { warningNames, type LogoNote } from "./checks.js";
 import { ClippedNote, ContextBar, FineTune, keyEdit } from "./SelectedItem.js";
 import { nudgeLayer, rotateLayerBy, scaleLayerBy } from "../design/item-edits.js";
 import { removeLayer } from "../design/edit.js";
@@ -889,10 +889,8 @@ export function EditorShell(props: EditorShellProps) {
   const fontsNote = fontsLoading ? wording.lettering.fontsLoading : null;
   const selectedLayer = selectedId ? (design.layers.find((l) => l.id === selectedId) ?? null) : null;
   const toolDesign = frozenDesign ?? design;
-  const selectionWarn = useMemo(() => {
-    const layer = selectedId ? toolDesign.layers.find((l) => l.id === selectedId) : undefined;
-    return layer ? itemChecks(product, toolDesign, layer, { notes: logoNotes, missingAssets }).length > 0 : false;
-  }, [selectedId, toolDesign, product, logoNotes, missingAssets]);
+  // R15, D2: every item with an open warning and its words (a badge on the model while the item is not selected).
+  const warnings = useMemo(() => warningNames(wording, product, toolDesign, { notes: logoNotes, palette, missingAssets }), [wording, product, toolDesign, logoNotes, palette, missingAssets]);
   const kitInPanel = kitOpen && layout !== "wide" && !startCard;
   const kitPanel = kitInPanel ? (
     <ToolPanel
@@ -1100,7 +1098,8 @@ export function EditorShell(props: EditorShellProps) {
             onTurnTo={() => selectedId && canvas.current?.focusOn(selectedId)}
             handlesHidden={typing || doneOpen}
             contextBar={Boolean(selectedLayer) && layout !== "wide" && !typing && mode === "3d" && !doneOpen}
-            selectionWarn={selectionWarn}
+            warnings={warnings}
+            onSelectItem={(layerId) => api.select(layerId, { openTool: true })}
             kitButton={
               startCard || doneOpen || (Boolean(selectedLayer) && layout !== "wide" && !typing && mode === "3d") || (layout === "compact" && typing) ? null : (
                 <KitButton count={design.layers.length} compact={(size.width || 390) < 480} open={kitOpen} onClick={() => setKitOpen((o) => !o)} />

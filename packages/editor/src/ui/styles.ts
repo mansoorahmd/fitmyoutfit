@@ -188,6 +188,10 @@ export const EDITOR_CSS = /* css */ `
 .fmo-stepper { display: inline-flex; align-items: center; gap: 8px; }
 .fmo-stepper-value { min-width: 72px; text-align: center; font: var(--fmo-type-label); }
 .fmo-overlay-badge { position: absolute; transform: translate(-50%, -50%); pointer-events: none; }
+/* R15, D2: a badge on an unselected item names its warning and selects the item (a 44 px target round the 24 px mark). */
+.fmo-overlay .fmo-badge-button { pointer-events: auto; padding: 0; cursor: pointer; box-shadow: 0 0 0 2px #fff; }
+.fmo-overlay .fmo-badge-button::after { content: ""; position: absolute; inset: -10px; }
+.fmo-overlay .fmo-badge-button:hover { background: #ffeccc; }
 .fmo-segmented button:has(> .fmo-icon) { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
 .fmo-font-chip { font-size: 18px; max-width: 220px; overflow: hidden; } /* the coach's own text in the font: a sample, not interface type */
 .fmo-font-chip > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

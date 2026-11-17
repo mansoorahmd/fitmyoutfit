@@ -6,7 +6,7 @@
  * area above (or beside) the panel by the canvas itself (`viewInsets`).
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
-import { DesignCanvas, type CameraInfo, type DesignCanvasHandle, type DesignCanvasProps, type SelectionGeometry } from "../react/DesignCanvas.js";
+import { DesignCanvas, type CameraInfo, type DesignCanvasHandle, type DesignCanvasProps, type ItemBox, type SelectionGeometry } from "../react/DesignCanvas.js";
 import { createBus } from "./handles.js";
 import { SelectionOverlay } from "./SelectionOverlay.js";
 import type { GestureEndReason, GesturePhase } from "./item-gestures.js";
@@ -93,8 +93,12 @@ export interface StageProps {
   handlesHidden?: boolean;
   /** The contextual bar on the stage (phones, with an item selected): the garment is framed below it. */
   contextBar?: boolean;
-  /** The selected item has a warning: a badge beside its handles. */
-  selectionWarn?: boolean;
+  /**
+   * R15, D2: the items with an open warning and its words. Each unselected one gets a badge on the model that
+   * selects it (`onSelectItem`); the selected item's warning leads its panel instead.
+   */
+  warnings?: ReadonlyMap<string, string>;
+  onSelectItem?: (layerId: string) => void;
   /** "On this kit" (4.8): its button at the top right of the stage, and (desktop) its popover under it. */
   kitButton?: ReactNode;
   kitPopover?: ReactNode;
@@ -119,13 +123,36 @@ export function Stage({ canvasRef, ...props }: StageProps) {
   const sides = ["front", "back", "left", "right"] as const;
   // The selected item's box on the screen, from the canvas to the overlay (only the overlay re-renders per frame).
   const bus = useMemo(() => createBus<SelectionGeometry | null>(null), []);
+  // Every item's box (E3d): the turn handle keeps off them (R33) and the badges sit on them (R15). Asked for only
+  // while something is selected or has a warning (the model's UV lookup is built the first time it is needed).
+  const items = useMemo(() => createBus<ItemBox[]>([]), []);
+  const selected = props.canvasProps.selectedLayerId ?? null;
+  const wantsBoxes = Boolean(selected) || (props.warnings?.size ?? 0) > 0;
+  // R24, 4.5: the overlay is clipped to the free stage (below the credit line, above the view buttons).
+  const clip = { top: props.credit && mode === "3d" ? CREDIT_ROOM : 0, right: insets.right, bottom: insets.bottom + (props.viewControls === "full" ? VIEW_ROW : 0), left: insets.left };
   // The width of "On this kit" (an icon on a narrow stage, words on a wider one): the top band leaves it room.
   const kitPlace = useRef<HTMLDivElement>(null);
   const [kitWidth, setKitWidth] = useState(44);
+  // "On this kit" in stage coordinates: the turn handle keeps off it (4.5).
+  const [kitBox, setKitBox] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
   useEffect(() => {
     const el = kitPlace.current;
-    if (!el) return;
-    const measure = () => setKitWidth(el.offsetWidth || 44);
+    if (!el) {
+      setKitBox(null);
+      return;
+    }
+    const measure = () => {
+      setKitWidth(el.offsetWidth || 44);
+      const button = el.firstElementChild as HTMLElement | null;
+      const stage = el.parentElement;
+      if (!button || !stage) return;
+      const b = button.getBoundingClientRect();
+      const s = stage.getBoundingClientRect();
+      setKitBox((old) => {
+        const next = { x: Math.round(b.left - s.left), y: Math.round(b.top - s.top), width: Math.round(b.width), height: Math.round(b.height) };
+        return old && old.x === next.x && old.y === next.y && old.width === next.width && old.height === next.height ? old : next;
+      });
+    };
     measure();
     if (typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(measure);
@@ -139,7 +166,7 @@ export function Stage({ canvasRef, ...props }: StageProps) {
       <div className="fmo-stage-shadow" hidden={mode !== "3d"} style={{ bottom: `calc(${canvasInsets.bottom}px + (100% - ${canvasInsets.bottom + canvasInsets.top}px) * 0.13)`, left: `calc((100% - ${insets.right}px) / 2)` }} aria-hidden="true" />
       {mode === "3d" ? (
         <div className="fmo-canvas" tabIndex={0} role="img" aria-label={props.description} onKeyDown={props.onStageKey} data-testid="stage-canvas">
-          <DesignCanvas {...props.canvasProps} ref={canvasRef} design={props.design} product={props.product} viewInsets={canvasInsets} assetUrl={props.assetUrl} style={{ background: "transparent", minHeight: 0 }} errorFallback={null} onSelectionGeometry={bus.emit} />
+          <DesignCanvas {...props.canvasProps} ref={canvasRef} design={props.design} product={props.product} viewInsets={canvasInsets} assetUrl={props.assetUrl} style={{ background: "transparent", minHeight: 0 }} errorFallback={null} onSelectionGeometry={bus.emit} onItemBoxes={wantsBoxes ? items.emit : undefined} />
           <SelectionOverlay
             bus={bus}
             wording={wording}
@@ -150,7 +177,11 @@ export function Stage({ canvasRef, ...props }: StageProps) {
             onTurnTo={props.onTurnTo ?? (() => undefined)}
             onInterrupt={props.onGestureInterrupt}
             hidden={props.handlesHidden}
-            warn={props.selectionWarn}
+            items={items}
+            warnings={props.warnings}
+            onSelectItem={props.onSelectItem}
+            clip={clip}
+            controls={kitBox ? [kitBox] : undefined}
           />
           {props.contextBar && <StageContextBar bus={bus} top={barTop} bottomInset={canvasInsets.bottom} />}
         </div>

@@ -245,6 +245,7 @@ export const EDITOR_WORDING = {
     fromDesign: "From the design", // W-ED132
     locked: "Locked", // W-ED132
     moreFor: "More for {item}", // NEW: a row's menu button (accessible name)
+    needsLook: "Needs a look: {reason}", // NEW (E3d, R15): a warning badge on the model (its name and tooltip; a tap selects the item)
     needsALook: "Needs a look", // NEW: the warning badge's accessible name
     colourAction: "Colour", // NEW: the only action for the design's shapes
   },

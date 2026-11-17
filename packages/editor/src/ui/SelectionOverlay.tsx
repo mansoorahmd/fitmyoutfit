@@ -1,8 +1,9 @@
 /**
- * The selected item's handles over the 3D model (06-editor.md 5.2): the box
- * as a two-tone line that follows the cloth, four corner handles that resize
- * evenly, a turn handle on a stem, and the snapping guides and print area
- * while placing. Drawn as SVG over the canvas, never into the texture, so a
+ * The selected item's handles over the 3D model (06-editor.md 5.2; E3d, 07-editor-review 4.5): the box as
+ * four straight two-tone lines between the item's projected corners, outset 8 px and at least 44 px (never a
+ * line along the cloth), four corner handles on those corners that resize evenly, a turn handle on a stem that
+ * keeps off other items and the stage's controls, the snapping guides and print area while placing (never
+ * through the item), and a warning badge on each unselected item that needs a look. Drawn as SVG over the canvas, never into the texture, so a
  * handle never waits for a repaint. Its geometry comes from the canvas (the
  * UV lookup, N9) through a small store, so only this overlay re-renders as the
  * camera turns.
@@ -59,6 +60,8 @@ export interface SelectionOverlayProps {
   onSelectItem?: (layerId: string) => void;
   /** The free stage (4.5): the overlay is clipped to it, and its edges are obstacles for the turn handle. */
   clip?: { top: number; right: number; bottom: number; left: number };
+  /** Controls floating on the stage ("On this kit"), in the overlay's coordinates: the turn handle keeps off them (4.5). */
+  controls?: readonly Rect[];
 }
 
 const NO_ITEMS = createEmptyItems();
@@ -142,6 +145,7 @@ export function SelectionOverlay(props: SelectionOverlayProps) {
     ...items.filter((b) => b.layerId !== g.layerId && b.facing).map((b) => boundsOf(b.corners)),
     { x: -1e4, y: -1e4, width: 2e4, height: 1e4 + clip.top },
     { x: -1e4, y: g.height - clip.bottom, width: 2e4, height: 1e4 },
+    ...(props.controls ?? []),
   ];
   const frame = selectionFrame(g.corners, g.centre, obstacles);
   const handles = frame.corners;

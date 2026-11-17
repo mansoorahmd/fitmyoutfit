@@ -115,13 +115,35 @@ export function designChecks(
   for (const layer of [...design.layers].reverse()) {
     for (const check of itemChecks(product, design, layer, { notes: options.notes, hardToRead, missingAssets: options.missingAssets })) {
       const item = itemWords(wording, product, layer, { fileName: options.fileName });
-      let reason: string;
-      if (check === "hard-to-read") {
-        const r = results.find((x) => x.layerId === layer.id);
-        reason = fill(wording.done.checkHardToRead, { colour: r ? colourName(options.palette ?? null, r.background.colour) : "" });
-      } else reason = wording.done.checks[check];
-      out.push({ layerId: layer.id, check, text: fill(wording.done.checkLine, { item: item.at, reason }) });
+      out.push({ layerId: layer.id, check, text: fill(wording.done.checkLine, { item: item.at, reason: checkReason(wording, check, results.find((x) => x.layerId === layer.id), options.palette ?? null) }) });
     }
+  }
+  return out;
+}
+
+function checkReason(wording: EditorWording, check: ItemCheck, readability: Readability | undefined, palette: Pick<Palette, "colors"> | null): string {
+  if (check === "hard-to-read") return fill(wording.done.checkHardToRead, { colour: readability ? colourName(palette, readability.background.colour) : "" });
+  return wording.done.checks[check];
+}
+
+/**
+ * The name of each warning badge on the model (E3d, R15): the item's open warnings in the coach's words
+ * ("Needs a look: hard to read on White."), keyed by item. Items without a warning are not in the map.
+ */
+export function warningNames(
+  wording: EditorWording,
+  product: ProductDefinition,
+  design: DesignDocument,
+  options: { notes?: Readonly<Record<string, LogoNote>>; palette?: Pick<Palette, "colors"> | null; missingAssets?: ReadonlySet<string> } = {},
+): Map<string, string> {
+  const results = designReadability(product, design);
+  const hardToRead = new Set(results.filter((r) => !r.passes).map((r) => r.layerId));
+  const out = new Map<string, string>();
+  for (const layer of design.layers) {
+    const checks = itemChecks(product, design, layer, { notes: options.notes, hardToRead, missingAssets: options.missingAssets });
+    if (checks.length === 0) continue;
+    const readability = results.find((x) => x.layerId === layer.id);
+    out.set(layer.id, fill(wording.selection.needsLook, { reason: checks.map((c) => checkReason(wording, c, readability, options.palette ?? null)).join(" ") }));
   }
   return out;
 }
