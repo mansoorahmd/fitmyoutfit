@@ -174,6 +174,20 @@ describe("the Delivery speed control on the cart page", () => {
     expect(screen.queryByTestId("speed-error")).toBeNull()
   })
 
+  it("no answer, but the backend made the change: the cart read again shows it, and no error stays", async () => {
+    rush.answer = async () => ({ ok: false, kind: "no_answer" })
+    const { rerender } = render(page(plainCart(), rulesPkRushOffered))
+    await act(async () => {
+      fireEvent.click(radios().rush)
+    })
+    expect(screen.getByTestId("speed-error")).toBeInTheDocument()
+    expect(nav.refreshed).toBe(1)
+    rerender(page(rushCart(), rulesPkRushInCart))
+    expect(radios().rush.checked).toBe(true)
+    expect(screen.queryByTestId("speed-error")).toBeNull()
+    expect(screen.getByTestId("speed-announcement")).toHaveTextContent("Rush chosen.")
+  })
+
   it("Standard from rush: DELETE, never a call for the card already chosen", async () => {
     render(page(rushCart(), rulesPkRushInCart))
     fireEvent.click(radios().rush)

@@ -106,6 +106,15 @@ export const RushChoiceProvider = ({
     }
   }, [chosen, control, saving, settling])
 
+  // A failed save whose answer was lost after the backend made the change:
+  // the cart read again shows the choice asked for, so nothing went wrong.
+  useEffect(() => {
+    if (failed !== null && saving === null && chosen === failed) {
+      if (control) setAnnouncement(announcementFor(control, failed))
+      setFailed(null)
+    }
+  }, [chosen, control, failed, saving])
+
   useEffect(() => {
     if (!settling) return
     const timer = setTimeout(() => {
