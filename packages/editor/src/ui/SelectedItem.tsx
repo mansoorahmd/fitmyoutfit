@@ -124,7 +124,7 @@ export function ContextBar({ variant }: { variant: "stage" | "panel" }) {
  * bottom of the free area when the item reaches into the top band (the
  * placement rule in selection.ts).
  */
-export function StageContextBar({ bus, top, bottomInset }: { bus: Bus<SelectionGeometry | null>; top: number; bottomInset: number }) {
+export function StageContextBar({ bus, top, bottomInset, endInset = 0 }: { bus: Bus<SelectionGeometry | null>; top: number; bottomInset: number; endInset?: number }) {
   const geometry = useSyncExternalStore(bus.subscribe, bus.get, bus.get);
   const api = useEditor();
   if (!api.selectedId) return null;
@@ -132,7 +132,8 @@ export function StageContextBar({ bus, top, bottomInset }: { bus: Bus<SelectionG
   const freeBottom = (geometry?.height ?? 0) - bottomInset;
   const place = geometry ? contextBarPlacement({ top, freeBottom, item }) : "top";
   return (
-    <div className="fmo-context-place" style={place === "top" ? { top } : { top: freeBottom - CONTEXT_BAR_HEIGHT }} data-place={place} data-testid="context-bar-place">
+    // E3d (R27): centred in the free stage, never under a side panel (landscape): its end stops 8 px before it.
+    <div className="fmo-context-place" style={{ ...(place === "top" ? { top } : { top: freeBottom - CONTEXT_BAR_HEIGHT }), insetInlineEnd: endInset + 8 }} data-place={place} data-testid="context-bar-place">
       <ContextBar variant="stage" />
     </div>
   );

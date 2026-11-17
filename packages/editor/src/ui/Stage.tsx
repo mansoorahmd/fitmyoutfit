@@ -183,12 +183,13 @@ export function Stage({ canvasRef, ...props }: StageProps) {
             clip={clip}
             controls={kitBox ? [kitBox] : undefined}
           />
-          {props.contextBar && <StageContextBar bus={bus} top={barTop} bottomInset={canvasInsets.bottom} />}
+          {props.contextBar && <StageContextBar bus={bus} top={barTop} bottomInset={canvasInsets.bottom} endInset={insets.right} />}
         </div>
       ) : (
         <div className="fmo-canvas fmo-flat-host" style={{ bottom: insets.bottom, right: insets.right }}>
           {props.banner && (
-            <div className="fmo-banner" role="status" data-testid="stage-banner">
+            // R28: the banner ends 8 px before "On this kit" (4.7), never under it.
+            <div className="fmo-banner" role="status" data-testid="stage-banner" style={props.kitButton ? { marginInlineEnd: kitWidth + 4 } : undefined}>
               <EditorIcon name="info" size={20} />
               <span>{props.banner}</span>
             </div>
@@ -266,7 +267,8 @@ export function Stage({ canvasRef, ...props }: StageProps) {
       )}
       {props.credit && mode === "3d" && <Credit full={props.credit} short={props.creditShort} form={creditForm(props.stageWidth)} right={insets.right} label={v.creditMore} />}
       {mode === "3d" && props.viewControls !== "none" && (
-        <div className="fmo-view" data-controls={props.viewControls} style={{ bottom: controlsBottom, right: layout === "short" ? insets.right : 0 }} data-testid="view-controls">
+        // R29: the view buttons follow the free stage (a side panel or the Done panel on the right).
+        <div className="fmo-view" data-controls={props.viewControls} style={{ bottom: controlsBottom, right: insets.right }} data-testid="view-controls">
           <div className="fmo-sides" role="group" aria-label={v.sidesName}>
             {sides.map((side) => (
               <button key={side} type="button" aria-pressed={camera.side === side} onClick={() => props.onSide(side)} data-testid={`view-${side}`}>

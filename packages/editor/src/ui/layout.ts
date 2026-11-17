@@ -43,6 +43,15 @@ export const START_CARD_STAGE_MIN = 160;
  * needs to be seen recolouring (at least 120 px tall at 360 x 640). Turning by hand still works.
  */
 export const START_CARD_FULL_CONTROLS_STAGE = 280;
+
+/**
+ * E3d (R38, 4.10): one sheet at a time on a phone. Opening the Done panel closes the open tool panel; this is what
+ * comes back (the tool and its height) when the Done panel closes, or null when nothing has to.
+ */
+export function sheetUnderDone<T extends string>(input: { layout: EditorLayout; panelOpen: boolean; tool: T | null; detent: PanelDetent }): { tool: T; detent: PanelDetent } | null {
+  if (input.layout !== "compact" || !input.panelOpen || !input.tool) return null;
+  return { tool: input.tool, detent: input.detent };
+}
 export function viewControlsFor(input: { layout: EditorLayout; typing: boolean; panelOpen: boolean; detent: PanelDetent; startCard: boolean; stageHeight: number }): "full" | "reset-only" | "none" {
   if (input.layout !== "compact") return "full";
   if (input.typing) return "none";

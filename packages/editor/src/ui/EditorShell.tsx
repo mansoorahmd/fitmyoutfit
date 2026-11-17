@@ -38,7 +38,7 @@ import { EditorContext, type ColourTarget, type EditorApi, type EditorAssets, ty
 import { CARD_HEIGHT, CARD_WIDTH, DesignTool } from "./DesignTool.js";
 import { PlayersTool, TeamTool } from "./LetteringTools.js";
 import { LogosTool, TextTool } from "./LogosTool.js";
-import { LAYOUT_SIZES, START_CARD_STAGE_MIN, chooseLayout, panelHeights, saveStateWords, stageInsets, viewControlsFor, type PanelDetent } from "./layout.js";
+import { LAYOUT_SIZES, START_CARD_STAGE_MIN, chooseLayout, panelHeights, saveStateWords, sheetUnderDone, stageInsets, viewControlsFor, type PanelDetent } from "./layout.js";
 import { ConfirmDialog } from "./parts.js";
 import { Stage, type StageLoad } from "./Stage.js";
 import { StartCard } from "./StartCard.js";
@@ -277,6 +277,10 @@ export function EditorShell(props: EditorShellProps) {
   const [kitOpen, setKitOpen] = useState(false);
   // The Done panel (9.2).
   const [doneOpen, setDoneOpen] = useState(false);
+  /** R38: the tool panel open when the Done panel opened on a phone (it comes back when the Done panel closes). */
+  const beforeDone = useRef<{ tool: ToolId; detent: PanelDetent } | null>(null);
+  /** R37: the Done panel's height on a phone (its content's), for the stage's framing. */
+  const [doneHeight, setDoneHeight] = useState(0);
   // What the upload checks found about each file this session (a logo without a transparent background), by asset id.
   // Kept with the files by the host when it can (S3), so "prints as a box" survives a reload.
   const [logoNotes, setLogoNotes] = useState<Record<string, LogoNote>>(() => ({ ...(props.assets.notes?.() ?? {}) }));
@@ -702,7 +706,7 @@ export function EditorShell(props: EditorShellProps) {
   const stageWidth = layout === "wide" ? editorWidth - LAYOUT_SIZES.wide.rail - LAYOUT_SIZES.wide.panel : layout === "short" ? editorWidth - LAYOUT_SIZES.short.rail - (panelOpen || startCard ? LAYOUT_SIZES.short.panel : 0) : editorWidth;
   const baseInsets = stageInsets(layout, { open: panelOpen || startCard || (kitOpen && layout !== "wide"), height: panelSize.height, width: panelSize.width });
   // The Done panel covers the stage's right side (desktop, landscape) or its lower part (phone): the garment is framed in the rest.
-  const insets = doneOpen ? (layout === "compact" ? { ...baseInsets, bottom: heights.expanded } : { ...baseInsets, right: layout === "wide" ? 400 : LAYOUT_SIZES.short.panel }) : baseInsets;
+  const insets = doneOpen ? (layout === "compact" ? { ...baseInsets, bottom: doneHeight > 0 ? doneHeight - LAYOUT_SIZES.compact.dock : heights.expanded } : { ...baseInsets, right: layout === "wide" ? 400 : LAYOUT_SIZES.short.panel }) : baseInsets;
 
   const api: EditorApi = {
     product,
@@ -1009,6 +1013,10 @@ export function EditorShell(props: EditorShellProps) {
             // The Done panel lets go of the selected item (E3c minor): no handles behind it.
             setSelectedId(null);
             setKitOpen(false);
+            // R38, 4.10: one sheet at a time on a phone: the tool panel closes under the Done panel, and comes back
+            // (with its height) when the Done panel closes.
+            beforeDone.current = sheetUnderDone({ layout, panelOpen, tool: activeTool, detent });
+            if (beforeDone.current) setTool(null);
             setDoneOpen(true);
           }}
           doneOpen={doneOpen}
@@ -1143,7 +1151,16 @@ export function EditorShell(props: EditorShellProps) {
           price={props.slots?.price}
           primaryAction={props.slots?.primaryAction}
           share={props.slots?.share}
-          onClose={() => setDoneOpen(false)}
+          onClose={() => {
+            setDoneOpen(false);
+            const back = beforeDone.current;
+            beforeDone.current = null;
+            if (back) {
+              setTool(back.tool);
+              setDetent(back.detent);
+            }
+          }}
+          onSize={setDoneHeight}
           onSaveAndGoBack={() => {
             setDoneOpen(false);
             props.onDone?.(designRef.current);

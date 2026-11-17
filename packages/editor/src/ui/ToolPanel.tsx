@@ -162,7 +162,7 @@ export function ToolPanel(props: ToolPanelProps) {
         />
       )}
       <div className="fmo-panel-head">
-        <h2 className="fmo-panel-title" id="fmo-panel-title">
+        <h2 className="fmo-panel-title" id="fmo-panel-title" tabIndex={-1}>
           {props.title ?? wording.tools[tool]}
         </h2>
         {!props.title && (

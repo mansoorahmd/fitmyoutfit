@@ -214,9 +214,19 @@ export const EDITOR_CSS = /* css */ `
 .fmo-done[data-open] { display: inline-flex; align-items: center; gap: 6px; background: transparent; border: 1px solid rgb(255 255 255 / 0.7); cursor: default; }
 .fmo-done-panel { border: 0; padding: 0; margin: 0; color: var(--fmo-ink); background: var(--fmo-surface); font: 400 15px/1.4 var(--fmo-font-body); --fmo-panel-pad: 16px; box-shadow: 0 -4px 24px rgb(11 21 48 / 0.18); max-width: 100vw; max-height: 100dvh; }
 .fmo-done-panel::backdrop { background: rgb(11 21 48 / 0.25); }
-.fmo-done-panel[data-layout="compact"] { position: fixed; inset: auto 0 0 0; width: 100%; height: min(60dvh, calc(100dvh - 56px - 160px)); min-height: 320px; border-radius: var(--fmo-radius-sheet) var(--fmo-radius-sheet) 0 0; }
+/* R37: a phone's sheet is as tall as its content, at most min(60dvh, 100dvh - 56 - 160); the stage gets the rest. */
+.fmo-done-panel[data-layout="compact"] { position: fixed; inset: auto 0 0 0; width: 100%; height: auto; max-height: min(60dvh, calc(100dvh - 56px - 160px)); border-radius: var(--fmo-radius-sheet) var(--fmo-radius-sheet) 0 0; }
+.fmo-done-panel[data-layout="compact"][open] { display: flex; flex-direction: column; }
+.fmo-done-panel[data-layout="compact"] .fmo-done-inner { height: auto; flex: 1 1 auto; min-height: 0; padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px)); }
+/* R29: on a desktop the kit stays bright beside the panel (the dialog stays modal). */
+.fmo-done-panel:is([data-layout="wide"], [data-layout="short"])::backdrop { background: rgb(11 21 48 / 0.08); }
 .fmo-done-panel[data-layout="wide"], .fmo-done-panel[data-layout="short"] { position: fixed; inset: 64px 0 0 auto; width: 400px; height: auto; box-shadow: -1px 0 0 var(--fmo-border), -4px 0 24px rgb(11 21 48 / 0.12); }
-.fmo-done-panel[data-layout="short"] { inset: 48px 0 0 auto; width: 340px; }
+.fmo-done-panel[data-layout="short"] { inset: 48px 0 0 auto; width: 384px; }
+/* E3d (landscape): the panel covers the tool panel and the rail exactly, and scrolls as one, so the list of things
+   to check has the panel's height, not one line between fixed blocks; the main action stays in view at its foot. */
+.fmo-done-panel[data-layout="short"] .fmo-done-inner { overflow-y: auto; overscroll-behavior: contain; }
+.fmo-done-panel[data-layout="short"] .fmo-done-inner > .fmo-done-checks { flex: none; overflow: visible; min-height: 0; }
+.fmo-done-panel[data-layout="short"] .fmo-done-inner > .fmo-primary { position: sticky; bottom: 0; z-index: 1; box-shadow: 0 8px 0 8px var(--fmo-surface); }
 .fmo-done-inner { height: 100%; overflow: hidden; padding: 8px var(--fmo-panel-pad) 24px; box-sizing: border-box; display: flex; flex-direction: column; }
 .fmo-done-inner > * { flex: none; }
 /* E3c (S6): the main action is always in view; the list of things to check scrolls when the panel is short (landscape). */
