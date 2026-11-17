@@ -452,8 +452,13 @@ export function buildOwnModules(): ModuleEntry[] {
 /**
  * The Notification Module, with Medusa's local provider (it writes each notification to the log)
  * on the `feed` channel always, as Medusa's own default has it, and on the `email` channel only
- * where emailDelivery (email-delivery.ts) says email is logged: development and test. Elsewhere
- * no provider takes `email`, so an email that something asks for is refused, never logged.
+ * where emailDelivery (email-delivery.ts) says email is logged: NODE_ENV exactly `development` or
+ * `test`. Elsewhere no provider takes `email`, so the local provider never writes an email to the
+ * log; but Medusa stores a notification, data included, in its `notification` table (readable by
+ * admins through GET /admin/notifications) before it refuses it for lack of a provider. So this is
+ * not what keeps a reset link out of production: the password-reset subscriber creates no
+ * notification at all there (mayLogResetLink). Our own code never writes a link or token to a log
+ * outside development and test; Medusa's request log is another matter (see the README).
  * Configuring the module replaces Medusa's default entry for it (the last entry wins).
  */
 export function buildNotificationModules(env: Env): ModuleEntry[] {

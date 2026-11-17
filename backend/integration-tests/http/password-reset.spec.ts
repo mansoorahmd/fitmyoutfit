@@ -282,6 +282,71 @@ medusaIntegrationTestRunner({
           }
         })
 
+        it.each([
+          ["production", "production"],
+          ["staging", "staging"],
+          ["Production", "Production"],
+          ["Development", "Development"],
+          ["blank", "   "],
+          ["empty", ""],
+          ["unset", undefined],
+        ])(
+          "with NODE_ENV %s creates no notification row (real modules, a real customer account)",
+          async (_name, NODE_ENV) => {
+            const saved = { ...process.env }
+            Object.assign(process.env, {
+              STOREFRONT_URL: "https://shop.example.com",
+              BACKEND_URL: "https://api.example.com",
+            })
+            if (NODE_ENV === undefined) delete process.env.NODE_ENV
+            else process.env.NODE_ENV = NODE_ENV
+            try {
+              const log = { warn: jest.fn(), info: jest.fn(), error: jest.fn(), debug: jest.fn() }
+              const container = {
+                resolve: (key: string) => (key === "logger" ? log : getContainer().resolve(key)),
+              }
+              const rowsBefore = await getContainer().resolve(Modules.NOTIFICATION).listNotifications({})
+              await run({ entity_id: CUSTOMER_EMAIL, actor_type: "customer", token }, container)
+              const rowsAfter = await getContainer().resolve(Modules.NOTIFICATION).listNotifications({})
+              expect(rowsAfter).toHaveLength(rowsBefore.length)
+              expect(log.warn).toHaveBeenCalledTimes(1)
+              expect(String(log.warn.mock.calls[0][0])).toContain("customer account at example.com was not sent")
+              expect(log.error).not.toHaveBeenCalled()
+            } finally {
+              for (const key of ["NODE_ENV", "STOREFRONT_URL", "BACKEND_URL"]) {
+                if (saved[key] === undefined) delete process.env[key]
+                else process.env[key] = saved[key]
+              }
+            }
+          }
+        )
+
+        it("outside development and test logs only the error's name when something fails", async () => {
+          const saved = { ...process.env }
+          Object.assign(process.env, {
+            NODE_ENV: "production",
+            STOREFRONT_URL: "https://shop.example.com",
+            BACKEND_URL: "https://api.example.com",
+          })
+          try {
+            const failing = fakeContainer()
+            // The one call that can fail after the plan there: the warning itself.
+            failing.log.warn.mockImplementation(() => {
+              throw new TypeError(`data: ${STOREFRONT_URL}/account/reset-password?token=${token}`)
+            })
+            await run({ entity_id: "a@example.com", actor_type: "customer", token }, failing.container)
+            expect(failing.log.error).toHaveBeenCalledTimes(1)
+            expect(String(failing.log.error.mock.calls[0][0])).toBe(
+              "Could not send a password reset link (TypeError). A new link can be asked for."
+            )
+          } finally {
+            for (const key of ["NODE_ENV", "STOREFRONT_URL", "BACKEND_URL"]) {
+              if (saved[key] === undefined) delete process.env[key]
+              else process.env[key] = saved[key]
+            }
+          }
+        })
+
         it("in test sends the notification it planned, and nothing for an unknown actor type", async () => {
           const sending = fakeContainer()
           await run({ entity_id: "a@example.com", actor_type: "customer", token }, sending.container)
@@ -360,7 +425,9 @@ medusaIntegrationTestRunner({
             run({ entity_id: "a@example.com", actor_type: "customer", token }, failing.container)
           ).resolves.toBeUndefined()
           expect(failing.log.error).toHaveBeenCalledTimes(1)
-          expect(String(failing.log.error.mock.calls[0][0])).toContain("Could not send a password reset link")
+          expect(String(failing.log.error.mock.calls[0][0])).toBe(
+            "Could not send a password reset link (provider down). A new link can be asked for."
+          )
         })
       })
     })
