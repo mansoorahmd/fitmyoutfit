@@ -13,6 +13,7 @@ import { isClipped, moveInside } from "../design/print-area.js";
 import { applyReadabilityRemedy } from "../design/readability.js";
 import { readabilityWarnings, remedyWords } from "./checks.js";
 import { logoIsBlurry, makeLogoSharp, sharpWidth } from "./logos.js";
+import { coveredItem, moveClear } from "./overlap.js";
 import type { DesignDocument, Layer } from "../design/schema.js";
 import type { EditLabel } from "../state/history.js";
 import type { SelectionGeometry } from "../react/DesignCanvas.js";
@@ -158,9 +159,24 @@ export function SelectedWarnings() {
   const note = logo ? api.logoNotes[logo.asset.assetId] : undefined;
   const box = Boolean(logo && note?.box && !note.kept);
   const blurry = Boolean(logo && logoIsBlurry(logo));
-  if (!readability && !box && !blurry) return null;
+  // E3d (left over): it lies over another item; the fix moves it clear (or makes it smaller).
+  const covered = coveredItem(design, layer);
+  if (!readability && !box && !blurry && !covered) return null;
   return (
     <div className="fmo-stack" data-testid="selected-warnings">
+      {covered && (
+        <Alert kind="warning" testId={`covers-${layer.id}`}>
+          <p>{fill(wording.selection.covers, { item: itemWords(wording, product, covered).kind.toLowerCase() })}</p>
+          <button
+            type="button"
+            className="fmo-btn"
+            onClick={() => api.commit((d) => moveClear(d, layer.id, product) ?? d, "move")}
+            data-testid={`move-clear-${layer.id}`}
+          >
+            {wording.selection.moveClear}
+          </button>
+        </Alert>
+      )}
       {readability && (
         <Alert kind="warning" testId={`readability-${readability.readability.layerId}`}>
           <p>{readability.text}</p>

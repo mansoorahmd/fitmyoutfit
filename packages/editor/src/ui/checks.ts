@@ -9,6 +9,7 @@ import { isClipped } from "../design/print-area.js";
 import { hasPictographs } from "../design/typed-text.js";
 import type { DesignDocument, ItemRole, Layer, ProductDefinition } from "../design/schema.js";
 import { logoIsBlurry } from "./logos.js";
+import { coveredItem } from "./overlap.js";
 import { fill, type EditorWording } from "./content.js";
 import { itemWords } from "./items.js";
 import { colourName } from "./stage-logic.js";
@@ -67,7 +68,7 @@ export interface LogoNote {
   kept?: boolean;
 }
 
-export type ItemCheck = "hard-to-read" | "clipped" | "blurry" | "box" | "pictographs" | "missing";
+export type ItemCheck = "hard-to-read" | "clipped" | "blurry" | "box" | "pictographs" | "missing" | "covers";
 
 /** The open warnings of one item: hard to read, cut off at the seam, low resolution, a box behind the logo (kept boxes are not open). */
 export function itemChecks(
@@ -89,6 +90,8 @@ export function itemChecks(
   }
   // Emoji and picture symbols (S5): an older saved design may hold them; they can't be printed in a kit colour.
   if (layer.kind === "text" && hasPictographs(layer.value)) out.push("pictographs");
+  // E3d: it lies over another item on its piece (only the upper one is named).
+  if (coveredItem(design, layer)) out.push("covers");
   return out;
 }
 
@@ -115,15 +118,22 @@ export function designChecks(
   for (const layer of [...design.layers].reverse()) {
     for (const check of itemChecks(product, design, layer, { notes: options.notes, hardToRead, missingAssets: options.missingAssets })) {
       const item = itemWords(wording, product, layer, { fileName: options.fileName });
-      out.push({ layerId: layer.id, check, text: fill(wording.done.checkLine, { item: item.at, reason: checkReason(wording, check, results.find((x) => x.layerId === layer.id), options.palette ?? null) }) });
+      out.push({ layerId: layer.id, check, text: fill(wording.done.checkLine, { item: item.at, reason: checkReason(wording, check, results.find((x) => x.layerId === layer.id), options.palette ?? null, coveredWords(wording, product, design, layer)) }) });
     }
   }
   return out;
 }
 
-function checkReason(wording: EditorWording, check: ItemCheck, readability: Readability | undefined, palette: Pick<Palette, "colors"> | null): string {
+function checkReason(wording: EditorWording, check: ItemCheck, readability: Readability | undefined, palette: Pick<Palette, "colors"> | null, covered: string): string {
   if (check === "hard-to-read") return fill(wording.done.checkHardToRead, { colour: readability ? colourName(palette, readability.background.colour) : "" });
+  if (check === "covers") return fill(wording.done.checkCovers, { item: covered });
   return wording.done.checks[check];
+}
+
+/** The item a layer covers, in words for the middle of a sentence ("player name"). */
+export function coveredWords(wording: EditorWording, product: ProductDefinition, design: Pick<DesignDocument, "layers">, layer: Layer): string {
+  const other = coveredItem(design, layer);
+  return other ? itemWords(wording, product, other).kind.toLowerCase() : "";
 }
 
 /**
@@ -143,7 +153,7 @@ export function warningNames(
     const checks = itemChecks(product, design, layer, { notes: options.notes, hardToRead, missingAssets: options.missingAssets });
     if (checks.length === 0) continue;
     const readability = results.find((x) => x.layerId === layer.id);
-    out.set(layer.id, fill(wording.selection.needsLook, { reason: checks.map((c) => checkReason(wording, c, readability, options.palette ?? null)).join(" ") }));
+    out.set(layer.id, fill(wording.selection.needsLook, { reason: checks.map((c) => checkReason(wording, c, readability, options.palette ?? null, coveredWords(wording, product, design, layer))).join(" ") }));
   }
   return out;
 }

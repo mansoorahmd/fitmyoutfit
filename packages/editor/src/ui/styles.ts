@@ -251,7 +251,10 @@ export const EDITOR_CSS = /* css */ `
 .fmo-hint { padding: 4px 12px; border-radius: 16px; background: var(--fmo-float-fill); border: 1px solid var(--fmo-float-line); box-shadow: var(--fmo-float-shadow); font: var(--fmo-type-small); max-width: calc(100% - 8px); box-sizing: border-box; text-align: center; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .fmo-banner { align-self: stretch; display: flex; gap: 8px; align-items: flex-start; padding: 10px 12px; border-radius: var(--fmo-radius-card); background: var(--fmo-surface); border: 1px solid var(--fmo-float-line); box-shadow: var(--fmo-float-shadow); font: var(--fmo-type-small); }
 .fmo-credit { position: absolute; top: 0; inset-inline-start: 8px; z-index: 3; height: 24px; display: flex; align-items: center; gap: 2px; margin: 0; font: var(--fmo-type-credit); color: var(--fmo-ink-muted); text-align: start; }
-.fmo-credit-line { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* E3d (left over): zoomed in (typing, a selected item) the cloth reaches the top row: the line keeps a backing in the
+   stage's own colour, invisible at rest, so it never reads as printed on the collar. */
+.fmo-credit-line { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 4px; margin-inline-start: -4px; border-radius: 4px; background: color-mix(in srgb, var(--fmo-stage-top) 88%, transparent); }
+.fmo-stage[data-tone="deep"] .fmo-credit-line { background: color-mix(in srgb, var(--fmo-stage-deep-top) 88%, transparent); }
 /* E3c: 44 px touch targets in a 24 px line (the band round the line is the stage's, never the garment's). */
 /* R30: the 44 px target is an invisible extension round the link, never its width, so the words keep one space between them. */
 .fmo-credit a { color: inherit; position: relative; }

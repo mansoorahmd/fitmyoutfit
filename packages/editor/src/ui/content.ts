@@ -247,6 +247,8 @@ export const EDITOR_WORDING = {
     locked: "Locked", // W-ED132
     moreFor: "More for {item}", // NEW: a row's menu button (accessible name)
     needsLook: "Needs a look: {reason}", // NEW (E3d, R15): a warning badge on the model (its name and tooltip; a tap selects the item)
+    covers: "This covers the {item}.", // NEW (E3d): the selected item lies over another one
+    moveClear: "Move it clear", // NEW (E3d): the one-tap fix (moves it to the nearest free place, or makes it smaller)
     needsALook: "Needs a look", // NEW: the warning badge's accessible name
     colourAction: "Colour", // NEW: the only action for the design's shapes
   },
@@ -313,6 +315,7 @@ export const EDITOR_WORDING = {
     show: "Show", // W-ED161
     checkLine: "{item}: {reason}", // NEW: one line of the summary ("Logo on the left chest: may print blurry at this size.")
     checkHardToRead: "hard to read on {colour}.", // NEW (W-ED85 in the summary)
+    checkCovers: "covers the {item}.", // NEW (E3d): an item over another one ("covers the player name.")
     checks: { clipped: "part of it is cut off at the seam.", blurry: "may print blurry at this size.", box: "prints as a box with its background colour.", "hard-to-read": "hard to read.", pictographs: "has emoji or picture symbols, which can't be printed.", missing: "its picture is missing on this device." } as Record<"clipped" | "blurry" | "box" | "hard-to-read" | "pictographs" | "missing", string>, // pictographs, missing: NEW (E3c, S5, S2) // NEW (W-ED111, W-ED96, W-ED95 in the summary)
     price: "Price", // W-ED168 (the host fills the slot)
     kitLine: "{product} · {team}", // NEW: the Done panel's line ("Jersey · Lahore Lions")
