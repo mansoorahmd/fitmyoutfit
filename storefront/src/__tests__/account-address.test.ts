@@ -118,8 +118,25 @@ describe("initial values, order and the overview's address", () => {
     const b = { id: "b", created_at: "2026-11-02", is_default_shipping: true }
     const c = { id: "c", created_at: "2026-10-01", is_default_shipping: false }
     expect(sortAddresses([a, b, c]).map((x) => x.id)).toEqual(["b", "c", "a"])
-    expect(overviewAddress([a, c])?.id).toBe("c")
     expect(overviewAddress([])).toBeNull()
+  })
+
+  it("with no address marked as the default, the most recently added is the default (S1-11)", () => {
+    const a = { id: "a", created_at: "2026-11-01", is_default_shipping: false }
+    const c = { id: "c", created_at: "2026-10-01", is_default_shipping: null }
+    const d: { id: string; created_at: string; is_default_shipping?: boolean | null } = { id: "d", created_at: "2026-11-05" }
+    expect(overviewAddress([a, c])?.id).toBe("a")
+    expect(overviewAddress([a, c])?.is_default_shipping).toBe(true)
+    expect(sortAddresses([a, c, d]).map((x) => [x.id, !!x.is_default_shipping])).toEqual([
+      ["d", true],
+      ["c", false],
+      ["a", false],
+    ])
+    expect(addressCardView(overviewAddress([a, c])!, "Pakistan").isDefault).toBe(true)
+    // the stored list is not changed, and a marked default is kept as it is
+    expect(a.is_default_shipping).toBe(false)
+    expect(sortAddresses([{ ...a, is_default_shipping: true }, d]).map((x) => x.id)).toEqual(["a", "d"])
+    expect(sortAddresses([])).toEqual([])
   })
 
   it("removing the default: the most recently added of the others becomes the default (QA S1-4c, m5)", () => {

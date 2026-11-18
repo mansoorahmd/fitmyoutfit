@@ -126,6 +126,8 @@ export const cartContent = {
     price: "+ {amount}",
     // DRAFT WORDING. No id (P): the quiet line under the Rush card, {percentage} from the rules.
     note: "We make your order first. Adds {percentage}% to your garments.",
+    // DRAFT WORDING. No id (P): the same line while the cart's rush charge could not be brought in line with the current percentage, so no percentage is named.
+    noteNoPercentage: "We make your order first.",
     // DRAFT WORDING. No id: the summary row, between the items and the delivery.
     row: "Rush production",
     // DRAFT WORDING. No id: saving the choice failed; the choice went back.

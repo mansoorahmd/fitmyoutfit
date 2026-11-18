@@ -7,6 +7,7 @@
 import { checkoutContent } from "@content/checkout"
 
 import compareAddresses from "./compare-addresses"
+import { EMAIL_MAX_LENGTH, isEmail } from "./email"
 import { subdivisionCode, subdivisionName, subdivisionsOf } from "./subdivisions"
 import { fill } from "./wording"
 
@@ -99,7 +100,7 @@ export const countryFieldRules = (countryCode: string | null | undefined): Count
  * 5321).
  */
 export const FIELD_MAX = {
-  email: 254,
+  email: EMAIL_MAX_LENGTH,
   phone: 25,
   first_name: 100,
   last_name: 100,
@@ -132,6 +133,7 @@ export const asciiDigits = (value: string): string =>
  */
 const UK_OUTSIDE_DELIVERY = [
   /^BFPO\d{1,4}$/, // British Forces Post Office
+  /^BF1\d[A-Z]{2}$/, // the BF1 district, British Forces' postcode ("BF1 4FB"; S1-11)
   /^(ASCN|BBND|BIQQ|FIQQ|PCRN|SIQQ|STHL|TDCU|TKCA)1ZZ$/, // Ascension, BIOT, Antarctic, Falklands, Pitcairn, South Georgia, St Helena, Tristan da Cunha, Turks and Caicos
   /^GX111AA$/, // Gibraltar
   /^AI-?\d{4}$/, // Anguilla
@@ -212,28 +214,7 @@ export const normalizePhone = (value: string, countryCode: string | null | undef
     ? normalizePkMobile(value) ?? asciiDigits(value).trim()
     : asciiDigits(value).trim()
 
-const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-
-/**
- * Control and format characters (Unicode Cc and Cf): zero-width spaces and
- * joiners, direction marks and embeddings, the soft hyphen, the byte order
- * mark. Written as ranges: the project's compile target has no `u` flag.
- */
-const INVISIBLE = /[\u0000-\u001f\u007f-\u009f\u00ad\u0600-\u0605\u061c\u06dd\u070f\u180e\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u206f\ufeff\ufff9-\ufffb]/
-
-/**
- * An email address with one @ and a dot in the domain; no spaces, no two
- * dots in a row, no dot at either end of the name or the domain, and no
- * invisible character (a zero-width space, a direction mark, a control
- * character; QA S1-4c, m3), which would make an address no one can type.
- */
-export const isEmail = (value: string): boolean => {
-  const trimmed = value.trim()
-  if (!EMAIL.test(trimmed)) return false
-  if (INVISIBLE.test(trimmed) || trimmed.includes("..")) return false
-  const [local, domain] = trimmed.split("@")
-  return !local.startsWith(".") && !local.endsWith(".") && !domain.startsWith(".") && !domain.endsWith(".")
-}
+export { isEmail }
 
 /**
  * A phone number as people type it: digits with spaces, dashes, dots and
@@ -518,6 +499,8 @@ export const addressLines = (
     // Pakistan, the UK and the UAE: the city with its postal code, then the province or emirate
     cityLine = [address.city, address.postal_code].filter((p) => !blank(p)).join(" ")
     provinceLine = subdivisionName(address.country_code, address.province) ?? ""
+    // "Dubai" in Dubai (S1-11): a city and an emirate with the same name show once
+    if (provinceLine.trim().toLowerCase() === (address.city ?? "").trim().toLowerCase()) provinceLine = ""
   }
   return [
     name,
@@ -560,16 +543,25 @@ export const sameAddress = (a: AddressLike | null | undefined, b: AddressLike | 
 export const shouldSaveToAccount = (saved: AddressLike[] | null, address: AddressLike): boolean =>
   !saved || !saved.some((a) => sameAddress(a, address))
 
-/** A customer's saved addresses in this region, the default one first. */
+/**
+ * A customer's saved addresses in this region, the default one first, then
+ * the most recently added: with none marked as the default the checkout
+ * still offers (and selects) one, the newest (S1-11).
+ */
 export const savedAddressesInRegion = <
-  T extends AddressLike & { id: string; is_default_shipping?: boolean | null }
+  T extends AddressLike & { id: string; is_default_shipping?: boolean | null; created_at?: string | Date | null }
 >(
   addresses: T[] | null | undefined,
   countryCodes: string[]
-): T[] =>
-  (addresses ?? [])
+): T[] => {
+  const addedAt = (a: T) => new Date(a.created_at ?? 0).getTime() || 0
+  return (addresses ?? [])
     .filter((a) => !!a.country_code && countryCodes.includes(a.country_code.toLowerCase()))
-    .sort((a, b) => Number(!!b.is_default_shipping) - Number(!!a.is_default_shipping))
+    .sort(
+      (a, b) =>
+        Number(!!b.is_default_shipping) - Number(!!a.is_default_shipping) || addedAt(b) - addedAt(a)
+    )
+}
 
 /**
  * The fields of a saved address put into the form, with its own phone

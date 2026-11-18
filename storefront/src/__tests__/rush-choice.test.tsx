@@ -121,6 +121,25 @@ describe("the Delivery speed control on the cart page", () => {
     dates.forEach((d) => expect(d).toHaveClass("whitespace-nowrap"))
   })
 
+  it("while the cart's rush line could not be brought in line, the card shows the line's amount and its note names no percentage (S1-11)", () => {
+    const rules = { ...rulesPkRushInCart, rush: { ...rulesPkRushInCart.rush, percentage: 7.77, amount: 466 } }
+    const lineAmount = 1200
+    render(
+      page(
+        checkoutCartPkRush({
+          items: [tshirtLine(), rushLine({ unit_price: lineAmount, subtotal: lineAmount, total: lineAmount })],
+          item_subtotal: 4000 + lineAmount,
+          total: 4000 + lineAmount + 250,
+        }),
+        rules
+      )
+    )
+    const card = screen.getByTestId("speed-rush")
+    expect(plain(card.textContent)).toContain("+ PKR 1,200")
+    expect(screen.getByTestId("speed-rush-note")).toHaveTextContent("We make your order first.")
+    expect(card.textContent).not.toMatch(/%|7\.77|Adds/)
+  })
+
   it("heads the summary column: after the lines on a phone, before the totals", () => {
     render(page(plainCart(), rulesPkRushOffered))
     const choice = screen.getByTestId("rush-choice")

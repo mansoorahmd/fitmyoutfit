@@ -136,9 +136,25 @@ export const initialAccountAddress = ({
   isDefault: saved ? !!saved.is_default_shipping : !hasDefault,
 })
 
-/** The default address first, then the others in the order they were saved. */
+/** When an address was added, as a number (0 when the store gave no date). */
+const addedAt = (a: { created_at?: string | Date | null }): number =>
+  new Date(a.created_at ?? 0).getTime() || 0
+
+/**
+ * An account that has addresses but none marked as the default (S1-11)
+ * still has one: the most recently added. The same list, with that address
+ * marked, so the cards, the overview and the form all agree.
+ */
+export const withEffectiveDefault = <T extends SavedAddress>(addresses: T[] | null | undefined): T[] => {
+  const list = addresses ?? []
+  if (list.length === 0 || list.some((a) => !!a.is_default_shipping)) return [...list]
+  const newest = list.reduce((best, a) => (addedAt(a) > addedAt(best) ? a : best))
+  return list.map((a) => (a === newest ? { ...a, is_default_shipping: true } : a))
+}
+
+/** The default address first (the most recently added when none is marked), then the others in the order they were saved. */
 export const sortAddresses = <T extends SavedAddress>(addresses: T[] | null | undefined): T[] =>
-  [...(addresses ?? [])].sort((a, b) => {
+  withEffectiveDefault(addresses).sort((a, b) => {
     const byDefault = Number(!!b.is_default_shipping) - Number(!!a.is_default_shipping)
     if (byDefault !== 0) return byDefault
     return String(a.created_at ?? "") < String(b.created_at ?? "") ? -1 : 1

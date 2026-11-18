@@ -1,11 +1,13 @@
 import { Metadata } from "next"
+import { cookies } from "next/headers"
 
 import { accountContent } from "@content/account"
 import { customerState } from "@lib/data/customer"
 import { listAccountOrders } from "@lib/data/orders"
 import { listRegions } from "@lib/data/regions"
 import { addressCardView, overviewAddress, storeCountries } from "@lib/util/account-address"
-import { authView, queryValue } from "@lib/util/account-auth"
+import { authNotice, authView, queryValue } from "@lib/util/account-auth"
+import { NOTICE_COOKIE } from "@lib/util/password-notice"
 import { orderCardView } from "@lib/util/account-orders"
 import AccountOverview from "@modules/account/templates/account-overview"
 import AccountFrame from "@modules/account/templates/account-frame"
@@ -46,11 +48,15 @@ export default async function AccountPage(props: Props) {
   }
 
   if (state.kind === "signed_out") {
+    // `?notice=password-changed` alone is not enough: the reset action sets a short-lived flag cookie
+    // when it has changed a password (the middleware clears it on this load)
+    const changed = (await cookies()).has(NOTICE_COOKIE)
     return (
       <AuthTemplate
         view={authView(queryValue(query.view))}
         next={queryValue(query.next) || null}
         email={queryValue(query.email).slice(0, 254)}
+        notice={changed ? authNotice(queryValue(query.notice), authView(queryValue(query.view))) : null}
       />
     )
   }

@@ -247,7 +247,6 @@ const AddressStep = ({
     return (
       <TextField
         id={fieldId(key)}
-        name={key}
         label={label}
         hint={hint}
         error={errors[key]}
@@ -288,7 +287,6 @@ const AddressStep = ({
         {address.countries.length > 1 ? (
           <SelectField
             id={fieldId(`${group}.country_code`)}
-            name={`${group}.country_code`}
             label={words.fields.country}
             value={a.country_code}
             error={errors[`${group}.country_code`]}
@@ -321,7 +319,6 @@ const AddressStep = ({
         {rules.province.shown && (
           <SelectField
             id={fieldId(`${group}.province`)}
-            name={`${group}.province`}
             label={rules.province.label}
             value={a.province}
             placeholder={rules.province.placeholder}

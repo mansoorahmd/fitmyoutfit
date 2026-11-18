@@ -36,6 +36,15 @@ describe("home content file (placeholder copy)", () => {
     expect(homeContent.button.href).toBe("/store")
   })
 
+  it("describes the organizer's team list, with no player link (decision 012)", () => {
+    expect(homeContent.headline).toBe("Design the kit. Add your team.")
+    expect(homeContent.subline).toBe(
+      "Build your team's jersey in 3D, add every player's name, number and size in one list, and see each shirt before you order."
+    )
+    const all = JSON.stringify(homeContent)
+    expect(all).not.toMatch(/drop the link|share one link|adds? their own|each player adds/i)
+  })
+
   it("hero shows the content file's copy with a /pk/store button", () => {
     render(<Hero />)
 

@@ -69,9 +69,47 @@ describe("sign-in view (05, 8.3)", () => {
     expect(screen.getByLabelText("Password")).toHaveAttribute("autocomplete", "current-password")
   })
 
-  it("has no 'Forgot your password?' link while reset doesn't exist", () => {
+  it("has a 'Forgot your password?' link to the forgot-password page, with no email in the address", () => {
     render(<AuthTemplate view="signin" next={null} email="" />)
+    type("Email", "ali@example.com")
+    const link = screen.getByRole("link", { name: "Forgot your password?" })
+    expect(link).toHaveAttribute("href", "/pk/account/forgot-password")
+  })
+
+  it("keeps the typed email in the browser for the forgot-password page, not in the address", () => {
+    window.sessionStorage.clear()
+    render(<AuthTemplate view="signin" next={null} email="" />)
+    type("Email", "  Ali@Example.com ")
+    const link = screen.getByRole("link", { name: "Forgot your password?" })
+    link.addEventListener("click", (event) => event.preventDefault())
+    fireEvent.click(link)
+    expect(window.sessionStorage.getItem("fmo.forgot-email")).toBe("Ali@Example.com")
+    expect(link.getAttribute("href")).not.toMatch(/example|email|@/i)
+  })
+
+  it("carries nothing when no email was typed (an earlier one is dropped)", () => {
+    window.sessionStorage.setItem("fmo.forgot-email", "old@example.com")
+    render(<AuthTemplate view="signin" next={null} email="" />)
+    const link = screen.getByRole("link", { name: "Forgot your password?" })
+    link.addEventListener("click", (event) => event.preventDefault())
+    fireEvent.click(link)
+    expect(window.sessionStorage.getItem("fmo.forgot-email")).toBeNull()
+  })
+
+  it("has no forgot-password link on the create view", () => {
+    render(<AuthTemplate view="create" next={null} email="" />)
     expect(screen.queryByText("Forgot your password?")).toBeNull()
+  })
+
+  it("shows the notice that the password was changed, with the email filled in", () => {
+    render(<AuthTemplate view="signin" next={null} email="ali@example.com" notice="password-changed" />)
+    expect(screen.getByTestId("auth-notice")).toHaveTextContent("Your password was changed. Sign in with your new password.")
+    expect(screen.getByLabelText("Email")).toHaveValue("ali@example.com")
+  })
+
+  it("shows no notice by default", () => {
+    render(<AuthTemplate view="signin" next={null} email="" />)
+    expect(screen.queryByTestId("auth-notice")).toBeNull()
   })
 
   it("shows and hides the password in words", () => {
