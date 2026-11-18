@@ -212,17 +212,18 @@ describe("an item the zoom left outside the free stage (E3e)", () => {
     { x: right, y: bottom },
     { x: left, y: bottom },
   ];
-  it("1 for a box inside, with room for its handles", () => {
+  it("1 for an item inside, even with its handles outside", () => {
     expect(itemOverflowFactor(box(200, 400), free)).toBe(1);
+    expect(itemOverflowFactor(box(145, 300), free)).toBe(1);
   });
-  it("a box high on the garment, reaching under the bar's room, must come back in proportion", () => {
-    // Its top is 77 px above the free stage's top edge: 128 - 77 = 51; the centre is 340; 340 - 51 = 289 over (212 - 45) room.
-    expect(itemOverflowFactor(box(51, 300), free)).toBeCloseTo((340 - 51) / (212 - 45), 6);
-    expect(itemOverflowFactor(box(51, 300), free)).toBeGreaterThan(1.7);
+  it("an item high on the garment, reaching under the bar's room, must come back in proportion", () => {
+    // Its top is 77 px above the free stage's top edge: the centre is 340; 340 - 51 = 289 over (212 - 12) of room.
+    expect(itemOverflowFactor(box(51, 300), free)).toBeCloseTo((340 - 51) / (212 - 12), 6);
+    expect(itemOverflowFactor(box(51, 300), free)).toBeGreaterThan(1.4);
   });
-  it("a box too low, or too far to the side, counts as well", () => {
+  it("an item too low, or too far to the side, counts as well", () => {
     expect(itemOverflowFactor(box(400, 600), free)).toBeGreaterThan(1);
-    expect(itemOverflowFactor(box(250, 330, 300, 390), free)).toBeGreaterThan(1);
+    expect(itemOverflowFactor(box(250, 330, 300, 400), free)).toBeGreaterThan(1);
   });
   it("the rig backs off a zoom it made, never past the rest framing, and leaves the coach's own zoom", () => {
     const { rig, run, distance, framing } = setup();

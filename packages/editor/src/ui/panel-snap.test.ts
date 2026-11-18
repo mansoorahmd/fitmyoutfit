@@ -36,9 +36,21 @@ describe("the panel uses it, and fades when it did not end on a row", () => {
     const src = readFileSync(new URL("./ToolPanel.tsx", import.meta.url), "utf8");
     expect(src).toContain("heights.normal + snap");
     expect(src).toContain("heights.expanded + snap");
-    expect(src).toContain("snapDelta(cut, rowBoxes(b))");
+    expect(src).toContain("snapDelta(cut, rowBoxes(b),");
   });
   it("the foot's fade is 28 px", () => {
     expect(EDITOR_CSS).toMatch(/data-more-below="true"\]\s*\{[^}]*linear-gradient\(to top, transparent 0, #000 28px\)/);
+  });
+});
+
+describe("the room a panel has to grow (E3e)", () => {
+  it("a 360 x 640 phone keeps its stage as it is: no growth; a tall phone may grow by the most", async () => {
+    const { panelGrowRoom } = await import("./layout");
+    expect(panelGrowRoom(640).normal).toBe(0);
+    expect(panelGrowRoom(844).normal).toBeGreaterThanOrEqual(SNAP_GROW_MAX);
+  });
+  it("the panel asks for it", () => {
+    const src = readFileSync(new URL("./ToolPanel.tsx", import.meta.url), "utf8");
+    expect(src).toContain("growMax: Math.min(SNAP_GROW_MAX, room)");
   });
 });

@@ -38,7 +38,7 @@ import { EditorContext, type ColourTarget, type EditorApi, type EditorAssets, ty
 import { CARD_HEIGHT, CARD_WIDTH, DesignTool } from "./DesignTool.js";
 import { PlayersTool, TeamTool } from "./LetteringTools.js";
 import { LogosTool, TextTool } from "./LogosTool.js";
-import { LAYOUT_SIZES, START_CARD_STAGE_MIN, chooseLayout, panelHeights, saveStateWords, sheetUnderDone, stageInsets, viewControlsFor, type PanelDetent } from "./layout.js";
+import { LAYOUT_SIZES, START_CARD_STAGE_MIN, chooseLayout, panelGrowRoom, panelHeights, saveStateWords, sheetUnderDone, stageInsets, viewControlsFor, type PanelDetent } from "./layout.js";
 import { ConfirmDialog } from "./parts.js";
 import { Stage, type StageLoad } from "./Stage.js";
 import { StartCard } from "./StartCard.js";
@@ -749,6 +749,7 @@ export function EditorShell(props: EditorShellProps) {
   }, [design, camera.side, wording, product, palette, props.productName, description]);
 
   const heights = panelHeights(size.height || 844);
+  const growRoom = panelGrowRoom(size.height || 844);
   const editorWidth = size.width || 390;
   const stageWidth = layout === "wide" ? editorWidth - LAYOUT_SIZES.wide.rail - LAYOUT_SIZES.wide.panel : layout === "short" ? editorWidth - LAYOUT_SIZES.short.rail - (panelOpen || startCard ? LAYOUT_SIZES.short.panel : 0) : editorWidth;
   const baseInsets = stageInsets(layout, { open: panelOpen || startCard || (kitOpen && layout !== "wide"), height: panelSize.height, width: panelSize.width });
@@ -986,6 +987,7 @@ export function EditorShell(props: EditorShellProps) {
       wording={wording}
       detent={detent}
       heights={heights}
+      growRoom={growRoom}
       typing={typing}
       onDetent={(d) => (d === "closed" ? setKitOpen(false) : setDetent(d))}
       onClose={() => setKitOpen(false)}
@@ -1008,6 +1010,7 @@ export function EditorShell(props: EditorShellProps) {
         wording={wording}
         detent={detent}
         heights={heights}
+        growRoom={growRoom}
         typing={typing}
         onDetent={(d) => (d === "closed" ? closePanel() : setDetent(d))}
         onClose={closePanel}

@@ -428,21 +428,30 @@ export function itemFitDistance(corners: readonly { x: number; y: number }[], di
 }
 
 /**
- * E3e: by what factor the camera must come back for an item's box and its handles to lie inside the free stage
- * (`free`: its rectangle in canvas px, which leaves out the credit line, the contextual bar and the view buttons). 1
- * when they do. 25 px round the box (outset and handles); 45 px above it, where the turn handle stands. The box
- * seen from further away shrinks towards the middle of the free stage in proportion.
+ * An item that lies this much (as a factor of the free stage's half height or width, with 12 px of air) outside the
+ * free stage makes the camera come back; less than 5% is left alone (a pixel or two from perspective).
+ */
+export const ITEM_OVERFLOW_BACKOFF = 1.05;
+
+/**
+ * E3e: by what factor the camera must come back for the item itself to lie inside the free stage (`free`: its
+ * rectangle in canvas px, which leaves out the credit line, the contextual bar and the view buttons), with 12 px of
+ * air. 1 when it does. The box seen from further away shrinks towards the middle of the free stage in proportion.
+ * Only the item's own corners count: its handles may stand a little outside (the overlay clips them there); an item
+ * that is itself under the bar or off the stage is what this is for.
  */
 export function itemOverflowFactor(corners: readonly { x: number; y: number }[], free: { x: number; y: number; width: number; height: number }): number {
+  const air = 12;
   const cx = free.x + free.width / 2;
   const cy = free.y + free.height / 2;
   const up = Math.min(...corners.map((c) => c.y));
   const down = Math.max(...corners.map((c) => c.y));
   const left = Math.min(...corners.map((c) => c.x));
   const right = Math.max(...corners.map((c) => c.x));
-  const room = { up: free.height / 2 - 45, down: free.height / 2 - 25, side: (free.width - 50 - 70) / 2 };
-  const ratios = [(cy - up) / room.up, (down - cy) / room.down, (cx - left) / room.side, (right - cx) / room.side];
-  const worst = Math.max(...ratios);
+  const halfH = free.height / 2 - air;
+  const halfW = free.width / 2 - air;
+  if (!(halfH > 0) || !(halfW > 0)) return 1;
+  const worst = Math.max((cy - up) / halfH, (down - cy) / halfH, (cx - left) / halfW, (right - cx) / halfW);
   return Number.isFinite(worst) && worst > 1 ? worst : 1;
 }
 
@@ -660,7 +669,7 @@ function ModelView({
     // credit line or where the bar goes): back off (it stops by itself at the rest framing).
     if (zoomedFor.current === layer.id && on.facing && !rig.animating && pointersDown.current.size === 0 && !gestureNow.current) {
       const need = itemOverflowFactor(on.corners, framingNow.current.free);
-      if (need > 1.03) rig.backOffFromItem(need);
+      if (need > ITEM_OVERFLOW_BACKOFF) rig.backOffFromItem(need);
     }
     // The lines (print area, guides) move only with the camera or when they change: projected again only then (S1).
     const linesKey = JSON.stringify([cam.matrixWorld.elements, cam.projectionMatrix.elements, g, vs.width, vs.height]);

@@ -10,7 +10,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type 
 import type { EditorWording } from "./content.js";
 import type { ToolId } from "./context.js";
 import { EditorIcon, type IconName } from "./icons.js";
-import { rowBoxes, snapDelta } from "./finish.js";
+import { SNAP_GROW_MAX, rowBoxes, snapDelta } from "./finish.js";
 import type { EditorLayout, PanelDetent } from "./layout.js";
 
 export const TOOL_ORDER: readonly ToolId[] = ["design", "colours", "team", "players", "logos", "text"];
@@ -66,6 +66,8 @@ export interface ToolPanelProps {
   wording: EditorWording;
   detent: PanelDetent;
   heights: { normal: number; expanded: number };
+  /** E3e: how much taller each resting height may grow to end on a whole row (layout.panelGrowRoom); none when absent. */
+  growRoom?: { normal: number; expanded: number };
   typing: boolean;
   onDetent: (detent: PanelDetent) => void;
   onClose: () => void;
@@ -116,7 +118,7 @@ export function ToolPanel(props: ToolPanelProps) {
   // The foot of the panel on a whole row (R39): measured at the nominal height for the detent, with the content
   // scrolled to its top; a few corrections at most per state (the scrollbar may come or go with the height).
   const nominal = detent === "expanded" ? heights.expanded : heights.normal;
-  const snapKey = `${tool}|${detent}|${nominal}|${props.title ?? ""}`;
+  const snapKey = `${tool}|${detent}|${nominal}|${props.title ?? ""}|${props.growRoom?.normal ?? 0}|${props.growRoom?.expanded ?? 0}`;
   const corrections = useRef({ key: "", n: 0 });
   useLayoutEffect(() => {
     const b = body.current;
@@ -132,7 +134,8 @@ export function ToolPanel(props: ToolPanelProps) {
       const cut = nominal - top;
       const content = inner.current?.scrollHeight ?? 0;
       // Everything fits: nothing is cut.
-      const next = content + 16 <= cut ? 0 : snapDelta(cut, rowBoxes(b));
+      const room = (detent === "expanded" ? props.growRoom?.expanded : props.growRoom?.normal) ?? 0;
+      const next = content + 16 <= cut ? 0 : snapDelta(cut, rowBoxes(b), { growMax: Math.min(SNAP_GROW_MAX, room) });
       setSnap((old) => {
         if (Math.abs(old - next) < 1) return old;
         corrections.current.n++;
