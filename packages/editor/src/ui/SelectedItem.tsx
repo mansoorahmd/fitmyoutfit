@@ -13,7 +13,7 @@ import { isClipped, moveInside } from "../design/print-area.js";
 import { applyReadabilityRemedy } from "../design/readability.js";
 import { readabilityWarnings, remedyWords } from "./checks.js";
 import { logoIsBlurry, makeLogoSharp, sharpWidth } from "./logos.js";
-import { coveredItem, moveClear } from "./overlap.js";
+import { clearAnnouncement, clearFix, coveredItem } from "./overlap.js";
 import type { DesignDocument, Layer } from "../design/schema.js";
 import type { EditLabel } from "../state/history.js";
 import type { SelectionGeometry } from "../react/DesignCanvas.js";
@@ -21,7 +21,7 @@ import { fill } from "./content.js";
 import { useEditor } from "./context.js";
 import { HANDLE_HIT, type Bus } from "./handles.js";
 import { EditorIcon, type IconName } from "./icons.js";
-import { itemWords } from "./items.js";
+import { itemWords, panelHeaderName } from "./items.js";
 import { Alert, SwitchRow } from "./parts.js";
 import { CONTEXT_BAR_HEIGHT, contextBarPlacement, itemScreenBox, toolForLayer } from "./selection.js";
 
@@ -57,7 +57,7 @@ function ContextBarView({ variant }: { variant: "stage" | "panel" }) {
   return (
     <div className={`fmo-context fmo-context-${variant}`} role="toolbar" aria-label={fill(w.actionsFor, { item: words.name })} data-testid={`context-bar-${variant}`}>
       <span className="fmo-context-name fmo-bdi" dir="auto">
-        {words.name}
+        {panelHeaderName(words, layer, variant)}
       </span>
       <button type="button" className="fmo-context-btn" onClick={() => api.commit((d) => removeLayer(d, layer.id), "remove-item") && api.select(null)} data-testid="context-delete">
         <EditorIcon name="trash" size={20} />
@@ -153,6 +153,8 @@ function SelectedWarningsView() {
   const layer = useSelectedLayer();
   const { design, product, palette, wording } = api;
   const readability = useMemo(() => (layer && (layer.kind === "text" || layer.kind === "number") ? readabilityWarnings(wording, product, design, palette, null, api.coachColoured).find((w) => w.layerIds.includes(layer.id)) ?? null : null), [layer, wording, product, design, palette, api.coachColoured]);
+  // The button is offered only when a fix exists (E3e, B1): the search is run once per design, not per render.
+  const fix = useMemo(() => (layer && coveredItem(design, layer) ? clearFix(design, layer.id, product) : null), [design, layer, product]);
   if (!layer) return null;
   const lw = wording.logos;
   const logo = layer.kind === "logo" ? layer : null;
@@ -167,14 +169,24 @@ function SelectedWarningsView() {
       {covered && (
         <Alert kind="warning" testId={`covers-${layer.id}`}>
           <p>{fill(wording.selection.covers, { item: itemWords(wording, product, covered).kind.toLowerCase() })}</p>
-          <button
-            type="button"
-            className="fmo-btn"
-            onClick={() => api.commit((d) => moveClear(d, layer.id, product) ?? d, "move")}
-            data-testid={`move-clear-${layer.id}`}
-          >
-            {wording.selection.moveClear}
-          </button>
+          {fix ? (
+            <button
+              type="button"
+              className="fmo-btn"
+              onClick={() => {
+                api.commit((d) => clearFix(d, layer.id, product)?.design ?? d, fix.how === "smaller" ? "resize" : "move");
+                const said = clearAnnouncement(wording, fix, itemWords(wording, product, covered).kind);
+                if (said) api.announce(said);
+              }}
+              data-testid={`move-clear-${layer.id}`}
+            >
+              {wording.selection.moveClear}
+            </button>
+          ) : (
+            <p className="fmo-muted" data-testid={`move-clear-none-${layer.id}`}>
+              {wording.selection.coversNoRoom}
+            </p>
+          )}
         </Alert>
       )}
       {readability && (
@@ -284,10 +296,10 @@ function FineTuneView() {
           </div>
           <div className="fmo-ft-row">
             <span className="fmo-label">{w.move}</span>
-            <RepeatButton label={w.moveLeft} icon="arrowLeft" onStep={() => api.commit((d) => nudgeLayer(d, id, -NUDGE_MM, 0, opts), "move")} testId="ft-left" />
-            <RepeatButton label={w.moveRight} icon="arrowRight" onStep={() => api.commit((d) => nudgeLayer(d, id, NUDGE_MM, 0, opts), "move")} testId="ft-right" />
-            <RepeatButton label={w.moveUp} icon="arrowUp" onStep={() => api.commit((d) => nudgeLayer(d, id, 0, -NUDGE_MM, opts), "move")} testId="ft-up" />
-            <RepeatButton label={w.moveDown} icon="arrowDown" onStep={() => api.commit((d) => nudgeLayer(d, id, 0, NUDGE_MM, opts), "move")} testId="ft-down" />
+            <RepeatButton label={w.moveLeft} icon="arrowLeft" onStep={() => api.nudge(id, -NUDGE_MM, 0)} testId="ft-left" />
+            <RepeatButton label={w.moveRight} icon="arrowRight" onStep={() => api.nudge(id, NUDGE_MM, 0)} testId="ft-right" />
+            <RepeatButton label={w.moveUp} icon="arrowUp" onStep={() => api.nudge(id, 0, -NUDGE_MM)} testId="ft-up" />
+            <RepeatButton label={w.moveDown} icon="arrowDown" onStep={() => api.nudge(id, 0, NUDGE_MM)} testId="ft-down" />
           </div>
           <div className="fmo-row">
             <button type="button" className="fmo-btn" onClick={step((d) => centreLayer(d, id, opts), "move")} data-testid="ft-centre">

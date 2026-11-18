@@ -44,3 +44,53 @@ export function refreshFinish(root: HTMLElement): void {
   const g = `${gutterWidth(body)}px`;
   if (root.style.getPropertyValue("--fmo-gutter") !== g) root.style.setProperty("--fmo-gutter", g);
 }
+
+/** A box in the panel body's content coordinates (scrolled to the top). */
+export interface RowBox {
+  top: number;
+  bottom: number;
+}
+
+/** The most a panel grows to show a whole row, and the most it gives up (a share of its height) to end above one. */
+export const SNAP_GROW_MAX = 72;
+export const SNAP_SHRINK_SHARE = 0.4;
+/** Rows are boxes this tall (px): taller ones are lists, shorter ones are not worth a stop. */
+const ROW_MIN = 20;
+const ROW_MAX = 140;
+/** Air kept under the last whole row. */
+const ROW_AIR = 12;
+
+/**
+ * E3e (R39, finished): how many px a phone panel's resting height changes so that it ends on a whole row. `cut` is
+ * where its body ends now (the content's y at the panel's foot); `rows` are the boxes of the content's parts. The row
+ * across the cut (the largest that is at most 140 px tall) is shown whole when that costs at most `SNAP_GROW_MAX`;
+ * otherwise the panel ends above it when that gives up no more than 40% of the body; otherwise 0 (the fade says
+ * "more below"). Nothing across the cut: 0.
+ */
+export function snapDelta(cut: number, rows: readonly RowBox[], options: { growMax?: number; shrinkShare?: number } = {}): number {
+  const growMax = options.growMax ?? SNAP_GROW_MAX;
+  const share = options.shrinkShare ?? SNAP_SHRINK_SHARE;
+  let across: RowBox | null = null;
+  for (const r of rows) {
+    const h = r.bottom - r.top;
+    if (h < ROW_MIN || h > ROW_MAX) continue;
+    if (!(r.top < cut - 1 && r.bottom > cut + 1)) continue;
+    if (!across || h > across.bottom - across.top) across = r;
+  }
+  if (!across) return 0;
+  const grow = Math.ceil(across.bottom - cut) + ROW_AIR;
+  if (grow <= growMax) return grow;
+  const shrink = Math.floor(cut - across.top) + ROW_AIR;
+  return shrink <= cut * share ? -shrink : 0;
+}
+
+/** The boxes of every part of a panel body, in its content's coordinates. */
+export function rowBoxes(body: HTMLElement): RowBox[] {
+  const origin = body.getBoundingClientRect().top - body.scrollTop;
+  const out: RowBox[] = [];
+  for (const el of body.querySelectorAll<HTMLElement>("*")) {
+    const r = el.getBoundingClientRect();
+    if (r.height >= ROW_MIN && r.height <= ROW_MAX) out.push({ top: r.top - origin, bottom: r.bottom - origin });
+  }
+  return out;
+}

@@ -82,6 +82,8 @@ export class CameraRig {
   /** E3d (R24): the target's offset from the garment's centre (world units), and what it aims at. */
   private aim: V3 = ZERO;
   private item: V3 | null = null;
+  /** E3e: the aim follows a moved item in steps (see `followAim`). */
+  private glide = false;
   private pointerY: number | null = null;
   /** E3d (4.6): the closest the camera may come while an item is selected (its box and handles stay in view). */
   private itemMin = 0;
@@ -146,6 +148,8 @@ export class CameraRig {
     if (t >= 1) {
       this.anim = null;
       this.report();
+      // One frame more: what waits for the camera to stand still (the zoom's checks) runs with `animating` false.
+      this.invalidate();
     } else this.invalidate();
   }
 
@@ -215,11 +219,15 @@ export class CameraRig {
     const next: V3 | null = world === null ? null : [world[0] - this.center[0], world[1] - this.center[1], world[2] - this.center[2]];
     if (next === null ? this.item === null : this.item !== null && near(next, this.item, 1e-6)) return;
     const released = next === null && this.item !== null;
+    // An item that moved while it stayed selected (a drag or a resize that has ended): the aim glides after it.
+    if (next !== null && this.item !== null) this.glide = true;
     this.item = next;
     if (next === null) this.itemMin = 0;
     if (next !== null) this.pointerY = null;
     if (released) this.releaseItemZoom();
-    this.invalidate();
+    // A frame only when the aim has something to do: every frame asked for here is a full draw of the scene, and
+    // an item that moves (a drag) asks every frame (E3e: the desktop drag drew 1.7 frames per pointer move).
+    if (released || !near(this.aimAt(this.orbit().distance), this.aim, 1e-5)) this.invalidate();
   }
 
   /**
@@ -270,6 +278,25 @@ export class CameraRig {
     this.moveTo({ ...from, distance }, this.targetOffset(), CAMERA_REFRAME_MS * 1.5, easeOut);
   }
 
+  /**
+   * E3e: the camera's own zoom on a small item left it (or its handles) outside the free stage (an item high on the
+   * garment cannot be brought to the middle of it): back off by `factor` (above 1), never past the rest framing. Only
+   * a zoom the camera made itself; one the coach made is theirs.
+   */
+  backOffFromItem(factor: number): void {
+    const f = this.config?.framing;
+    const held = this.itemZoom;
+    if (!f || !held || !(factor > 1)) return;
+    const from = this.anim ? this.anim.to : this.orbit();
+    // Only while the camera is where its own zoom put it (a zoom by hand, by wheel or pinch, is the coach's).
+    if (Math.abs(from.distance - f.fit * held.factor) > 0.02 * f.fit) return;
+    const distance = Math.min(f.fit, from.distance * factor);
+    if (distance <= from.distance + 1e-6) return;
+    this.zoomFactor = distance / f.fit;
+    this.itemZoom = { restore: held.restore, factor: this.zoomFactor };
+    this.moveTo({ ...from, distance }, this.targetOffset(), CAMERA_REFRAME_MS, easeOut);
+  }
+
   private releaseItemZoom(): void {
     const f = this.config?.framing;
     const held = this.itemZoom;
@@ -300,8 +327,15 @@ export class CameraRig {
   private followAim(): void {
     const orbit = this.orbit();
     const want = this.aimAt(orbit.distance);
-    if (near(want, this.aim, 1e-5)) return;
-    this.aim = want;
+    if (near(want, this.aim, 1e-5)) {
+      this.glide = false;
+      return;
+    }
+    if (this.glide) {
+      // E3e: a third of the way each frame, so the view settles after a drag instead of jumping.
+      const step: V3 = [this.aim[0] + (want[0] - this.aim[0]) * 0.35, this.aim[1] + (want[1] - this.aim[1]) * 0.35, this.aim[2] + (want[2] - this.aim[2]) * 0.35];
+      this.aim = near(want, step, 1e-4) ? want : step;
+    } else this.aim = want;
     this.place(orbit, this.offset);
     this.invalidate();
   }

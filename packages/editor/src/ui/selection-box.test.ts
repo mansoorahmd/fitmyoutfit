@@ -53,8 +53,12 @@ describe("R32: outset 8 px; handles never on the item", () => {
     const logo = rect(200, 200, 20, 20);
     const f = selectionFrame(logo, { x: 210, y: 210 });
     const b = boundsOf(f.corners);
-    expect(b.width).toBeGreaterThanOrEqual(MIN_BOX - 0.01);
-    expect(b.height).toBeGreaterThanOrEqual(MIN_BOX - 0.01);
+    // The literal 44 (E3e: with the constant as the bound, a mutation of the constant moved the test with it).
+    expect(MIN_BOX).toBe(44);
+    expect(b.width).toBeGreaterThanOrEqual(44 - 0.01);
+    expect(b.height).toBeGreaterThanOrEqual(44 - 0.01);
+    expect(b.width).toBeLessThan(44 + 0.01);
+    expect(b.height).toBeLessThan(44 + 0.01);
     expect(b.x + b.width / 2).toBeCloseTo(210, 5);
     for (const c of f.corners) expect(intersects(handleSquare(c), boundsOf(logo))).toBe(false);
   });

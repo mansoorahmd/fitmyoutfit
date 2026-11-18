@@ -62,6 +62,21 @@ export function viewControlsFor(input: { layout: EditorLayout; typing: boolean; 
 
 export type PanelDetent = "closed" | "normal" | "expanded";
 
+/** The least the stage keeps when a panel grows to end on a whole row (E3e, R39): the phone's smallest stage stays as it is. */
+export const STAGE_KEEP_FOR_SNAP = 288;
+
+/**
+ * How much taller than its resting height a compact panel may grow to end on a whole row (E3e): the stage above it
+ * keeps at least `STAGE_KEEP_FOR_SNAP` at the normal height (a 360 x 640 phone has 288: no growth) and the expanded
+ * height's own minimum at the expanded one.
+ */
+export function panelGrowRoom(viewportHeight: number): { normal: number; expanded: number } {
+  const { topBar, dock } = LAYOUT_SIZES.compact;
+  const stageAndPanel = viewportHeight - topBar - dock;
+  const h = panelHeights(viewportHeight);
+  return { normal: Math.max(0, stageAndPanel - h.normal - STAGE_KEEP_FOR_SNAP), expanded: Math.max(0, stageAndPanel - h.expanded - STAGE_MIN_EXPANDED) };
+}
+
 /** The heights a compact panel may take at this visible height (header included). */
 export function panelHeights(viewportHeight: number): { normal: number; expanded: number } {
   const { topBar, dock } = LAYOUT_SIZES.compact;

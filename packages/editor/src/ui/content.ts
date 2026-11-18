@@ -249,6 +249,8 @@ export const EDITOR_WORDING = {
     needsLook: "Needs a look: {reason}", // NEW (E3d, R15): a warning badge on the model (its name and tooltip; a tap selects the item)
     covers: "This covers the {item}.", // NEW (E3d): the selected item lies over another one
     moveClear: "Move it clear", // NEW (E3d): the one-tap fix (moves it to the nearest free place, or makes it smaller)
+    coversNoRoom: "There is no free place for it here. Make it smaller or move it by hand.", // NEW (E3e): it covers another item and no fix exists, so the button is not offered
+    madeSmallerClear: "Made smaller so it no longer covers the {item}.", // NEW (E3e): the fix had to shrink the item instead of moving it
     needsALook: "Needs a look", // NEW: the warning badge's accessible name
     colourAction: "Colour", // NEW: the only action for the design's shapes
   },

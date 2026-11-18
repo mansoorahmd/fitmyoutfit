@@ -3,9 +3,9 @@ import { loadStandInJerseyProduct } from "../test/fixtures";
 import { createDesign } from "./create";
 import { addLayer } from "./edit";
 import { addCatalogFont } from "./font-catalog";
-import { bringForward, canDuplicate, centreLayer, duplicateLayer, nudgeLayer, rotateLayerBy, rotateLayerTo, scaleLayerBy, sendBack } from "./item-edits";
+import { DUPLICATE_OFFSET_MM, NUDGE_MM, bringForward, canDuplicate, centreLayer, duplicateLayer, duplicatePlace, nudgeLayer, stoppedByArea, rotateLayerBy, rotateLayerTo, scaleLayerBy, sendBack } from "./item-edits";
 import { newLogoLayer, newTextLayer } from "./new-layers";
-import { layerBounds, printAreaOf } from "./print-area";
+import { clampIntoArea, layerBounds, printAreaOf } from "./print-area";
 import { loadPlaceholderFonts } from "../test/fixtures";
 import type { DesignDocument } from "./schema";
 
@@ -75,7 +75,9 @@ describe("fine-tune and keyboard edits", () => {
     const k = copied.layers.findIndex((l) => l.id === "logo-1");
     expect(copied.layers[k + 1]!.id).toBe(id);
     const copy = get(copied, id);
-    expect(copy.position.x).toBeGreaterThan(get(d, "logo-1").position.x);
+    // Offset from the original (down and right, or to the side with more room when the right side is short of it).
+    expect(copy.position.x).not.toBe(get(d, "logo-1").position.x);
+    expect(copy.position.y).toBeGreaterThan(get(d, "logo-1").position.y);
     expect(copy.preset).toBeUndefined();
   });
 
@@ -89,5 +91,80 @@ describe("fine-tune and keyboard edits", () => {
     const forward = bringForward(d, bottom).layers.map((l) => l.id);
     expect(forward[1]).toBe(bottom);
     expect(sendBack(bringForward(d, bottom), bottom).layers.map((l) => l.id)).toEqual(ids);
+  });
+});
+
+describe("a duplicate can still be moved (E3e, QA 17 B3)", () => {
+  const back = printAreaOf(product.pieces.find((p) => p.id === "back")!);
+  /** A text nearly as wide as its print area (300 of 318 mm), turned up from the preset's place. */
+  function wide(x: number) {
+    const font = fonts.fonts.find((f) => f.uses.includes("text"))!;
+    let d = addCatalogFont(createDesign(product, { teamName: "TIGERS" }), fonts, font.id);
+    d = addLayer(d, { ...newTextLayer(product, { id: "text-1", pieceId: "back", value: "LAHORE LIONS FOR EVER", fontId: font.id, fill: d.teamColors.second }), size: { width: 300, height: 40 }, position: { x, y: 300 } }, opts);
+    return d;
+  }
+  const room = (d: DesignDocument, id: string) => {
+    const l = get(d, id);
+    const lo = clampIntoArea(back, l, { x: -1e6, y: -1e6 });
+    const hi = clampIntoArea(back, l, { x: 1e6, y: 1e6 });
+    return { left: l.position.x - lo.x, right: hi.x - l.position.x, up: l.position.y - lo.y, down: hi.y - l.position.y };
+  };
+
+  it("a text 300 mm wide: the copy keeps room to move to the right and to the left, and the old offset is kept where it fits", () => {
+    const d = wide(back.x + back.width / 2 - 3);
+    const original = room(d, "text-1");
+    expect(original.left).toBeGreaterThan(1);
+    expect(original.right).toBeGreaterThan(1);
+    const { design: copied, id } = duplicateLayer(d, "text-1", opts);
+    const copy = room(copied, id);
+    // Every direction the original could move, the copy can: at least one fine-tune step each way.
+    expect(copy.left).toBeGreaterThanOrEqual(NUDGE_MM - 1e-6);
+    expect(copy.right).toBeGreaterThanOrEqual(NUDGE_MM - 1e-6);
+    // The arrow moves it (the case QA found: it stood on the limit and the right arrow did nothing).
+    const right = get(nudgeLayer(copied, id, 1, 0, opts), id).position.x;
+    expect(right).toBeCloseTo(get(copied, id).position.x + 1, 6);
+    // Vertically there was plenty of room: the usual offset down.
+    expect(get(copied, id).position.y).toBeCloseTo(300 + DUPLICATE_OFFSET_MM, 6);
+  });
+
+  it("an offset towards the side with more room: near the right limit the copy goes left", () => {
+    const area = back;
+    const d = wide(area.x + area.width / 2 + 6);
+    const original = room(d, "text-1");
+    expect(original.right).toBeLessThan(DUPLICATE_OFFSET_MM + NUDGE_MM);
+    expect(original.left).toBeGreaterThan(original.right);
+    const { design: copied, id } = duplicateLayer(d, "text-1", opts);
+    expect(get(copied, id).position.x).toBeLessThan(get(d, "text-1").position.x);
+    const copy = room(copied, id);
+    expect(copy.left).toBeGreaterThanOrEqual(NUDGE_MM - 1e-6);
+    expect(copy.right).toBeGreaterThanOrEqual(NUDGE_MM - 1e-6);
+  });
+
+  it("where there is plenty of room the copy is 12 mm down and right, as before", () => {
+    const d = centreLayer(design(), "logo-1", opts);
+    const from = get(d, "logo-1").position;
+    expect(duplicatePlace(product, get(d, "logo-1"))).toEqual({ x: from.x + DUPLICATE_OFFSET_MM, y: from.y + DUPLICATE_OFFSET_MM });
+  });
+
+  it("an axis with no room at all stays where it is", () => {
+    const d = wide(back.x + back.width / 2);
+    const full = { ...get(d, "text-1"), size: { width: back.width, height: 40 } };
+    expect(duplicatePlace(product, full).x).toBeCloseTo(full.position.x, 6);
+  });
+});
+
+describe("a step the print area stops (E3e)", () => {
+  it("is told apart from one it lets through", () => {
+    const d = design();
+    const l = get(d, "logo-1");
+    const free = get(nudgeLayer(d, "logo-1", -2, 0, opts), "logo-1");
+    expect(stoppedByArea(l, free, -2, 0)).toBe(false);
+    const far = get(nudgeLayer(d, "logo-1", 500, 0, opts), "logo-1");
+    expect(stoppedByArea(l, far, 500, 0)).toBe(true);
+    // At the limit already: one more millimetre does nothing, and that is told.
+    const atLimit = nudgeLayer(d, "logo-1", 500, 0, opts);
+    const again = get(nudgeLayer(atLimit, "logo-1", 1, 0, opts), "logo-1");
+    expect(stoppedByArea(get(atLimit, "logo-1"), again, 1, 0)).toBe(true);
+    expect(stoppedByArea(get(atLimit, "logo-1"), get(nudgeLayer(atLimit, "logo-1", -1, 0, opts), "logo-1"), -1, 0)).toBe(false);
   });
 });

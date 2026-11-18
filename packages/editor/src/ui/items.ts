@@ -54,6 +54,16 @@ export function itemWords(
   };
 }
 
+/**
+ * The name at the top of the selected item's panel (E3e, QA 17). On the desktop panel the field right under it shows a
+ * text item's words, so the header names only the kind ("Team name"), not the kind and the words twice; a logo's
+ * file name has no field below it, so it stays.
+ */
+export function panelHeaderName(words: Pick<ItemWords, "kind" | "name">, layer: Pick<Layer, "kind" | "role">, variant: "panel" | "stage"): string {
+  const fieldBelow = variant === "panel" && layer.kind === "text" && (layer.role === "team-name" || layer.role === "text");
+  return fieldBelow ? words.kind : words.name;
+}
+
 /** The item's words by id, or null when the design has no such layer. */
 export function itemWordsById(wording: EditorWording, product: ProductDefinition, design: Pick<DesignDocument, "layers">, layerId: string, options?: { fileName?: (assetId: string) => string | null }): ItemWords | null {
   const layer = design.layers.find((l) => l.id === layerId);

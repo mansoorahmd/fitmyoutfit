@@ -38,7 +38,7 @@ import { EditorContext, type ColourTarget, type EditorApi, type EditorAssets, ty
 import { CARD_HEIGHT, CARD_WIDTH, DesignTool } from "./DesignTool.js";
 import { PlayersTool, TeamTool } from "./LetteringTools.js";
 import { LogosTool, TextTool } from "./LogosTool.js";
-import { LAYOUT_SIZES, START_CARD_STAGE_MIN, chooseLayout, panelHeights, saveStateWords, sheetUnderDone, stageInsets, viewControlsFor, type PanelDetent } from "./layout.js";
+import { LAYOUT_SIZES, START_CARD_STAGE_MIN, chooseLayout, panelGrowRoom, panelHeights, saveStateWords, sheetUnderDone, stageInsets, viewControlsFor, type PanelDetent } from "./layout.js";
 import { ConfirmDialog } from "./parts.js";
 import { Stage, type StageLoad } from "./Stage.js";
 import { StartCard } from "./StartCard.js";
@@ -54,7 +54,9 @@ import { KitButton, OnThisKit } from "./OnThisKit.js";
 import { DonePanel } from "./DonePanel.js";
 import { warningNames, type LogoNote } from "./checks.js";
 import { ClippedNote, ContextBar, FineTune, SelectedWarnings, keyEdit } from "./SelectedItem.js";
-import { nudgeLayer, rotateLayerBy, scaleLayerBy } from "../design/item-edits.js";
+import { nudgeLayer, rotateLayerBy, scaleLayerBy, stoppedByArea } from "../design/item-edits.js";
+import { printAreaLines } from "../design/snapping.js";
+import { shouldReportChange } from "./report.js";
 import { removeLayer } from "../design/edit.js";
 
 /** Places the host fills with its own components (06-editor.md 13.1, 9.1). */
@@ -196,7 +198,7 @@ export function colourChanges(before: DesignDocument, after: DesignDocument): st
 }
 
 /** The editor API's functions (E3d, speed): stable for the shell's life, each calling the latest one. */
-const HANDLER_KEYS = ["latestDesign", "commit", "begin", "preview", "end", "hoverPreview", "showSide", "focusOn", "announce", "chooseColourTarget", "useColour", "setTyping", "openTool", "select", "setLogoNote", "setSnapping", "markTiming", "setDetent"] as const;
+const HANDLER_KEYS = ["latestDesign", "commit", "begin", "preview", "end", "hoverPreview", "showSide", "focusOn", "announce", "chooseColourTarget", "useColour", "setTyping", "openTool", "select", "setLogoNote", "setSnapping", "markTiming", "setDetent", "nudge"] as const;
 type HandlerKey = (typeof HANDLER_KEYS)[number];
 type ApiHandlers = Required<Pick<EditorApi, HandlerKey>>;
 /** Stable functions that call the latest implementations given to `set` (set after every render of the shell). */
@@ -361,6 +363,29 @@ export function EditorShell(props: EditorShellProps) {
     },
     [history, announce, wording, product, palette, coachColoured],
   );
+  // E3e: a step (arrow key, fine-tune) that the print area stops shows the area's lines for a moment, as a drag does.
+  const limitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (limitTimer.current) clearTimeout(limitTimer.current);
+    },
+    [],
+  );
+  const nudge = useCallback(
+    (layerId: string, dx: number, dy: number) => {
+      const layer = designRef.current.layers.find((l) => l.id === layerId);
+      if (!layer) return;
+      const edit = (d: DesignDocument) => nudgeLayer(d, layerId, dx, dy, { product });
+      const moved = edit(designRef.current).layers.find((l) => l.id === layerId);
+      const stopped = Boolean(moved) && stoppedByArea(layer, moved!, dx, dy);
+      commit(edit, "move");
+      if (!stopped) return;
+      setGuides(printAreaLines(product, layer.pieceId).map((l) => ({ ...l, kind: "area" as const })));
+      if (limitTimer.current) clearTimeout(limitTimer.current);
+      limitTimer.current = setTimeout(() => setGuides([]), 1200);
+    },
+    [commit, product, setGuides],
+  );
   const preview = useCallback(
     (edit: (d: DesignDocument) => DesignDocument) => {
       try {
@@ -507,14 +532,14 @@ export function EditorShell(props: EditorShellProps) {
         event.preventDefault();
         if (step.kind === "delete") {
           if (commit((d) => removeLayer(d, selectedId), "remove-item")) setSelectedId(null);
-        } else if (step.kind === "nudge") commit((d) => nudgeLayer(d, selectedId, step.dx, step.dy, { product }), "move");
+        } else if (step.kind === "nudge") nudge(selectedId, step.dx, step.dy);
         else if (step.kind === "scale") commit((d) => scaleLayerBy(d, selectedId, step.factor, { product }), "resize");
         else commit((d) => rotateLayerBy(d, selectedId, step.degrees, { product }), "rotate");
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [undo, redo, selectedId, setSelectedId, panelOpen, layout, closePanel, commit, product, kitOpen]);
+  }, [undo, redo, selectedId, setSelectedId, panelOpen, layout, closePanel, commit, nudge, product, kitOpen]);
 
   // ---- The zone flash (4.3): white then ink, 600 ms, fading; a still outline for 1.5 s with reduced motion.
   const chooseColourTarget = useCallback(
@@ -648,12 +673,16 @@ export function EditorShell(props: EditorShellProps) {
     onDesignChange.current = props.onDesignChange;
   });
   const reported = useRef<{ design: DesignDocument | null; started: boolean }>({ design: null, started: !startCard });
+  const untouched = useRef(design);
   useEffect(() => {
     const started = !startCard;
     if (reported.current.design === design && reported.current.started === started) return;
     const first = reported.current.design === null;
+    const same = reported.current.design === design;
     reported.current = { design, started };
-    if (!first || started !== !props.showStartCard) onDesignChange.current?.(design, { started });
+    // E3e: the start card closing on a design nobody has changed (a tap on an item) is not a change to save: the
+    // line "Saved on this device" waits for a real change.
+    if (shouldReportChange({ first, sameDesign: same, isInitial: design === untouched.current, startedDiffers: started !== !props.showStartCard })) onDesignChange.current?.(design, { started });
   }, [design, startCard, props.showStartCard]);
   // Leaving after a failed save: the browser asks first (10.6).
   useEffect(() => {
@@ -720,6 +749,7 @@ export function EditorShell(props: EditorShellProps) {
   }, [design, camera.side, wording, product, palette, props.productName, description]);
 
   const heights = panelHeights(size.height || 844);
+  const growRoom = panelGrowRoom(size.height || 844);
   const editorWidth = size.width || 390;
   const stageWidth = layout === "wide" ? editorWidth - LAYOUT_SIZES.wide.rail - LAYOUT_SIZES.wide.panel : layout === "short" ? editorWidth - LAYOUT_SIZES.short.rail - (panelOpen || startCard ? LAYOUT_SIZES.short.panel : 0) : editorWidth;
   const baseInsets = stageInsets(layout, { open: panelOpen || startCard || (kitOpen && layout !== "wide"), height: panelSize.height, width: panelSize.width });
@@ -732,6 +762,7 @@ export function EditorShell(props: EditorShellProps) {
   // memoised, a tool re-renders when its own data changes.
   const impl: ApiHandlers = {
       setDetent,
+      nudge,
       latestDesign: () => designRef.current,
       commit,
       begin: (label) => history.begin(label),
@@ -956,6 +987,7 @@ export function EditorShell(props: EditorShellProps) {
       wording={wording}
       detent={detent}
       heights={heights}
+      growRoom={growRoom}
       typing={typing}
       onDetent={(d) => (d === "closed" ? setKitOpen(false) : setDetent(d))}
       onClose={() => setKitOpen(false)}
@@ -978,6 +1010,7 @@ export function EditorShell(props: EditorShellProps) {
         wording={wording}
         detent={detent}
         heights={heights}
+        growRoom={growRoom}
         typing={typing}
         onDetent={(d) => (d === "closed" ? closePanel() : setDetent(d))}
         onClose={closePanel}

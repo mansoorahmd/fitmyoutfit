@@ -427,6 +427,34 @@ export function itemFitDistance(corners: readonly { x: number; y: number }[], di
   return distance * Math.max(h / roomH, w / roomW);
 }
 
+/**
+ * An item that lies this much (as a factor of the free stage's half height or width, with 12 px of air) outside the
+ * free stage makes the camera come back; less than 5% is left alone (a pixel or two from perspective).
+ */
+export const ITEM_OVERFLOW_BACKOFF = 1.05;
+
+/**
+ * E3e: by what factor the camera must come back for the item itself to lie inside the free stage (`free`: its
+ * rectangle in canvas px, which leaves out the credit line, the contextual bar and the view buttons), with 12 px of
+ * air. 1 when it does. The box seen from further away shrinks towards the middle of the free stage in proportion.
+ * Only the item's own corners count: its handles may stand a little outside (the overlay clips them there); an item
+ * that is itself under the bar or off the stage is what this is for.
+ */
+export function itemOverflowFactor(corners: readonly { x: number; y: number }[], free: { x: number; y: number; width: number; height: number }): number {
+  const air = 12;
+  const cx = free.x + free.width / 2;
+  const cy = free.y + free.height / 2;
+  const up = Math.min(...corners.map((c) => c.y));
+  const down = Math.max(...corners.map((c) => c.y));
+  const left = Math.min(...corners.map((c) => c.x));
+  const right = Math.max(...corners.map((c) => c.x));
+  const halfH = free.height / 2 - air;
+  const halfW = free.width / 2 - air;
+  if (!(halfH > 0) || !(halfW > 0)) return 1;
+  const worst = Math.max((cy - up) / halfH, (down - cy) / halfH, (cx - left) / halfW, (right - cx) / halfW);
+  return Number.isFinite(worst) && worst > 1 ? worst : 1;
+}
+
 /** The longer side of an item's box on the screen (its edges' lengths, CSS px). */
 export function itemLongSide(corners: readonly { x: number; y: number }[]): number {
   let longest = 0;
@@ -619,7 +647,8 @@ function ModelView({
       return;
     }
     // R24: zooming in aims at the selected item. R22: a small item is zoomed in on once, when nothing is pressed.
-    rig.setItem(on.centreWorld);
+    // Not while the item is being dragged, resized or turned: the camera does not chase it (E3e; it moved every frame).
+    if (!gestureNow.current && pointersDown.current.size === 0) rig.setItem(on.centreWorld);
     // 4.6: the closest zoom keeps the item, its outset box and its handles inside the free stage.
     // The box grows as the camera nears the item; the rig's distances are to the point it turns round (nearer or
     // farther by the same amount), so the limit is moved by the difference.
@@ -635,6 +664,12 @@ function ModelView({
     if (zoomedFor.current !== layer.id && on.facing && !rig.animating && pointersDown.current.size === 0 && !gestureNow.current) {
       zoomedFor.current = layer.id;
       if (minPx) rig.zoomToItem(itemLongSide(on.corners), minPx, rig.distance() - toItem);
+    }
+    // E3e: the zoom the camera made on a small item left it outside the free stage (high on the garment, under the
+    // credit line or where the bar goes): back off (it stops by itself at the rest framing).
+    if (zoomedFor.current === layer.id && on.facing && !rig.animating && pointersDown.current.size === 0 && !gestureNow.current) {
+      const need = itemOverflowFactor(on.corners, framingNow.current.free);
+      if (need > ITEM_OVERFLOW_BACKOFF) rig.backOffFromItem(need);
     }
     // The lines (print area, guides) move only with the camera or when they change: projected again only then (S1).
     const linesKey = JSON.stringify([cam.matrixWorld.elements, cam.projectionMatrix.elements, g, vs.width, vs.height]);
