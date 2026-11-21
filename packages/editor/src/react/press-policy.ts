@@ -1,12 +1,12 @@
 /**
  * What a press on the model does (06-editor.md 5.1, N10 `dragOnlySelected`):
  *
- * - With a mouse or a pen, a press on an item selects it and drags it in one
- *   go (direct manipulation: a pointer is precise, and turning uses empty space).
- * - On touch, select first, then drag: a drag that starts on an item that is
- *   not selected turns the garment and leaves the item where it is (a thumb
- *   turning the shirt must not move the team name). A tap selects it; after
- *   that, a drag that starts on it moves it.
+ * - E3f: select first, then drag, for every pointer: a drag that starts on an
+ *   item that is not selected turns the garment and leaves the item where it
+ *   is (a thumb or a mouse turning the shirt must not move the team name). A
+ *   tap or click selects it; after that, a drag that starts on it moves it.
+ *   (Before E3f a mouse pressed and dragged an unselected item in one go; that
+ *   is still `dragOnlySelected: "touch"`, or `false` for every pointer.)
  * - A press anywhere else turns the garment; if it is a tap (no movement), it
  *   selects what is under it, or nothing (a tap on empty fabric or the stage
  *   deselects). In the Colours tool a tap chooses the zone instead.
@@ -22,7 +22,7 @@ export interface PressInput {
   /** The item under the press, or null. */
   hitLayerId: string | null;
   selectedId: string | null;
-  /** Default "touch": only touch selects first. */
+  /** Default true (E3f): every pointer selects first; "touch": only touch does. */
   dragOnlySelected?: DragOnlySelected;
   /** Taps choose zones (the Colours tool): items are neither dragged nor selected by a press. */
   pickZones?: boolean;
@@ -36,7 +36,7 @@ export type PressAction =
   /** Leave the press to the camera (it turns the garment); a tap selects `tapSelects` (null: deselect). */
   | { kind: "turn"; tapSelects: string | null };
 
-export function selectsFirst(pointerType: string, policy: DragOnlySelected = "touch"): boolean {
+export function selectsFirst(pointerType: string, policy: DragOnlySelected = true): boolean {
   return policy === true || (policy === "touch" && pointerType === "touch");
 }
 

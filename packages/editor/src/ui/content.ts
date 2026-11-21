@@ -242,8 +242,8 @@ export const EDITOR_WORDING = {
     degrees: "{degrees}°", // NEW: desktop only, secondary text
     snap: "Snap to guides", // NEW: snapping on or off (touch has no Alt key)
     keys: "Arrows move it, Shift for bigger steps. [ and ] resize, with Shift they turn. Delete removes it. Esc lets go.", // NEW: keyboard help in fine-tune (desktop)
-    hint: "Drag to turn. Tap something to change it.", // W-ED116
-    hintPointer: "Drag to turn. Click something to change it.", // W-ED116
+    hint: "Drag to turn. Two fingers slide. Tap a part.", // W-ED116, CHANGED (E3f)
+    hintPointer: "Drag to turn. Right-drag to slide. Click a part.", // W-ED116, CHANGED (E3f)
     onThisKit: "On this kit", // W-ED130
     onThisKitCount: "On this kit ({count})", // W-ED130 with the count
     onThisKitName: "On this kit, {count} items", // NEW: the button's accessible name (4.8)

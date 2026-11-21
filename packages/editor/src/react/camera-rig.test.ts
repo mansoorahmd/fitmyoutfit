@@ -40,7 +40,7 @@ describe("the camera rig (N7)", () => {
     const { orbit, infos, camera } = setup();
     expect(Math.abs(orbit().azimuth)).toBeLessThan(1e-9);
     expect(orbit().distance).toBeCloseTo(frameInFreeArea(SIZE, 35, { width: 360, height: 520 }).fit, 6);
-    expect(infos.at(-1)).toEqual({ side: "front", canZoomIn: true, canZoomOut: true });
+    expect(infos.at(-1)).toEqual({ side: "front", canZoomIn: true, canZoomOut: true, panned: false });
     expect(camera.view?.enabled ?? false).toBe(false);
   });
 

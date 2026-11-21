@@ -260,7 +260,7 @@ export function EditorShell(props: EditorShellProps) {
   const [typing, setTypingState] = useState(false);
   const [status, setStatus] = useState<{ text: string; undo: boolean } | null>(null);
   const statusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [camera, setCamera] = useState<CameraInfo>({ side: "front", canZoomIn: true, canZoomOut: true });
+  const [camera, setCamera] = useState<CameraInfo>({ side: "front", canZoomIn: true, canZoomOut: true, panned: false });
   const pointer = useRef<{ down: boolean; lastUserTurnAt: number | null }>({ down: false, lastUserTurnAt: null });
   // No WebGL 2: the flat view, with its banner (10.3). Checked once, when the editor first renders.
   const [mode, setMode] = useState<"3d" | "flat">(() => (props.flatView || (typeof document !== "undefined" && !hasWebGL2()) ? "flat" : "3d"));
@@ -1129,7 +1129,7 @@ export function EditorShell(props: EditorShellProps) {
               // R22, 4.6: a selected item is zoomed in on until its box is this long on screen.
               selectionMinPx: layout === "wide" ? 160 : 120,
               onSelectLayer: selectOnModel,
-              dragOnlySelected: "touch",
+              dragOnlySelected: true,
               outlineSelected: false,
               guides,
               gesture: placing !== null,

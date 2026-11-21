@@ -11,9 +11,15 @@ describe("the drag policy (06-editor.md 5.1, N10 dragOnlySelected)", () => {
     expect(pressAction({ pointerType: "touch", hitLayerId: "team-name", selectedId: "team-name" })).toEqual({ kind: "drag", layerId: "team-name" });
   });
 
-  it("mouse and pen: press and drag an item in one go (direct)", () => {
-    expect(pressAction({ pointerType: "mouse", hitLayerId: "team-name", selectedId: null })).toEqual({ kind: "drag", layerId: "team-name" });
-    expect(pressAction({ pointerType: "pen", hitLayerId: "logo", selectedId: "team-name" })).toEqual({ kind: "drag", layerId: "logo" });
+  it("E3f: mouse and pen too: a drag that starts on an unselected item turns the garment; a click selects it", () => {
+    expect(pressAction({ pointerType: "mouse", hitLayerId: "team-name", selectedId: null })).toEqual({ kind: "turn", tapSelects: "team-name" });
+    expect(pressAction({ pointerType: "pen", hitLayerId: "logo", selectedId: "team-name" })).toEqual({ kind: "turn", tapSelects: "logo" });
+    // Once selected, a drag that starts on it moves it, with a mouse as on touch.
+    expect(pressAction({ pointerType: "mouse", hitLayerId: "team-name", selectedId: "team-name" })).toEqual({ kind: "drag", layerId: "team-name" });
+  });
+
+  it("the earlier mouse rule (press and drag at once) is still there for a host that asks for it", () => {
+    expect(pressAction({ pointerType: "mouse", hitLayerId: "team-name", selectedId: null, dragOnlySelected: "touch" })).toEqual({ kind: "drag", layerId: "team-name" });
   });
 
   it("a press on empty fabric or the stage turns the garment, and a tap there deselects", () => {
@@ -29,7 +35,8 @@ describe("the drag policy (06-editor.md 5.1, N10 dragOnlySelected)", () => {
     expect(selectsFirst("mouse", true)).toBe(true);
     expect(selectsFirst("touch", false)).toBe(false);
     expect(selectsFirst("touch")).toBe(true);
-    expect(selectsFirst("mouse")).toBe(false);
+    expect(selectsFirst("mouse")).toBe(true);
+    expect(selectsFirst("mouse", "touch")).toBe(false);
     expect(pressAction({ pointerType: "mouse", hitLayerId: "a", selectedId: null, dragOnlySelected: true })).toEqual({ kind: "turn", tapSelects: "a" });
     expect(pressAction({ pointerType: "touch", hitLayerId: "a", selectedId: null, dragOnlySelected: false })).toEqual({ kind: "drag", layerId: "a" });
     expect(pressAction({ pointerType: "mouse", hitLayerId: "a", selectedId: "a", canDrag: false })).toEqual({ kind: "turn", tapSelects: "a" });

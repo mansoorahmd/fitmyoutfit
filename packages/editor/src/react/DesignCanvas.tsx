@@ -112,6 +112,8 @@ export interface CameraInfo {
   side: CameraSide | null;
   canZoomIn: boolean;
   canZoomOut: boolean;
+  /** E3f: the view is slid. */
+  panned: boolean;
 }
 
 /** A tap on the model while zones are picked (N8): the piece, and the zone or group of shapes under the finger. */
@@ -176,10 +178,9 @@ export interface DesignCanvasProps {
   /** Called with a layer's id when the customer taps (or, with a mouse, presses) it on the model; null for a tap on empty fabric or the stage. */
   onSelectLayer?: (layerId: string | null) => void;
   /**
-   * Who may drag an item that is not selected (N10): "touch" (default) means on
-   * touch a drag that starts on an unselected item turns the garment, and a tap
-   * selects it first; with a mouse, a press selects and drags at once. true:
-   * select first for every pointer; false: direct drag for every pointer.
+   * Who may drag an item that is not selected (N10). true (default, E3f): nobody; a drag that starts on an
+   * unselected item turns the garment for every pointer, and a click or tap selects it first. "touch": only touch
+   * does so, a mouse presses and drags at once. false: direct drag for every pointer.
    */
   dragOnlySelected?: DragOnlySelected;
   /** Draw the selected layer's outline into the texture (default true). An interface that draws handles over the canvas passes false. */
@@ -466,6 +467,19 @@ export function itemLongSide(corners: readonly { x: number; y: number }[]): numb
   return longest;
 }
 
+/** E3f: the middle of the fingers that are down (where a two-finger slide is measured). */
+export function slideCentre(points: Iterable<{ x: number; y: number }>): { x: number; y: number } {
+  let x = 0;
+  let y = 0;
+  let n = 0;
+  for (const p of points) {
+    x += p.x;
+    y += p.y;
+    n++;
+  }
+  return n > 0 ? { x: x / n, y: y / n } : { x: 0, y: 0 };
+}
+
 /** The latest value, for event handlers that must not be re-attached on every render. */
 function useLatest<T>(value: T) {
   const ref = useRef(value);
@@ -489,7 +503,7 @@ function ModelView({
   selectedLayerId,
   onSelectLayer,
   onLayerDrag,
-  dragOnlySelected = "touch",
+  dragOnlySelected = true,
   outlineSelected = true,
   onSelectionGeometry,
   onItemBoxes,
@@ -862,6 +876,32 @@ function ModelView({
     const meshes = [...prepared.pieceMeshes.keys()];
     const down = pointersDown.current;
     down.clear();
+    // E3f: sliding the view: the right button or Shift + drag (a mouse), or two fingers dragged together (touch).
+    const fingers = new Map<number, { x: number; y: number }>();
+    let slide: { mouse: number | null; x: number; y: number } | null = null;
+    const onSlideMove = (event: PointerEvent) => {
+      if (!slide) return;
+      if (slide.mouse === event.pointerId) {
+        rig.panBy(event.clientX - slide.x, event.clientY - slide.y);
+        slide.x = event.clientX;
+        slide.y = event.clientY;
+        return;
+      }
+      const finger = fingers.get(event.pointerId);
+      if (!finger || slide.mouse !== null || fingers.size !== 2) return;
+      finger.x = event.clientX;
+      finger.y = event.clientY;
+      const c = slideCentre(fingers.values());
+      rig.panBy(c.x - slide.x, c.y - slide.y);
+      slide.x = c.x;
+      slide.y = c.y;
+    };
+    const stopSlide = () => {
+      slide = null;
+      window.removeEventListener("pointermove", onSlideMove);
+      canvas.style.cursor = "";
+    };
+    const onContextMenu = (event: Event) => event.target === canvas && event.preventDefault();
     let drag: {
       pointerId: number;
       state: LayerDrag;
@@ -984,6 +1024,8 @@ function ModelView({
 
     const finish = (event: PointerEvent, phase: "end" | "cancel") => {
       down.delete(event.pointerId);
+      fingers.delete(event.pointerId);
+      if (slide && (slide.mouse === event.pointerId || (slide.mouse === null && fingers.size < 2))) stopSlide();
       // Anything waiting for the pointer to lift (R22's zoom on a small item) gets a frame.
       if (down.size === 0) invalidate();
       if (tap && event.pointerId === tap.pointerId) {
@@ -1025,6 +1067,14 @@ function ModelView({
     const onDown = (event: PointerEvent) => {
       const busy = down.size > 0;
       down.add(event.pointerId);
+      if (event.pointerType === "touch") {
+        fingers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+        if (fingers.size === 2) {
+          const c = slideCentre(fingers.values());
+          slide = { mouse: null, x: c.x, y: c.y };
+          window.addEventListener("pointermove", onSlideMove);
+        }
+      }
       const { design: current, onSelectLayer: select, onLayerDrag: dragHandler, touchSlopMm: slop, pickZones: zones } = latest.current;
       if (drag) {
         // A second finger during a drag ends the drag (cancelled: the item goes back; two fingers move the
@@ -1045,9 +1095,18 @@ function ModelView({
         tap = null; // two fingers: a pinch, not a tap
         return;
       }
-      if (event.button !== 0) return;
       // Presses on the handles drawn over the canvas are theirs, not the model's.
       if (event.target !== canvas) return;
+      if (event.pointerType !== "touch" && (event.button === 2 || (event.button === 0 && event.shiftKey))) {
+        // E3f: slide the view; the orbit controls (turning) never see this press, nor does an item.
+        event.stopPropagation();
+        event.preventDefault();
+        slide = { mouse: event.pointerId, x: event.clientX, y: event.clientY };
+        canvas.style.cursor = "move";
+        window.addEventListener("pointermove", onSlideMove);
+        return;
+      }
+      if (event.button !== 0) return;
       const hit = zones ? null : hitAt(event);
       const under = hit ? layerAtPoint(current, hit.piece.id, hit.point, slop) : null;
       const action = pressAction({
@@ -1097,6 +1156,7 @@ function ModelView({
     };
     host.addEventListener("wheel", onWheel, { capture: true, passive: true });
     host.addEventListener("pointerdown", onDown, { capture: true });
+    host.addEventListener("contextmenu", onContextMenu);
     window.addEventListener("pointerup", onUp, { capture: true });
     window.addEventListener("pointercancel", onCancel, { capture: true });
     return () => {
@@ -1104,6 +1164,8 @@ function ModelView({
       if (bvhIdle !== null) (globalThis as { cancelIdleCallback?: (id: number) => void }).cancelIdleCallback?.(bvhIdle);
       host.removeEventListener("wheel", onWheel, { capture: true });
       host.removeEventListener("pointerdown", onDown, { capture: true });
+      host.removeEventListener("contextmenu", onContextMenu);
+      stopSlide();
       window.removeEventListener("pointerup", onUp, { capture: true });
       window.removeEventListener("pointercancel", onCancel, { capture: true });
       window.removeEventListener("pointermove", onMove);
