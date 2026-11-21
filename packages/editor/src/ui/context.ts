@@ -76,6 +76,9 @@ export interface EditorApi {
   /** The Colours tool's chosen zone or shapes, and choosing one (with the flash on the model). */
   colourTarget: ColourTarget;
   chooseColourTarget(target: ColourTarget, flash?: boolean): void;
+  /** E3f: the part tapped on the model (its row in the Colours tool is marked, and the part on the model); null: none. */
+  markedPart?: ColourTarget | null;
+  markPart?(target: ColourTarget | null): void;
   /** Recently used palette colour ids, newest first. */
   recentColours: string[];
   useColour(colourId: string): void;

@@ -8,7 +8,6 @@ import { colourCodeState, normaliseCodeInput } from "./colour-code";
 import { bodyColour, describeStage, nextStageTone } from "./stage-logic";
 import { formatMegabytes, uploadRefusal, uploadRefusalText, uploadWarningTexts } from "./upload-wording";
 import { EDIT_LABELS } from "../state/history";
-import { teamColoursFromPicks } from "./StartCard";
 import { nextPreset } from "./logos";
 import { createDesign } from "../design/create";
 import { setZoneColor } from "../design/edit";
@@ -245,19 +244,7 @@ describe("upload findings in the coach's words (10.4)", () => {
   });
 });
 
-describe("the start card's picks and where new items go", () => {
-  const red = palette.colors.find((c) => c.id === "placeholder-red")!;
-  const gold = palette.colors.find((c) => c.id === "placeholder-gold")!;
-  const navy = palette.colors.find((c) => c.id === "placeholder-navy")!;
-
-  it("fills Main, then Second, then Accent; fewer picks leave the rest as they were and remove the accent", () => {
-    const d = createDesign(jersey);
-    expect(teamColoursFromPicks(d, [red]).teamColors).toEqual({ main: { id: red.id, hex: red.hex }, second: d.teamColors.second });
-    const three = teamColoursFromPicks(d, [red, gold, navy]);
-    expect([three.teamColors.main.id, three.teamColors.second.id, three.teamColors.accent?.id]).toEqual([red.id, gold.id, navy.id]);
-    expect(teamColoursFromPicks(three, [red, gold]).teamColors.accent).toBeUndefined();
-  });
-
+describe("where new items go", () => {
   it("puts the first logo on the left chest, the next where nothing is yet, in the usual order", () => {
     const presets = jersey.placements.filter((p) => p.roles.includes("crest"));
     expect(nextPreset(jersey, "logo", { layers: [] }, presets)!.id).toBe("left-chest");

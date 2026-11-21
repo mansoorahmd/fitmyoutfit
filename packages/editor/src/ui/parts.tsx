@@ -22,6 +22,7 @@ export function Swatch({
   onPreview,
   testId,
   badge,
+  disabled,
 }: {
   hex: string;
   /** The accessible name ("Navy" or "Navy, selected"). */
@@ -33,6 +34,8 @@ export function Swatch({
   testId?: string;
   /** A small mark on the swatch's top end corner (the start card's pick order, "1", "2", "3"); the label says it in words. */
   badge?: string;
+  /** E3f: a colour another row has already (dimmed, not pickable; its name says which). */
+  disabled?: boolean;
 }) {
   return (
     <button
@@ -42,6 +45,7 @@ export function Swatch({
       aria-pressed={selected}
       aria-label={label}
       title={label}
+      disabled={disabled}
       data-testid={testId}
       onClick={onPick}
       onPointerEnter={(e) => e.pointerType === "mouse" && onPreview?.(true)}
