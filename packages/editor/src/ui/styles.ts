@@ -436,6 +436,13 @@ export const EDITOR_CSS = /* css */ `
 .fmo-colour-row[data-active="true"] .fmo-row-head { text-decoration: underline; text-decoration-thickness: 3px; text-underline-offset: 4px; }
 .fmo-colour-row > .fmo-scroll-row + .fmo-family, .fmo-colour-row > .fmo-scroll-row + .fmo-section { margin-top: 12px; }
 .fmo-swatch:disabled { opacity: 0.3; cursor: not-allowed; }
+/* E3f: hover on the model: an item's outline, a part's label by the pointer, and the popover with a part's colours. */
+.fmo-hover-box { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; z-index: 1; }
+.fmo-hover-halo { fill: rgb(255 255 255 / 0.1); stroke: #fff; stroke-width: 4px; stroke-linejoin: round; }
+.fmo-hover-line { fill: none; stroke: var(--fmo-ink); stroke-width: 1.5px; stroke-linejoin: round; }
+.fmo-hover-label { position: absolute; left: 0; top: 0; z-index: 2; display: block; padding: 4px 8px; border: 1px solid var(--fmo-float-line); border-radius: var(--fmo-radius-card); background: var(--fmo-float-fill); box-shadow: var(--fmo-float-shadow); font: var(--fmo-type-small); color: var(--fmo-ink); pointer-events: none; white-space: nowrap; }
+.fmo-part-popover { position: absolute; z-index: 3; box-sizing: border-box; width: 304px; max-width: calc(100% - 16px); max-height: calc(100% - 16px); overflow-y: auto; padding: 12px; border: 1px solid var(--fmo-float-line); border-radius: var(--fmo-radius-card); background: var(--fmo-surface); box-shadow: 0 4px 16px rgb(11 21 48 / 0.18); }
+.fmo-part-popover .fmo-scroll-row { flex-wrap: wrap; overflow: visible; padding: 0; margin-inline: 0; -webkit-mask-image: none; mask-image: none; }
 .fmo-family > .fmo-label, .fmo-family > .fmo-group-label { display: block; margin: 0 0 8px; }
 .fmo-start-skip { text-align: center; }
 /* R5: while the start card is open on a phone only Reset stays over the small stage. */

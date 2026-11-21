@@ -22,7 +22,7 @@ import { createItemGestures, forwardGestures, type GestureEndReason, type Gestur
 import { layerSide } from "../design/roles.js";
 import { sameJson, type EditLabel } from "../state/history.js";
 import { useDesignHistory } from "../react/useDesignHistory.js";
-import type { CameraInfo, DesignCanvasHandle, LayerDragEvent, PieceGuide, TextureDrawInfo, ZoneTap } from "../react/DesignCanvas.js";
+import type { CameraInfo, CanvasHover, DesignCanvasHandle, LayerDragEvent, PieceGuide, TextureDrawInfo, ZoneTap } from "../react/DesignCanvas.js";
 import type { GestureTiming } from "../react/draft-quality.js";
 import { mayMoveCamera } from "../react/camera.js";
 import { extractGarmentMeshes } from "../react/garment-geometry.js";
@@ -32,7 +32,8 @@ import { renderGarmentView, type GarmentMesh, type GarmentView } from "../textur
 import type { TextFit } from "../texture/layers.js";
 import type { ZoneHighlight } from "../texture/zone-highlight.js";
 import type { SaveState } from "../storage/device-store.js";
-import { ColoursTool } from "./ColoursTool.js";
+import { ColoursTool, partName } from "./ColoursTool.js";
+import { PartPopover } from "./PartPopover.js";
 import { changeWords, fill, mergeWording, type WordingOverrides } from "./content.js";
 import { EditorContext, type ColourTarget, type EditorApi, type EditorAssets, type ToolId } from "./context.js";
 import { CARD_HEIGHT, CARD_WIDTH, DesignTool } from "./DesignTool.js";
@@ -48,7 +49,7 @@ import { TOOL_ORDER, ToolPanel, ToolTabs } from "./ToolPanel.js";
 import { TopBar } from "./TopBar.js";
 import { hasWebGL2, readLocal, writeLocal } from "./webgl.js";
 import { markBody, markRow, refreshFinish } from "./finish.js";
-import { HINT_MS, hintEnds, hintShows, modelTapAction, toolForLayer } from "./selection.js";
+import { HINT_MS, hintEnds, hintShows, modelTapAction, partTapAction, toolForLayer } from "./selection.js";
 import { namedLabel } from "./items.js";
 import { KitButton, OnThisKit } from "./OnThisKit.js";
 import { DonePanel } from "./DonePanel.js";
@@ -198,7 +199,7 @@ export function colourChanges(before: DesignDocument, after: DesignDocument): st
 }
 
 /** The editor API's functions (E3d, speed): stable for the shell's life, each calling the latest one. */
-const HANDLER_KEYS = ["latestDesign", "commit", "begin", "preview", "end", "hoverPreview", "showSide", "focusOn", "announce", "chooseColourTarget", "useColour", "setTyping", "openTool", "select", "setLogoNote", "setSnapping", "markTiming", "setDetent", "nudge"] as const;
+const HANDLER_KEYS = ["latestDesign", "commit", "begin", "preview", "end", "hoverPreview", "showSide", "focusOn", "announce", "chooseColourTarget", "markPart", "useColour", "setTyping", "openTool", "select", "setLogoNote", "setSnapping", "markTiming", "setDetent", "nudge"] as const;
 type HandlerKey = (typeof HANDLER_KEYS)[number];
 type ApiHandlers = Required<Pick<EditorApi, HandlerKey>>;
 /** Stable functions that call the latest implementations given to `set` (set after every render of the shell). */
@@ -277,6 +278,12 @@ export function EditorShell(props: EditorShellProps) {
   const bodyZone = product.pieces.find((p) => p.id === product.views.front)?.zone ?? product.zones[0]!.id;
   const [colourTarget, setColourTarget] = useState<ColourTarget>({ kind: "zone", id: bodyZone });
   const [highlight, setHighlight] = useState<ZoneHighlight | null>(null);
+  // E3f: the part tapped on the model (its row in the Colours tool is marked, and so is the part on the model), what
+  // the mouse is over, and the popover with a part's colours (desktop).
+  const [markedPart, setMarkedPart] = useState<ColourTarget | null>(null);
+  const [hovered, setHovered] = useState<CanvasHover | null>(null);
+  const [partMenu, setPartMenu] = useState<{ target: ColourTarget; x: number; y: number } | null>(null);
+  const markedHighlight = useMemo<ZoneHighlight | null>(() => (markedPart ? { ...(markedPart.kind === "zone" ? { zoneId: markedPart.id } : { shapeGroup: markedPart.id }), alpha: 0.5 } : null), [markedPart]);
   const flashTimers = useRef<Array<ReturnType<typeof setTimeout>>>([]);
   const [recentColours, setRecentColours] = useState<string[]>(() => {
     try {
@@ -462,6 +469,8 @@ export function EditorShell(props: EditorShellProps) {
       return;
     }
     gestures.finish("tool-change");
+    setMarkedPart(null);
+    setPartMenu(null);
     // A tool the selected item does not belong to: the item is let go (E3c minor), so no handles or
     // "Turn to edit" stay over another tool's view.
     if (selectedId && keepsSelection(designRef.current, selectedId, next) === false) setSelectedId(null);
@@ -478,6 +487,7 @@ export function EditorShell(props: EditorShellProps) {
     openTool(next, detent === "expanded" ? "expanded" : "normal");
   };
   const closePanel = useCallback(() => {
+    setMarkedPart(null);
     if (layout !== "wide") setTool(null);
     setDetent("normal");
   }, [layout]);
@@ -523,7 +533,8 @@ export function EditorShell(props: EditorShellProps) {
         event.preventDefault();
         redo();
       } else if (event.key === "Escape" && !typingInField) {
-        if (kitOpen) setKitOpen(false);
+        if (partMenu) setPartMenu(null);
+        else if (kitOpen) setKitOpen(false);
         else if (selectedId) setSelectedId(null);
         else if (panelOpen && layout !== "wide") closePanel();
       } else if (selectedId && !typingInField && !mod && (target === document.body || target?.closest?.(".fmo-stage, .fmo-context"))) {
@@ -539,7 +550,7 @@ export function EditorShell(props: EditorShellProps) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [undo, redo, selectedId, setSelectedId, panelOpen, layout, closePanel, commit, nudge, product, kitOpen]);
+  }, [undo, redo, selectedId, setSelectedId, panelOpen, layout, closePanel, commit, nudge, product, kitOpen, partMenu]);
 
   // ---- The zone flash (4.3): white then ink, 600 ms, fading; a still outline for 1.5 s with reduced motion.
   const chooseColourTarget = useCallback(
@@ -558,12 +569,22 @@ export function EditorShell(props: EditorShellProps) {
     },
     [reducedMotion],
   );
-  const onZoneTap = useCallback(
-    (tap: ZoneTap) => {
-      if (tap.shapeGroup) chooseColourTarget({ kind: "shapes", id: tap.shapeGroup });
-      else if (tap.zoneId) chooseColourTarget({ kind: "zone", id: tap.zoneId });
+  // E3f: a tap or click on a part of the garment, from any tool. Desktop: its colour row opens by the click (a
+  // popover). A phone: the Colours tool opens on that part's row, the part marked on the model. A tap on the stage lets go.
+  const onPartTap = useCallback(
+    (tap: ZoneTap | null) => {
+      setPartMenu(null);
+      setMarkedPart(null);
+      const action = tap ? partTapAction({ zoneId: tap.zoneId, shapeGroup: tap.shapeGroup, layout, startCard, doneOpen, typing }) : null;
+      if (!tap || !action) return;
+      setColourTarget(action.target);
+      if (action.open === "popover") setPartMenu({ target: action.target, x: tap.x ?? 0, y: tap.y ?? 0 });
+      else {
+        setMarkedPart(action.target);
+        openTool("colours", detent === "expanded" ? "expanded" : "normal", { turn: false });
+      }
     },
-    [chooseColourTarget],
+    [startCard, doneOpen, typing, layout, openTool, detent],
   );
 
   // ---- Typing (3.3): on a phone the dock hides, the panel shrinks to the field, the camera frames the item.
@@ -779,6 +800,7 @@ export function EditorShell(props: EditorShellProps) {
       focusOn,
       announce,
       chooseColourTarget,
+      markPart: setMarkedPart,
       useColour: (id) =>
         setRecentColours((list) => {
           const next = [id, ...list.filter((x) => x !== id)].slice(0, 8);
@@ -833,6 +855,7 @@ export function EditorShell(props: EditorShellProps) {
       fontsFailed,
       garmentView,
       colourTarget,
+      markedPart,
       recentColours,
       reducedMotion,
       selectedId,
@@ -842,7 +865,7 @@ export function EditorShell(props: EditorShellProps) {
       coachColoured,
       readable,
     }),
-    [handlers, product, palette, fonts, templates, wording, assets, layout, detent, apiDesign, textFits, fontsLoading, fontsFailed, garmentView, colourTarget, recentColours, reducedMotion, selectedId, logoNotes, missingAssets, snapOn, coachColoured, readable],
+    [handlers, product, palette, fonts, templates, wording, assets, layout, detent, apiDesign, textFits, fontsLoading, fontsFailed, garmentView, colourTarget, markedPart, recentColours, reducedMotion, selectedId, logoNotes, missingAssets, snapOn, coachColoured, readable],
   );
 
   const selectOnModel = useCallback(
@@ -1140,9 +1163,10 @@ export function EditorShell(props: EditorShellProps) {
                 if (logTimings) console.info(`[editor timing] ${named.name}: ${t.frames} frames, frame p50 ${t.frameP50.toFixed(1)} ms, p95 ${t.frameP95.toFixed(1)} ms, max ${t.frameMax.toFixed(1)} ms; drawing p50 ${t.drawP50.toFixed(1)} ms; draft ${t.draft ? "on" : "off"}; full quality ${(t.fullQualityMs ?? 0).toFixed(1)} ms after release`);
               },
               onLayerDrag,
-              pickZones: activeTool === "colours" && !startCard,
-              onZoneTap,
-              highlight,
+              onZoneTap: onPartTap,
+              hover: true,
+              onHover: setHovered,
+              highlight: highlight ?? markedHighlight,
               onCameraChange: setCamera,
               onUserTurn: (phase, moved) => {
                 if (phase === "end" && moved) pointer.current.lastUserTurnAt = performance.now();
@@ -1195,6 +1219,9 @@ export function EditorShell(props: EditorShellProps) {
             contextBar={Boolean(selectedLayer) && layout !== "wide" && !typing && mode === "3d" && !doneOpen}
             warnings={warnings}
             onSelectItem={(layerId) => api.select(layerId, { openTool: true })}
+            hover={hovered}
+            hoverName={hovered?.kind === "part" ? partName(wording, product, hovered.shapeGroup ? { kind: "shapes", id: hovered.shapeGroup } : { kind: "zone", id: hovered.zoneId ?? "" }) : null}
+            partPopover={partMenu ? <PartPopover key={`${partMenu.target.kind}-${partMenu.target.id}-${partMenu.x}-${partMenu.y}`} target={partMenu.target} x={partMenu.x} y={partMenu.y} onClose={() => setPartMenu(null)} /> : null}
             kitButton={
               startCard || doneOpen || (Boolean(selectedLayer) && layout !== "wide" && !typing && mode === "3d") || (layout === "compact" && typing) ? null : (
                 <KitButton count={design.layers.length} compact={(size.width || 390) < 480} open={kitOpen} onClick={() => setKitOpen((o) => !o)} />

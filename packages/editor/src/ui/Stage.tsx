@@ -6,9 +6,10 @@
  * area above (or beside) the panel by the canvas itself (`viewInsets`).
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
-import { DesignCanvas, type CameraInfo, type DesignCanvasHandle, type DesignCanvasProps, type ItemBox, type SelectionGeometry } from "../react/DesignCanvas.js";
+import { DesignCanvas, type CameraInfo, type CanvasHover, type DesignCanvasHandle, type DesignCanvasProps, type ItemBox, type SelectionGeometry } from "../react/DesignCanvas.js";
 import { createBus } from "./handles.js";
 import { SelectionOverlay } from "./SelectionOverlay.js";
+import { HoverMarks } from "./HoverMarks.js";
 import type { GestureEndReason, GesturePhase } from "./item-gestures.js";
 import { StageContextBar } from "./SelectedItem.js";
 import { CONTEXT_BAR_HEIGHT } from "./selection.js";
@@ -102,6 +103,11 @@ export interface StageProps {
   /** "On this kit" (4.8): its button at the top right of the stage, and (desktop) its popover under it. */
   kitButton?: ReactNode;
   kitPopover?: ReactNode;
+  /** E3f: what the mouse is over on the model (an item's outline, a part's label), and the name of the part. */
+  hover?: CanvasHover | null;
+  hoverName?: string | null;
+  /** E3f: the popover with a part's colours, by the click on it (desktop). */
+  partPopover?: ReactNode;
 }
 
 export function Stage({ canvasRef, ...props }: StageProps) {
@@ -186,6 +192,8 @@ export function Stage({ canvasRef, ...props }: StageProps) {
             clip={clip}
             controls={kitBox ? [kitBox] : undefined}
           />
+          <HoverMarks hover={props.hover ?? null} name={props.hoverName ?? null} />
+          {props.partPopover}
           {props.contextBar && <StageContextBar bus={bus} top={barTop} bottomInset={canvasInsets.bottom} endInset={insets.right} />}
         </div>
       ) : (

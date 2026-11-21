@@ -48,6 +48,16 @@ export function pressAction(input: PressInput): PressAction {
   return { kind: "turn", tapSelects: hitLayerId };
 }
 
+/**
+ * What a tap (a press that did not move) does once it is over (E3f): it selects the item it was on (or nothing),
+ * and, where it was on no item, reports the part of the garment under it (from any tool, not only the Colours
+ * tool's `pickZones`) or, on the stage, that nothing was under it (a popover or a marked part lets go).
+ */
+export function tapOutcome(input: { pickZones: boolean; selects: string | null; onFabric: boolean }): { select: string | null; part: "part" | "stage" | null } {
+  const select = input.pickZones ? null : input.selects;
+  return { select, part: input.pickZones || input.selects === null ? (input.onFabric ? "part" : "stage") : null };
+}
+
 /** How far a press may move (CSS px) and how long it may last (ms) and still be a tap. */
 export const TAP_SLOP_PX = 8;
 export const TAP_MAX_MS = 700;

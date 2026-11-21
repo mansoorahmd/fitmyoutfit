@@ -11,7 +11,7 @@ import { TEAM_COLOUR_ROLES, type ColorValue, type DesignDocument, type ProductDe
 import { setShapeGroupColor, setZoneTeamColor, swapTeamColors, teamColourValue } from "../design/team-colours.js";
 import { AllChip, ColourRow, FamilySwatches, TeamColourRows } from "./ColourRows.js";
 import { colourCodeState, normaliseCodeInput } from "./colour-code.js";
-import { fill, shapeGroupWords } from "./content.js";
+import { fill, shapeGroupWords, type EditorWording } from "./content.js";
 import { useEditor, type ColourTarget } from "./context.js";
 import { EditorIcon } from "./icons.js";
 import { Swatch } from "./parts.js";
@@ -31,6 +31,11 @@ export function colourEdit(target: ColourTarget, colour: { role: TeamColourRole 
     }
     return target.kind === "zone" ? setZoneColor(d, target.id, colour.value, options) : setShapeGroupColor(d, target.id, colour.value);
   };
+}
+
+/** A part's name in the coach's words: a zone's own name, or the group of shapes ("Hoops"). */
+export function partName(wording: EditorWording, product: ProductDefinition, target: ColourTarget): string {
+  return target.kind === "zone" ? (product.zones.find((z) => z.id === target.id)?.name ?? "") : shapeGroupWords(wording, target.id);
 }
 
 /** Which colour a swatch of a part's row gives: a team colour to follow, or a palette colour's id. */
@@ -79,7 +84,7 @@ export function PartRow({ target, open, onOpen, active, on }: { target: ColourTa
   const w = wording.colours;
   const zone = target.kind === "zone" ? product.zones.find((z) => z.id === target.id) : undefined;
   const current = targetColour(design, target, zone?.defaultColor);
-  const name = zone ? zone.name : shapeGroupWords(wording, target.id);
+  const name = partName(wording, product, target);
   const common = coloursCommonFirst(palette).filter((c) => palette.common.includes(c.id));
   const teamIds = new Set(TEAM_COLOUR_ROLES.map((r) => design.teamColors[r]?.id));
   // The colour in use stays in view when it came from "All colours".
@@ -127,7 +132,7 @@ function ColoursToolView() {
   const markedId = markedPart ? `${markedPart.kind}-${markedPart.id}` : null;
   const reduced = api.reducedMotion;
   useEffect(() => {
-    if (markedId) root.current?.querySelector<HTMLElement>('[data-active="true"]')?.scrollIntoView?.({ block: "nearest", behavior: reduced ? "auto" : "smooth" });
+    if (markedId) root.current?.querySelector<HTMLElement>('[data-active="true"]')?.scrollIntoView?.({ block: "start", behavior: reduced ? "auto" : "smooth" });
   }, [markedId, reduced]);
 
   if (view === "team") return <TeamColoursEditor onBack={() => setView("main")} />;

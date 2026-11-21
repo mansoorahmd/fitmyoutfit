@@ -4,7 +4,8 @@
  * functions, tested without a browser.
  */
 import type { Layer } from "../design/schema.js";
-import type { ToolId } from "./context.js";
+import type { ColourTarget, ToolId } from "./context.js";
+import type { EditorLayout } from "./layout.js";
 
 /** The contextual bar's height on a phone (06-editor.md 5.2). */
 export const CONTEXT_BAR_HEIGHT = 48;
@@ -72,6 +73,18 @@ export function modelTapAction(input: { startCard: boolean; itemTool: ToolId | n
   const available = input.tools.includes(input.itemTool) ? input.itemTool : null;
   if (input.startCard) return { closeStartCard: true, openTool: available };
   return { closeStartCard: false, openTool: available !== input.activeTool ? available : null };
+}
+
+/**
+ * What a tap or click on a part of the garment does (E3f): on desktop (the wide layout) its colour row opens in a
+ * popover by the click; on a phone or in landscape the Colours tool opens on that part's row, the part marked on
+ * the model. A group of shapes on top (the hoops) is the part when there is one. Nothing while the start card, the
+ * Done panel or typing has the coach's attention, or when the tap is on fabric that is no part.
+ */
+export function partTapAction(input: { zoneId: string | null; shapeGroup: string | null; layout: EditorLayout; startCard: boolean; doneOpen: boolean; typing: boolean }): { target: ColourTarget; open: "popover" | "panel" } | null {
+  if (input.startCard || input.doneOpen || input.typing) return null;
+  const target: ColourTarget | null = input.shapeGroup ? { kind: "shapes", id: input.shapeGroup } : input.zoneId ? { kind: "zone", id: input.zoneId } : null;
+  return target ? { target, open: input.layout === "wide" ? "popover" : "panel" } : null;
 }
 
 /** The tool that edits an item: the team name in Team, names and numbers in Players, logos in Logos, free text in Text. */
