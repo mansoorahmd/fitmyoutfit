@@ -1,20 +1,20 @@
 /**
- * Colours (06-editor.md 4.2, 4.3): the parts of the kit as chips (and the
- * template's shapes), tap the kit to choose a part (it flashes), the team
- * colours with swap and edit, recent colours, the palette by family, and
- * "Match a colour code", which shows both colours and applies only the
- * palette's.
+ * Colours (06-editor.md 4.2, 4.3; E3f): one row per part of the kit (and per group of the template's shapes): its
+ * name as the heading, its swatches right under it, the team's colours first. One click sets the colour; tapping
+ * the part on the model brings its row into view. Team colours with swap and edit; "Match a colour code" (in a
+ * row's "All colours"), which shows both colours and applies only the palette's.
  */
 import { memo, useCallback, useEffect, useId, useRef, useState } from "react";
-import { coloursByFamily, findPaletteColour, paletteColourRef, type PaletteColour } from "../design/palette.js";
+import { coloursCommonFirst, findPaletteColour, paletteColourRef, type PaletteColour } from "../design/palette.js";
 import { setZoneColor } from "../design/edit.js";
 import { TEAM_COLOUR_ROLES, type ColorValue, type DesignDocument, type ProductDefinition, type TeamColourRole } from "../design/schema.js";
-import { setShapeGroupColor, setTeamColor, setZoneTeamColor, swapTeamColors, teamColourValue } from "../design/team-colours.js";
+import { setShapeGroupColor, setZoneTeamColor, swapTeamColors, teamColourValue } from "../design/team-colours.js";
+import { AllChip, ColourRow, FamilySwatches, TeamColourRows } from "./ColourRows.js";
 import { colourCodeState, normaliseCodeInput } from "./colour-code.js";
-import { fill, shapeGroupWords } from "./content.js";
+import { fill, shapeGroupWords, type EditorWording } from "./content.js";
 import { useEditor, type ColourTarget } from "./context.js";
 import { EditorIcon } from "./icons.js";
-import { Chip, Swatch } from "./parts.js";
+import { Swatch } from "./parts.js";
 import { colourName } from "./stage-logic.js";
 
 /** The colour a zone or a group of shapes has now. */
@@ -33,183 +33,146 @@ export function colourEdit(target: ColourTarget, colour: { role: TeamColourRole 
   };
 }
 
-/** A palette colour's swatch, memoised (S1): it re-renders only when its own state changes. */
-const PaletteSwatch = memo(function PaletteSwatch({ colour, label, selected, prefix, onPick, onPreview }: { colour: PaletteColour; label: string; selected: boolean; prefix: string; onPick: (c: PaletteColour) => void; onPreview: (c: PaletteColour, on: boolean) => void }) {
-  return <Swatch hex={colour.hex} label={label} selected={selected} onPick={() => onPick(colour)} onPreview={(on) => onPreview(colour, on)} testId={`swatch-${prefix}-${colour.id}`} />;
+/** A part's name in the coach's words: a zone's own name, or the group of shapes ("Hoops"). */
+export function partName(wording: EditorWording, product: ProductDefinition, target: ColourTarget): string {
+  return target.kind === "zone" ? (product.zones.find((z) => z.id === target.id)?.name ?? "") : shapeGroupWords(wording, target.id);
+}
+
+/** Which colour a swatch of a part's row gives: a team colour to follow, or a palette colour's id. */
+export interface RowPick {
+  kind: ColourTarget["kind"];
+  id: string;
+  role?: TeamColourRole;
+  colourId?: string;
+}
+type RowHandler = (pick: RowPick, preview: boolean | null) => void;
+
+/** One swatch of a part's row, memoised (S1): a tap re-renders only the swatches whose "selected" changed. */
+const PartSwatch = memo(function PartSwatch({ hex, label, selected, kind, id, role, colourId, on, testId }: RowPick & { hex: string; label: string; selected: boolean; on: RowHandler; testId: string }) {
+  const pick = { kind, id, role, colourId };
+  return <Swatch hex={hex} label={label} selected={selected} onPick={() => on(pick, null)} onPreview={(p) => on(pick, p)} testId={testId} />;
 });
 
-function ColoursToolView() {
+/** E3f: the one stable function a part's swatches call: a click sets the colour (one undo step); a hover previews it. */
+export function usePartColours(): RowHandler {
   const api = useEditor();
-  const { design, product, palette, wording, colourTarget, detent, layout } = api;
-  const w = wording.colours;
-  const [view, setView] = useState<"main" | "team">("main");
-  const [editRole, setEditRole] = useState<TeamColourRole>("main");
-  const expanded = detent === "expanded" || layout !== "compact";
-  const zoneDefault = colourTarget.kind === "zone" ? product.zones.find((z) => z.id === colourTarget.id)?.defaultColor : undefined;
-  const current = targetColour(design, colourTarget, zoneDefault);
-  const targetName = colourTarget.kind === "zone" ? (product.zones.find((z) => z.id === colourTarget.id)?.name ?? "") : shapeGroupWords(wording, colourTarget.id);
-  const label = colourTarget.kind === "zone" ? "zone-colour" : "shape-colour";
-  const groups = [...new Set(design.shapes.map((s) => s.group))];
-
-  const apply = (colour: { role: TeamColourRole } | { value: ColorValue }, recentId?: string) => {
-    api.markTiming("swatch");
-    if (api.commit(colourEdit(colourTarget, colour, { product }), label) && recentId) api.useColour(recentId);
-  };
-  const preview = (colour: { role: TeamColourRole } | { value: ColorValue }) => (on: boolean) => api.hoverPreview(on ? colourEdit(colourTarget, colour, { product }) : null);
-
-  const roles = TEAM_COLOUR_ROLES.filter((r) => design.teamColors[r]);
-  const teamSwatches = roles.map((role) => {
-    const c = design.teamColors[role]!;
-    const name = `${w.roles[role]}: ${colourName(palette, c)}`;
-    const selected = current?.teamColor === role;
-    return <Swatch key={role} hex={c.hex} label={selected ? fill(w.selected, { colour: name }) : name} selected={selected} onPick={() => apply({ role }, c.id)} onPreview={preview({ role })} testId={`swatch-team-${role}`} />;
-  });
-  // Stable handlers (S1): a tap re-renders only the two palette swatches whose "selected" changed.
-  const handlers = useRef({ apply, preview });
+  const latest = useRef(api);
   useEffect(() => {
-    handlers.current = { apply, preview };
+    latest.current = api;
   });
-  const pickPalette = useCallback((c: PaletteColour) => handlers.current.apply({ value: paletteColourRef(c) }, c.id), []);
-  const previewPalette = useCallback((c: PaletteColour, on: boolean) => handlers.current.preview({ value: paletteColourRef(c) })(on), []);
-  const paletteSwatch = (c: PaletteColour, prefix: string) => {
+  return useCallback((p, preview) => {
+    const { product, palette, design } = latest.current;
+    const found = p.colourId ? findPaletteColour(palette, p.colourId) : undefined;
+    const colour = p.role ? { role: p.role } : found ? { value: paletteColourRef(found) } : null;
+    if (!colour) return;
+    const edit = colourEdit({ kind: p.kind, id: p.id }, colour, { product });
+    if (preview !== null) return latest.current.hoverPreview(preview ? edit : null);
+    latest.current.markTiming("swatch");
+    latest.current.markPart?.(null);
+    if (latest.current.commit(edit, p.kind === "zone" ? "zone-colour" : "shape-colour")) latest.current.useColour(p.colourId ?? design.teamColors[p.role!]?.id ?? "");
+  }, []);
+}
+
+/**
+ * E3f: one part of the kit (a zone, or a group of shapes) as a row: its name as the heading with the colour it has
+ * now, its swatches right under it: the team's colours first, then the common colours. "All colours" opens the
+ * rest and "Match a colour code". One click sets it. The popover on the model shows the same row.
+ */
+export function PartRow({ target, open, onOpen, active, on }: { target: ColourTarget; open: boolean; onOpen: (open: boolean) => void; active?: boolean; on: RowHandler }) {
+  const api = useEditor();
+  const { design, product, palette, wording } = api;
+  const w = wording.colours;
+  const zone = target.kind === "zone" ? product.zones.find((z) => z.id === target.id) : undefined;
+  const current = targetColour(design, target, zone?.defaultColor);
+  const name = partName(wording, product, target);
+  const common = coloursCommonFirst(palette).filter((c) => palette.common.includes(c.id));
+  const teamIds = new Set(TEAM_COLOUR_ROLES.map((r) => design.teamColors[r]?.id));
+  // The colour in use stays in view when it came from "All colours".
+  const own = current && !current.teamColor ? findPaletteColour(palette, current.id) : undefined;
+  const palettes = [...(own && !common.some((c) => c.id === own.id) ? [own] : []), ...common].filter((c) => !teamIds.has(c.id));
+  const swatch = (c: PaletteColour, prefix: string) => {
     const selected = current?.id === c.id && !current.teamColor;
-    return <PaletteSwatch key={`${prefix}-${c.id}`} colour={c} label={selected ? fill(w.selected, { colour: c.name }) : c.name} selected={selected} prefix={prefix} onPick={pickPalette} onPreview={previewPalette} />;
+    return <PartSwatch key={`${prefix}-${c.id}`} hex={c.hex} label={selected ? fill(w.selected, { colour: c.name }) : c.name} selected={selected} kind={target.kind} id={target.id} colourId={c.id} on={on} testId={`swatch-${target.id}-${c.id}`} />;
   };
-  const recent = api.recentColours.map((id) => findPaletteColour(palette, id)).filter((c): c is PaletteColour => Boolean(c));
-
-  if (view === "team") {
-    return (
-      <TeamColoursEditor
-        role={editRole}
-        onRole={setEditRole}
-        onBack={() => setView("main")}
-      />
-    );
-  }
-
-  const headerLine = current ? (current.requested ? fill(w.matched, { zone: targetName, colour: colourName(palette, current), code: current.requested }) : fill(w.zoneColour, { zone: targetName, colour: colourName(palette, current) })) : targetName;
-
+  const note = current ? (current.requested ? `${colourName(palette, current)} (${current.requested})` : colourName(palette, current)) : undefined;
   return (
-    <>
-      <p className="fmo-line" data-testid="colour-line" data-keep-typing>
-        <strong>{headerLine.split(":")[0]}:</strong>
-        {headerLine.slice(headerLine.indexOf(":") + 1)}
-      </p>
-      <div className="fmo-scroll-row" role="group" aria-label={w.parts} data-testid="zone-chips">
-        {product.zones.map((z) => {
-          const c: ColorValue = design.zones[z.id] ?? z.defaultColor;
-          return (
-            <Chip key={z.id} pressed={colourTarget.kind === "zone" && colourTarget.id === z.id} onClick={() => api.chooseColourTarget({ kind: "zone", id: z.id }, true)} dot={c.hex} marked={Boolean(c.requested)} testId={`zone-${z.id}`}>
-              {z.name}
-            </Chip>
-          );
+    <ColourRow heading={name} note={note} active={active} testId={`part-${target.id}`}>
+      <div className="fmo-scroll-row" role="group" aria-label={name}>
+        {TEAM_COLOUR_ROLES.filter((r) => design.teamColors[r]).map((role) => {
+          const c = design.teamColors[role]!;
+          const label = `${w.roles[role]}: ${colourName(palette, c)}`;
+          const selected = current?.teamColor === role;
+          return <PartSwatch key={role} hex={c.hex} label={selected ? fill(w.selected, { colour: label }) : label} selected={selected} kind={target.kind} id={target.id} role={role} on={on} testId={`swatch-${target.id}-${role}`} />;
         })}
-        {groups.map((g) => {
-          const c = design.shapes.find((s) => s.group === g)!.fill;
-          return (
-            <Chip key={g} pressed={colourTarget.kind === "shapes" && colourTarget.id === g} onClick={() => api.chooseColourTarget({ kind: "shapes", id: g }, true)} dot={c.hex} marked={Boolean(c.requested)} testId={`shapes-${g}`}>
-              {shapeGroupWords(wording, g)}
-            </Chip>
-          );
-        })}
+        {palettes.map((c) => swatch(c, "common"))}
+        <AllChip open={open} onToggle={() => onOpen(!open)} testId={`all-${target.id}`} />
       </div>
-      {!expanded ? (
-        <div className="fmo-scroll-row" data-testid="swatch-row">
-          <span className="fmo-group-label">{w.teamColours}</span>
-          {teamSwatches}
-          {recent.length > 0 && <span className="fmo-divider" />}
-          {recent.length > 0 && <span className="fmo-group-label">{w.recent}</span>}
-          {recent.map((c) => paletteSwatch(c, "recent"))}
-          <span className="fmo-divider" />
-          <button type="button" className="fmo-chip" onClick={() => api.setDetent("expanded")} data-testid="all-colours">
-            {w.all}
-            <EditorIcon name="chevronUp" size={18} />
-          </button>
-        </div>
-      ) : (
+      {open && (
         <>
-          <section className="fmo-stack" aria-label={w.teamColours}>
-            <span className="fmo-label">{w.teamColours}</span>
-            <div className="fmo-row">
-              <div className="fmo-swatches">{teamSwatches}</div>
-              {/* R21: a chip with its word, not a bare icon. */}
-              <button type="button" className="fmo-chip" onClick={() => api.commit(swapTeamColors, "swap-team-colours")} data-testid="swap-team" aria-label={w.swap} title={w.swap}>
-                <EditorIcon name="swap" size={20} />
-                {w.swapShort}
-              </button>
-              <button type="button" className="fmo-btn fmo-btn-text" onClick={() => setView("team")} data-testid="edit-team">
-                {w.editTeam}
-              </button>
-            </div>
-          </section>
-          {recent.length > 0 && (
-            <section className="fmo-stack" aria-label={w.recent}>
-              <span className="fmo-label">{w.recent}</span>
-              <div className="fmo-swatches">{recent.map((c) => paletteSwatch(c, "recent"))}</div>
-            </section>
-          )}
-          {coloursByFamily(palette).map(({ family, colours }) => (
-            <section key={family.id} className="fmo-family" aria-label={family.name}>
-              <span className="fmo-label">{family.name}</span>
-              <div className="fmo-swatches">{colours.map((c) => paletteSwatch(c, "palette"))}</div>
-            </section>
-          ))}
-          <ColourCodeMatch onUse={(value, id) => apply({ value }, id)} />
+          <FamilySwatches swatch={(c) => swatch(c, "all")} />
+          <ColourCodeMatch onUse={(value, id) => on({ kind: target.kind, id: target.id, colourId: id }, null)} />
           <p className="fmo-muted">{w.printNote}</p>
         </>
       )}
-      <p className="fmo-muted">{w.tapKit}</p>
-    </>
+    </ColourRow>
   );
 }
 
-/** "Edit team colours": choose Main, Second or Accent, then its colour; swap; remove the accent. */
-function TeamColoursEditor({ role, onRole, onBack }: { role: TeamColourRole; onRole: (role: TeamColourRole) => void; onBack: () => void }) {
+function ColoursToolView() {
   const api = useEditor();
-  const { design, palette, wording } = api;
+  const { design, product, wording, markedPart } = api;
   const w = wording.colours;
-  const setRole = (c: PaletteColour) => {
-    if (api.commit((d) => setTeamColor(d, role, paletteColourRef(c)), "team-colour")) api.useColour(c.id);
-  };
+  const [view, setView] = useState<"main" | "team">("main");
+  const [open, setOpen] = useState<string | null>(null);
+  const on = usePartColours();
+  const groups = [...new Set(design.shapes.map((s) => s.group))];
+  const targets: ColourTarget[] = [...product.zones.map((z) => ({ kind: "zone" as const, id: z.id })), ...groups.map((g) => ({ kind: "shapes" as const, id: g }))];
+  // A part tapped on the model: its row is marked and comes into view.
+  const root = useRef<HTMLDivElement>(null);
+  const markedId = markedPart ? `${markedPart.kind}-${markedPart.id}` : null;
+  const reduced = api.reducedMotion;
+  useEffect(() => {
+    if (markedId) root.current?.querySelector<HTMLElement>('[data-active="true"]')?.scrollIntoView?.({ block: "start", behavior: reduced ? "auto" : "smooth" });
+  }, [markedId, reduced]);
+
+  if (view === "team") return <TeamColoursEditor onBack={() => setView("main")} />;
+
+  return (
+    <div className="fmo-colour-rows" ref={root} data-testid="colour-rows">
+      <div className="fmo-row">
+        <span className="fmo-label">{w.teamColours}</span>
+        <button type="button" className="fmo-chip" onClick={() => api.commit(swapTeamColors, "swap-team-colours")} data-testid="swap-team" aria-label={w.swap} title={w.swap}>
+          <EditorIcon name="swap" size={20} />
+          {w.swapShort}
+        </button>
+        <button type="button" className="fmo-btn fmo-btn-text" onClick={() => setView("team")} data-testid="edit-team">
+          {w.editTeam}
+        </button>
+      </div>
+      {targets.map((t) => (
+        <PartRow key={`${t.kind}-${t.id}`} target={t} open={open === t.id} onOpen={(o) => setOpen(o ? t.id : null)} active={markedId === `${t.kind}-${t.id}`} on={on} />
+      ))}
+      <p className="fmo-muted">{w.tapKit}</p>
+    </div>
+  );
+}
+
+/** "Edit team colours": Main, Second and Accent as three rows, and swap. */
+function TeamColoursEditor({ onBack }: { onBack: () => void }) {
+  const api = useEditor();
+  const w = api.wording.colours;
   return (
     <>
       <div className="fmo-back-row">
         <button type="button" onClick={onBack} data-testid="back">
-          {wording.tools.back}
+          {api.wording.tools.back}
         </button>
       </div>
-      <div className="fmo-team-slots" role="radiogroup" aria-label={w.teamColours}>
-        {TEAM_COLOUR_ROLES.map((r) => {
-          const c = design.teamColors[r];
-          return (
-            <button key={r} type="button" role="radio" aria-checked={role === r} className="fmo-team-slot" data-active={role === r} onClick={() => onRole(r)} style={{ border: 0, background: "none", cursor: "pointer", padding: 0 }} data-testid={`team-slot-${r}`}>
-              <span className={c ? "fmo-swatch" : "fmo-swatch fmo-swatch-empty"} style={{ background: c?.hex, boxShadow: role === r ? "0 0 0 2px #fff, 0 0 0 4px var(--fmo-ink)" : undefined }} aria-hidden="true" />
-              {w.roles[r]}
-            </button>
-          );
-        })}
-        <button type="button" className="fmo-btn fmo-btn-text" onClick={() => api.commit(swapTeamColors, "swap-team-colours")}>
-          <EditorIcon name="swap" size={20} />
-          {w.swap}
-        </button>
-      </div>
-      {design.teamColors.accent && (
-        <button type="button" className="fmo-btn fmo-btn-text" onClick={() => api.commit((d) => setTeamColor(d, "accent", null), "team-colour")} data-testid="no-accent">
-          {w.noAccent}
-        </button>
-      )}
-      <p className="fmo-label">{fill(w.editRole, { role: w.roles[role] })}</p>
-      {coloursByFamily(palette).map(({ family, colours }) => (
-        <section key={family.id} className="fmo-family" aria-label={family.name}>
-          <span className="fmo-label">{family.name}</span>
-          <div className="fmo-swatches">
-            {colours.map((c) => {
-              const selected = design.teamColors[role]?.id === c.id;
-              return <Swatch key={c.id} hex={c.hex} label={selected ? fill(w.selected, { colour: c.name }) : c.name} selected={selected} onPick={() => setRole(c)} testId={`team-colour-${c.id}`} />;
-            })}
-          </div>
-        </section>
-      ))}
+      <TeamColourRows prefix="team" />
+      <button type="button" className="fmo-btn fmo-btn-text" onClick={() => api.commit(swapTeamColors, "swap-team-colours")}>
+        <EditorIcon name="swap" size={20} />
+        {w.swap}
+      </button>
     </>
   );
 }

@@ -106,9 +106,11 @@ async function runSize(size) {
     record.framing.start = await framing(page, `${size}-start`);
     if (width <= 360 && record.framing.start?.garment && record.framing.start.garment.h < 120) record.failures.push(`${size} start: R5 the garment is ${record.framing.start.garment.h} px tall (120 at least)`);
     // Past the card: two colours, a name, Skip.
-    const swatches = await page.eval(`[...document.querySelectorAll('[data-testid^="start-colour-"]')].map((b) => b.dataset.testid)`);
-    await page.click(`[data-testid="${swatches.find((s) => s.endsWith("-red")) ?? swatches[3]}"]`);
-    await page.click(`[data-testid="${swatches.find((s) => s.endsWith("-navy")) ?? swatches[2]}"]`);
+    // E3f: Main and Second are rows of their own; a colour another row has is dimmed, so red goes to Main first.
+    const swatches = await page.eval(`[...document.querySelectorAll('[data-testid^="start-colour-"]:not(:disabled)')].map((b) => b.dataset.testid)`);
+    await page.click(`[data-testid="${swatches.find((s) => s.startsWith("start-colour-main-") && s.endsWith("-red")) ?? swatches.find((s) => s.startsWith("start-colour-main-"))}"]`);
+    const seconds = await page.eval(`[...document.querySelectorAll('[data-testid^="start-colour-second-"]:not(:disabled)')].map((b) => b.dataset.testid)`);
+    await page.click(`[data-testid="${seconds.find((s) => s.endsWith("-navy")) ?? seconds[0]}"]`);
     await page.type('[data-testid="start-team-name"]', "LAHORE LIONS");
     await page.click('[data-testid="start-skip"]');
     await sleep(1500);

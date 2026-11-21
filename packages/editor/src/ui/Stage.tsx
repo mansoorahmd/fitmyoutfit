@@ -6,9 +6,10 @@
  * area above (or beside) the panel by the canvas itself (`viewInsets`).
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
-import { DesignCanvas, type CameraInfo, type DesignCanvasHandle, type DesignCanvasProps, type ItemBox, type SelectionGeometry } from "../react/DesignCanvas.js";
+import { DesignCanvas, type CameraInfo, type CanvasHover, type DesignCanvasHandle, type DesignCanvasProps, type ItemBox, type SelectionGeometry } from "../react/DesignCanvas.js";
 import { createBus } from "./handles.js";
 import { SelectionOverlay } from "./SelectionOverlay.js";
+import { HoverMarks } from "./HoverMarks.js";
 import type { GestureEndReason, GesturePhase } from "./item-gestures.js";
 import { StageContextBar } from "./SelectedItem.js";
 import { CONTEXT_BAR_HEIGHT } from "./selection.js";
@@ -102,6 +103,11 @@ export interface StageProps {
   /** "On this kit" (4.8): its button at the top right of the stage, and (desktop) its popover under it. */
   kitButton?: ReactNode;
   kitPopover?: ReactNode;
+  /** E3f: what the mouse is over on the model (an item's outline, a part's label), and the name of the part. */
+  hover?: CanvasHover | null;
+  hoverName?: string | null;
+  /** E3f: the popover with a part's colours, by the click on it (desktop). */
+  partPopover?: ReactNode;
 }
 
 export function Stage({ canvasRef, ...props }: StageProps) {
@@ -166,7 +172,7 @@ export function Stage({ canvasRef, ...props }: StageProps) {
     <div className="fmo-stage" data-tone={props.tone} data-testid="stage" style={props.credit && mode === "3d" ? ({ "--fmo-credit-room": `${CREDIT_ROOM}px` } as React.CSSProperties) : undefined} onPointerDownCapture={props.onStagePointerDown}>
       <div className="fmo-stage-deep" />
       {/* The soft contact shadow under the hem: the garment fills about 78% of the free area's height, centred (4.6). */}
-      <div className="fmo-stage-shadow" hidden={mode !== "3d"} style={{ bottom: `calc(${canvasInsets.bottom}px + (100% - ${canvasInsets.bottom + canvasInsets.top}px) * 0.1)`, left: `calc((100% - ${insets.right}px) / 2)` }} aria-hidden="true" />
+      <div className="fmo-stage-shadow" hidden={mode !== "3d" || camera.panned} style={{ bottom: `calc(${canvasInsets.bottom}px + (100% - ${canvasInsets.bottom + canvasInsets.top}px) * 0.1)`, left: `calc((100% - ${insets.right}px) / 2)` }} aria-hidden="true" />
       {mode === "3d" ? (
         <div className="fmo-canvas" tabIndex={0} role="img" aria-label={props.description} onKeyDown={props.onStageKey} data-testid="stage-canvas" data-free={`${canvasInsets.top} ${canvasInsets.right} ${canvasInsets.bottom} ${canvasInsets.left}`}>
           <DesignCanvas {...props.canvasProps} ref={canvasRef} design={props.design} product={props.product} viewInsets={canvasInsets} assetUrl={props.assetUrl} style={{ background: "transparent", minHeight: 0 }} errorFallback={null} onSelectionGeometry={bus.emit} onItemBoxes={wantsBoxes ? items.emit : undefined} />
@@ -186,6 +192,8 @@ export function Stage({ canvasRef, ...props }: StageProps) {
             clip={clip}
             controls={kitBox ? [kitBox] : undefined}
           />
+          <HoverMarks hover={props.hover ?? null} name={props.hoverName ?? null} />
+          {props.partPopover}
           {props.contextBar && <StageContextBar bus={bus} top={barTop} bottomInset={canvasInsets.bottom} endInset={insets.right} />}
         </div>
       ) : (

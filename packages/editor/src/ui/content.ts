@@ -54,7 +54,7 @@ export const EDITOR_WORDING = {
   /** One short tip per tool, shown by the "?" button (a pull revelation, 06-editor.md 7.4). NEW. */
   help: {
     design: "Tap a design to try it on your kit. Your name, logo and colours stay. Undo brings back the one before.",
-    colours: "Choose a part of the kit, then a colour. You can also tap the kit to choose a part.",
+    colours: "Every part of the kit has its own row of colours: tap a colour to use it. You can also tap a part on the kit.", // CHANGED (E3f)
     team: "Your team name is printed the same on every shirt. Choose where it goes and how it looks.",
     players: "Each player gets their own name and number. Type a sample to see how they look.",
     logos: "Add your crest or a sponsor's logo. A PNG with a transparent background prints best.",
@@ -63,7 +63,7 @@ export const EDITOR_WORDING = {
   /** Start card (`start`), the first open of a new design. */
   start: {
     title: "Let's make your team's kit", // W-ED20
-    colours: "Team colours (pick 2 or 3)", // W-ED21
+    colours: "Your team colours", // W-ED21, CHANGED (E3f): each colour is a heading with its swatches
     name: "Team name", // W-ED22
     namePlaceholder: "e.g. Lahore Lions", // W-ED22b
     seeDesigns: "See designs in your colours", // W-ED23
@@ -96,7 +96,7 @@ export const EDITOR_WORDING = {
     editTeam: "Edit team colours", // W-ED45
     swap: "Swap main and second", // W-ED46
     swapShort: "Swap", // NEW (E3d, R21): the swap chip's visible word (its accessible name stays "Swap main and second")
-    tapKit: "Tap the kit to choose a part.", // W-ED47
+    tapKit: "You can also tap a part of the kit to change its colour.", // W-ED47, CHANGED (E3f)
     matchCode: "Match a colour code", // W-ED48
     codeLabel: "Enter a colour code, like #1F4E9C", // W-ED49
     youEntered: "You entered", // W-ED50
@@ -112,6 +112,11 @@ export const EDITOR_WORDING = {
     noAccent: "No accent", // NEW: removes the accent colour
     addAccent: "Add an accent", // NEW
     editRole: "Choose the {role} colour", // NEW
+    roleHeading: { main: "Main colour", second: "Second colour", accent: "Accent colour" }, // NEW (E3f): the team colour rows' headings
+    optional: "optional", // NEW (E3f): after "Accent colour"
+    none: "None", // NEW (E3f): no accent colour
+    usedAs: "{colour}, already used for {role}", // NEW (E3f): a dimmed swatch's name; the same colour is never in two rows
+    fewer: "Fewer colours", // NEW (E3f): closes a row's "All colours"
   },
   /** Team, players, text (`lettering`). */
   lettering: {
@@ -237,8 +242,8 @@ export const EDITOR_WORDING = {
     degrees: "{degrees}°", // NEW: desktop only, secondary text
     snap: "Snap to guides", // NEW: snapping on or off (touch has no Alt key)
     keys: "Arrows move it, Shift for bigger steps. [ and ] resize, with Shift they turn. Delete removes it. Esc lets go.", // NEW: keyboard help in fine-tune (desktop)
-    hint: "Drag to turn. Tap something to change it.", // W-ED116
-    hintPointer: "Drag to turn. Click something to change it.", // W-ED116
+    hint: "Drag to turn. Two fingers slide. Tap a part.", // W-ED116, CHANGED (E3f)
+    hintPointer: "Drag to turn. Right-drag to slide. Click a part.", // W-ED116, CHANGED (E3f)
     onThisKit: "On this kit", // W-ED130
     onThisKitCount: "On this kit ({count})", // W-ED130 with the count
     onThisKitName: "On this kit, {count} items", // NEW: the button's accessible name (4.8)

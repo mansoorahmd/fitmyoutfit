@@ -334,10 +334,10 @@ export const EDITOR_CSS = /* css */ `
 .fmo-editor[data-layout="short"] .fmo-start { inset-block: 0; inset-inline: auto 0; width: 320px; border-radius: 0; border-top: 0; box-shadow: -1px 0 0 var(--fmo-border), -4px 0 16px rgb(11 21 48 / 0.08); }
 .fmo-editor[data-layout="wide"] .fmo-start { position: static; grid-area: panel; border-radius: 0; box-shadow: 1px 0 0 var(--fmo-border); border-top: 0; z-index: 1; min-height: 0; }
 .fmo-start .fmo-panel-body { padding-top: 8px; }
+.fmo-start-actions { flex: none; padding: 8px var(--fmo-panel-pad) 8px; border-top: 1px solid var(--fmo-border); }
 /* R2, D1: one left edge; the step number sits inline in its label row. */
 .fmo-step-label { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; font: var(--fmo-type-label); }
 .fmo-step-n { flex: none; width: 24px; height: 24px; border-radius: 12px; background: var(--fmo-ink); color: #fff; font: 600 13px/24px var(--fmo-font-body); text-align: center; }
-.fmo-start-picked { margin: 8px 0 0; font: var(--fmo-type-small); color: var(--fmo-ink-muted); }
 /* R5: the pick order on the swatch itself (1 Main, 2 Second, 3 Accent). */
 .fmo-swatch-order { position: absolute; top: -6px; inset-inline-end: -6px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px; background: var(--fmo-ink); color: #fff; font: 600 12px/20px var(--fmo-font-body); box-shadow: 0 0 0 2px #fff; pointer-events: none; }
 
@@ -429,13 +429,24 @@ export const EDITOR_CSS = /* css */ `
 .fmo-swatch .fmo-check { position: absolute; inset: 0; margin: auto; }
 .fmo-swatch-empty { background: repeating-linear-gradient(45deg, var(--fmo-surface-alt) 0 6px, var(--fmo-surface) 6px 12px); box-shadow: inset 0 0 0 1px var(--fmo-border-strong); }
 .fmo-family + .fmo-family { margin-top: 16px; }
+/* E3f: colours as a heading with its swatches under it (the team colours; each part of the kit). */
+.fmo-colour-rows > * + * { margin-top: 16px; }
+.fmo-row-head { margin: 0 0 8px; font: var(--fmo-type-label); }
+.fmo-row-note { margin-inline-start: 8px; font: var(--fmo-type-small); color: var(--fmo-ink-muted); }
+.fmo-colour-row[data-active="true"] .fmo-row-head { text-decoration: underline; text-decoration-thickness: 3px; text-underline-offset: 4px; }
+.fmo-colour-row > .fmo-scroll-row + .fmo-family, .fmo-colour-row > .fmo-scroll-row + .fmo-section { margin-top: 12px; }
+.fmo-swatch:disabled { opacity: 0.4; filter: grayscale(1); cursor: not-allowed; }
+/* E3f: hover on the model: an item's outline, a part's label by the pointer, and the popover with a part's colours. */
+.fmo-hover-box { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; z-index: 1; }
+.fmo-hover-halo { fill: rgb(255 255 255 / 0.1); stroke: #fff; stroke-width: 4px; stroke-linejoin: round; }
+.fmo-hover-line { fill: none; stroke: var(--fmo-ink); stroke-width: 1.5px; stroke-linejoin: round; }
+.fmo-hover-label { position: absolute; left: 0; top: 0; z-index: 2; display: block; padding: 4px 8px; border: 1px solid var(--fmo-float-line); border-radius: var(--fmo-radius-card); background: var(--fmo-float-fill); box-shadow: var(--fmo-float-shadow); font: var(--fmo-type-small); color: var(--fmo-ink); pointer-events: none; white-space: nowrap; }
+.fmo-part-popover { position: absolute; z-index: 3; box-sizing: border-box; width: 304px; max-width: calc(100% - 16px); max-height: calc(100% - 16px); overflow-y: auto; padding: 12px; border: 1px solid var(--fmo-float-line); border-radius: var(--fmo-radius-card); background: var(--fmo-surface); box-shadow: 0 4px 16px rgb(11 21 48 / 0.18); }
+.fmo-part-popover .fmo-scroll-row { flex-wrap: wrap; overflow: visible; padding: 0; margin-inline: 0; -webkit-mask-image: none; mask-image: none; }
 .fmo-family > .fmo-label, .fmo-family > .fmo-group-label { display: block; margin: 0 0 8px; }
-.fmo-team-slots { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
 .fmo-start-skip { text-align: center; }
 /* R5: while the start card is open on a phone only Reset stays over the small stage. */
 .fmo-editor[data-layout="compact"][data-start="true"] .fmo-zoom > :not(:last-child) { display: none; }
-.fmo-team-slot { display: flex; flex-direction: column; align-items: center; gap: 4px; font: var(--fmo-type-small); color: var(--fmo-ink-muted); }
-.fmo-team-slot[data-active="true"] { color: var(--fmo-ink); font-weight: 600; }
 .fmo-match { display: grid; grid-template-columns: auto auto 1fr; gap: 6px 14px; align-items: center; padding: 12px; border: 1px solid var(--fmo-border); border-radius: var(--fmo-radius-card); }
 .fmo-match-chip { width: 64px; height: 64px; border-radius: 8px; box-shadow: inset 0 0 0 1px rgb(11 21 48 / 0.25); }
 .fmo-match-col { display: flex; flex-direction: column; gap: 4px; font: var(--fmo-type-small); }

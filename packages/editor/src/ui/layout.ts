@@ -33,8 +33,8 @@ export const PANEL_NORMAL_MAX = 232;
 export const STAGE_MIN_EXPANDED = 160;
 /** An expanded panel takes at most this share of the visible height. */
 export const PANEL_EXPANDED_SHARE = 0.6;
-/** The start card is the one panel taller than normal (06-editor.md 7.2): it keeps the stage at least this tall. */
-export const START_CARD_STAGE_MIN = 160;
+/** The start card is the one panel taller than normal (06-editor.md 7.2): it keeps the stage at least this tall (E3f: three colour rows made it taller; 190 keeps the garment 120 px tall on a 360 x 640 phone). */
+export const START_CARD_STAGE_MIN = 190;
 
 /**
  * The view buttons over the stage (4.7): all of them; only Reset; or none. On a phone: none while typing (the

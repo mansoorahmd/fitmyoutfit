@@ -35,6 +35,8 @@ export interface CameraRigInfo {
   side: ViewSideName | null;
   canZoomIn: boolean;
   canZoomOut: boolean;
+  /** E3f: the view is slid (the stage hides the shadow under the hem, which stays where the garment was). */
+  panned: boolean;
 }
 
 export interface CameraRigConfig {
@@ -61,6 +63,18 @@ export function aimFor(goal: number, factor: number, halfView: number): number {
 
 type V3 = [number, number, number];
 
+/** E3f: how far the view may be slid from the garment's centre, as a share of the garment's size along each axis. */
+export const PAN_LIMIT = 0.5;
+
+/**
+ * E3f: a slid view (`pan`, world units from the garment's centre) kept inside the limit: an ellipsoid with
+ * `PAN_LIMIT` of the garment's size on each axis, so some of the garment is always on the free stage.
+ */
+export function clampPan(pan: V3, size: V3): V3 {
+  const norm = Math.hypot(...pan.map((v, i) => v / Math.max(1e-6, PAN_LIMIT * size[i]!)));
+  return norm > 1 ? (pan.map((v) => v / norm) as V3) : pan;
+}
+
 /**
  * The same in three dimensions (an item off the centre line, a logo on the left chest): up and down as `aimFor`
  * against half the free height, across (x and z together) against half the free width.
@@ -78,7 +92,9 @@ const ZERO: V3 = [0, 0, 0];
 const near = (a: V3, b: V3, eps: number) => Math.abs(a[0] - b[0]) < eps && Math.abs(a[1] - b[1]) < eps && Math.abs(a[2] - b[2]) < eps;
 
 export class CameraRig {
-  private anim: { from: Orbit; to: Orbit; fromOffset: Offset; toOffset: Offset; fromAim: V3; toAim: V3; start: number; duration: number; ease: (t: number) => number } | null = null;
+  private anim: { from: Orbit; to: Orbit; fromOffset: Offset; toOffset: Offset; fromAim: V3; toAim: V3; fromPan: V3; toPan: V3; start: number; duration: number; ease: (t: number) => number } | null = null;
+  /** E3f: the view slid by the coach (world units from the garment's centre); Reset brings it back. */
+  private pan: V3 = ZERO;
   /** E3d (R24): the target's offset from the garment's centre (world units), and what it aims at. */
   private aim: V3 = ZERO;
   private item: V3 | null = null;
@@ -119,6 +135,7 @@ export class CameraRig {
       this.focus = null;
       this.anim = null;
       this.aim = ZERO;
+      this.pan = ZERO;
       this.itemZoom = null;
       this.pointerY = null;
       this.place({ azimuth: SIDE_AZIMUTH.front, polar: SIDE_POLAR, distance: config.framing.fit }, { ...config.framing.offset });
@@ -144,6 +161,7 @@ export class CameraRig {
     const t = Math.min(1, (this.now() - anim.start) / anim.duration);
     const k = anim.ease(t);
     this.aim = [0, 1, 2].map((i) => anim.fromAim[i]! + (anim.toAim[i]! - anim.fromAim[i]!) * k) as V3;
+    this.pan = [0, 1, 2].map((i) => anim.fromPan[i]! + (anim.toPan[i]! - anim.fromPan[i]!) * k) as V3;
     this.place(tweenOrbit(anim.from, anim.to, k), { x: anim.fromOffset.x + (anim.toOffset.x - anim.fromOffset.x) * k, y: anim.fromOffset.y + (anim.toOffset.y - anim.fromOffset.y) * k });
     if (t >= 1) {
       this.anim = null;
@@ -207,7 +225,31 @@ export class CameraRig {
     this.focus = null;
     this.pointerY = null;
     this.itemZoom = null;
-    this.moveTo({ azimuth: SIDE_AZIMUTH.front, polar: SIDE_POLAR, distance: f.fit }, this.targetOffset(), CAMERA_TURN_MS, easeInOut);
+    this.moveTo({ azimuth: SIDE_AZIMUTH.front, polar: SIDE_POLAR, distance: f.fit }, this.targetOffset(), CAMERA_TURN_MS, easeInOut, ZERO);
+  }
+
+  /** E3f: whether the view is slid. */
+  get panned(): boolean {
+    return this.pan !== ZERO && this.pan.some((v) => Math.abs(v) > 1e-6);
+  }
+
+  /**
+   * E3f: slides the view by a drag of `dx`, `dy` CSS px: the garment follows the pointer (the camera and its target
+   * move the other way, along the screen's own axes). Limited by `clampPan`. A turn or a zoom of ours stops.
+   */
+  panBy(dx: number, dy: number): void {
+    const viewport = this.config?.viewport;
+    if (!this.config || !viewport || (dx === 0 && dy === 0)) return;
+    this.anim = null;
+    const orbit = this.orbit();
+    this.camera.updateMatrixWorld();
+    const e = this.camera.matrixWorld.elements;
+    const perPx = (2 * orbit.distance * Math.tan((this.config.fovDegrees * Math.PI) / 360)) / Math.max(1, viewport.height);
+    const next: V3 = [0, 1, 2].map((i) => this.pan[i]! + (-e[i]! * dx + e[4 + i]! * dy) * perPx) as V3;
+    this.pan = clampPan(next, this.size);
+    this.place(orbit, this.offset);
+    this.invalidate();
+    this.report();
   }
 
   /**
@@ -380,7 +422,7 @@ export class CameraRig {
 
   /** The point the camera looks at: the garment's centre, moved by the aim (R24). */
   private target(): [number, number, number] {
-    return [this.center[0] + this.aim[0], this.center[1] + this.aim[1], this.center[2] + this.aim[2]];
+    return [this.center[0] + this.aim[0] + this.pan[0], this.center[1] + this.aim[1] + this.pan[1], this.center[2] + this.aim[2] + this.pan[2]];
   }
 
   private orbit(): Orbit {
@@ -400,18 +442,19 @@ export class CameraRig {
     this.offset = offset;
   }
 
-  private moveTo(to: Orbit, toOffset: Offset, duration: number, ease: (t: number) => number): void {
+  private moveTo(to: Orbit, toOffset: Offset, duration: number, ease: (t: number) => number, toPan: V3 = this.pan): void {
     const ms = this.config?.reducedMotion ? 0 : duration;
     const toAim = this.aimAt(to.distance);
     if (ms <= 0) {
       this.anim = null;
       this.aim = toAim;
+      this.pan = toPan;
       this.place(to, toOffset);
       this.invalidate();
       this.report();
       return;
     }
-    this.anim = { from: this.orbit(), to, fromOffset: { ...this.offset }, toOffset, fromAim: this.aim, toAim, start: this.now(), duration: ms, ease };
+    this.anim = { from: this.orbit(), to, fromOffset: { ...this.offset }, toOffset, fromAim: this.aim, toAim, fromPan: this.pan, toPan, start: this.now(), duration: ms, ease };
     this.invalidate();
   }
 
@@ -420,7 +463,7 @@ export class CameraRig {
     if (!f) return;
     const orbit = this.orbit();
     const zoom = canZoom(orbit.distance, { minDistance: this.minDistance(), maxDistance: f.maxDistance });
-    const info: CameraRigInfo = { side: sideFromAzimuth(orbit.azimuth), canZoomIn: zoom.in, canZoomOut: zoom.out };
+    const info: CameraRigInfo = { side: sideFromAzimuth(orbit.azimuth), canZoomIn: zoom.in, canZoomOut: zoom.out, panned: this.panned };
     const key = JSON.stringify(info);
     if (key === this.lastInfo) return;
     this.lastInfo = key;

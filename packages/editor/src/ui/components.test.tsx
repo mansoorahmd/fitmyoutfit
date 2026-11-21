@@ -123,19 +123,21 @@ describe("the tools", () => {
     expect(text(html)).toContain(W.templates.loading);
   });
 
-  it("Colours: the line in words, the parts as chips, the team colours, the hint; expanded: families and the code field", () => {
+  it("Colours (E3f): one row per part, its name the heading with its swatches under it, the team colours first; no part chips", () => {
     const html = inTool(<ColoursTool />);
-    expect(text(html)).toContain("Body front: White");
-    expect(html).toContain('data-testid="zone-body_front"');
-    expect(html).toContain('data-testid="swatch-team-main"');
+    expect(html).not.toContain('data-testid="zone-chips"');
+    expect(html).not.toContain('data-testid="zone-body_front"');
+    for (const zone of product.zones) expect(html).toContain(`data-testid="part-${zone.id}"`);
+    expect(text(html)).toContain("Body front White");
+    expect(html).toContain('data-testid="swatch-body_front-main"');
+    expect(html.indexOf('data-testid="swatch-body_front-main"')).toBeLessThan(html.indexOf('data-testid="swatch-body_front-placeholder-gold"'));
     expect(text(html)).toContain(W.colours.tapKit);
-    const expanded = inTool(<ColoursTool />, { detent: "expanded" });
-    expect(text(expanded)).toContain("Whites & greys");
-    expect(expanded).toContain('data-testid="colour-code-input"');
-    expect(text(expanded)).toContain(W.colours.printNote);
-    // The shapes of a template are chips too.
+    // Every row has its own "All colours"; open, it shows the families and the code field.
+    expect(html).toContain('data-testid="all-body_front"');
+    expect(html).not.toContain('data-testid="colour-code-input"');
+    // The shapes of a template are rows too.
     const hoops = applyTemplate(design, templates[1]!, { product, fonts, previous: templates[0] });
-    expect(inTool(<ColoursTool />, { design: hoops })).toContain('data-testid="shapes-hoops"');
+    expect(inTool(<ColoursTool />, { design: hoops })).toContain('data-testid="part-hoops"');
   });
 
   it("Team: the name field, where (with Off), style", () => {

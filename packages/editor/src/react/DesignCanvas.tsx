@@ -32,13 +32,14 @@ import {
 import type { DesignDocument, Point, ProductDefinition } from "../design/schema.js";
 import { buildSurfaceLookup, projectItem, projectPieceLine, type ItemOnScreen, type ScreenPoint, type SurfaceLookup } from "../texture/surface-lookup.js";
 import { extractGarmentMeshes } from "./garment-geometry.js";
-import { TAP_MAX_MS, pressAction, travelledPast, type DragOnlySelected } from "./press-policy.js";
+import { TAP_MAX_MS, pressAction, tapOutcome, travelledPast, type DragOnlySelected } from "./press-policy.js";
 import { DraftPolicy, type GestureTiming } from "./draft-quality.js";
 import { buildPickBvh, pickBvh, type PickBvh } from "./pick-bvh.js";
 import { dragPosition, layerAtPoint, pieceAtMeshUv, round3, startLayerDrag, type LayerDrag } from "../design/placement.js";
 import { backgroundAt } from "../design/readability.js";
-import { DEFAULT_TEXTURE_SIZE, drawPatternTexture, type DrawPatternResult } from "../texture/pattern-texture.js";
-import type { ZoneHighlight } from "../texture/zone-highlight.js";
+import { DEFAULT_TEXTURE_SIZE, drawPatternTexture, pieceTransform, type DrawPatternResult } from "../texture/pattern-texture.js";
+import { drawZoneHighlight, type ZoneHighlight } from "../texture/zone-highlight.js";
+import { HoverTracker, hoverAllowed, type Hover } from "./hover.js";
 import { FontWatcher, type FontSetLike, type FontStatus } from "../texture/fonts.js";
 import { AssetImageCache, type AssetUrlResolver } from "./asset-images.js";
 import { NO_INSETS, frameInFreeArea, type Framing, type ViewInsets } from "./camera.js";
@@ -112,6 +113,8 @@ export interface CameraInfo {
   side: CameraSide | null;
   canZoomIn: boolean;
   canZoomOut: boolean;
+  /** E3f: the view is slid. */
+  panned: boolean;
 }
 
 /** A tap on the model while zones are picked (N8): the piece, and the zone or group of shapes under the finger. */
@@ -120,7 +123,16 @@ export interface ZoneTap {
   zoneId: string | null;
   /** The group of shapes on top there ("hoops"), when a shape is under the finger. */
   shapeGroup: string | null;
+  /** E3f: where the tap was, in CSS px from the canvas's top left (a popover goes there). */
+  x?: number;
+  y?: number;
 }
+
+/**
+ * E3f: what the mouse pointer is over on the model (`hover`): an item or a part of the garment, where (CSS px from
+ * the canvas's top left), and for an item its box on the screen. Reported only when it changes.
+ */
+export type CanvasHover = Hover & { x: number; y: number; corners?: ScreenPoint[] };
 
 /** Imperative controls, through `ref`. Every move is the coach's own action (06-editor.md 6.3); the host decides when. */
 export interface DesignCanvasHandle {
@@ -176,10 +188,9 @@ export interface DesignCanvasProps {
   /** Called with a layer's id when the customer taps (or, with a mouse, presses) it on the model; null for a tap on empty fabric or the stage. */
   onSelectLayer?: (layerId: string | null) => void;
   /**
-   * Who may drag an item that is not selected (N10): "touch" (default) means on
-   * touch a drag that starts on an unselected item turns the garment, and a tap
-   * selects it first; with a mouse, a press selects and drags at once. true:
-   * select first for every pointer; false: direct drag for every pointer.
+   * Who may drag an item that is not selected (N10). true (default, E3f): nobody; a drag that starts on an
+   * unselected item turns the garment for every pointer, and a click or tap selects it first. "touch": only touch
+   * does so, a mouse presses and drags at once. false: direct drag for every pointer.
    */
   dragOnlySelected?: DragOnlySelected;
   /** Draw the selected layer's outline into the texture (default true). An interface that draws handles over the canvas passes false. */
@@ -247,7 +258,18 @@ export interface DesignCanvasProps {
    * layers are neither selected nor dragged. Drags still turn the garment.
    */
   pickZones?: boolean;
-  onZoneTap?: (tap: ZoneTap) => void;
+  /**
+   * A tap on a part of the garment (E3f): from any tool, not only while `pickZones` is set. A tap on an item selects
+   * it as before; a tap on bare fabric calls this with the part; a tap on the stage calls it with null.
+   */
+  onZoneTap?: (tap: ZoneTap | null) => void;
+  /**
+   * E3f: with a mouse, the item or part under the pointer is shown (the part marked softly on the model; the hand
+   * cursor) and reported to `onHover` when it changes (null: nothing). The canvas asks for a new frame only when
+   * what is under the pointer changes.
+   */
+  hover?: boolean;
+  onHover?: (hover: CanvasHover | null) => void;
   /** A zone or group of shapes to show on the model (the zone flash; editor only). */
   highlight?: ZoneHighlight | null;
   /** The model's download progress (N17). */
@@ -261,6 +283,10 @@ export interface DesignCanvasProps {
 }
 
 const FOV = 35;
+
+/** E3f: the hover texture's edge (px), and how strongly the hovered part is marked (a soft veil and edge). */
+const HOVER_TEXTURE_SIZE = 512;
+const HOVER_ALPHA = 0.5;
 
 /** How far a tap may move and still be a tap, in CSS pixels. */
 const TAP_SLOP_PX = 8;
@@ -353,6 +379,23 @@ function applyPatternTexture(materials: readonly MeshStandardMaterial[], texture
   for (const material of materials) {
     material.map = texture;
     material.color.set("#ffffff");
+    material.needsUpdate = true;
+  }
+}
+
+/** E3f: the hover texture is black (adds no light) until a part is drawn into it; the cloth's emissive channel shows it. */
+function clearHoverSurface(surface: PatternSurface): void {
+  surface.ctx.setTransform(1, 0, 0, 1, 0, 0);
+  surface.ctx.fillStyle = "#000000";
+  surface.ctx.fillRect(0, 0, surface.size, surface.size);
+  surface.texture.needsUpdate = true;
+}
+
+/** E3f: puts the hover texture on the pieces' emissive channel (white light through a black texture is none), or takes it off. */
+function setHoverMap(materials: readonly MeshStandardMaterial[], texture: CanvasTexture | null): void {
+  for (const material of materials) {
+    material.emissive.set(texture ? "#ffffff" : "#000000");
+    material.emissiveMap = texture;
     material.needsUpdate = true;
   }
 }
@@ -466,6 +509,19 @@ export function itemLongSide(corners: readonly { x: number; y: number }[]): numb
   return longest;
 }
 
+/** E3f: the middle of the fingers that are down (where a two-finger slide is measured). */
+export function slideCentre(points: Iterable<{ x: number; y: number }>): { x: number; y: number } {
+  let x = 0;
+  let y = 0;
+  let n = 0;
+  for (const p of points) {
+    x += p.x;
+    y += p.y;
+    n++;
+  }
+  return n > 0 ? { x: x / n, y: y / n } : { x: 0, y: 0 };
+}
+
 /** The latest value, for event handlers that must not be re-attached on every render. */
 function useLatest<T>(value: T) {
   const ref = useRef(value);
@@ -489,7 +545,7 @@ function ModelView({
   selectedLayerId,
   onSelectLayer,
   onLayerDrag,
-  dragOnlySelected = "touch",
+  dragOnlySelected = true,
   outlineSelected = true,
   onSelectionGeometry,
   onItemBoxes,
@@ -508,6 +564,8 @@ function ModelView({
   onUserTurn,
   pickZones = false,
   onZoneTap,
+  hover = false,
+  onHover,
   highlight = null,
   onContextLost,
   onContextRestored,
@@ -553,7 +611,7 @@ function ModelView({
   useFrame(() => draft.frame(performance.now()));
 
   // The layer and design the commands need, read when a command runs.
-  const latest = useLatest({ design, product, onSelectLayer, onLayerDrag, touchSlopMm, controls, pickZones, onZoneTap, selectedLayerId, dragOnlySelected, free: framing.free });
+  const latest = useLatest({ design, product, onSelectLayer, onLayerDrag, touchSlopMm, controls, pickZones, onZoneTap, selectedLayerId, dragOnlySelected, free: framing.free, hover, onHover });
 
   // The selected item on the screen (N9): the UV lookup is built once per model, the first time something is
   // selected; then the box is projected in the frame loop, only while something is selected (the canvas renders
@@ -588,6 +646,7 @@ function ModelView({
     }
     return lookup.current.lookup;
   };
+  const surfaceLookupRef = useLatest(surfaceLookup);
   // Every item's box (E3d), when the interface asks for it: only when the camera or the design changed.
   useFrame(({ camera: cam }) => {
     const report = boxesOut.current;
@@ -736,6 +795,22 @@ function ModelView({
     invalidate();
   }, [zonesOnly, product, inside, invalidate, restored]);
 
+  // E3f: the part under the mouse is marked softly through a small second texture on the cloth's emissive channel,
+  // drawn only when what is under the pointer changes: the garment's own texture is not redrawn for a hover.
+  const hoverSurface = usePatternSurface(HOVER_TEXTURE_SIZE, { mipmaps: false });
+  useEffect(() => {
+    if (!hover) return;
+    clearHoverSurface(hoverSurface);
+    setHoverMap(prepared.pieceMaterials, hoverSurface.texture);
+    invalidate();
+    return () => setHoverMap(prepared.pieceMaterials, null);
+  }, [hover, hoverSurface, prepared, invalidate]);
+  const drawHover = useLatest((h: Hover | null) => {
+    clearHoverSurface(hoverSurface);
+    if (h?.kind === "part") drawZoneHighlight(hoverSurface.ctx, product, design, { zoneId: h.zoneId, shapeGroup: h.shapeGroup, alpha: HOVER_ALPHA }, (piece) => pieceTransform(piece, hoverSurface.size), hoverSurface.size / DEFAULT_TEXTURE_SIZE);
+    invalidate();
+  });
+
   // Fonts: load what the text needs, and redraw when it arrives (never stay in a fallback silently).
   const [fontsVersion, setFontsVersion] = useState(0);
   const fontStatusRef = useLatest(onFontStatus);
@@ -862,6 +937,32 @@ function ModelView({
     const meshes = [...prepared.pieceMeshes.keys()];
     const down = pointersDown.current;
     down.clear();
+    // E3f: sliding the view: the right button or Shift + drag (a mouse), or two fingers dragged together (touch).
+    const fingers = new Map<number, { x: number; y: number }>();
+    let slide: { mouse: number | null; x: number; y: number } | null = null;
+    const onSlideMove = (event: PointerEvent) => {
+      if (!slide) return;
+      if (slide.mouse === event.pointerId) {
+        rig.panBy(event.clientX - slide.x, event.clientY - slide.y);
+        slide.x = event.clientX;
+        slide.y = event.clientY;
+        return;
+      }
+      const finger = fingers.get(event.pointerId);
+      if (!finger || slide.mouse !== null || fingers.size !== 2) return;
+      finger.x = event.clientX;
+      finger.y = event.clientY;
+      const c = slideCentre(fingers.values());
+      rig.panBy(c.x - slide.x, c.y - slide.y);
+      slide.x = c.x;
+      slide.y = c.y;
+    };
+    const stopSlide = () => {
+      slide = null;
+      window.removeEventListener("pointermove", onSlideMove);
+      canvas.style.cursor = "";
+    };
+    const onContextMenu = (event: Event) => event.target === canvas && event.preventDefault();
     let drag: {
       pointerId: number;
       state: LayerDrag;
@@ -984,6 +1085,8 @@ function ModelView({
 
     const finish = (event: PointerEvent, phase: "end" | "cancel") => {
       down.delete(event.pointerId);
+      fingers.delete(event.pointerId);
+      if (slide && (slide.mouse === event.pointerId || (slide.mouse === null && fingers.size < 2))) stopSlide();
       // Anything waiting for the pointer to lift (R22's zoom on a small item) gets a frame.
       if (down.size === 0) invalidate();
       if (tap && event.pointerId === tap.pointerId) {
@@ -993,15 +1096,22 @@ function ModelView({
         if (phase === "end" && still) {
           const hit = hitAt(event);
           const { design: current, product: currentProduct, onZoneTap: zoneTap, pickZones: zonesNow, onSelectLayer: select } = latest.current;
-          // A tap selects the item under it (touch: select first), or deselects on empty fabric or the stage.
-          select?.(zonesNow ? null : t.selects);
-          if (hit && zoneTap && zonesNow) {
-            const background = backgroundAt(currentProduct, current, hit.piece.id, hit.point);
-            zoneTap({
-              pieceId: hit.piece.id,
-              zoneId: background?.kind === "zone" ? background.zoneId : null,
-              shapeGroup: background?.kind === "shape" ? background.group : null,
-            });
+          // A tap selects the item under it (select first), or deselects on empty fabric or the stage.
+          const outcome = tapOutcome({ pickZones: zonesNow, selects: t.selects, onFabric: Boolean(hit) });
+          select?.(outcome.select);
+          // E3f: a tap on bare fabric (no item under it) chooses the part from any tool; on the stage, it lets go.
+          if (zoneTap && outcome.part) {
+            if (hit) {
+              const background = backgroundAt(currentProduct, current, hit.piece.id, hit.point);
+              const rect = canvas.getBoundingClientRect();
+              zoneTap({
+                pieceId: hit.piece.id,
+                zoneId: background?.kind === "zone" ? background.zoneId : null,
+                shapeGroup: background?.kind === "shape" ? background.group : null,
+                x: event.clientX - rect.left,
+                y: event.clientY - rect.top,
+              });
+            } else zoneTap(null);
           }
         }
       }
@@ -1019,12 +1129,78 @@ function ModelView({
       if (controlsNow) controlsNow.enabled = true;
       canvas.style.cursor = "";
     };
+    // E3f: hover (a mouse only). The ray is cast at most once per frame for the latest position; the scene is
+    // redrawn only when the thing under the pointer changes (HoverTracker).
+    let hoverAt: { x: number; y: number; layerId: string | null } = { x: 0, y: 0, layerId: null };
+    let shownPart = false;
+    const itemCorners = (layerId: string): ScreenPoint[] | undefined => {
+      const { design: current, product: p } = latest.current;
+      const layer = current.layers.find((l) => l.id === layerId);
+      const piece = layer ? p.pieces.find((x) => x.id === layer.pieceId) : undefined;
+      const surface = piece ? surfaceLookupRef.current(p) : null;
+      if (!layer || !piece || !surface) return undefined;
+      camera.updateMatrixWorld();
+      const rect = canvas.getBoundingClientRect();
+      const viewProjection = camera.projectionMatrix.clone().multiply(camera.matrixWorldInverse).elements;
+      return projectItem(surface, piece, layer, { viewProjection, position: camera.position.toArray() as [number, number, number], width: rect.width, height: rect.height }, { outline: false })?.corners;
+    };
+    const tracker = new HoverTracker((h) => {
+      if (h?.kind === "part" || shownPart) drawHover.current(h);
+      shownPart = h?.kind === "part";
+      canvas.style.cursor = h ? (h.kind === "item" && h.selected ? "grab" : "pointer") : "";
+      latest.current.onHover?.(h ? { ...h, x: hoverAt.x, y: hoverAt.y, ...(h.kind === "item" ? { corners: itemCorners(h.layerId) } : {}) } : null);
+    });
+    let hoverEvent: { clientX: number; clientY: number } | null = null;
+    let hoverFrame: number | null = null;
+    const runHover = () => {
+      hoverFrame = null;
+      const at = hoverEvent;
+      hoverEvent = null;
+      if (!at || !latest.current.hover) return;
+      const hit = hitAt(at);
+      if (!hit) {
+        tracker.set(null);
+        return;
+      }
+      const { design: current, product: p, touchSlopMm: slop, selectedLayerId: selectedNow } = latest.current;
+      const rect = canvas.getBoundingClientRect();
+      const under = layerAtPoint(current, hit.piece.id, hit.point, slop);
+      hoverAt = { x: at.clientX - rect.left, y: at.clientY - rect.top, layerId: under?.id ?? null };
+      if (under) {
+        tracker.set({ kind: "item", layerId: under.id, selected: under.id === selectedNow });
+        return;
+      }
+      const background = backgroundAt(p, current, hit.piece.id, hit.point);
+      tracker.set(background ? { kind: "part", zoneId: background.kind === "zone" ? background.zoneId : null, shapeGroup: background.kind === "shape" ? background.group : null } : null);
+    };
+    const onHoverMove = (event: PointerEvent) => {
+      if (!latest.current.hover) return;
+      if (event.target !== canvas || !hoverAllowed(event, { dragging: drag !== null, placing: gestureNow.current, sliding: slide !== null })) {
+        tracker.set(null);
+        return;
+      }
+      hoverEvent = { clientX: event.clientX, clientY: event.clientY };
+      hoverFrame ??= requestAnimationFrame(runHover);
+    };
+    const onHoverEnd = () => {
+      hoverEvent = null;
+      tracker.set(null);
+    };
     const onUp = (event: PointerEvent) => finish(event, "end");
     const onCancel = (event: PointerEvent) => finish(event, "cancel");
 
     const onDown = (event: PointerEvent) => {
       const busy = down.size > 0;
       down.add(event.pointerId);
+      onHoverEnd();
+      if (event.pointerType === "touch") {
+        fingers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+        if (fingers.size === 2) {
+          const c = slideCentre(fingers.values());
+          slide = { mouse: null, x: c.x, y: c.y };
+          window.addEventListener("pointermove", onSlideMove);
+        }
+      }
       const { design: current, onSelectLayer: select, onLayerDrag: dragHandler, touchSlopMm: slop, pickZones: zones } = latest.current;
       if (drag) {
         // A second finger during a drag ends the drag (cancelled: the item goes back; two fingers move the
@@ -1045,9 +1221,18 @@ function ModelView({
         tap = null; // two fingers: a pinch, not a tap
         return;
       }
-      if (event.button !== 0) return;
       // Presses on the handles drawn over the canvas are theirs, not the model's.
       if (event.target !== canvas) return;
+      if (event.pointerType !== "touch" && (event.button === 2 || (event.button === 0 && event.shiftKey))) {
+        // E3f: slide the view; the orbit controls (turning) never see this press, nor does an item.
+        event.stopPropagation();
+        event.preventDefault();
+        slide = { mouse: event.pointerId, x: event.clientX, y: event.clientY };
+        canvas.style.cursor = "move";
+        window.addEventListener("pointermove", onSlideMove);
+        return;
+      }
+      if (event.button !== 0) return;
       const hit = zones ? null : hitAt(event);
       const under = hit ? layerAtPoint(current, hit.piece.id, hit.point, slop) : null;
       const action = pressAction({
@@ -1090,6 +1275,7 @@ function ModelView({
 
     // R24: without a selection the wheel zooms towards the height under the pointer (the controls do the zoom).
     const onWheel = (event: WheelEvent) => {
+      onHoverEnd();
       if (latest.current.selectedLayerId) return;
       const r = canvas.getBoundingClientRect();
       const free = latest.current.free;
@@ -1097,6 +1283,9 @@ function ModelView({
     };
     host.addEventListener("wheel", onWheel, { capture: true, passive: true });
     host.addEventListener("pointerdown", onDown, { capture: true });
+    host.addEventListener("contextmenu", onContextMenu);
+    host.addEventListener("pointermove", onHoverMove);
+    host.addEventListener("pointerleave", onHoverEnd);
     window.addEventListener("pointerup", onUp, { capture: true });
     window.addEventListener("pointercancel", onCancel, { capture: true });
     return () => {
@@ -1104,12 +1293,17 @@ function ModelView({
       if (bvhIdle !== null) (globalThis as { cancelIdleCallback?: (id: number) => void }).cancelIdleCallback?.(bvhIdle);
       host.removeEventListener("wheel", onWheel, { capture: true });
       host.removeEventListener("pointerdown", onDown, { capture: true });
+      host.removeEventListener("contextmenu", onContextMenu);
+      host.removeEventListener("pointermove", onHoverMove);
+      host.removeEventListener("pointerleave", onHoverEnd);
+      if (hoverFrame !== null) cancelAnimationFrame(hoverFrame);
+      stopSlide();
       window.removeEventListener("pointerup", onUp, { capture: true });
       window.removeEventListener("pointercancel", onCancel, { capture: true });
       window.removeEventListener("pointermove", onMove);
       if (drag?.frame != null) cancelAnimationFrame(drag.frame);
     };
-  }, [gl, camera, prepared, latest, lastProjected, rig, invalidate]);
+  }, [gl, camera, prepared, latest, lastProjected, rig, invalidate, drawHover, gestureNow, surfaceLookupRef]);
 
   // Dispose of the cloned materials when the model goes away.
   useEffect(() => {
