@@ -435,7 +435,7 @@ export const EDITOR_CSS = /* css */ `
 .fmo-row-note { margin-inline-start: 8px; font: var(--fmo-type-small); color: var(--fmo-ink-muted); }
 .fmo-colour-row[data-active="true"] .fmo-row-head { text-decoration: underline; text-decoration-thickness: 3px; text-underline-offset: 4px; }
 .fmo-colour-row > .fmo-scroll-row + .fmo-family, .fmo-colour-row > .fmo-scroll-row + .fmo-section { margin-top: 12px; }
-.fmo-swatch:disabled { opacity: 0.3; cursor: not-allowed; }
+.fmo-swatch:disabled { opacity: 0.4; filter: grayscale(1); cursor: not-allowed; }
 /* E3f: hover on the model: an item's outline, a part's label by the pointer, and the popover with a part's colours. */
 .fmo-hover-box { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; z-index: 1; }
 .fmo-hover-halo { fill: rgb(255 255 255 / 0.1); stroke: #fff; stroke-width: 4px; stroke-linejoin: round; }
