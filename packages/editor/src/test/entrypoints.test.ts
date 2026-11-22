@@ -31,9 +31,9 @@ function externalImports(file: string, seen = new Set<string>(), found = new Set
 }
 
 describe("the design entry point (@fitmyoutfit/editor/design)", () => {
-  it("imports only zod: no React, no Three.js, no Node or DOM modules", () => {
-    const found = [...externalImports(resolve(srcDir, "design/index.ts"))];
-    expect(found).toEqual(["zod"]);
+  it("imports only zod and the team rules (plain TypeScript, bundled into the build): no React, no Three.js, no Node or DOM modules", () => {
+    const found = [...externalImports(resolve(srcDir, "design/index.ts"))].sort();
+    expect(found).toEqual(["@fitmyoutfit/team-rules", "zod"]);
   });
 
   it("has no test or fixture files that the build would pick up", () => {

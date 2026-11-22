@@ -37,6 +37,13 @@
     "./package.json": "./package.json"
   },
   "scripts": {
+    "ensure-rules": "node scripts/ensure-rules.mjs",
+    "predev": "npm run ensure-rules",
+    "predev:lan": "npm run ensure-rules",
+    "prebuild": "npm run ensure-rules",
+    "prebuild:demo": "npm run ensure-rules",
+    "pretypecheck": "npm run ensure-rules",
+    "pretest": "npm run ensure-rules",
     "dev": "vite --config vite.demo.config.ts",
     "build": "vite build --config vite.lib.config.ts && tsc -p tsconfig.build.json && vite build --config vite.design-cjs.config.ts && tsc -p tsconfig.build.cjs.json && node scripts/write-cjs-package.mjs && node scripts/check-entrypoints.mjs",
     "build:demo": "vite build --config vite.demo.config.ts",
@@ -50,6 +57,7 @@
     "dev:lan": "vite --config vite.demo.config.ts --host"
   },
   "dependencies": {
+    "@fitmyoutfit/team-rules": "*",
     "@react-three/drei": "^10.7.9",
     "@react-three/fiber": "^9.8.2",
     "zod": "^4.6.7"
