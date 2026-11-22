@@ -1,0 +1,23 @@
+import { Migration } from "@medusajs/framework/mikro-orm/migrations";
+
+export class Migration20261122071613 extends Migration {
+
+  override async up(): Promise<void> {
+    this.addSql(`alter table if exists "design_version" drop constraint if exists "design_version_design_id_version_unique";`);
+    this.addSql(`create table if not exists "design" ("id" text not null, "customer_id" text not null, "name" text not null, "created_at" timestamptz not null default now(), "updated_at" timestamptz not null default now(), "deleted_at" timestamptz null, constraint "design_pkey" primary key ("id"));`);
+    this.addSql(`CREATE INDEX IF NOT EXISTS "IDX_design_deleted_at" ON "design" ("deleted_at") WHERE deleted_at IS NULL;`);
+    this.addSql(`CREATE INDEX IF NOT EXISTS "IDX_design_customer_id" ON "design" ("customer_id") WHERE deleted_at IS NULL;`);
+
+    this.addSql(`create table if not exists "design_version" ("id" text not null, "design_id" text not null, "version" integer not null, "product_id" text not null, "schema_version" integer not null, "data" jsonb not null, "created_at" timestamptz not null default now(), "updated_at" timestamptz not null default now(), "deleted_at" timestamptz null, constraint "design_version_pkey" primary key ("id"));`);
+    this.addSql(`CREATE INDEX IF NOT EXISTS "IDX_design_version_deleted_at" ON "design_version" ("deleted_at") WHERE deleted_at IS NULL;`);
+    this.addSql(`CREATE UNIQUE INDEX IF NOT EXISTS "IDX_design_version_design_id_version_unique" ON "design_version" ("design_id", "version") WHERE deleted_at IS NULL;`);
+    this.addSql(`CREATE INDEX IF NOT EXISTS "IDX_design_version_product_id" ON "design_version" ("product_id") WHERE deleted_at IS NULL;`);
+  }
+
+  override async down(): Promise<void> {
+    this.addSql(`drop table if exists "design" cascade;`);
+
+    this.addSql(`drop table if exists "design_version" cascade;`);
+  }
+
+}

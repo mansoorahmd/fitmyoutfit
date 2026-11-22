@@ -444,10 +444,16 @@ export function buildPaymentModules(): ModuleEntry[] {
 
 /**
  * Our own modules, each with its own tables: the cash-collection record of an order
- * (src/modules/cash-collection). The path is relative to the directory Medusa runs in, as above.
+ * (src/modules/cash-collection), saved designs with their versions (src/modules/design) and team
+ * orders with their team lists (src/modules/team-order). The paths are relative to the directory
+ * Medusa runs in, as above.
  */
 export function buildOwnModules(): ModuleEntry[] {
-  return [{ resolve: "./src/modules/cash-collection" }]
+  return [
+    { resolve: "./src/modules/cash-collection" },
+    { resolve: "./src/modules/design" },
+    { resolve: "./src/modules/team-order" },
+  ]
 }
 
 /**
