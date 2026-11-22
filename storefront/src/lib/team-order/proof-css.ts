@@ -32,7 +32,8 @@ export const PROOF_CSS = `
 .fmo-proof-table th { text-align: start; font-size: 12px; font-weight: 700; color: var(--p-muted); padding: 6px 4px; border-bottom: 2px solid var(--p-line-strong); vertical-align: bottom; }
 .fmo-proof-table td { padding: 8px 4px; border-bottom: 1px solid var(--p-line); vertical-align: top; }
 .fmo-proof-table .c-pos { width: 30px; color: var(--p-muted); }
-.fmo-proof-table .c-num { width: 52px; }
+.fmo-proof-table .c-num { width: 58px; }
+.fmo-proof-table td.c-num.words { font-size: 12px; line-height: 1.2; overflow-wrap: anywhere; }
 .fmo-proof-table .c-size { width: 104px; }
 .fmo-proof-table .c-count { width: 44px; text-align: end; }
 .fmo-proof-table td.c-count { font-weight: 600; }
