@@ -11,7 +11,7 @@
 import { checkJerseyNumber, type JerseyNumberFailure } from "./jersey-number.js";
 import { resolveLimits } from "./limits.js";
 import { buildSizeTable, normalizeSize, readSize, type SizeTable } from "./sizes.js";
-import { cleanText, disallowedNameCharacters, mixesScripts, nameLength } from "./text.js";
+import { cleanText, disallowedNameCharacters, hasLetter, mixesScripts, nameLength } from "./text.js";
 import type {
   LineRef,
   TakenRef,
@@ -156,10 +156,11 @@ export function checkRoster(
   lines.forEach((line, index) => {
     // name
     if (nameApplies(line, settings)) {
-      if (line.name === "") {
+      const bad = line.name === "" ? null : disallowedNameCharacters(line.name);
+      // Empty, or nothing but the allowed marks (-, ', ., ZWNJ, a lone combining mark): no name at all.
+      if (line.name === "" || (!bad && !hasLetter(line.name))) {
         problems.push({ code: "name-missing", ...base(line, index), field: "name" });
       } else {
-        const bad = disallowedNameCharacters(line.name);
         if (bad) {
           problems.push({
             code: "name-character",

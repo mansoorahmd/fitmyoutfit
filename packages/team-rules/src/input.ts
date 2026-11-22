@@ -20,6 +20,22 @@ export type RosterInputResult = { ok: true; lines: RosterLine[] } | { ok: false;
 /** The longest text of each field that is read at all, so a body cannot carry a megabyte of name. */
 const MAX_FIELD_LENGTH = { id: 64, name: 200, number: 40, size: 40 } as const;
 
+/**
+ * The largest count a stored line can hold: the team list keeps a count in a 32-bit integer column.
+ * A count above it (or below its negative) would be refused by the database, not by the checks.
+ */
+const MAX_STORABLE_COUNT = 2147483647;
+
+/**
+ * A count is a whole number the storage can hold. A fraction (1.5) would be rounded by the column
+ * without anyone being told, and a number beyond the column would fail the save, so both make the
+ * list malformed. A whole number outside the limits (0, 11, -1) is not malformed: the checks report
+ * it as `quantity-range`.
+ */
+function isStorableCount(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && Math.abs(value) <= MAX_STORABLE_COUNT;
+}
+
 function text(
   value: unknown,
   index: number,
@@ -36,7 +52,7 @@ function text(
 /**
  * Checks the shape of a list and returns its lines (unclean: run `normalizeLines` next).
  * A line is `{ id?, name?, number?, size?, count?, noName?, noNumber? }`: missing text is empty,
- * a missing count is 1, a missing flag is false. A count that is not a number, a flag that is not
+ * a missing count is 1, a missing flag is false. A count that is not a whole number the storage can hold (1.5, 3e9), a flag that is not
  * a boolean, text that is not a string, or a line id used twice make the list malformed.
  */
 export function parseRosterInput(input: unknown, limitOverrides?: Partial<RosterLimits>): RosterInputResult {
@@ -58,7 +74,7 @@ export function parseRosterInput(input: unknown, limitOverrides?: Partial<Roster
     const number = text(row.number, index, "number");
     const size = text(row.size, index, "size");
     for (const part of [id, name, number, size]) if (!part.ok) return { ok: false, error: part.error };
-    if (row.count !== undefined && (typeof row.count !== "number" || !Number.isFinite(row.count))) {
+    if (row.count !== undefined && !isStorableCount(row.count)) {
       return { ok: false, error: { code: "wrong-type", index, field: "count" } };
     }
     for (const flag of ["noName", "noNumber"] as const) {

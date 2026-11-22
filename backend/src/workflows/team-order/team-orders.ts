@@ -51,7 +51,11 @@ import {
 import { readMinGarmentQuantity } from "../../lib/settings/min-garment-quantity"
 import { readRosterLimits } from "../../lib/settings/roster-limits"
 import { TEAM_ORDER_MODULE } from "../../modules/team-order/constants"
-import { RosterVersionStale, TeamOrderChanged } from "../../modules/team-order/service"
+import {
+  RosterVersionStale,
+  TeamOrderChanged,
+  TeamOrderHasLinkedOrders,
+} from "../../modules/team-order/service"
 import type TeamOrderModuleService from "../../modules/team-order/service"
 import { loadOwnVersionById } from "../design/designs"
 
@@ -435,12 +439,23 @@ export async function deleteTeamOrder(container: MedusaContainer, customerId: st
   if (order.status !== "draft") {
     throw notAllowed("team_order_not_draft", "Only a draft team order can be deleted.")
   }
+  const linkedRefusal = () => notAllowed("team_order_has_linked_orders", "A team order with add-ons or reorders cannot be deleted.")
   const linked = (await service(container).listTeamOrders({ linked_order_id: order.id }, { select: ["id"] })) as { id: string }[]
   if (linked.length > 0) {
-    throw notAllowed("team_order_has_linked_orders", "A team order with add-ons or reorders cannot be deleted.")
+    throw linkedRefusal()
   }
-  await service(container).deleteRosterEntries({ team_order_id: order.id })
-  await service(container).deleteTeamOrders(order.id)
+  // One transaction under the order's row lock: it is deleted only while it is still a draft.
+  try {
+    await service(container).deleteDraft({ teamOrderId: order.id })
+  } catch (error) {
+    if (error instanceof TeamOrderHasLinkedOrders) throw linkedRefusal()
+    if (error instanceof TeamOrderChanged) {
+      // A proof was made at the same moment (not a draft any more); an order that is gone is a 404.
+      const current = await loadOwnTeamOrder(container, customerId, id)
+      throw notAllowed("team_order_not_draft", "Only a draft team order can be deleted.", { status: current.status })
+    }
+    throw error
+  }
   return { id: order.id, object: "team_order", deleted: true }
 }
 

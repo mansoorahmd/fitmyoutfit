@@ -26,7 +26,7 @@ import {
 import { isInThePast } from "../../lib/rules/team-order-schedule"
 import { allowedIn, isStatus, mayStep, type TeamOrderStatus } from "../../lib/rules/team-order-status"
 import { readNeedByDate, buildRosterView, entriesToLines } from "../../lib/rules/team-order"
-import { TeamOrderChanged } from "../../modules/team-order/service"
+import { TeamOrderChanged, TeamOrderHasAddOns } from "../../modules/team-order/service"
 import { loadOwnVersionById } from "../design/designs"
 import { sendDepositDue, sendProofReady } from "./emails"
 import {
@@ -59,15 +59,11 @@ async function loadOwnProof(container: MedusaContainer, order: TeamOrderRow, pro
 }
 
 /**
- * Makes a proof of the team list as it is now: `draft -> proof_sent`. Refused when the list is not
- * ready (empty, a problem anywhere, below the region's minimum). Stores the snapshot, its hash and
- * the next proof number. Answers with the whole read answer of the team order.
+ * Checks the team list as it is now (its lines, the region's minimum, the numbers other add-ons of
+ * the same first order have taken) and refuses (400) when it is not ready for a proof: empty, a
+ * problem anywhere, below the minimum. Returns the lines as the proof will list them.
  */
-export async function makeProof(container: MedusaContainer, customerId: string, id: string, now: Date = new Date()) {
-  const order = await loadOwnTeamOrder(container, customerId, id)
-  if (!mayStep("organizer", statusOf(order), "proof_sent")) {
-    throw notAllowed("team_order_not_draft", "A proof can only be made from a draft team order.", { status: order.status })
-  }
+async function assertReadyForProof(container: MedusaContainer, order: TeamOrderRow) {
   const [entries, sizes, region, settings, taken] = await Promise.all([
     loadEntries(container, order.id),
     loadProductSizes(container, order.product_id),
@@ -92,7 +88,25 @@ export async function makeProof(container: MedusaContainer, customerId: string, 
     }
     throw notAllowed(why.code, messages[why.code], why.extra)
   }
-  const { text, hash } = hashSnapshot(snapshotOf(order, view.lines))
+  return view.lines
+}
+
+/**
+ * Makes a proof of the team list as it is now: `draft -> proof_sent`. Refused when the list is not
+ * ready (empty, a problem anywhere, below the region's minimum). Stores the snapshot, its hash and
+ * the next proof number. Answers with the whole read answer of the team order.
+ *
+ * For an add-on the numbers other add-ons have taken are worked out again inside the transaction,
+ * under the first order's row lock (service.ts, makeProof): two add-ons with the same number cannot
+ * both get a proof, because the second finds the first one's proof out.
+ */
+export async function makeProof(container: MedusaContainer, customerId: string, id: string, now: Date = new Date()) {
+  const order = await loadOwnTeamOrder(container, customerId, id)
+  if (!mayStep("organizer", statusOf(order), "proof_sent")) {
+    throw notAllowed("team_order_not_draft", "A proof can only be made from a draft team order.", { status: order.status })
+  }
+  const lines = await assertReadyForProof(container, order)
+  const { text, hash } = hashSnapshot(snapshotOf(order, lines))
   let made: { id: string; proof_number: number }
   try {
     made = await service(container).makeProof({
@@ -101,6 +115,14 @@ export async function makeProof(container: MedusaContainer, customerId: string, 
       snapshotText: text,
       snapshotHash: hash,
       by: { actor: "organizer", actorId: customerId },
+      ...(kindOf(order) === "add_on" && order.linked_order_id
+        ? {
+            firstOrderId: order.linked_order_id,
+            checkUnderLock: async () => {
+              await assertReadyForProof(container, order)
+            },
+          }
+        : {}),
     })
   } catch (error) {
     if (error instanceof TeamOrderChanged) {
@@ -220,6 +242,13 @@ export async function signProof(
   return describeTeamOrder(container, after, now)
 }
 
+const hasAddOns = (status: string, addOns: number) =>
+  notAllowed(
+    "team_order_has_add_ons",
+    "A team order with add-ons cannot go back to draft: the add-ons depend on its signed list.",
+    { status, add_ons: addOns }
+  )
+
 /**
  * Back to draft, to change something: from `proof_sent` (the proof becomes withdrawn) or from
  * `approved` (the signed proof becomes replaced; nothing is paid yet). A new proof must be made
@@ -238,19 +267,20 @@ export async function reopenTeamOrder(container: MedusaContainer, customerId: st
       { status: order.status }
     )
   }
+  // The add-ons are counted again under the order's row lock (service.ts, backToDraft), so one made
+  // at this very moment cannot slip in between: this early check only gives the refusal sooner.
   if (kindOf(order) !== "add_on") {
     const addOns = (await service(container).listTeamOrders({ linked_order_id: order.id, kind: "add_on" }, { select: ["id"] })) as { id: string }[]
     if (addOns.length > 0) {
-      throw notAllowed(
-        "team_order_has_add_ons",
-        "A team order with add-ons cannot go back to draft: the add-ons depend on its signed list.",
-        { status: order.status, add_ons: addOns.length }
-      )
+      throw hasAddOns(order.status, addOns.length)
     }
   }
   try {
     await service(container).backToDraft({ teamOrderId: order.id, from: status, by: { actor: "organizer", actorId: customerId } })
   } catch (error) {
+    if (error instanceof TeamOrderHasAddOns) {
+      throw hasAddOns(order.status, error.addOns)
+    }
     if (error instanceof TeamOrderChanged) {
       const current = await loadOwnTeamOrder(container, customerId, id)
       if (current.status === "draft") {
