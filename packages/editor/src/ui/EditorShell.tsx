@@ -24,11 +24,13 @@ import { sameJson, type EditLabel } from "../state/history.js";
 import { useEditorHistory } from "../react/useEditorHistory.js";
 import { useTrailing } from "../react/useTrailing.js";
 import { buildSizeTable, resolveLimits } from "@fitmyoutfit/team-rules";
-import { analyseList, designWithPlayer, playerForShirt, toSavedList, type SeenMap } from "../team-list/checks.js";
+import { analyseList, designWithPlayer, nextToFix, playerForShirt, toSavedList, type SeenMap } from "../team-list/checks.js";
 import { addLine, cleanField, convertAllDigits, moveLine, newLine, removeLine, setCount as setLineCount, setField as setLineField, setFlag as setLineFlag, setSizeCountLines, sortLines, type SortBy } from "../team-list/lines.js";
 import { createHandOver } from "../team-list/hand-over.js";
 import { readSavedList } from "../team-list/saved.js";
 import { DEFAULT_TEAM_NOUN, DEFAULT_TEAM_SIZES, type EditorLine, type SavedTeamList, type TeamListHost, type TeamListReport } from "../team-list/types.js";
+import { applyPaste, type PasteMode } from "../team-list/paste.js";
+import { PlayerChip, WholeShirtToggle } from "./PlayerChip.js";
 import { TeamListContext, type TeamListApi } from "./team-list-context.js";
 import { PlayersTool } from "./PlayersTool.js";
 import type { CameraInfo, CanvasHover, DesignCanvasHandle, LayerDragEvent, PieceGuide, TextureDrawInfo, ZoneTap } from "../react/DesignCanvas.js";
@@ -446,7 +448,8 @@ export function EditorShell(props: EditorShellProps) {
   const chosenId = chosen !== null && lines.some((l) => l.id === chosen) ? chosen : (lines[0]?.id ?? null);
   const [seen, setSeen] = useState<SeenMap>({});
   const [revealAll, setRevealAll] = useState(false);
-  const [playersView, setPlayersView] = useState<"list" | "style">("list");
+  const [playersView, setPlayersView] = useState<"list" | "style" | "paste">("list");
+  const [pasteText, setPasteText] = useState("");
   const [listMemory] = useState(() => {
     let scrollTop = 0;
     return { get: () => scrollTop, set: (value: number) => void (scrollTop = value) };
@@ -456,11 +459,12 @@ export function EditorShell(props: EditorShellProps) {
     for (const l of lines) if (!entered.current.includes(l.id)) entered.current.push(l.id);
   }, [lines]);
   // The shirt shows the chosen line (7.1): its name and number as they would print, never written into the design.
-  const chosenLine = lines.length > 0 ? lines.find((l) => l.id === chosenId) : undefined;
+  const [previewedLine, setPreviewedLine] = useState<EditorLine | null>(null);
+  const chosenLine = previewedLine ?? (lines.length > 0 ? lines.find((l) => l.id === chosenId) : undefined);
   const shirt = chosenLine ? playerForShirt(chosenLine, prints) : null;
   // Typing never waits for the shirt (13.5): the shirt follows the keys a moment after they pause; choosing another line shows its shirt at once.
   const shirtKey = shirt ? `${shirt.name}\u0000${shirt.number}` : null;
-  const shirtShown = useTrailing(shirtKey, 120, chosenId);
+  const shirtShown = useTrailing(shirtKey, 120, previewedLine?.id ?? chosenId);
   const shirtName = shirtShown === null ? null : shirtShown.split("\u0000")[0]!;
   const shirtNumber = shirtShown === null ? null : (shirtShown.split("\u0000")[1] ?? "");
   const withPlayer = useCallback((d: DesignDocument): DesignDocument => (shirtName === null || shirtNumber === null ? d : designWithPlayer(d, { name: shirtName, number: shirtNumber })), [shirtName, shirtNumber]);
@@ -482,51 +486,136 @@ export function EditorShell(props: EditorShellProps) {
   const maxLines = listLimits.maxLines;
   const maxCount = listLimits.maxCount;
   const minCount = listLimits.minCount;
-  const beginField = useCallback((id: string, field: "name" | "number" | "size") => history.beginLines(`list-${field}|${nameOfLine(id)}`), [history, nameOfLine]);
-  const typeField = useCallback((id: string, field: "name" | "number" | "size", value: string) => history.previewLines((ls) => setLineField(ls as EditorLine[], id, field, value)), [history]);
+  // A field's undo gesture opens on its FIRST change, not when it gets focus, and a field that was only looked at ends
+  // nothing: choosing a line (focus in, focus out) is not an edit, so it changes no history and renders the editor once
+  // (TL4: a line chosen within 100 ms; each history change is a render of the whole editor).
+  const fieldLabel = useRef<string | null>(null);
+  const gestureOpen = useRef(false);
+  const beginField = useCallback(
+    (id: string, field: "name" | "number" | "size") => {
+      fieldLabel.current = `list-${field}|${nameOfLine(id)}`;
+    },
+    [nameOfLine],
+  );
+  const typeField = useCallback(
+    (id: string, field: "name" | "number" | "size", value: string) => {
+      if (teamHost?.locked) return;
+      if (!gestureOpen.current && fieldLabel.current !== null) {
+        history.beginLines(fieldLabel.current);
+        gestureOpen.current = true;
+      }
+      history.previewLines((ls) => setLineField(ls as EditorLine[], id, field, value));
+    },
+    [history, teamHost?.locked],
+  );
   const leaveField = useCallback(
     (id: string, field: "name" | "number" | "size") => {
       markSeen(id, field);
-      history.previewLines((ls) => cleanField(ls as EditorLine[], id, field, sizeTable));
-      history.endLines();
+      // The clean-up on leaving (4.1) is an edit only when it changes the value.
+      const needsCleaning = cleanField(linesRef.current as EditorLine[], id, field, sizeTable) !== linesRef.current;
+      if (gestureOpen.current || needsCleaning) {
+        if (!gestureOpen.current && fieldLabel.current !== null) history.beginLines(fieldLabel.current);
+        history.previewLines((ls) => cleanField(ls as EditorLine[], id, field, sizeTable));
+        history.endLines();
+        gestureOpen.current = false;
+      }
+      fieldLabel.current = null;
     },
     [history, markSeen, sizeTable],
   );
   const leaveLine = useCallback((id: string) => markSeen(id, "left"), [markSeen]);
-  const endTyping = useCallback(() => history.endLines(), [history]);
+  const endTyping = useCallback(() => {
+    if (!gestureOpen.current) return;
+    gestureOpen.current = false;
+    history.endLines();
+  }, [history]);
   const addPlayer = useCallback(() => {
-    if (linesRef.current.length >= maxLines) return null;
+    if (teamHost?.locked || linesRef.current.length >= maxLines) return null;
     const line = newLine();
     history.beginLines("list-add");
+    gestureOpen.current = true;
     history.previewLines((ls) => addLine(ls as EditorLine[], line));
     setChosen(line.id);
     return line.id;
-  }, [history, maxLines]);
+  }, [history, maxLines, teamHost?.locked]);
   const removePlayer = useCallback(
     (id: string, options?: { silent?: boolean }) => {
       const current = linesRef.current;
       const at = current.findIndex((l) => l.id === id);
-      if (at < 0) return;
+      if (at < 0 || teamHost?.locked) return;
       const name = nameOfLine(id);
       const after = current[at + 1] ?? current[at - 1];
       if (options?.silent) {
         history.beginLines("list-remove");
         history.previewLines((ls) => removeLine(ls as EditorLine[], id));
         history.endLines();
+        gestureOpen.current = false;
       } else {
         history.commitLines((ls) => removeLine(ls as EditorLine[], id), `list-remove|${name}`);
         announce(fill(wording.teamList.removed, { name }), { undo: true, ms: 6000 });
       }
       setChosen(after?.id ?? null);
     },
-    [history, nameOfLine, announce, wording],
+    [history, nameOfLine, announce, wording, teamHost?.locked],
   );
-  const movePlayer = useCallback((id: string, delta: -1 | 1) => history.commitLines((ls) => moveLine(ls as EditorLine[], id, delta), `list-move|${nameOfLine(id)}`), [history, nameOfLine]);
-  const sortPlayers = useCallback((by: SortBy) => history.commitLines((ls) => sortLines(ls as EditorLine[], by, { sizes: listSizes, entered: entered.current }), "list-sort"), [history, listSizes]);
-  const setPlayerCount = useCallback((id: string, count: number) => history.commitLines((ls) => setLineCount(ls as EditorLine[], id, count), `list-count|${nameOfLine(id)}`), [history, nameOfLine]);
-  const setPlayerFlag = useCallback((id: string, flag: "noName" | "noNumber", on: boolean) => history.commitLines((ls) => setLineFlag(ls as EditorLine[], id, flag, on), `list-flag|${nameOfLine(id)}`), [history, nameOfLine]);
-  const convertDigits = useCallback((to: "western" | "arabic-indic") => history.commitLines((ls) => convertAllDigits(ls as EditorLine[], to), "list-digits"), [history]);
-  const setSizeCount = useCallback((code: string, count: number) => history.commitLines((ls) => setSizeCountLines(ls as EditorLine[], code, count, { table: sizeTable, maxCount }), `list-count|${code}`), [history, sizeTable, maxCount]);
+  const movePlayer = useCallback((id: string, delta: -1 | 1) => !teamHost?.locked && history.commitLines((ls) => moveLine(ls as EditorLine[], id, delta), `list-move|${nameOfLine(id)}`), [history, nameOfLine, teamHost?.locked]);
+  const sortPlayers = useCallback((by: SortBy) => !teamHost?.locked && history.commitLines((ls) => sortLines(ls as EditorLine[], by, { sizes: listSizes, entered: entered.current }), "list-sort"), [history, listSizes, teamHost?.locked]);
+  const setPlayerCount = useCallback((id: string, count: number) => !teamHost?.locked && history.commitLines((ls) => setLineCount(ls as EditorLine[], id, count), `list-count|${nameOfLine(id)}`), [history, nameOfLine, teamHost?.locked]);
+  const setPlayerFlag = useCallback((id: string, flag: "noName" | "noNumber", on: boolean) => !teamHost?.locked && history.commitLines((ls) => setLineFlag(ls as EditorLine[], id, flag, on), `list-flag|${nameOfLine(id)}`), [history, nameOfLine, teamHost?.locked]);
+  const convertDigits = useCallback((to: "western" | "arabic-indic") => !teamHost?.locked && history.commitLines((ls) => convertAllDigits(ls as EditorLine[], to), "list-digits"), [history, teamHost?.locked]);
+  const setSizeCount = useCallback((code: string, count: number) => !teamHost?.locked && history.commitLines((ls) => setSizeCountLines(ls as EditorLine[], code, count, { table: sizeTable, maxCount }), `list-count|${code}`), [history, sizeTable, maxCount, teamHost?.locked]);
+  // The player chip (7.2): previous and next in list order; its words are said politely (a hidden live region), never in the status line, which would take the chip's place.
+  const [stepNote, setStepNote] = useState("");
+  const [revealTick, setRevealTick] = useState(0);
+  const chosenIdRef = useRef(chosenId);
+  useEffect(() => {
+    chosenIdRef.current = chosenId;
+  });
+  const step = useCallback(
+    (direction: -1 | 1) => {
+      const current = linesRef.current;
+      const at = Math.max(0, current.findIndex((l) => l.id === chosenIdRef.current));
+      const next = current[at + direction];
+      if (!next) return;
+      setChosen(next.id);
+      setStepNote(fill(wording.teamList.chip.stepped, { i: at + direction + 1, n: current.length, name: next.name || fill(wording.teamList.chip.unnamed, { i: at + direction + 1 }) }));
+      setRevealTick((n) => n + 1);
+    },
+    [wording],
+  );
+  const reveal = useCallback(() => setRevealTick((n) => n + 1), []);
+  const revealOnOpen = useRef(false);
+  const consumeReveal = useCallback(() => {
+    const was = revealOnOpen.current;
+    revealOnOpen.current = false;
+    return was;
+  }, []);
+  // The phone's list view frames the close-up of the name and number; the toggle goes back to the whole shirt and again (3.2).
+  const [wholeShirt, setWholeShirt] = useState(false);
+
+  // Pasting (5.2): the lines are added in ONE undo step, the first added line is chosen, and the checks show on them like on typed lines.
+  const addPasted = useCallback(
+    (added: readonly EditorLine[], mode: PasteMode) => {
+      if (added.length === 0 || teamHost?.locked) return;
+      const n = added.length;
+      const words = n === 1 ? wording.teamList.onePlayer : fill(wording.teamList.players, { n });
+      history.commitLines((ls) => applyPaste(ls as EditorLine[], added, mode, maxLines), `list-paste|${words}`);
+      setSeen((s) => ({ ...s, ...Object.fromEntries(added.map((l) => [l.id, { left: true, name: true, number: true, size: true }])) }));
+      setChosen(added[0]!.id);
+      setPasteText("");
+      setPlayersView("list");
+      announce(n === 1 ? wording.teamList.paste.addedOne : fill(wording.teamList.paste.added, { n }));
+    },
+    [history, maxLines, announce, wording, teamHost?.locked],
+  );
+  const openPaste = useCallback(
+    (text?: string) => {
+      if (teamHost?.locked) return;
+      if (text !== undefined) setPasteText(text);
+      setPlayersView("paste");
+    },
+    [teamHost?.locked],
+  );
   const revealAllProblems = useCallback(() => setRevealAll(true), []);
   const compactLayout = layout === "compact";
   const setKeyboard = useCallback(
@@ -540,6 +629,7 @@ export function EditorShell(props: EditorShellProps) {
   const teamNoun = teamHost?.noun ?? DEFAULT_TEAM_NOUN;
   const teamMinimum = teamHost?.minimum ?? null;
   const openSizeChart = teamHost?.openSizeChart ?? null;
+  const lockedList = teamHost?.locked ?? null;
   const keyboard = typing && compactLayout;
   const listLimitsView = useMemo(() => ({ maxLines, minCount, maxCount }), [maxLines, minCount, maxCount]);
   const teamApi: TeamListApi = useMemo(
@@ -553,12 +643,23 @@ export function EditorShell(props: EditorShellProps) {
       minimum: teamMinimum,
       limits: listLimitsView,
       openSizeChart,
+      locked: lockedList,
       chosenId,
       choose: setChosen,
+      step,
+      stepNote,
+      reveal,
+      revealTick,
       seen,
       revealAll,
       view: playersView,
       setView: setPlayersView,
+      consumeReveal,
+      previewPlayer: setPreviewedLine,
+      pasteText,
+      setPasteText,
+      openPaste,
+      addPasted,
       memory: listMemory,
       keyboard,
       beginField,
@@ -579,7 +680,7 @@ export function EditorShell(props: EditorShellProps) {
       nameShrunk,
       closeUpLayerId,
     }),
-    [lines, analysis, prints, listSizes, sizeTable, teamNoun, teamMinimum, listLimitsView, openSizeChart, chosenId, seen, revealAll, playersView, listMemory, keyboard, beginField, typeField, leaveField, leaveLine, endTyping, addPlayer, removePlayer, movePlayer, sortPlayers, setPlayerCount, setPlayerFlag, convertDigits, setSizeCount, revealAllProblems, setKeyboard, nameShrunk, closeUpLayerId],
+    [lines, analysis, prints, listSizes, sizeTable, teamNoun, teamMinimum, listLimitsView, openSizeChart, lockedList, chosenId, step, stepNote, reveal, revealTick, seen, revealAll, playersView, consumeReveal, setPreviewedLine, pasteText, openPaste, addPasted, listMemory, keyboard, beginField, typeField, leaveField, leaveLine, endTyping, addPlayer, removePlayer, movePlayer, sortPlayers, setPlayerCount, setPlayerFlag, convertDigits, setSizeCount, revealAllProblems, setKeyboard, nameShrunk, closeUpLayerId],
   );
   // What the editor hands to its host (12.2, 11.1): the list and its report, after a second without changes.
   const [hostBridge] = useState(() => {
@@ -654,10 +755,10 @@ export function EditorShell(props: EditorShellProps) {
   const toolsReady = mode === "flat" || (load.ready && fontsReadyOnce);
   // The team list on a phone frames the back close-up: the name and number fill the free stage (3.2). The camera
   // moves only when the list opens (an action of the coach's), never while lines are chosen; it goes back when the list closes.
-  const listView = activeTool === "players" && playersView === "list" && !startCard;
+  const listView = activeTool === "players" && (playersView === "list" || playersView === "paste") && !startCard;
   const listTyping = typing && layout === "compact" && listView;
   const closeUpLayer = closeUpLayerId;
-  const listCloseUp = layout === "compact" && listView && !doneOpen && toolsReady && closeUpLayer !== null;
+  const listCloseUp = layout === "compact" && listView && !doneOpen && toolsReady && closeUpLayer !== null && !wholeShirt;
   const wasCloseUp = useRef(false);
   // The close-up is aimed at the free stage, so it is aimed again once the panel's height has settled (the keyboard
   // opening or closing changes it).
@@ -683,7 +784,10 @@ export function EditorShell(props: EditorShellProps) {
       setDetent(nextDetent);
       setStartCard(false);
       setKitOpen(false);
-      if (next === "players") setPlayersView("list");
+      if (next === "players") {
+        setPlayersView("list");
+        setWholeShirt(false);
+      }
       // The camera turns to the side the tool works on (6.3), unless the coach tapped an item on the model
       // (they are already looking at it).
       if (options.turn === false) return;
@@ -694,6 +798,21 @@ export function EditorShell(props: EditorShellProps) {
       } else if (next === "logos") showSide("front");
     },
     [showSide, product],
+  );
+  // The Done panel's team section (11.2): "Show", "Add players" and the fix and add buttons close the panel and open the list, at the first line to fix.
+  const showTeamList = useCallback(
+    (target: "fix" | "players" | "add") => {
+      setDoneOpen(false);
+      beforeDone.current = null;
+      revealOnOpen.current = true;
+      openTool("players", layout === "compact" ? "expanded" : "normal", { turn: true });
+      if (target === "fix") {
+        setRevealAll(true);
+        const first = nextToFix(linesRef.current, analysis.toFix, null, 1);
+        if (first) setChosen(first);
+      } else if (target === "add") addPlayer();
+    },
+    [analysis.toFix, openTool, layout, addPlayer],
   );
   const onTab = (next: ToolId) => {
     if (!toolsReady) {
@@ -1211,6 +1330,11 @@ export function EditorShell(props: EditorShellProps) {
       canvas.current?.turnBy(turn);
     } else if (event.key === "+" || event.key === "=") canvas.current?.zoomIn();
     else if (event.key === "-") canvas.current?.zoomOut();
+    // Page Up and Page Down choose the previous and next player (7.2), with nothing selected.
+    else if ((event.key === "PageUp" || event.key === "PageDown") && !selectedId) {
+      event.preventDefault();
+      step(event.key === "PageUp" ? -1 : 1);
+    }
   };
 
   const toolBody = (t: ToolId) => {
@@ -1476,6 +1600,8 @@ export function EditorShell(props: EditorShellProps) {
                 </div>
               ) : null
             }
+            chip={startCard || doneOpen || (layout === "compact" && typing) ? null : <PlayerChip inList={listView && panelOpen} />}
+            wholeToggle={layout === "compact" && listView && panelOpen ? <WholeShirtToggle pressed={wholeShirt} onToggle={() => setWholeShirt((w) => !w)} /> : null}
             viewControls={viewControlsFor({ layout, typing, panelOpen, detent, startCard, listView, stageHeight: (size.height || 844) - LAYOUT_SIZES.compact.topBar - (startCard ? panelSize.height : 0) })}
           />
           {layout !== "wide" && (start ?? panel)}
@@ -1502,6 +1628,8 @@ export function EditorShell(props: EditorShellProps) {
             flushList();
             props.onDone?.(designRef.current);
           }}
+          listRequired={Boolean(teamHost?.listRequiredToContinue)}
+          onShowList={showTeamList}
           onShow={(check) => {
             setDoneOpen(false);
             api.select(check.layerId, { turn: true, openTool: true });

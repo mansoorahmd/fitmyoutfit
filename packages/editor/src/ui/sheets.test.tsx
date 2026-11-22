@@ -12,6 +12,8 @@ import type { SelectionGeometry } from "../react/DesignCanvas";
 import { EDITOR_WORDING as W } from "./content";
 import { EditorContext, type EditorApi } from "./context";
 import { DonePanel } from "./DonePanel";
+import { TeamListContext } from "./team-list-context";
+import { fakeTeamApi } from "./team-list-test-api";
 import { createBus } from "./handles";
 import { sheetUnderDone } from "./layout";
 import { SelectedWarnings, StageContextBar } from "./SelectedItem";
@@ -62,7 +64,11 @@ describe("R37, R29 and landscape: the Done panel", () => {
     expect(EDITOR_CSS).toMatch(/\.fmo-done-panel\[data-layout="short"\] \.fmo-done-inner > \.fmo-primary \{ position: sticky; bottom: 0;/);
   });
   it("the main action is the one that takes the focus when it opens (not the close button)", () => {
-    const html = inEditor(<DonePanel open layout="compact" productName="Jersey" onSaveAndGoBack={noop} onClose={noop} onShow={noop} />);
+    const html = inEditor(
+      <TeamListContext.Provider value={fakeTeamApi([])}>
+        <DonePanel open layout="compact" productName="Jersey" onSaveAndGoBack={noop} onClose={noop} onShow={noop} />
+      </TeamListContext.Provider>,
+    );
     expect(html).toMatch(/<button[^>]*data-testid="done-save-and-go-back"[^>]*data-done-focus="true"/);
   });
 });

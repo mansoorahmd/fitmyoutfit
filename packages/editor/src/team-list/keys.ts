@@ -12,6 +12,23 @@ export function fieldsOf(line: Pick<EditorLine, "noName" | "noNumber">, showNumb
   return [...(line.noName ? [] : (["name"] as const)), ...(showNumber && !line.noNumber ? (["number"] as const) : []), "size" as const];
 }
 
+/**
+ * Where focus goes after a line is removed from its menu (4.7, 13.7): the SAME field of the line that took its place,
+ * never the top of the page. The line that took its place is the next one, or the one before at the end; null when the
+ * list is empty. `lastField` is the field that had focus in the removed line (the menu took focus from it). With the
+ * keyboard closed on a phone a field would bring the keyboard up, so the line itself takes focus there.
+ */
+export function focusAfterRemoval(input: { lines: readonly EditorLine[]; removedId: string; lastField: Field | null; showNumber: boolean; phoneWithoutKeyboard: boolean }): { id: string; field: Field | "line" } | null {
+  const at = input.lines.findIndex((l) => l.id === input.removedId);
+  if (at < 0) return null;
+  const after = input.lines[at + 1] ?? input.lines[at - 1];
+  if (!after) return null;
+  if (input.phoneWithoutKeyboard) return { id: after.id, field: "line" };
+  const own = fieldsOf(after, input.showNumber);
+  const wanted = input.lastField ?? "name";
+  return { id: after.id, field: own.includes(wanted) ? wanted : (own[0] ?? "name") };
+}
+
 export interface KeyInput {
   key: string;
   shift?: boolean;

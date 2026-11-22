@@ -4,6 +4,7 @@
  */
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { NOTE_CODES, PROBLEM_CODES } from "@fitmyoutfit/team-rules";
 import { describe, expect, it } from "vitest";
 import { EDITOR_WORDING } from "./content.js";
 import { initialsExample, noteText, piecesText, playerCalled, problemText, saysInField, withoutIsolates, type WordsContext } from "./team-list-words.js";
@@ -13,18 +14,9 @@ import { DEFAULT_TEAM_NOUN, DEFAULT_TEAM_SIZES, type EditorLine } from "../team-
 const W = EDITOR_WORDING;
 const line = (id: string, name = "", number = "", size = "", extra: Partial<EditorLine> = {}): EditorLine => ({ id, name, number, size, count: 1, noName: false, noNumber: false, ...extra });
 
-/** The members of a string-literal union in the package's source: `export type ProblemCode = | "a" | "b"`. */
-function unionMembers(file: string, name: string): string[] {
-  const source = readFileSync(resolve(import.meta.dirname, "../../../team-rules/src", file), "utf8");
-  const start = source.indexOf(`export type ${name} =`);
-  expect(start, `${name} in ${file}`).toBeGreaterThan(-1);
-  const end = source.indexOf(";", start);
-  return [...source.slice(start, end).matchAll(/"([a-z-]+)"/g)].map((m) => m[1]!);
-}
-
 describe("every code the rules package can return has wording", () => {
-  const problemCodes = unionMembers("types.ts", "ProblemCode");
-  const noteCodes = ["name-mixed-scripts", "mixed-digit-systems"];
+  const problemCodes = [...PROBLEM_CODES];
+  const noteCodes = [...NOTE_CODES];
   it("reads a real list of codes from the package (not an empty one)", () => {
     expect(problemCodes.length).toBeGreaterThanOrEqual(12);
     expect(problemCodes).toContain("number-duplicate");
@@ -40,11 +32,10 @@ describe("every code the rules package can return has wording", () => {
   });
   it("has a sentence for each note code", () => {
     for (const code of noteCodes) expect(noteText({ code } as never, W)).toBe((W.teamList.notes as Record<string, string>)[code]);
-    for (const code of unionMembers("types.ts", "ProblemCode")) expect(code).toMatch(/^[a-z]+(-[a-z]+)*$/);
-  });
-  it("finds the note codes in the package too", () => {
-    const source = readFileSync(resolve(import.meta.dirname, "../../../team-rules/src/types.ts"), "utf8");
-    for (const code of ["name-mixed-scripts", "mixed-digit-systems"]) expect(source).toContain(`"${code}"`);
+    // No wording the package cannot return: every key of the wording is a code (or one of the editor's own variants).
+    const own = new Set(["number-duplicate-two", "number-duplicate-many", "name-digit"]);
+    for (const key of Object.keys(W.teamList.problems)) expect(own.has(key) || problemCodes.includes(key as never), key).toBe(true);
+    for (const key of Object.keys(W.teamList.notes)) expect(key === "smaller" || noteCodes.includes(key as never), key).toBe(true);
   });
 });
 

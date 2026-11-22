@@ -4,12 +4,12 @@
  * without leaving the keyboard. The lines are the editor's own state (kept in its one undo history by the shell);
  * the checks are the rules package's, worded from the codes (`team-list-words.ts`).
  *
- * Not here (the second part): pasting a list, the CSV file, the player chip, the Done panel's team section.
+ * Pasting a list is `PasteView`; the player chip is on the stage; the Done panel has its own team section.
  */
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 import { readSize } from "@fitmyoutfit/team-rules";
 import { nextToFix, shownProblems } from "../team-list/checks.js";
-import { fieldsOf, keyAction, type Field, type KeyAction } from "../team-list/keys.js";
+import { fieldsOf, focusAfterRemoval, keyAction, type Field, type KeyAction } from "../team-list/keys.js";
 import type { SortBy } from "../team-list/lines.js";
 import type { EditorLine } from "../team-list/types.js";
 import { fill } from "./content.js";
@@ -19,6 +19,8 @@ import { LineRow, SizeListbox, SizeStrip, listboxSizes, type Shown } from "./Tea
 import { useTeamList } from "./team-list-context.js";
 import { Alert, SwitchRow } from "./parts.js";
 import { noteText, piecesText, playerCalled, problemText, saysInField } from "./team-list-words.js";
+
+const NO_SHOWN: readonly Shown[] = [];
 
 type MenuState = { kind: "line"; id: string; stepper?: boolean } | { kind: "sort" } | null;
 
@@ -47,6 +49,7 @@ export function TeamListView({ initialDetailsOpen }: { initialDetailsOpen?: bool
   const menuButton = useRef<HTMLElement | null>(null);
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const listboxId = useId();
+  const locked = t.locked;
   const atLimit = lines.length >= t.limits.maxLines;
   const chosenIndex = t.chosenId ? lines.findIndex((l) => l.id === t.chosenId) : -1;
 
@@ -54,22 +57,33 @@ export function TeamListView({ initialDetailsOpen }: { initialDetailsOpen?: bool
   const { sizes: sizeList, noun: productNoun } = t;
   const wordsContext = useMemo(() => ({ wording, lines, sizes: sizeList, noun: productNoun }), [wording, lines, sizeList, productNoun]);
 
-  /** The problems and notes of one line, worded. */
-  const shownFor = (line: EditorLine): Shown[] => {
-    const problems = shownProblems(analysis, line, t.seen, t.revealAll);
-    const out: Shown[] = problems.map((p) => {
-      const text = problemText(p, line, wordsContext);
-      return { key: `${p.code}:${text}`, code: p.code, field: p.field, text, inField: saysInField(p), kind: "error" as const };
-    });
-    const seen = t.seen[line.id];
-    for (const n of analysis.notesByLine.get(line.id) ?? []) {
-      if (n.code === "name-mixed-scripts" && !(seen?.name || t.revealAll)) continue;
-      out.push({ key: `${n.code}`, code: n.code, field: "name", text: noteText(n, wording), inField: false, kind: "note" });
+  /**
+   * The problems and notes of every line, worded. Worked out when the lines, their checks, what has been left or the
+   * wording change, NOT when another line is chosen: choosing is the hot path (TL4, 100 ms), and 40 lines of sentences
+   * were being rebuilt for it. Only the chosen line's "Prints smaller to fit" note depends on the choice (`shownFor`).
+   */
+  const shownByLine = useMemo(() => {
+    const map = new Map<string, Shown[]>();
+    for (const line of lines) {
+      const problems = shownProblems(analysis, line, t.seen, t.revealAll);
+      const out: Shown[] = problems.map((p) => {
+        const text = problemText(p, line, wordsContext);
+        return { key: `${p.code}:${text}`, code: p.code, field: p.field, text, inField: saysInField(p), kind: "error" as const };
+      });
+      const seen = t.seen[line.id];
+      for (const n of analysis.notesByLine.get(line.id) ?? []) {
+        if (n.code === "name-mixed-scripts" && !(seen?.name || t.revealAll)) continue;
+        out.push({ key: `${n.code}`, code: n.code, field: "name", text: noteText(n, wording), inField: false, kind: "note" });
+      }
+      map.set(line.id, out);
     }
-    if (line.id === t.chosenId && t.nameShrunk && !line.noName && prints.name && !problems.some((p) => p.code === "name-too-long")) {
-      out.push({ key: "smaller", code: "smaller", field: "name", text: w.notes.smaller, inField: false, kind: "note" });
-    }
-    return out;
+    return map;
+  }, [lines, analysis, t.seen, t.revealAll, wordsContext, wording]);
+  const smallerNote = useMemo<Shown>(() => ({ key: "smaller", code: "smaller", field: "name", text: w.notes.smaller, inField: false, kind: "note" }), [w.notes.smaller]);
+  const shownFor = (line: EditorLine): readonly Shown[] => {
+    const base = shownByLine.get(line.id) ?? NO_SHOWN;
+    if (line.id === t.chosenId && t.nameShrunk && !line.noName && prints.name && !base.some((s) => s.code === "name-too-long")) return [...base, smallerNote];
+    return base;
   };
 
   // ---- Focus requests: after the render that makes the field exist.
@@ -93,6 +107,24 @@ export function TeamListView({ initialDetailsOpen }: { initialDetailsOpen?: bool
     }
     li.scrollIntoView?.({ block: "nearest", behavior: "auto" });
   });
+
+  // The chip's step and its middle (7.2) bring the chosen line into view; a tap on a line never moves the list.
+  const firstTick = useRef(t.revealTick);
+  useEffect(() => {
+    if (t.revealTick === firstTick.current) return;
+    firstTick.current = t.revealTick;
+    const li = rows.current?.querySelector<HTMLElement>('li[data-chosen="true"]');
+    li?.scrollIntoView?.({ block: "nearest", behavior: api.reducedMotion ? "auto" : "smooth" });
+  }, [t.revealTick, t.chosenId, api.reducedMotion]);
+
+  // Opened by the Done panel's "Show" (11.2): the chosen line is scrolled into view, as "Next to fix" does.
+  useLayoutEffect(() => {
+    if (!t.consumeReveal()) return;
+    const li = rows.current?.querySelector<HTMLElement>('li[data-chosen="true"]');
+    if (li && rows.current) rows.current.scrollTop = Math.max(0, li.offsetTop - rows.current.clientHeight / 3);
+    // Once per visit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // The scroll position of the visit is kept for the next time the list opens (3.5).
   useLayoutEffect(() => {
@@ -186,6 +218,8 @@ export function TeamListView({ initialDetailsOpen }: { initialDetailsOpen?: bool
   };
   const carryOut = (action: KeyAction | null, id: string, field: Field, value: string): void => {
     if (!action) return;
+    // A signed list can be walked, not changed (11.3).
+    if (locked && action.type !== "go" && action.type !== "go-first" && action.type !== "go-same") return;
     switch (action.type) {
       case "go":
         if (!focusNow(action.id, action.field)) pending.current = { id: action.id, field: action.field };
@@ -326,6 +360,20 @@ export function TeamListView({ initialDetailsOpen }: { initialDetailsOpen?: bool
     if (!next || next.closest<HTMLElement>("li[data-id]")?.dataset.id !== id) t.leaveLine(id);
   };
 
+  // Pasting text that holds a line break or a tab into a field opens the paste view with it (5.1); a single line pastes as usual.
+  const onPasteInto = (event: React.ClipboardEvent<HTMLElement>) => {
+    const target = event.target as HTMLElement;
+    if (!(target instanceof HTMLInputElement) || !target.dataset.field) return;
+    const pasted = event.clipboardData.getData("text");
+    if (!/[\r\n\t\u2028\u2029]/u.test(pasted.replace(/[\r\n]+$/u, ""))) return;
+    event.preventDefault();
+    if (atLimit) {
+      api.announce(fill(w.limitReached, { max: t.limits.maxLines }));
+      return;
+    }
+    t.openPaste(pasted);
+  };
+
   const onClick = (event: React.MouseEvent<HTMLElement>) => {
     const target = event.target as HTMLElement;
     const opener = target.closest<HTMLElement>("[data-open-menu]");
@@ -397,10 +445,15 @@ export function TeamListView({ initialDetailsOpen }: { initialDetailsOpen?: bool
   const empty = lines.length === 0;
   // A short desktop panel (the summary closed) keeps Sort and Style on the summary bar's row, so more lines show (3.4).
   const inBar = api.layout === "wide" && !detailsOpen;
-  const sortButton = (
+  const sortButton = locked ? null : (
     <button type="button" className="fmo-btn fmo-btn-text" aria-haspopup="menu" aria-expanded={menu?.kind === "sort"} onClick={(e) => { menuButton.current = e.currentTarget; setAnchor(e.currentTarget); setMenu((m) => (m?.kind === "sort" ? null : { kind: "sort" })); }} data-testid="tl-sort">
       {w.sort}
       <EditorIcon name="chevronDown" size={16} />
+    </button>
+  );
+  const pasteButton = locked ? null : (
+    <button type="button" className="fmo-btn fmo-btn-text" aria-disabled={atLimit} onClick={() => (atLimit ? api.announce(fill(w.limitReached, { max: t.limits.maxLines })) : t.openPaste())} data-testid="tl-paste">
+      {w.paste.button}
     </button>
   );
   const styleButton = (
@@ -456,7 +509,10 @@ export function TeamListView({ initialDetailsOpen }: { initialDetailsOpen?: bool
       )}
       {!empty && !typingShort && !collapsed && !inBar && (
         <div className="fmo-tl-toolbar">
-          {sortButton}
+          <span className="fmo-tl-toolbar-start">
+            {pasteButton}
+            {sortButton}
+          </span>
           {styleButton}
         </div>
       )}
@@ -474,8 +530,19 @@ export function TeamListView({ initialDetailsOpen }: { initialDetailsOpen?: bool
     </>
   );
   return (
-    <div className="fmo-tl" ref={root} data-keep-typing data-testid="team-list" data-keyboard={typingShort ? "true" : undefined} onFocus={onFocusIn} onBlur={onFocusOut}>
+    <div className="fmo-tl" ref={root} data-keep-typing data-testid="team-list" data-keyboard={typingShort ? "true" : undefined} data-locked={locked ? "true" : undefined} onFocus={onFocusIn} onBlur={onFocusOut}>
       <div className="sr-only fmo-sr-only" role="status" aria-live="polite" data-testid="tl-live">{spoken}</div>
+      {locked && (
+        <div className="fmo-tl-locked" data-testid="tl-locked">
+          <EditorIcon name="lock" size={16} />
+          <p>{fill(w.locked.note, { date: locked.signedOn })}</p>
+          {locked.onChangeList && (
+            <button type="button" className="fmo-btn fmo-btn-text" onClick={locked.onChangeList} data-testid="tl-change-list">
+              {w.locked.change}
+            </button>
+          )}
+        </div>
+      )}
       {!empty && (
         <div className="fmo-tl-bar" data-testid="tl-summary-bar">
           <button type="button" className="fmo-tl-count" aria-expanded={detailsOpen} aria-label={detailsOpen ? w.summaryClose : w.summaryOpen} onClick={() => setDetailsOpen((o) => !o)} data-testid="tl-summary-toggle">
@@ -492,13 +559,14 @@ export function TeamListView({ initialDetailsOpen }: { initialDetailsOpen?: bool
           )}
           {inBar && !typingShort && (
             <>
+              {pasteButton}
               {sortButton}
               {styleButton}
             </>
           )}
-          <button type="button" className="fmo-icon-btn fmo-tl-plus" aria-label={w.addPlayer} aria-disabled={atLimit} onClick={() => !atLimit && addAndFocus()} data-testid="tl-add-top">
+          {!locked && <button type="button" className="fmo-icon-btn fmo-tl-plus" aria-label={w.addPlayer} aria-disabled={atLimit} onClick={() => !atLimit && addAndFocus()} data-testid="tl-add-top">
             <EditorIcon name="plus" />
-          </button>
+          </button>}
         </div>
       )}
       {wide && above}
@@ -516,10 +584,17 @@ export function TeamListView({ initialDetailsOpen }: { initialDetailsOpen?: bool
           <div className="fmo-tl-empty" data-testid="tl-empty">
             <h3 className="fmo-section-title">{w.empty.title}</h3>
             <p className="fmo-muted">{w.empty.body}</p>
-            <button type="button" className="fmo-btn fmo-btn-block fmo-btn-ink" onClick={() => addAndFocus()} data-testid="tl-empty-add">
-              <EditorIcon name="plus" size={20} />
-              {w.empty.add}
-            </button>
+            {!locked && (
+              <>
+                <button type="button" className="fmo-btn fmo-btn-block fmo-btn-ink" onClick={() => addAndFocus()} data-testid="tl-empty-add">
+                  <EditorIcon name="plus" size={20} />
+                  {w.empty.add}
+                </button>
+                <button type="button" className="fmo-btn fmo-btn-block" onClick={() => t.openPaste()} data-testid="tl-empty-paste">
+                  {w.paste.button}
+                </button>
+              </>
+            )}
             <button type="button" className="fmo-btn fmo-btn-text" onClick={() => t.setView("style")} data-testid="tl-style-empty">
               {w.styleLong} ›
             </button>
@@ -528,7 +603,7 @@ export function TeamListView({ initialDetailsOpen }: { initialDetailsOpen?: bool
           <BySizeList onNames={() => setNamesForBags(true)} />
         ) : (
           <>
-            <ol className="fmo-tl-list" aria-label={fill(w.listName, { n: summary.players })} onKeyDown={onKeyDown} onInput={onChange} onChange={onChange} onFocus={onFocus} onBlur={onBlur} onClick={onClick} data-testid="tl-list">
+            <ol className="fmo-tl-list" aria-label={fill(w.listName, { n: summary.players })} onKeyDown={onKeyDown} onInput={onChange} onChange={onChange} onFocus={onFocus} onBlur={onBlur} onClick={onClick} onPaste={onPasteInto} data-testid="tl-list">
               {shownLines.map((line) => {
                 const index = lines.indexOf(line);
                 return (
@@ -546,6 +621,7 @@ export function TeamListView({ initialDetailsOpen }: { initialDetailsOpen?: bool
                     shown={shownFor(line)}
                     menuOpen={menu?.kind === "line" && menu.id === line.id}
                     wording={wording}
+                    readOnly={Boolean(locked)}
                     listOpen={wide && sizeFocus === line.id && listing}
                   />
                 );
@@ -559,7 +635,7 @@ export function TeamListView({ initialDetailsOpen }: { initialDetailsOpen?: bool
             {atLimit && (
               <p className="fmo-tl-detail" data-testid="tl-limit">{fill(w.limitReached, { max: t.limits.maxLines })}</p>
             )}
-            {!onlyFix && (
+            {!onlyFix && !locked && (
               <button type="button" className="fmo-tl-add" ref={addButton} aria-disabled={atLimit} onClick={() => !atLimit && addAndFocus()} data-testid="tl-add">
                 <EditorIcon name="plus" size={20} />
                 {w.addPlayer}
@@ -612,6 +688,7 @@ export function TeamListView({ initialDetailsOpen }: { initialDetailsOpen?: bool
       {menu && menu.kind === "line" && menuLine && (
         <MenuView
           anchor={anchor}
+          sheet={api.layout !== "wide"}
           label={fill(w.more, { name: menuLine.name || fill(w.unnamedPlayer, { i: menuIndex + 1 }) })}
           onClose={closeMenu}
           stepper={menu.stepper ? { count: menuLine.count, min: t.limits.minCount, max: t.limits.maxCount, onChange: (n) => t.setCount(menuLine.id, n), label: w.countLabel, less: w.countLess, more: w.countMore, done: w.done } : undefined}
@@ -622,10 +699,11 @@ export function TeamListView({ initialDetailsOpen }: { initialDetailsOpen?: bool
             ...(prints.name ? [{ id: "noname", label: w.noNameItem, checked: menuLine.noName, onSelect: () => t.setFlag(menuLine.id, "noName", !menuLine.noName) }] : []),
             ...(prints.number ? [{ id: "nonumber", label: w.noNumberItem, checked: menuLine.noNumber, onSelect: () => t.setFlag(menuLine.id, "noNumber", !menuLine.noNumber) }] : []),
             { id: "remove", label: w.remove, danger: true, onSelect: () => {
-              const at = menuIndex;
+              // Focus goes to the SAME field of the line that took its place (4.7, 13.7), never to the top of the page.
+              const was = valueAtFocus.current;
+              const next = focusAfterRemoval({ lines, removedId: menuLine.id, lastField: was && was.id === menuLine.id ? was.field : null, showNumber, phoneWithoutKeyboard: api.layout === "compact" && !t.keyboard });
               t.remove(menuLine.id);
-              const after = lines[at + 1] ?? lines[at - 1];
-              if (after) pending.current = { id: after.id, field: "line" };
+              if (next) pending.current = next;
             } },
           ]}
         />
@@ -665,12 +743,13 @@ interface MenuItem {
 }
 
 /** A small menu (the line menu 4.6 and Sort): arrow keys move, Enter chooses, Esc closes and returns focus to its button. */
-function MenuView({ anchor, align = "end", label, items, onClose, stepper }: { anchor: HTMLElement | null; align?: "start" | "end"; label: string; items: MenuItem[]; onClose: () => void; stepper?: { count: number; min: number; max: number; onChange: (n: number) => void; label: string; less: string; more: string; done: string } }) {
+export function MenuView({ anchor, align = "end", label, items, onClose, stepper, sheet = false }: { anchor: HTMLElement | null; align?: "start" | "end"; sheet?: boolean; label: string; items: MenuItem[]; onClose: () => void; stepper?: { count: number; min: number; max: number; onChange: (n: number) => void; label: string; less: string; more: string; done: string } }) {
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null);
   // Placed beside its button in the page's own coordinates (the menu is fixed: the panel's box does not clip it), and again
   // once the panel has settled (opening the menu takes focus from the field, so a phone's keyboard layout ends).
   const place = useCallback(() => {
+    if (sheet) return;
     const box = anchor?.getBoundingClientRect();
     const host = anchor?.closest<HTMLElement>(".fmo-editor")?.getBoundingClientRect();
     if (!box || !host) return;
@@ -678,14 +757,14 @@ function MenuView({ anchor, align = "end", label, items, onClose, stepper }: { a
     const height = ref.current?.offsetHeight ?? 240;
     const below = box.bottom + 4 + height <= host.bottom - 8;
     setPos({ top: below ? box.bottom + 4 : Math.max(host.top + 8, box.top - 4 - height), left: Math.max(host.left + 12, Math.min(align === "start" ? box.left : box.right - width, host.right - width - 12)), width });
-  }, [anchor, align]);
+  }, [anchor, align, sheet]);
   useLayoutEffect(() => {
     place();
     const timer = setTimeout(place, 320);
     return () => clearTimeout(timer);
   }, [place, items.length, stepper]);
   // Focus goes into the menu once it is placed (a hidden element cannot take focus).
-  const placed = pos !== null;
+  const placed = pos !== null || sheet;
   const hasStepper = stepper !== undefined;
   useEffect(() => {
     if (placed) ref.current?.querySelector<HTMLElement>('[role^="menuitem"]:not([aria-disabled="true"]), button')?.focus({ preventScroll: true });
@@ -712,7 +791,10 @@ function MenuView({ anchor, align = "end", label, items, onClose, stepper }: { a
     buttons[(k + (event.key === "ArrowDown" ? 1 : -1) + buttons.length) % buttons.length]?.focus();
   };
   return (
-    <div className="fmo-tl-menu" role="menu" aria-label={label} ref={ref} style={pos ? { top: pos.top, left: pos.left, width: pos.width } : { visibility: "hidden" }} onKeyDown={onKey} data-testid="tl-menu">
+    <>
+    {sheet && <div className="fmo-tl-scrim" aria-hidden="true" data-testid="tl-menu-scrim" />}
+    <div className={sheet ? "fmo-tl-menu fmo-tl-sheet" : "fmo-tl-menu"} role="menu" aria-label={label} ref={ref} style={sheet ? undefined : pos ? { top: pos.top, left: pos.left, width: pos.width } : { visibility: "hidden" }} onKeyDown={onKey} data-sheet={sheet ? "true" : undefined} data-testid="tl-menu">
+      {sheet && <p className="fmo-label fmo-tl-sheet-title" aria-hidden="true"><bdi dir="auto">{label}</bdi></p>}
       {stepper ? (
         <div className="fmo-tl-stepper" role="group" aria-label={stepper.label}>
           <span className="fmo-label">{stepper.label}</span>
@@ -750,6 +832,7 @@ function MenuView({ anchor, align = "end", label, items, onClose, stepper }: { a
         ))
       )}
     </div>
+    </>
   );
 }
 

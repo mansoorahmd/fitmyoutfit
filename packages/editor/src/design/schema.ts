@@ -16,6 +16,7 @@
 import { z } from "zod";
 import { DEFAULT_JERSEY_NUMBER_RULES } from "./jersey-number-rules.js";
 import { checkJerseyNumber } from "./jersey-number.js";
+import { LETTER_CASES } from "./letter-case.js";
 import { MAX_PATH_LENGTH, SVG_PATH_PATTERN, parseSvgPath } from "./svg-path.js";
 import { TEXT_ALIGNS, TEXT_DIRECTIONS, isNormalizedText } from "./text.js";
 
@@ -283,6 +284,12 @@ export const textLayerSchema = z.strictObject({
   ),
   /** Reading direction. "auto" follows the first strong letter of the text (Unicode bidi rules P2 and P3). */
   direction: choice(TEXT_DIRECTIONS),
+  /**
+   * How a PLAYER NAME is drawn (decision 012): "upper" draws the Latin letters in capitals, "as-typed" draws the text as
+   * stored. Left out means the default, capitals, on a player-name item; other items always draw their text as stored.
+   * The stored value is never changed, and Arabic-script text has no capitals.
+   */
+  letterCase: choice(LETTER_CASES).optional(),
   ...textStyle,
 });
 

@@ -63,6 +63,10 @@ const DEMO_PRODUCT = chooseProduct(window.location.search);
 // (Pakistan: none), uk (default), uae, us. The store passes the real one from its duty-paid quotes.
 const REGIONS: Record<string, { name: string; minimum: number }> = { pk: { name: "Pakistan", minimum: 0 }, uk: { name: "the UK", minimum: 10 }, uae: { name: "the UAE", minimum: 10 }, us: { name: "the US", minimum: 10 } };
 const REGION = REGIONS[PARAMS.get("region") ?? "uk"] ?? REGIONS.uk!;
+// ?listRequired=1: the Done panel's main button follows the list (what the store sets once team orders exist, 08-team-list.md 11.2).
+// ?signed=20%20Nov%202026: the proof is signed, so the list is read-only (11.3).
+const LIST_REQUIRED = PARAMS.get("listRequired") === "1";
+const SIGNED_ON = PARAMS.get("signed");
 const PRODUCT_URL = `/products/${DEMO_PRODUCT.id}.json`;
 // Placeholder colours, as data, NOT print-tested: the founders' print-tested palette replaces the file.
 const PALETTE_URL = "/palettes/placeholder-palette.json";
@@ -236,6 +240,8 @@ function EditorPage({ data }: { data: DemoData }) {
       initial: session?.teamList ?? null,
       noun: { one: DEMO_PRODUCT.shortName.toLowerCase(), many: `${DEMO_PRODUCT.shortName.toLowerCase()}s` },
       minimum: REGION.minimum > 0 ? { pieces: REGION.minimum, region: REGION.name } : null,
+      ...(LIST_REQUIRED ? { listRequiredToContinue: true } : {}),
+      ...(SIGNED_ON ? { locked: { signedOn: SIGNED_ON, onChangeList: () => window.alert("In the store this starts a new proof.") } } : {}),
       onChange: onTeamListChange,
       // The device save has its own second of waiting: the list is handed over at once.
       debounceMs: 0,

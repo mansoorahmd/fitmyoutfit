@@ -10,6 +10,7 @@
  * A layer's font stack is its font, then the font's `fallbackFontIds` in
  * order, then the generic `sans-serif` as the last resort.
  */
+import { drawnText } from "../design/letter-case.js";
 import type { DesignDocument, FontRef, Layer } from "../design/schema.js";
 
 type TextLike = Extract<Layer, { kind: "text" | "number" }>;
@@ -69,7 +70,7 @@ export function fontRequests(design: DesignDocument): FontRequest[] {
   const out = new Map<string, FontRequest>();
   for (const layer of design.layers) {
     if (layer.kind !== "text" && layer.kind !== "number") continue;
-    const chars = [...new Set(layer.value)].sort().join("");
+    const chars = [...new Set(layer.kind === "text" ? drawnText(layer) : layer.value)].sort().join("");
     for (const font of fontStack(design, layer.fontId)) {
       const request = { family: font.family, font: `${font.style ?? "normal"} ${font.weight ?? 400} 16px ${quoteFamily(font.family)}`, text: chars };
       out.set(requestKey(request), request);

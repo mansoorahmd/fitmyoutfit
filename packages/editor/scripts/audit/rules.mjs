@@ -95,7 +95,7 @@ export function pageAudit() {
   ]);
   // Samples of the coach's own lettering, the field's 16 px (no zoom on iOS), small marks, the brand, and a
   // word made bold inside a line of body text ("Body front: Red").
-  const EXCEPT = ".fmo-line strong, .fmo-font-sample, .fmo-font-chip, .fmo-font-chip *, .fmo-font-button > span:last-child, input.fmo-field, .fmo-step-n, .fmo-kit-count, .fmo-swatch-order, code, .fmo-topbar-brand, .fmo-topbar-brand *";
+  const EXCEPT = ".fmo-line strong, .fmo-font-sample, .fmo-font-chip, .fmo-font-chip *, .fmo-font-button > span:last-child, input.fmo-field, textarea.fmo-field, .fmo-step-n, .fmo-kit-count, .fmo-swatch-order, code, .fmo-topbar-brand, .fmo-topbar-brand *";
   const kind = (family) => (/Barlow Condensed|Arial Narrow|Roboto Condensed/i.test(family.split(",")[0]) ? "heading" : "body");
   const type = {};
   for (const el of document.querySelectorAll(".fmo-editor *, dialog *")) {

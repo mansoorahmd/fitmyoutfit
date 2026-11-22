@@ -179,6 +179,36 @@ async function runSize(size) {
         const list = await page.eval(`(${teamListAudit.toString()})()`);
         idle.teamList = list;
         for (const f of list.failures) record.failures.push(`${size} players-list: ${f}`);
+        // E4b: the player chip stepped twice (the shirt follows), the phone's whole-shirt toggle on and off, and the paste view
+        // (the empty box, then a pasted list with its read result and the lines that are not players).
+        if (await page.exists('[data-testid="chip-next"]')) {
+          await page.click('[data-testid="chip-next"]');
+          await sleep(300);
+          await page.click('[data-testid="chip-next"]');
+          await sleep(600);
+          await audit(page, "players-chip", size, record);
+        }
+        if (mobile && (await page.exists('[data-testid="whole-shirt"]'))) {
+          await page.click('[data-testid="whole-shirt"]');
+          await sleep(1200);
+          await audit(page, "players-whole-shirt", size, record);
+          await page.click('[data-testid="whole-shirt"]');
+          await sleep(900);
+        }
+        if (await page.exists('[data-testid="tl-paste"]')) {
+          await page.click('[data-testid="tl-paste"]');
+          await sleep(700);
+          await audit(page, "players-paste-empty", size, record);
+          await page.eval(`document.querySelector('[data-testid="paste-box"]')?.focus()`);
+          await sleep(200);
+          await page.send("Input.insertText", { text: "Squad for Saturday:\n1. Imran Khan 5 M\n#9 Hamza small\n7 Ali 10 M\nZain Malik, 11, 4XL\nمحمد علی ٧ XL\n\ud83d\udc4d" });
+          await sleep(900);
+          await audit(page, "players-paste-result", size, record);
+          await page.eval(`document.querySelector('[data-testid="paste-box"]')?.blur()`);
+          await sleep(200);
+          await page.click('[data-testid="paste-cancel"]');
+          await sleep(600);
+        }
       }
       if (await page.exists('[data-testid="tl-style"]')) {
         await page.click('[data-testid="tl-style"]');

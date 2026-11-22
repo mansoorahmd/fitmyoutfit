@@ -3,8 +3,10 @@
  * returns a sentence, so every code has its wording in `content.ts` (`teamList.problems`), and this file chooses and
  * fills it. Plain functions, tested without React.
  */
-import type { RosterNote, RosterProblem } from "@fitmyoutfit/team-rules";
-import type { EditorLine, TeamListNoun, TeamListSize } from "../team-list/types.js";
+import type { NotAdded, ReadNote, RosterNote, RosterProblem, RosterSummary } from "@fitmyoutfit/team-rules";
+import type { FileRefusal } from "../team-list/csv.js";
+import type { PasteRow } from "../team-list/paste.js";
+import type { EditorLine, TeamListMinimum, TeamListNoun, TeamListSize } from "../team-list/types.js";
 import { fill, type EditorWording } from "./content.js";
 
 /** The missing values are said inside the empty field; every other problem is a sentence under the line (6.3). */
@@ -79,4 +81,100 @@ export function noteText(note: Pick<RosterNote, "code">, wording: EditorWording)
 /** "21 jerseys" for the summary (8.1): the product's noun in the plural, or the singular for one. */
 export function piecesText(wording: EditorWording, pieces: number, noun: TeamListNoun): string {
   return fill(wording.teamList.pieces, { pieces, noun: pieces === 1 ? noun.one : noun.many });
+}
+
+/** The words for something the reader was unsure of in a pasted line (5.3, step 6). */
+export function readNoteText(note: ReadNote, wording: EditorWording): string {
+  const p = wording.teamList.paste;
+  switch (note.code) {
+    case "two-numbers":
+      return fill(p.twoNumbers, { a: note.values[0] ?? "", b: note.values[1] ?? "" });
+    case "two-sizes":
+      return fill(p.twoSizes, { a: note.values[0] ?? "", b: note.values[1] ?? "" });
+    case "two-counts":
+      return fill(p.twoCounts, { a: note.values[0] ?? "", b: note.values[1] ?? "" });
+    case "count-unclear":
+      return fill(p.countUnclear, { value: note.value });
+  }
+}
+
+/** One message under a row of the paste view. */
+export interface PreviewMessage {
+  key: string;
+  text: string;
+  kind: "problem" | "note";
+}
+
+/**
+ * What the paste view says under one row (5.4): the reader's remarks first (they say WHY a field is empty), then a
+ * value the design needs and the text lacks (W-TL43), then every other check of the list, worded exactly as the list
+ * words it (GOV.UK: the same message in both places), then the notes that are not problems.
+ */
+export function previewMessages(row: Pick<PasteRow, "line" | "readNotes" | "problems" | "notes">, ctx: WordsContext): PreviewMessage[] {
+  const p = ctx.wording.teamList.paste;
+  const out: PreviewMessage[] = [];
+  const explained = new Set<string>();
+  for (const n of row.readNotes) {
+    out.push({ key: `read:${n.code}`, text: readNoteText(n, ctx.wording), kind: "problem" });
+    if (n.code === "two-numbers") explained.add("number-missing");
+    if (n.code === "two-sizes") explained.add("size-missing");
+  }
+  for (const problem of row.problems) {
+    if (explained.has(problem.code)) continue;
+    const text =
+      problem.code === "name-missing" ? p.noNameFound : problem.code === "number-missing" ? p.noNumberFound : problem.code === "size-missing" ? p.noSizeFound : problemText(problem, row.line, ctx);
+    out.push({ key: `${problem.code}:${text}`, text, kind: "problem" });
+  }
+  for (const note of row.notes) out.push({ key: `note:${note.code}`, text: noteText(note, ctx.wording), kind: "note" });
+  return out;
+}
+
+/** Why a line is listed under "Not added" (5.3, step 7). */
+export function notAddedReason(reason: NotAdded["reason"], wording: EditorWording): string {
+  return reason === "not-a-player" ? wording.teamList.paste.notAPlayer : wording.teamList.paste.nothingToRead;
+}
+
+/** The words for a file the paste view refuses (5.6). */
+export function fileRefusalText(reason: FileRefusal, wording: EditorWording, values: { size?: string; max?: string } = {}): string {
+  const p = wording.teamList.paste;
+  switch (reason) {
+    case "too-big":
+      return fill(p.fileTooBig, { size: values.size ?? "", max: values.max ?? "" });
+    case "spreadsheet":
+      return p.excelHint;
+    case "not-text":
+      return p.fileNotText;
+    case "empty":
+      return p.fileEmpty;
+    case "encoding":
+      return p.fileUnreadable;
+  }
+}
+
+/** What the Done panel's team section says (11.2), from the list's own summary: nothing is worked out twice. */
+export interface DoneTeamSection {
+  kind: "empty" | "list";
+  /** "18 players · 19 jerseys · 2 to fix", or "No players yet". */
+  text: string;
+  toFix: number;
+  ready: boolean;
+  /** The region's minimum note, only when below it (8.3). */
+  minimumNote: string | null;
+  /** How many more pieces the minimum needs. */
+  missing: number;
+}
+
+export function doneTeamSection(input: { wording: EditorWording; summary: Pick<RosterSummary, "players" | "pieces" | "linesToFix" | "minimum">; noun: TeamListNoun; minimum: TeamListMinimum | null }): DoneTeamSection {
+  const w = input.wording.teamList;
+  const { summary } = input;
+  if (summary.players === 0) return { kind: "empty", text: w.doneSection.none, toFix: 0, ready: false, minimumNote: null, missing: 0 };
+  const players = summary.players === 1 ? w.onePlayer : fill(w.players, { n: summary.players });
+  const state = summary.linesToFix > 0 ? fill(w.toFix, { k: summary.linesToFix }) : w.allReady;
+  const text =
+    summary.pieces !== summary.players
+      ? fill(w.doneSection.players, { players, pieces: piecesText(input.wording, summary.pieces, input.noun), state })
+      : fill(w.doneSection.playersSame, { players, state });
+  const below = input.minimum && summary.minimum && !summary.minimum.met ? summary.minimum : null;
+  const minimumNote = below && input.minimum ? fill(w.minimum, { region: input.minimum.region, minimum: input.minimum.pieces, noun: input.minimum.pieces === 1 ? input.noun.one : input.noun.many, pieces: summary.pieces, missing: below.missing }) : null;
+  return { kind: "list", text, toFix: summary.linesToFix, ready: summary.linesToFix === 0, minimumNote, missing: below?.missing ?? 0 };
 }

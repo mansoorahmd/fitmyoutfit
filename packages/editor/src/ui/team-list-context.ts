@@ -8,7 +8,8 @@ import type { PrintedFields } from "@fitmyoutfit/team-rules";
 import type { SizeTable } from "@fitmyoutfit/team-rules";
 import type { ListAnalysis, SeenMap } from "../team-list/checks.js";
 import type { SortBy, TextField } from "../team-list/lines.js";
-import type { EditorLine, TeamListMinimum, TeamListNoun, TeamListSize } from "../team-list/types.js";
+import type { PasteMode } from "../team-list/paste.js";
+import type { EditorLine, TeamListLocked, TeamListMinimum, TeamListNoun, TeamListSize } from "../team-list/types.js";
 
 export interface TeamListApi {
   lines: readonly EditorLine[];
@@ -22,9 +23,17 @@ export interface TeamListApi {
   /** The limits in force (the host's or the package's defaults): none is a constant of the editor. */
   limits: { maxLines: number; minCount: number; maxCount: number };
   openSizeChart: ((size: string | null) => void) | null;
+  /** The proof is signed: the list is read-only (11.3). */
+  locked: TeamListLocked | null;
   /** The chosen line: the one the shirt shows. Null only when the list is empty. */
   chosenId: string | null;
   choose(id: string | null): void;
+  /** The player chip's step (7.2): previous (-1) or next (1) line in list order; the polite words for it in `stepNote`. */
+  step(direction: -1 | 1): void;
+  stepNote: string;
+  /** Scroll the list to the chosen line (the chip's middle, in list view); `revealTick` counts the requests. */
+  reveal(): void;
+  revealTick: number;
   /** What has been left, per line (6.2), and whether every missing value shows ("Next to fix", Done). */
   seen: SeenMap;
   revealAll: boolean;
@@ -32,9 +41,20 @@ export interface TeamListApi {
   memory: { get(): number; set(scrollTop: number): void };
   /** The keyboard is probably open on a phone (a list field has focus). */
   keyboard: boolean;
-  /** The Players tab shows the list or the style view (3.1). */
-  view: "list" | "style";
-  setView(view: "list" | "style"): void;
+  /** The Players tab shows the list, the style view (3.1) or the paste view (5.2). */
+  view: "list" | "style" | "paste";
+  setView(view: "list" | "style" | "paste"): void;
+  /** The Done panel's "Show" opened the list: the list scrolls to the chosen line once, as it mounts (read once). */
+  consumeReveal(): boolean;
+  /** The paste view shows the first player it read on the shirt (5.2): a line that is not in the list, or null to go back to the chosen line. */
+  previewPlayer(line: EditorLine | null): void;
+  /** The pasted text, kept for the visit so going back is not a loss (5.2). */
+  pasteText: string;
+  setPasteText(text: string): void;
+  /** Opens the paste view, with `text` in the box when given (a paste of several lines into a field, 5.1). */
+  openPaste(text?: string): void;
+  /** Adds the read lines in one undo step ("Pasted 18 players"), chooses the first, returns to the list (5.2). */
+  addPasted(lines: readonly EditorLine[], mode: PasteMode): void;
   /** Typing in a field: one undo step per field, left when the field is. */
   beginField(id: string, field: TextField): void;
   typeField(id: string, field: TextField, value: string): void;

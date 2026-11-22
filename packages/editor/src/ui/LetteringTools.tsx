@@ -14,7 +14,8 @@ import { applyReadabilityRemedy, itemReadability, outlineColourFor } from "../de
 import { readabilityWarnings, remedyWords } from "./checks.js";
 import { hasPictographs, stripPictographs } from "../design/typed-text.js";
 import { PictographAlert } from "./parts.js";
-import { findLayers, isRoleSlotOn, outlineStepOf, placeAtPreset, setOutline, setRoleSlot, setSamplePlayer, setSizeStep, setTeamName, sizeStepOf, type LetteringStyle, type OutlineStep, type SizeStep } from "../design/roles.js";
+import { findLayers, isRoleSlotOn, nameLetterCase, outlineStepOf, placeAtPreset, setNameLetterCase, setOutline, setRoleSlot, setSamplePlayer, setSizeStep, setTeamName, sizeStepOf, type LetteringStyle, type OutlineStep, type SizeStep } from "../design/roles.js";
+import type { LetterCase } from "../design/letter-case.js";
 import { TEAM_COLOUR_ROLES, type ColorValue, type DesignDocument, type Layer, type PlacementPreset, type TeamColourRole } from "../design/schema.js";
 import { teamColourValue } from "../design/team-colours.js";
 import type { ValueRole } from "../design/edit.js";
@@ -414,6 +415,22 @@ function PlayersStyleView({ onBack, showPreviewAs }: { onBack: () => void; showP
         ]}
         onFonts={setFonts}
       />
+      {nameLayer && (
+        <div>
+          <span className="fmo-label">{w.letters}</span>
+          <Segmented<LetterCase>
+            label={w.letters}
+            value={nameLetterCase(design) ?? "upper"}
+            options={[
+              { value: "upper", label: w.lettersUpper },
+              { value: "as-typed", label: w.lettersTyped },
+            ]}
+            onChange={(to) => api.commit((d) => setNameLetterCase(d, to), "letter-case")}
+            testId="letter-case"
+          />
+          <p className="fmo-muted">{w.lettersNote}</p>
+        </div>
+      )}
       {numberLayer && (
         <div>
           <span className="fmo-label">{w.digits}</span>

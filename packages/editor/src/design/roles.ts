@@ -28,6 +28,7 @@ import { newNumberLayer, newTextLayer, nextLayerId, requirePreset } from "./new-
 import { round3 } from "./placement.js";
 import { fitLayerToArea } from "./print-area.js";
 import { DesignError } from "./validate.js";
+import type { LetterCase } from "./letter-case.js";
 
 /** Sets the team name: the design's `teamName` and every team-name layer. One edit. */
 export function setTeamName(design: DesignDocument, value: string, options?: EditOptions): DesignDocument {
@@ -294,4 +295,33 @@ export function setOutline(design: DesignDocument, layerId: string, outline: { s
 /** The roles a layer of this kind may have (from the format). */
 export function rolesForKind(kind: Layer["kind"]): readonly ItemRole[] {
   return ROLES_BY_KIND[kind];
+}
+
+/**
+ * How the player-name items are drawn (decision 012, Q-TL2): "upper" is the default and is stored as nothing ("As typed"
+ * is the only value that is written). The stored names never change. Returns the same design when nothing changes.
+ */
+export function setNameLetterCase(design: DesignDocument, value: LetterCase): DesignDocument {
+  let changed = false;
+  const layers = design.layers.map((layer) => {
+    if (layer.kind !== "text" || layer.role !== "player-name") return layer;
+    if (value === "as-typed") {
+      if (layer.letterCase === "as-typed") return layer;
+      changed = true;
+      return { ...layer, letterCase: "as-typed" as const };
+    }
+    if (layer.letterCase === undefined) return layer;
+    changed = true;
+    const { letterCase: _dropped, ...rest } = layer;
+    void _dropped;
+    return rest;
+  });
+  return changed ? { ...design, layers } : design;
+}
+
+/** The letter case of the design's player names: "as-typed" when any name item says so, else the default, "upper"; null when the design has no player name item. */
+export function nameLetterCase(design: Pick<DesignDocument, "layers">): LetterCase | null {
+  const names = design.layers.filter((l) => l.kind === "text" && l.role === "player-name");
+  if (names.length === 0) return null;
+  return names.some((l) => l.kind === "text" && l.letterCase === "as-typed") ? "as-typed" : "upper";
 }

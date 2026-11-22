@@ -6,6 +6,7 @@
 export * from "./jersey-number-rules.js";
 export * from "./jersey-number.js";
 export * from "./schema.js";
+export * from "./letter-case.js";
 export * from "./text.js";
 export * from "./create.js";
 export * from "./edit.js";

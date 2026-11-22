@@ -9,6 +9,7 @@ Every result is **a code with its line and field, never a sentence**: the storef
 | Function | What it does |
 | --- | --- |
 | `checkRoster(lines, settings)` | The checks of section 6: `name-missing`, `number-missing`, `size-missing`, `number-not-digits`, `number-too-long`, `number-mixed-digits`, `number-duplicate` (on every line involved), `number-taken-first-order` and `number-taken-add-on` (a number already taken outside this list, see below), `name-character`, `name-too-long`, `size-unknown`, `quantity-range`, `list-too-long`. Also notes that are not problems (`name-mixed-scripts`, `mixed-digit-systems`). |
+| `PROBLEM_CODES`, `NOTE_CODES` | The two lists above as data (`ProblemCode` and `NoteCode` are made from them), so whoever words the codes can test that none lacks a sentence. A test keeps them equal to what `checkRoster` returns. |
 | `summarizeRoster`, `analyzeRoster` | Section 8: players, pieces, pieces per size, lines without a size, lines to fix, and with a minimum how many pieces are missing. `analyzeRoster` does the checks and the summary. |
 | `normalizeLines(lines, settings)` | Cleans lines for storage: trimmed, runs of spaces made one, NFC, direction marks removed; the number kept as written; the size in the product's spelling. Nothing is shortened or capitalised. |
 | `parseRosterInput(input, limits?)` | The shape of a list from outside (a request body). Only a malformed list or one over the line limit is refused; an incomplete list is a list. |
@@ -41,5 +42,3 @@ npm test -w @fitmyoutfit/team-rules
 ```
 
 `dist/` is not committed. The backend depends on this package with `"@fitmyoutfit/team-rules": "file:../packages/team-rules"` and its scripts build the package first; see `backend/README.md`.
-
-`src/jersey-number.parity.test.ts` compares the jersey number rule with the editor's own copy (`packages/editor/src/design/jersey-number.ts`). When the editor imports this package instead, delete the editor's copy and that test.

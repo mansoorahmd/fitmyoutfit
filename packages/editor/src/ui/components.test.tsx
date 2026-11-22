@@ -236,7 +236,7 @@ describe("the Done panel (06-editor.md 9.2, 9.3)", () => {
     expect(t).toMatch(/thing(s)? to check|Nothing to check/);
     expect(html).toContain('data-testid="done-save-and-go-back"');
     expect(html.match(/class="fmo-primary"/g)).toHaveLength(1); // the one red button in the panel
-    expect(t).toContain("Team orders open soon. Your design is saved on this device.");
+    expect(t).toContain("You can't order from here yet. Your design is saved on this device.");
     expect(html).not.toContain('data-testid="done-share"');
     expect(t).toContain("Keep designing");
   });

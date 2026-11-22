@@ -96,21 +96,29 @@ export interface TakenRef {
 
 export type LineField = "name" | "number" | "size" | "count";
 
-export type ProblemCode =
-  | "name-missing"
-  | "number-missing"
-  | "size-missing"
-  | "number-not-digits"
-  | "number-too-long"
-  | "number-mixed-digits"
-  | "number-duplicate"
-  | "number-taken-first-order"
-  | "number-taken-add-on"
-  | "name-character"
-  | "name-too-long"
-  | "size-unknown"
-  | "quantity-range"
-  | "list-too-long";
+/**
+ * Every problem code the checks can return, as data: a caller that words them (the editor, the storefront) can
+ * test that it has a sentence for each. `ProblemCode` is made from this list, and a test keeps the list and
+ * `analyzeRoster` in step.
+ */
+export const PROBLEM_CODES = [
+  "name-missing",
+  "number-missing",
+  "size-missing",
+  "number-not-digits",
+  "number-too-long",
+  "number-mixed-digits",
+  "number-duplicate",
+  "number-taken-first-order",
+  "number-taken-add-on",
+  "name-character",
+  "name-too-long",
+  "size-unknown",
+  "quantity-range",
+  "list-too-long",
+] as const;
+
+export type ProblemCode = (typeof PROBLEM_CODES)[number];
 
 /** A reference to another line, for messages such as "Same number as Bilal". */
 export interface LineRef {
@@ -150,9 +158,14 @@ export interface RosterProblem {
   };
 }
 
+/** Every note code, as data, like `PROBLEM_CODES`. */
+export const NOTE_CODES = ["name-mixed-scripts", "mixed-digit-systems"] as const;
+
+export type NoteCode = (typeof NOTE_CODES)[number];
+
 /** A remark that is not a problem (08-team-list.md, 6.1 and 7.4). */
 export interface RosterNote {
-  code: "name-mixed-scripts" | "mixed-digit-systems";
+  code: NoteCode;
   /** The line it belongs to; -1 for the whole list. */
   index: number;
   lineId?: string;

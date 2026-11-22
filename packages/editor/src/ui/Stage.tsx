@@ -31,6 +31,8 @@ import { creditForm, type StageTone } from "./stage-logic.js";
 export const CREDIT_ROOM = 24;
 export const VIEW_ROW = 60;
 export const HINT_ROOM = 44;
+/** The phone's list view keeps a row for the player chip and the whole-shirt toggle at the foot of the free stage (08-team-list.md 3.2): 44 and 8. */
+export const CHIP_ROW = 52;
 
 /** Whether the stage keeps the hint's room: while it shows, and after, until the frame changes for another reason. */
 export function keepsHintRoom(hintShown: boolean, heldFor: string | null, frameKey: string): boolean {
@@ -83,7 +85,10 @@ export interface StageProps {
    * The view buttons over the stage: all of them; only Reset (a phone with an expanded panel: the stage is
    * short); or none (a phone while typing: the keyboard leaves room only for the item being typed).
    */
-  viewControls: "full" | "reset-only" | "none";
+  viewControls: "full" | "reset-only" | "list" | "none";
+  /** The player chip (08-team-list.md 7.2): at the top centre of the free stage, or, in the phone's list view (`viewControls` "list"), in the bottom row with `wholeToggle`. */
+  chip?: ReactNode;
+  wholeToggle?: ReactNode;
   /** The selected item's handles (3D only): resize and turn gestures, and "Turn to edit". */
   onResize?: (phase: GesturePhase, factor: number) => void;
   onRotate?: (phase: GesturePhase, degrees: number, free: boolean) => void;
@@ -125,7 +130,7 @@ export function Stage({ canvasRef, ...props }: StageProps) {
   if (hintShown && hintRoomFor !== frameKey) setHintRoomFor(frameKey);
   const hintRoom = keepsHintRoom(hintShown, hintRoomFor, frameKey);
   const barTop = (props.credit && mode === "3d" ? CREDIT_ROOM : 0) + (hintRoom && mode === "3d" ? HINT_ROOM : 0);
-  const canvasInsets = { top: barTop + (props.contextBar ? CONTEXT_BAR_HEIGHT : 0), right: insets.right, bottom: insets.bottom + (mode === "3d" && props.viewControls === "full" ? VIEW_ROW : 0), left: insets.left };
+  const canvasInsets = { top: barTop + (props.contextBar ? CONTEXT_BAR_HEIGHT : 0), right: insets.right, bottom: insets.bottom + (mode === "3d" && props.viewControls === "full" ? VIEW_ROW : mode === "3d" && props.viewControls === "list" ? CHIP_ROW : 0), left: insets.left };
   const sides = ["front", "back", "left", "right"] as const;
   // The selected item's box on the screen, from the canvas to the overlay (only the overlay re-renders per frame).
   const bus = useMemo(() => createBus<SelectionGeometry | null>(null), []);
@@ -135,7 +140,7 @@ export function Stage({ canvasRef, ...props }: StageProps) {
   const selected = props.canvasProps.selectedLayerId ?? null;
   const wantsBoxes = Boolean(selected) || (props.warnings?.size ?? 0) > 0;
   // R24, 4.5: the overlay is clipped to the free stage (below the credit line, above the view buttons).
-  const clip = { top: props.credit && mode === "3d" ? CREDIT_ROOM : 0, right: insets.right, bottom: insets.bottom + (props.viewControls === "full" ? VIEW_ROW : 0), left: insets.left };
+  const clip = { top: props.credit && mode === "3d" ? CREDIT_ROOM : 0, right: insets.right, bottom: insets.bottom + (props.viewControls === "full" ? VIEW_ROW : props.viewControls === "list" ? CHIP_ROW : 0), left: insets.left };
   // The width of "On this kit" (an icon on a narrow stage, words on a wider one): the top band leaves it room.
   const kitPlace = useRef<HTMLDivElement>(null);
   const [kitWidth, setKitWidth] = useState(44);
@@ -257,6 +262,7 @@ export function Stage({ canvasRef, ...props }: StageProps) {
             <span>{props.banner}</span>
           </div>
         )}
+        {props.chip && props.viewControls !== "list" && !hintShown && !props.banner && !props.status && !props.contextBar && !selected && <div className="fmo-chip-top">{props.chip}</div>}
         <div className={props.status?.undo ? "fmo-status" : "fmo-status fmo-status-quiet"} role="status" aria-live="polite" data-testid="status-line">
           {props.status && (
             <>
@@ -277,7 +283,13 @@ export function Stage({ canvasRef, ...props }: StageProps) {
         </div>
       )}
       {props.credit && mode === "3d" && <Credit full={props.credit} short={props.creditShort} form={creditForm(props.stageWidth)} right={insets.right} label={v.creditMore} />}
-      {mode === "3d" && props.viewControls !== "none" && (
+      {props.viewControls === "list" && props.chip && (
+        <div className="fmo-view fmo-view-list" style={{ bottom: controlsBottom - 4, right: insets.right }} data-testid="list-stage-row">
+          {props.chip}
+          {props.wholeToggle}
+        </div>
+      )}
+      {mode === "3d" && props.viewControls !== "none" && props.viewControls !== "list" && (
         // R29: the view buttons follow the free stage (a side panel or the Done panel on the right).
         <div className="fmo-view" data-controls={props.viewControls} style={{ bottom: controlsBottom, right: insets.right }} data-testid="view-controls">
           <div className="fmo-sides" role="group" aria-label={v.sidesName}>
