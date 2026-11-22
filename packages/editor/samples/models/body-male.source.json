@@ -16,6 +16,7 @@
   },
   "dropMaterials": ["Mark_Tongue", "Mark_Tears", "Mark_Cornea"],
   "cutoutMaterials": ["Mark_Hair01", "Mark_Scalp"],
+  "shorts": { "material": "Mark_Body", "colour": "#1c2230", "roughness": 0.8, "minY": 0.86, "maxY": 1.0, "maxAbsX": 0.28 },
   "roughness": {
     "Mark_Derbys01": 0.7,
     "Mark_Hair01": 0.55,
