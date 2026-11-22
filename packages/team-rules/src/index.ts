@@ -40,3 +40,13 @@ export {
   type ReadResult,
 } from "./read.js";
 export { parseRosterInput, type RosterInputError, type RosterInputResult } from "./input.js";
+export { sha256Hex } from "./sha256.js";
+export {
+  SNAPSHOT_FORMAT,
+  canonicalSnapshot,
+  canonicalSnapshotText,
+  hashSnapshot,
+  hashSnapshotText,
+  type ProofSnapshot,
+  type SnapshotLine,
+} from "./snapshot.js";
