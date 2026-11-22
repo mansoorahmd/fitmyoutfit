@@ -18,9 +18,9 @@ export const MAX_TEAM_NAME_LENGTH = 100
 
 /** The team name: trimmed text of 1 to 100 characters, no control characters; null if not. */
 export function readTeamName(input: unknown): string | null {
-  if (typeof input !== "string") return null
+  if (typeof input !== "string" || /\p{Cc}/u.test(input)) return null
   const name = input.normalize("NFC").replace(/\s+/gu, " ").trim()
-  if (name === "" || [...name].length > MAX_TEAM_NAME_LENGTH || /\p{Cc}/u.test(name)) return null
+  if (name === "" || [...name].length > MAX_TEAM_NAME_LENGTH) return null
   return name
 }
 

@@ -30,7 +30,7 @@ class TeamOrderModuleService extends MedusaService({ TeamOrder, RosterEntry }) {
   /**
    * Replaces all the lines of a team order and moves its `list_version` from `expectedVersion` to
    * the next number, in one database transaction. The version moves first, with a condition on
-   * the old value (an UPDATE ... WHERE list_version = expected), so of two saves made from the same
+   * the old value (an UPDATE ... WHERE list_version = expected, one statement), so of two saves made from the same
    * version one finds no row to update and throws `RosterVersionStale`; nothing is written then.
    * A save that fails halfway rolls back, so the list is never left empty or half-new. Returns the
    * new version.
@@ -41,10 +41,18 @@ class TeamOrderModuleService extends MedusaService({ TeamOrder, RosterEntry }) {
     @MedusaContext() sharedContext: Context = {}
   ): Promise<number> {
     const { teamOrderId, expectedVersion } = input
-    const moved = await this.updateTeamOrders(
-      { selector: { id: teamOrderId, list_version: expectedVersion }, data: { list_version: expectedVersion + 1 } },
-      sharedContext
-    )
+    // Raw SQL on purpose: the generated update by selector reads the rows first and writes them
+    // after, which two saves can interleave. This one statement takes the row lock and checks the
+    // version in the same step; the second save waits for the first to commit, then matches no row.
+    const manager = sharedContext.transactionManager as unknown as {
+      getConnection: () => { execute: (sql: string, params: unknown[]) => Promise<{ id: string }[]> }
+    }
+    const moved = await manager
+      .getConnection()
+      .execute(
+        "update team_order set list_version = ?, updated_at = now() where id = ? and list_version = ? and deleted_at is null returning id",
+        [expectedVersion + 1, teamOrderId, expectedVersion]
+      )
     if (moved.length === 0) {
       throw new RosterVersionStale(teamOrderId, expectedVersion)
     }

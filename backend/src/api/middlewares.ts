@@ -23,8 +23,13 @@
  * Referer lose the value of a `token` parameter (redactCredentialsInRequestLog), and a password
  * update holds its reset token's lock, so a token works once even when two updates arrive at the
  * same moment (holdResetTokenLockDuringUpdate).
+ *
+ * Saved designs and team orders (/store/designs*, /store/team-orders*): the signed-in customer only
+ * (`authenticate`, 401 without); a design's JSON may be larger than Medusa's default body limit,
+ * so the two routes that take one allow a body of up to DESIGN_BODY_LIMIT.
  */
 import {
+  authenticate,
   defineMiddlewares,
   type MedusaNextFunction,
   type MedusaRequest,
@@ -294,8 +299,58 @@ export function holdResetTokenLockDuringUpdate(
   })
 }
 
+/**
+ * The body limit of the routes that take a design (the design itself is capped at 1,000,000 bytes
+ * in lib/rules/design-input.ts; the rest of the body is a few fields).
+ */
+export const DESIGN_BODY_LIMIT = "2mb"
+
+const customerOnly = authenticate("customer", ["session", "bearer"])
+
 export default defineMiddlewares({
   routes: [
+    {
+      matcher: "/store/designs",
+      method: ["POST"],
+      bodyParser: { sizeLimit: DESIGN_BODY_LIMIT },
+      middlewares: [customerOnly],
+    },
+    {
+      matcher: "/store/designs/:id/versions",
+      method: ["POST"],
+      bodyParser: { sizeLimit: DESIGN_BODY_LIMIT },
+      middlewares: [customerOnly],
+    },
+    {
+      matcher: "/store/designs",
+      method: ["GET"],
+      middlewares: [customerOnly],
+    },
+    {
+      matcher: "/store/designs/:id",
+      method: ["GET"],
+      middlewares: [customerOnly],
+    },
+    {
+      matcher: "/store/designs/:id/versions/:version",
+      method: ["GET"],
+      middlewares: [customerOnly],
+    },
+    {
+      matcher: "/store/team-orders",
+      method: ["GET", "POST"],
+      middlewares: [customerOnly],
+    },
+    {
+      matcher: "/store/team-orders/:id",
+      method: ["GET", "POST", "DELETE"],
+      middlewares: [customerOnly],
+    },
+    {
+      matcher: "/store/team-orders/:id/roster",
+      method: ["PUT"],
+      middlewares: [customerOnly],
+    },
     {
       // No method: a global middleware, ahead of the routes.
       matcher: "/",
