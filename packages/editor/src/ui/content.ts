@@ -272,6 +272,11 @@ export const EDITOR_WORDING = {
     numbersOff: "Numbers are off on this design. The numbers you typed are kept and come back if you turn numbers on.", // W-TL72
     bySize: { addNames: "Add names for the bag labels", hideNames: "Hide the names", total: "Total {n}", sizeCount: "{size}: {count}", less: "One less {size}", more: "One more {size}", title: "How many of each size" }, // W-TL74
     skipEmpty: "An empty line was removed", // NEW (status)
+    /** The signed list (11.3). DRAFT WORDING. */
+    locked: {
+      note: "Signed on {date}. Changing the list makes a new proof.", // W-TL87 P, copy from founders
+      change: "Change the list", // W-TL88
+    },
     /** Pasting a list and a CSV file (section 5, W-TL30 to W-TL44). DRAFT WORDING. */
     paste: {
       button: "Paste a list", // W-TL2

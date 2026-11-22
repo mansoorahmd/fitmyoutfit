@@ -20,6 +20,7 @@ export function fakeTeamApi(lines: readonly EditorLine[] = [], overrides: Partia
     minimum: null,
     limits: { maxLines: 100, minCount: 1, maxCount: 10 },
     openSizeChart: null,
+    locked: null,
     chosenId: lines[0]?.id ?? null,
     choose: noop,
     step: noop,

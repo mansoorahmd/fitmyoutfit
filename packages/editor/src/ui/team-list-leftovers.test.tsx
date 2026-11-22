@@ -11,7 +11,7 @@ import { addLayer } from "../design/edit.js";
 import { EDITOR_WORDING } from "./content.js";
 import { EditorContext, type EditorApi } from "./context.js";
 import { PlayersStyle } from "./LetteringTools.js";
-import { MenuView } from "./TeamList.js";
+import { MenuView, TeamListView } from "./TeamList.js";
 import { SizeListbox } from "./TeamListLine.js";
 import { TeamListContext } from "./team-list-context.js";
 import { fakeTeamApi } from "./team-list-test-api.js";
@@ -128,5 +128,43 @@ describe("Capitals and As typed in the Style view (Q-TL2)", () => {
   it("is not offered when the design has no player name item", () => {
     const d = createDesign(product, { teamName: "LIONS" });
     expect(style(d as ReturnType<typeof withName>)).not.toContain('data-testid="letter-case"');
+  });
+});
+
+describe("a signed list is read-only (11.3)", () => {
+  const lines = [line("a", "Ali Raza"), line("b", "Bilal Ahmed")];
+  const render = (locked: { signedOn: string; onChangeList?: () => void } | null) => {
+    const noop = () => undefined;
+    const design = createDesign(loadPlaceholderProduct(), { teamName: "LIONS", samplePlayer: { name: "Ali", number: "10" } });
+    const api: EditorApi = {
+      product: loadPlaceholderProduct(), palette: loadPlaceholderPalette(), fonts: loadPlaceholderFonts(), templates: [], wording: W, assets: { upload: async () => ({ assetId: "a" }), url: () => null }, layout: "wide", detent: "expanded", setDetent: noop, design,
+      commit: () => true, begin: noop, preview: noop, end: noop, hoverPreview: noop, textFits: [], fontsLoading: false, fontsFailed: false, garmentView: null,
+      showSide: noop, focusOn: noop, announce: noop, colourTarget: { kind: "zone", id: "body_front" }, chooseColourTarget: noop, recentColours: [], useColour: noop,
+      setTyping: noop, openTool: noop, nudge: noop, reducedMotion: false, markTiming: noop, snapping: true, setSnapping: noop, selectedId: null, select: noop, logoNotes: {}, setLogoNote: noop,
+    };
+    return renderToStaticMarkup(
+      <EditorContext.Provider value={api}>
+        <TeamListContext.Provider value={fakeTeamApi(lines, { locked })}>
+          <TeamListView initialDetailsOpen />
+        </TeamListContext.Provider>
+      </EditorContext.Provider>,
+    );
+  };
+  it("shows the line at the top with the date and the host's action, and no field can be edited", () => {
+    const html = render({ signedOn: "20 Nov 2026", onChangeList: () => undefined });
+    expect(text(html)).toContain("Signed on 20 Nov 2026. Changing the list makes a new proof.");
+    expect(html).toContain('data-testid="tl-change-list"');
+    expect(text(html)).toContain("Change the list");
+    expect((html.match(/readOnly=""/g) ?? []).length).toBeGreaterThanOrEqual(6);
+    expect(html).toContain('aria-readonly="true"');
+  });
+  it("has no menu, no add, no paste and no sort", () => {
+    const html = render({ signedOn: "20 Nov 2026" });
+    for (const id of ["tl-more-0", "tl-add", "tl-add-top", "tl-paste", "tl-sort", "tl-change-list"]) expect(html).not.toContain(`data-testid="${id}"`);
+  });
+  it("is the ordinary list when the host does not say it is signed", () => {
+    const html = render(null);
+    expect(html).not.toContain('data-testid="tl-locked"');
+    for (const id of ["tl-more-0", "tl-add", "tl-add-top", "tl-paste", "tl-sort"]) expect(html).toContain(`data-testid="${id}"`);
   });
 });

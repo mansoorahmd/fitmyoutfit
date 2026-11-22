@@ -498,13 +498,14 @@ export function EditorShell(props: EditorShellProps) {
   );
   const typeField = useCallback(
     (id: string, field: "name" | "number" | "size", value: string) => {
+      if (teamHost?.locked) return;
       if (!gestureOpen.current && fieldLabel.current !== null) {
         history.beginLines(fieldLabel.current);
         gestureOpen.current = true;
       }
       history.previewLines((ls) => setLineField(ls as EditorLine[], id, field, value));
     },
-    [history],
+    [history, teamHost?.locked],
   );
   const leaveField = useCallback(
     (id: string, field: "name" | "number" | "size") => {
@@ -528,19 +529,19 @@ export function EditorShell(props: EditorShellProps) {
     history.endLines();
   }, [history]);
   const addPlayer = useCallback(() => {
-    if (linesRef.current.length >= maxLines) return null;
+    if (teamHost?.locked || linesRef.current.length >= maxLines) return null;
     const line = newLine();
     history.beginLines("list-add");
     gestureOpen.current = true;
     history.previewLines((ls) => addLine(ls as EditorLine[], line));
     setChosen(line.id);
     return line.id;
-  }, [history, maxLines]);
+  }, [history, maxLines, teamHost?.locked]);
   const removePlayer = useCallback(
     (id: string, options?: { silent?: boolean }) => {
       const current = linesRef.current;
       const at = current.findIndex((l) => l.id === id);
-      if (at < 0) return;
+      if (at < 0 || teamHost?.locked) return;
       const name = nameOfLine(id);
       const after = current[at + 1] ?? current[at - 1];
       if (options?.silent) {
@@ -554,14 +555,14 @@ export function EditorShell(props: EditorShellProps) {
       }
       setChosen(after?.id ?? null);
     },
-    [history, nameOfLine, announce, wording],
+    [history, nameOfLine, announce, wording, teamHost?.locked],
   );
-  const movePlayer = useCallback((id: string, delta: -1 | 1) => history.commitLines((ls) => moveLine(ls as EditorLine[], id, delta), `list-move|${nameOfLine(id)}`), [history, nameOfLine]);
-  const sortPlayers = useCallback((by: SortBy) => history.commitLines((ls) => sortLines(ls as EditorLine[], by, { sizes: listSizes, entered: entered.current }), "list-sort"), [history, listSizes]);
-  const setPlayerCount = useCallback((id: string, count: number) => history.commitLines((ls) => setLineCount(ls as EditorLine[], id, count), `list-count|${nameOfLine(id)}`), [history, nameOfLine]);
-  const setPlayerFlag = useCallback((id: string, flag: "noName" | "noNumber", on: boolean) => history.commitLines((ls) => setLineFlag(ls as EditorLine[], id, flag, on), `list-flag|${nameOfLine(id)}`), [history, nameOfLine]);
-  const convertDigits = useCallback((to: "western" | "arabic-indic") => history.commitLines((ls) => convertAllDigits(ls as EditorLine[], to), "list-digits"), [history]);
-  const setSizeCount = useCallback((code: string, count: number) => history.commitLines((ls) => setSizeCountLines(ls as EditorLine[], code, count, { table: sizeTable, maxCount }), `list-count|${code}`), [history, sizeTable, maxCount]);
+  const movePlayer = useCallback((id: string, delta: -1 | 1) => !teamHost?.locked && history.commitLines((ls) => moveLine(ls as EditorLine[], id, delta), `list-move|${nameOfLine(id)}`), [history, nameOfLine, teamHost?.locked]);
+  const sortPlayers = useCallback((by: SortBy) => !teamHost?.locked && history.commitLines((ls) => sortLines(ls as EditorLine[], by, { sizes: listSizes, entered: entered.current }), "list-sort"), [history, listSizes, teamHost?.locked]);
+  const setPlayerCount = useCallback((id: string, count: number) => !teamHost?.locked && history.commitLines((ls) => setLineCount(ls as EditorLine[], id, count), `list-count|${nameOfLine(id)}`), [history, nameOfLine, teamHost?.locked]);
+  const setPlayerFlag = useCallback((id: string, flag: "noName" | "noNumber", on: boolean) => !teamHost?.locked && history.commitLines((ls) => setLineFlag(ls as EditorLine[], id, flag, on), `list-flag|${nameOfLine(id)}`), [history, nameOfLine, teamHost?.locked]);
+  const convertDigits = useCallback((to: "western" | "arabic-indic") => !teamHost?.locked && history.commitLines((ls) => convertAllDigits(ls as EditorLine[], to), "list-digits"), [history, teamHost?.locked]);
+  const setSizeCount = useCallback((code: string, count: number) => !teamHost?.locked && history.commitLines((ls) => setSizeCountLines(ls as EditorLine[], code, count, { table: sizeTable, maxCount }), `list-count|${code}`), [history, sizeTable, maxCount, teamHost?.locked]);
   // The player chip (7.2): previous and next in list order; its words are said politely (a hidden live region), never in the status line, which would take the chip's place.
   const [stepNote, setStepNote] = useState("");
   const [revealTick, setRevealTick] = useState(0);
@@ -594,7 +595,7 @@ export function EditorShell(props: EditorShellProps) {
   // Pasting (5.2): the lines are added in ONE undo step, the first added line is chosen, and the checks show on them like on typed lines.
   const addPasted = useCallback(
     (added: readonly EditorLine[], mode: PasteMode) => {
-      if (added.length === 0) return;
+      if (added.length === 0 || teamHost?.locked) return;
       const n = added.length;
       const words = n === 1 ? wording.teamList.onePlayer : fill(wording.teamList.players, { n });
       history.commitLines((ls) => applyPaste(ls as EditorLine[], added, mode, maxLines), `list-paste|${words}`);
@@ -604,12 +605,16 @@ export function EditorShell(props: EditorShellProps) {
       setPlayersView("list");
       announce(n === 1 ? wording.teamList.paste.addedOne : fill(wording.teamList.paste.added, { n }));
     },
-    [history, maxLines, announce, wording],
+    [history, maxLines, announce, wording, teamHost?.locked],
   );
-  const openPaste = useCallback((text?: string) => {
-    if (text !== undefined) setPasteText(text);
-    setPlayersView("paste");
-  }, []);
+  const openPaste = useCallback(
+    (text?: string) => {
+      if (teamHost?.locked) return;
+      if (text !== undefined) setPasteText(text);
+      setPlayersView("paste");
+    },
+    [teamHost?.locked],
+  );
   const revealAllProblems = useCallback(() => setRevealAll(true), []);
   const compactLayout = layout === "compact";
   const setKeyboard = useCallback(
@@ -623,6 +628,7 @@ export function EditorShell(props: EditorShellProps) {
   const teamNoun = teamHost?.noun ?? DEFAULT_TEAM_NOUN;
   const teamMinimum = teamHost?.minimum ?? null;
   const openSizeChart = teamHost?.openSizeChart ?? null;
+  const lockedList = teamHost?.locked ?? null;
   const keyboard = typing && compactLayout;
   const listLimitsView = useMemo(() => ({ maxLines, minCount, maxCount }), [maxLines, minCount, maxCount]);
   const teamApi: TeamListApi = useMemo(
@@ -636,6 +642,7 @@ export function EditorShell(props: EditorShellProps) {
       minimum: teamMinimum,
       limits: listLimitsView,
       openSizeChart,
+      locked: lockedList,
       chosenId,
       choose: setChosen,
       step,
@@ -671,7 +678,7 @@ export function EditorShell(props: EditorShellProps) {
       nameShrunk,
       closeUpLayerId,
     }),
-    [lines, analysis, prints, listSizes, sizeTable, teamNoun, teamMinimum, listLimitsView, openSizeChart, chosenId, step, stepNote, reveal, revealTick, seen, revealAll, playersView, consumeReveal, pasteText, openPaste, addPasted, listMemory, keyboard, beginField, typeField, leaveField, leaveLine, endTyping, addPlayer, removePlayer, movePlayer, sortPlayers, setPlayerCount, setPlayerFlag, convertDigits, setSizeCount, revealAllProblems, setKeyboard, nameShrunk, closeUpLayerId],
+    [lines, analysis, prints, listSizes, sizeTable, teamNoun, teamMinimum, listLimitsView, openSizeChart, lockedList, chosenId, step, stepNote, reveal, revealTick, seen, revealAll, playersView, consumeReveal, pasteText, openPaste, addPasted, listMemory, keyboard, beginField, typeField, leaveField, leaveLine, endTyping, addPlayer, removePlayer, movePlayer, sortPlayers, setPlayerCount, setPlayerFlag, convertDigits, setSizeCount, revealAllProblems, setKeyboard, nameShrunk, closeUpLayerId],
   );
   // What the editor hands to its host (12.2, 11.1): the list and its report, after a second without changes.
   const [hostBridge] = useState(() => {

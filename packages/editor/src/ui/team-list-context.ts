@@ -9,7 +9,7 @@ import type { SizeTable } from "@fitmyoutfit/team-rules";
 import type { ListAnalysis, SeenMap } from "../team-list/checks.js";
 import type { SortBy, TextField } from "../team-list/lines.js";
 import type { PasteMode } from "../team-list/paste.js";
-import type { EditorLine, TeamListMinimum, TeamListNoun, TeamListSize } from "../team-list/types.js";
+import type { EditorLine, TeamListLocked, TeamListMinimum, TeamListNoun, TeamListSize } from "../team-list/types.js";
 
 export interface TeamListApi {
   lines: readonly EditorLine[];
@@ -23,6 +23,8 @@ export interface TeamListApi {
   /** The limits in force (the host's or the package's defaults): none is a constant of the editor. */
   limits: { maxLines: number; minCount: number; maxCount: number };
   openSizeChart: ((size: string | null) => void) | null;
+  /** The proof is signed: the list is read-only (11.3). */
+  locked: TeamListLocked | null;
   /** The chosen line: the one the shirt shows. Null only when the list is empty. */
   chosenId: string | null;
   choose(id: string | null): void;

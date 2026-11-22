@@ -43,6 +43,12 @@ export interface SavedTeamList {
 /** What the editor hands over with the list: the rules package's analysis (problems as codes, notes, the summary). Worked out, never saved. */
 export type TeamListReport = RosterAnalysis;
 
+/** A signed list (11.3): when it was signed, as the host words the date, and what "Change the list" does (the host's, usually a new proof). */
+export interface TeamListLocked {
+  signedOn: string;
+  onChangeList?: () => void;
+}
+
 /** What the host gives the editor and what it gets back (12.3). Everything is optional. */
 export interface TeamListHost {
   /** The saved list to start from, or nothing. A list made for another product is not used. */
@@ -67,6 +73,12 @@ export interface TeamListHost {
    * it is off: an unfinished list is fine to save.
    */
   listRequiredToContinue?: boolean;
+  /**
+   * The proof is signed (11.3): the list is shown read-only (no menu, no add, no paste, no sort), with a line at the top
+   * ("Signed on 20 Nov 2026. Changing the list makes a new proof.") and the host's own "Change the list" action. Late
+   * players are added through the team-order page, not here.
+   */
+  locked?: TeamListLocked | null;
 }
 
 /** The sizes used when the host gives none: the store's (backend seed data): youth YS to YXL, adult XS to 3XL. */

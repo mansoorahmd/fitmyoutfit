@@ -49,6 +49,7 @@ export function TeamListView({ initialDetailsOpen }: { initialDetailsOpen?: bool
   const menuButton = useRef<HTMLElement | null>(null);
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const listboxId = useId();
+  const locked = t.locked;
   const atLimit = lines.length >= t.limits.maxLines;
   const chosenIndex = t.chosenId ? lines.findIndex((l) => l.id === t.chosenId) : -1;
 
@@ -217,6 +218,8 @@ export function TeamListView({ initialDetailsOpen }: { initialDetailsOpen?: bool
   };
   const carryOut = (action: KeyAction | null, id: string, field: Field, value: string): void => {
     if (!action) return;
+    // A signed list can be walked, not changed (11.3).
+    if (locked && action.type !== "go" && action.type !== "go-first" && action.type !== "go-same") return;
     switch (action.type) {
       case "go":
         if (!focusNow(action.id, action.field)) pending.current = { id: action.id, field: action.field };
@@ -442,13 +445,13 @@ export function TeamListView({ initialDetailsOpen }: { initialDetailsOpen?: bool
   const empty = lines.length === 0;
   // A short desktop panel (the summary closed) keeps Sort and Style on the summary bar's row, so more lines show (3.4).
   const inBar = api.layout === "wide" && !detailsOpen;
-  const sortButton = (
+  const sortButton = locked ? null : (
     <button type="button" className="fmo-btn fmo-btn-text" aria-haspopup="menu" aria-expanded={menu?.kind === "sort"} onClick={(e) => { menuButton.current = e.currentTarget; setAnchor(e.currentTarget); setMenu((m) => (m?.kind === "sort" ? null : { kind: "sort" })); }} data-testid="tl-sort">
       {w.sort}
       <EditorIcon name="chevronDown" size={16} />
     </button>
   );
-  const pasteButton = (
+  const pasteButton = locked ? null : (
     <button type="button" className="fmo-btn fmo-btn-text" aria-disabled={atLimit} onClick={() => (atLimit ? api.announce(fill(w.limitReached, { max: t.limits.maxLines })) : t.openPaste())} data-testid="tl-paste">
       {w.paste.button}
     </button>
@@ -527,8 +530,19 @@ export function TeamListView({ initialDetailsOpen }: { initialDetailsOpen?: bool
     </>
   );
   return (
-    <div className="fmo-tl" ref={root} data-keep-typing data-testid="team-list" data-keyboard={typingShort ? "true" : undefined} onFocus={onFocusIn} onBlur={onFocusOut}>
+    <div className="fmo-tl" ref={root} data-keep-typing data-testid="team-list" data-keyboard={typingShort ? "true" : undefined} data-locked={locked ? "true" : undefined} onFocus={onFocusIn} onBlur={onFocusOut}>
       <div className="sr-only fmo-sr-only" role="status" aria-live="polite" data-testid="tl-live">{spoken}</div>
+      {locked && (
+        <div className="fmo-tl-locked" data-testid="tl-locked">
+          <EditorIcon name="lock" size={16} />
+          <p>{fill(w.locked.note, { date: locked.signedOn })}</p>
+          {locked.onChangeList && (
+            <button type="button" className="fmo-btn fmo-btn-text" onClick={locked.onChangeList} data-testid="tl-change-list">
+              {w.locked.change}
+            </button>
+          )}
+        </div>
+      )}
       {!empty && (
         <div className="fmo-tl-bar" data-testid="tl-summary-bar">
           <button type="button" className="fmo-tl-count" aria-expanded={detailsOpen} aria-label={detailsOpen ? w.summaryClose : w.summaryOpen} onClick={() => setDetailsOpen((o) => !o)} data-testid="tl-summary-toggle">
@@ -550,9 +564,9 @@ export function TeamListView({ initialDetailsOpen }: { initialDetailsOpen?: bool
               {styleButton}
             </>
           )}
-          <button type="button" className="fmo-icon-btn fmo-tl-plus" aria-label={w.addPlayer} aria-disabled={atLimit} onClick={() => !atLimit && addAndFocus()} data-testid="tl-add-top">
+          {!locked && <button type="button" className="fmo-icon-btn fmo-tl-plus" aria-label={w.addPlayer} aria-disabled={atLimit} onClick={() => !atLimit && addAndFocus()} data-testid="tl-add-top">
             <EditorIcon name="plus" />
-          </button>
+          </button>}
         </div>
       )}
       {wide && above}
@@ -603,6 +617,7 @@ export function TeamListView({ initialDetailsOpen }: { initialDetailsOpen?: bool
                     shown={shownFor(line)}
                     menuOpen={menu?.kind === "line" && menu.id === line.id}
                     wording={wording}
+                    readOnly={Boolean(locked)}
                     listOpen={wide && sizeFocus === line.id && listing}
                   />
                 );
@@ -616,7 +631,7 @@ export function TeamListView({ initialDetailsOpen }: { initialDetailsOpen?: bool
             {atLimit && (
               <p className="fmo-tl-detail" data-testid="tl-limit">{fill(w.limitReached, { max: t.limits.maxLines })}</p>
             )}
-            {!onlyFix && (
+            {!onlyFix && !locked && (
               <button type="button" className="fmo-tl-add" ref={addButton} aria-disabled={atLimit} onClick={() => !atLimit && addAndFocus()} data-testid="tl-add">
                 <EditorIcon name="plus" size={20} />
                 {w.addPlayer}

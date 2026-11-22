@@ -630,6 +630,7 @@ export const EDITOR_CSS = /* css */ `
 .fmo-chip-tag { flex: none; padding: 0 6px; border: 1px solid var(--fmo-border-strong); border-radius: 10px; font: var(--fmo-type-small); color: var(--fmo-ink-muted); }
 .fmo-chip-count { flex: none; min-width: 20px; height: 20px; padding: 0 4px; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; border-radius: 10px; background: var(--fmo-ink); color: #fff; font: var(--fmo-type-label); }
 .fmo-chip-problem { flex: none; display: inline-flex; color: var(--fmo-error); }
+.fmo-view-list .fmo-chip { max-width: calc(100% - 136px); }
 .fmo-chip-top { display: flex; justify-content: center; }
 .fmo-view-list { justify-content: center; position: absolute; }
 .fmo-view-list .fmo-whole { position: absolute; inset-inline-end: 12px; bottom: 0; }
@@ -639,7 +640,7 @@ export const EDITOR_CSS = /* css */ `
 .fmo-done-team .fmo-done-checks-title { margin: 0; }
 .fmo-done-team-line { margin: 0; display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px; font: var(--fmo-type-body); }
 .fmo-done-team-line > span { min-width: 0; }
-.fmo-done-team[data-state="fix"] .fmo-done-team-line > span { font-weight: 600; }
+.fmo-done-team[data-state="fix"] .fmo-done-team-line > span { font: var(--fmo-type-button); }
 .fmo-tl-listgroup ul { list-style: none; margin: 0; padding: 0; }
 .fmo-tl-listbox .fmo-tl-listgroup { display: block; min-height: 0; padding: 0; cursor: default; }
 .fmo-tl-listbox .fmo-tl-listgroup:hover { background: transparent; }
@@ -648,6 +649,10 @@ export const EDITOR_CSS = /* css */ `
 .fmo-tl-scrim { position: absolute; inset: 0; z-index: 7; background: rgb(11 21 48 / 0.32); }
 .fmo-tl-menu.fmo-tl-sheet { position: absolute; z-index: 8; inset: auto 0 0 0; width: auto; max-height: 100%; overflow-y: auto; padding: 8px var(--fmo-panel-pad) 12px; border: 0; border-top: 1px solid var(--fmo-border); border-radius: 16px 16px 0 0; box-shadow: 0 -6px 20px rgb(11 21 48 / 0.22); }
 .fmo-tl-sheet-title { margin: 0; padding: 8px 12px 4px; }
+.fmo-tl-locked { flex: none; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 8px; padding: 8px 12px; border-radius: var(--fmo-radius-card); background: var(--fmo-surface-alt); color: var(--fmo-ink); font: var(--fmo-type-small); }
+.fmo-tl-locked p { margin: 0; flex: 1 1 160px; }
+.fmo-tl-locked svg { flex: none; }
+.fmo-tl[data-locked="true"] .fmo-tl-input { background: var(--fmo-surface-alt); border-color: transparent; }
 .fmo-tl-toolbar-start { display: inline-flex; align-items: center; gap: 4px; }
 /* The paste view (5.2): a sub-view of the Players panel; the actions are stuck to the bottom. */
 .fmo-pv { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; position: relative; }
@@ -656,7 +661,7 @@ export const EDITOR_CSS = /* css */ `
 .fmo-pv-back { align-self: flex-start; min-height: 44px; gap: 4px; padding-inline-start: 0; }
 .fmo-pv-title { margin: 0; }
 .fmo-pv-body, .fmo-pv-hint { margin: 0; }
-.fmo-pv-box { width: 100%; box-sizing: border-box; height: auto; min-height: 150px; padding: 12px; resize: vertical; line-height: 24px; }
+.fmo-pv-box { width: 100%; box-sizing: border-box; height: auto; min-height: 150px; padding: 12px; resize: vertical; }
 .fmo-editor[data-layout="wide"] .fmo-pv-box { min-height: 200px; }
 .fmo-pv-box::placeholder { color: var(--fmo-ink-muted); opacity: 1; }
 .fmo-pv-tools { display: flex; flex-wrap: wrap; gap: 8px; }

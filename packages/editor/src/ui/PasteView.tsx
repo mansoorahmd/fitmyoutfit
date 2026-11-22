@@ -234,6 +234,18 @@ export function PasteView() {
                 <span>{preview.room === 0 ? p.overLimitNone : fill(p.overLimit, { fit: preview.room })}</span>
               </p>
             )}
+            {hasList && (
+              <div className="fmo-pv-modes" role="radiogroup" aria-label={p.modeName}>
+                <label className="fmo-pv-mode">
+                  <input type="radio" name={`${uid}-mode`} checked={effectiveMode === "add"} onChange={() => setMode("add")} data-testid="paste-mode-add" />
+                  <span>{fill(p.addTo, { n: existing.length })}</span>
+                </label>
+                <label className="fmo-pv-mode">
+                  <input type="radio" name={`${uid}-mode`} checked={effectiveMode === "replace"} onChange={() => setMode("replace")} data-testid="paste-mode-replace" />
+                  <span>{p.replace}</span>
+                </label>
+              </div>
+            )}
             {n > 0 && (
               <ol className="fmo-pv-rows" aria-label={p.listName} data-testid="paste-rows">
                 {preview.rows.map((row, i) => {
@@ -290,18 +302,6 @@ export function PasteView() {
       </div>
       {preview && (
         <div className="fmo-pv-actions">
-          {hasList && (
-            <div className="fmo-pv-modes" role="radiogroup" aria-label={p.modeName}>
-              <label className="fmo-pv-mode">
-                <input type="radio" name={`${uid}-mode`} checked={effectiveMode === "add"} onChange={() => setMode("add")} data-testid="paste-mode-add" />
-                <span>{fill(p.addTo, { n: existing.length })}</span>
-              </label>
-              <label className="fmo-pv-mode">
-                <input type="radio" name={`${uid}-mode`} checked={effectiveMode === "replace"} onChange={() => setMode("replace")} data-testid="paste-mode-replace" />
-                <span>{p.replace}</span>
-              </label>
-            </div>
-          )}
           <div className="fmo-pv-buttons">
             <button type="button" className="fmo-btn fmo-btn-ink fmo-pv-accept" aria-disabled={n === 0} onClick={accept} data-testid="paste-accept">
               {n === 0 ? fill(p.addN, { n: 0 }) : addLabel}

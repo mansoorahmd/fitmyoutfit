@@ -42,7 +42,7 @@ describe("wording (section 14)", () => {
     const walk = (value: unknown, path: string): void => {
       if (typeof value === "string") {
         expect(value.trim().length, path).toBeGreaterThan(0);
-        for (const m of value.matchAll(/\{(\w+)\}/g)) expect(["zone", "colour", "code", "role", "file", "size", "percent", "change", "font", "product", "side", "summary", "zones", "item", "where", "value", "name", "number", "width", "height", "degrees", "count", "cm", "reason", "team", "n", "i", "k", "r", "max", "min", "pieces", "noun", "missing", "minimum", "region", "first", "last", "character", "example", "text", "a", "b", "fit", "names", "players", "state"], path).toContain(m[1]);
+        for (const m of value.matchAll(/\{(\w+)\}/g)) expect(["zone", "colour", "code", "role", "file", "size", "percent", "change", "font", "product", "side", "summary", "zones", "item", "where", "value", "name", "number", "width", "height", "degrees", "count", "cm", "reason", "team", "n", "i", "k", "r", "max", "min", "pieces", "noun", "missing", "minimum", "region", "first", "last", "character", "example", "text", "a", "b", "fit", "names", "players", "state", "date"], path).toContain(m[1]);
       } else if (value && typeof value === "object") for (const [k, v] of Object.entries(value)) walk(v, `${path}.${k}`);
     };
     walk(W, "wording");
