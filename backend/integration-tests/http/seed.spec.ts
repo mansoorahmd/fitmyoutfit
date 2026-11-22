@@ -318,6 +318,8 @@ medusaIntegrationTestRunner({
           "roster_max_count",
           "roster_max_name_length",
           "schedule_time_zone",
+          "team_order_deposit_percentage",
+          "team_order_payment_path",
         ])
         const [seeded] = await getContainer().resolve(Modules.STORE).listStores({})
         expect(seeded.metadata).toMatchObject({
@@ -325,6 +327,8 @@ medusaIntegrationTestRunner({
           roster_max_count: 10,
           roster_max_name_length: 18,
           schedule_time_zone: "Asia/Karachi",
+          team_order_deposit_percentage: 50,
+          team_order_payment_path: "/[countryCode]/account/team-orders/[id]/pay",
         })
         const storeModule = getContainer().resolve(Modules.STORE)
         const [store] = await storeModule.listStores({})
@@ -1008,6 +1012,8 @@ medusaIntegrationTestRunner({
             "roster_max_count",
             "roster_max_name_length",
             "schedule_time_zone",
+            "team_order_deposit_percentage",
+            "team_order_payment_path",
           ],
           regionSettings: [
             "Pakistan: min_garment_quantity",

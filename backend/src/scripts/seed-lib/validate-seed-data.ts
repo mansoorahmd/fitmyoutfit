@@ -11,6 +11,7 @@ import { readMinGarmentQuantity } from "../../lib/settings/min-garment-quantity"
 import { readRosterLimits } from "../../lib/settings/roster-limits"
 import { readRushPercentage } from "../../lib/settings/rush-percentage"
 import { readScheduleTimeZone } from "../../lib/settings/schedule-time-zone"
+import { readDepositPercentage, readPaymentPath } from "../../lib/settings/team-order-payments"
 import { isHttpsUrl } from "./product-images"
 
 const PAYMENT_PROVIDER_RE = /^pp_[a-z0-9-]+(_[a-z0-9-]+)+$/
@@ -293,6 +294,14 @@ export function validateSeedData(seed: SeedData): string[] {
   const timeZone = readScheduleTimeZone(seed.settings.data)
   if (!timeZone.ok) {
     problems.push(`settings: ${timeZone.error}`)
+  }
+  const depositPercentage = readDepositPercentage(seed.settings.data)
+  if (!depositPercentage.ok) {
+    problems.push(`settings: ${depositPercentage.error}`)
+  }
+  const paymentPath = readPaymentPath(seed.settings.data)
+  if (!paymentPath.ok) {
+    problems.push(`settings: ${paymentPath.error}`)
   }
 
   // Region settings and payment providers
