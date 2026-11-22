@@ -317,6 +317,44 @@ medusaIntegrationTestRunner({
           expect(await sentFor(id)).toHaveLength(1)
         })
 
+        it("an organizer with no email address: the request succeeds, the send is recorded as failed, nothing is sent, and it goes out once an address exists", async () => {
+          const as = await w.signIn()
+          const me = await api.get("/store/customers/me", w.h(as))
+          const customerId = me.data.customer.id as string
+          const customers = getContainer().resolve(Modules.CUSTOMER) as any
+          await customers.updateCustomers(customerId, { email: null })
+          const order = await w.aTeamOrder(as)
+          const id = order.team_order.id
+          await w.putRoster(as, id, 1, team(12))
+          const spy = jest.spyOn(notifications(), "createNotifications")
+          try {
+            const made = await w.makeProof(as, id)
+            expect(made.status).toBe(201)
+            expect(made.data.team_order.status).toBe("proof_sent")
+            expect(spy).not.toHaveBeenCalled()
+            const [row] = await rowsFor(id)
+            expect(row).toMatchObject({ kind: "proof_ready", status: "failed", attempts: 1, last_error: "NoOrganizerAddress", sent_at: null })
+            expect(await sentFor(id)).toEqual([])
+            // the signature also goes through, with its own failed record (the deposit email)
+            const signed = await w.sign(as, id, made.data.current_proof.id, w.signBody(made.data))
+            expect(signed.status).toBe(200)
+            expect((await rowsFor(id)).map((r) => `${r.kind}:${r.status}:${r.last_error}`)).toEqual([
+              "proof_ready:failed:NoOrganizerAddress",
+              "deposit_due:failed:NoOrganizerAddress",
+            ])
+            // the job tries again and fails the same way, without sending or duplicating
+            await retryFailedEmails(getContainer(), new Date())
+            expect(await sentFor(id)).toEqual([])
+            expect(await rowsFor(id)).toHaveLength(2)
+          } finally {
+            spy.mockRestore()
+          }
+          // an address is added: the next run sends both, once
+          await customers.updateCustomers(customerId, { email: as.__email })
+          expect(await retryFailedEmails(getContainer(), new Date())).toEqual({ tried: 2, sent: 2 })
+          expect(await templates(id)).toEqual(["team-order-proof-ready", "team-order-deposit-due"])
+        })
+
         it("is tried again up to a limit and then left alone", async () => {
           const as = await w.signIn()
           const order = await w.aTeamOrder(as)
