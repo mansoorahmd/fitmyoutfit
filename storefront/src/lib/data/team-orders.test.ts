@@ -15,7 +15,7 @@ import {
   retrieveTeamOrder,
   saveTeamOrderList,
   setTeamOrderDesignVersion,
-  setTeamOrderNeedBy,
+  setTeamOrderSchedule,
 } from "./team-orders"
 
 type Reply = { status: number; body?: unknown }
@@ -95,7 +95,7 @@ describe("what each call sends", () => {
     expect(listed.ok && listed.value.map((o) => o.id)).toEqual(["teamord_1"])
     await renameTeamOrder("teamord_1", "New")
     await setTeamOrderDesignVersion("teamord_1", "desver_2")
-    await setTeamOrderNeedBy("teamord_1", null)
+    await setTeamOrderSchedule("teamord_1", { needByDate: null })
     await saveTeamOrderList("teamord_1", 3, { lines: [{ id: "a", name: "A", number: "1", size: "M", count: 1, noName: false, noNumber: false }] })
     expect(await deleteTeamOrder("teamord_1")).toEqual({ ok: true, value: true })
     expect(requests.map((r) => `${r.init.method} ${r.url.replace(/^.*\/store/, "")}`)).toEqual([
@@ -111,6 +111,18 @@ describe("what each call sends", () => {
       version: 3,
       lines: [{ id: "a", name: "A", number: "1", size: "M", count: 1, no_name: false, no_number: false }],
     })
+  })
+
+  it("sends only the keys it is given: a date, a clear, or the rush choice", async () => {
+    replies.push({ status: 200, body: apiAnswer() }, { status: 200, body: apiAnswer() }, { status: 200, body: apiAnswer() })
+    await setTeamOrderSchedule("teamord_1", { needByDate: "2026-12-20" })
+    await setTeamOrderSchedule("teamord_1", { rushRequested: true })
+    await setTeamOrderSchedule("teamord_1", { needByDate: null, rushRequested: false })
+    expect(requests.map((r) => JSON.parse(r.init.body as string))).toEqual([
+      { need_by_date: "2026-12-20" },
+      { rush_requested: true },
+      { need_by_date: null, rush_requested: false },
+    ])
   })
 
   it("reads a design by the version's id: the design's versions first, then the version's number", async () => {
@@ -147,8 +159,8 @@ describe("each refusal the backend can answer", () => {
   it.each([
     ["team_name_invalid", () => renameTeamOrder("teamord_1", "x")],
     ["team_order_not_editable", () => renameTeamOrder("teamord_1", "x")],
-    ["need_by_date_invalid", () => setTeamOrderNeedBy("teamord_1", "2026-12-20")],
-    ["need_by_date_in_past", () => setTeamOrderNeedBy("teamord_1", "2020-01-01")],
+    ["need_by_date_invalid", () => setTeamOrderSchedule("teamord_1", { needByDate: "2026-12-20" })],
+    ["need_by_date_in_past", () => setTeamOrderSchedule("teamord_1", { needByDate: "2020-01-01" })],
     ["roster_malformed", () => saveTeamOrderList("teamord_1", 1, { lines: [] })],
     ["roster_too_many_lines", () => saveTeamOrderList("teamord_1", 1, { lines: [] })],
     ["roster_version_required", () => saveTeamOrderList("teamord_1", 1, { lines: [] })],

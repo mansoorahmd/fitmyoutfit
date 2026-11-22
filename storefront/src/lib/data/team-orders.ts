@@ -159,12 +159,22 @@ export async function setTeamOrderDesignVersion(id: string, designVersionId: str
   })
 }
 
-/** POST /store/team-orders/:id/schedule: set (a date), change or clear (null) the need-by date. */
-export async function setTeamOrderNeedBy(id: string, needByDate: string | null): Promise<Outcome<TeamOrderView>> {
+/**
+ * POST /store/team-orders/:id/schedule: set or change the need-by date (a date), clear it (null), and/or
+ * choose rush delivery. A key that is not given is left as it is. Allowed while the order is a draft or
+ * has its proof out; the answer carries the new schedule.
+ */
+export async function setTeamOrderSchedule(
+  id: string,
+  change: { needByDate?: string | null; rushRequested?: boolean }
+): Promise<Outcome<TeamOrderView>> {
   return teamCall({
     method: "POST",
     path: `/store/team-orders/${enc(id)}/schedule`,
-    body: { need_by_date: needByDate },
+    body: {
+      ...(change.needByDate !== undefined ? { need_by_date: change.needByDate } : {}),
+      ...(change.rushRequested !== undefined ? { rush_requested: change.rushRequested } : {}),
+    },
     read: parseTeamOrderAnswer,
   })
 }

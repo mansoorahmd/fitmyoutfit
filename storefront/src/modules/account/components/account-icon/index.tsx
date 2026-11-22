@@ -3,7 +3,7 @@
 // ends, currentColor) so they sit beside it. Always decorative: the words
 // next to an icon carry the meaning.
 
-export type AccountIconName = "orders" | "pin" | "user" | "sign-out" | "chevron"
+export type AccountIconName = "orders" | "team" | "pin" | "user" | "sign-out" | "chevron"
 
 const PATHS: Record<AccountIconName, React.ReactNode> = {
   // an open box, as LineIcon's "package"
@@ -11,6 +11,14 @@ const PATHS: Record<AccountIconName, React.ReactNode> = {
     <>
       <path d="M3.75 7.75L12 3.75l8.25 4v8.5L12 20.25l-8.25-4z" />
       <path d="M3.75 7.75L12 11.75l8.25-4M12 11.75v8.5" />
+    </>
+  ),
+  // two heads and shoulders: a team
+  team: (
+    <>
+      <circle cx="9" cy="8.5" r="3.25" />
+      <path d="M3.25 19.75c.5-3.25 2.75-5.25 5.75-5.25s5.25 2 5.75 5.25" />
+      <path d="M15.25 5.5a3.25 3.25 0 0 1 0 6M17 14.75c2 .5 3.25 2.25 3.75 5" />
     </>
   ),
   // a map pin
