@@ -264,7 +264,6 @@ export const EDITOR_WORDING = {
     } satisfies Record<RosterNote["code"] | "smaller", string>,
     digitsTo: { western: "Show all numbers as 0‎–‎9", "arabic-indic": "Show all numbers as ٠‎–‎٩" }, // W-TL70
     numbersOff: "Numbers are off on this design. The numbers you typed are kept and come back if you turn numbers on.", // W-TL72
-    namesOff: "Names are off on this design. The names you typed are kept and come back if you turn names on.", // W-TL72
     bySize: { addNames: "Add names for the bag labels", hideNames: "Hide the names", total: "Total {n}", sizeCount: "{size}: {count}", less: "One less {size}", more: "One more {size}", title: "How many of each size" }, // W-TL74
     skipEmpty: "An empty line was removed", // NEW (status)
   },

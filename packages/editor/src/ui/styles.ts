@@ -549,6 +549,7 @@ export const EDITOR_CSS = /* css */ `
 .fmo-tl-heading .fmo-tl-h-size { grid-column: 4; text-align: center; }
 .fmo-tl-rows { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; position: relative; margin-inline: calc(-1 * var(--fmo-panel-pad)); padding-bottom: 16px; scroll-padding-block: 8px; }
 .fmo-tl-above { padding-inline: var(--fmo-panel-pad); }
+.fmo-tl-strong { font: var(--fmo-type-section); }
 .fmo-tl-list { list-style: none; margin: 0; padding: 0; }
 .fmo-tl-line { position: relative; padding: 4px var(--fmo-panel-pad) 4px; outline: none; }
 .fmo-tl-line:hover { background: color-mix(in srgb, var(--fmo-surface-alt) 50%, transparent); }

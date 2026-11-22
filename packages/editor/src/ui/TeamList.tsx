@@ -55,7 +55,7 @@ export function TeamListView({ initialDetailsOpen }: { initialDetailsOpen?: bool
   const wordsContext = useMemo(() => ({ wording, lines, sizes: sizeList, noun: productNoun }), [wording, lines, sizeList, productNoun]);
 
   /** The problems and notes of one line, worded. */
-  const shownFor = (line: EditorLine, index: number): Shown[] => {
+  const shownFor = (line: EditorLine): Shown[] => {
     const problems = shownProblems(analysis, line, t.seen, t.revealAll);
     const out: Shown[] = problems.map((p) => {
       const text = problemText(p, line, wordsContext);
@@ -69,7 +69,6 @@ export function TeamListView({ initialDetailsOpen }: { initialDetailsOpen?: bool
     if (line.id === t.chosenId && t.nameShrunk && !line.noName && prints.name && !problems.some((p) => p.code === "name-too-long")) {
       out.push({ key: "smaller", code: "smaller", field: "name", text: w.notes.smaller, inField: false, kind: "note" });
     }
-    void index;
     return out;
   };
 
@@ -374,10 +373,6 @@ export function TeamListView({ initialDetailsOpen }: { initialDetailsOpen?: bool
   const shortLine = lines.length === 0 ? "" : analysis.toFix.length > 0 ? fill(w.shortBar, { i: Math.max(1, chosenIndex + 1), n: lines.length, k: analysis.toFix.length }) : fill(w.shortBarReady, { i: Math.max(1, chosenIndex + 1), n: lines.length });
   const mixedDigits = analysis.listNotes.some((n) => n.code === "mixed-digit-systems");
   const hasHiddenNumbers = !prints.number && lines.some((l) => l.number !== "");
-  const hasHiddenNames = !prints.name && prints.number && false;
-  const nameOffNote = !prints.name && prints.number && lines.some((l) => l.name !== "") ? null : null;
-  void hasHiddenNames;
-  void nameOffNote;
 
   const startOnlyFix = (on: boolean) => {
     setOnlyFix(on);
@@ -386,12 +381,10 @@ export function TeamListView({ initialDetailsOpen }: { initialDetailsOpen?: bool
 
   const menuLine = menu?.kind === "line" ? lines.find((l) => l.id === menu.id) : undefined;
   const menuIndex = menuLine ? lines.findIndex((l) => l.id === menuLine.id) : -1;
-  const activeSize = useMemo(() => (sizeLine ? readSize(sizeLine.size, t.sizeTable) : null), [sizeLine, t.sizeTable]);
-  void activeSize;
 
   const empty = lines.length === 0;
   // A short desktop panel (the summary closed) keeps Sort and Style on the summary bar's row, so more lines show (3.4).
-  const inBar = wide && !detailsOpen;
+  const inBar = api.layout === "wide" && !detailsOpen;
   const sortButton = (
     <button type="button" className="fmo-btn fmo-btn-text" aria-haspopup="menu" aria-expanded={menu?.kind === "sort"} onClick={(e) => { menuButton.current = e.currentTarget; setAnchor(e.currentTarget); setMenu((m) => (m?.kind === "sort" ? null : { kind: "sort" })); }} data-testid="tl-sort">
       {w.sort}
@@ -420,7 +413,7 @@ export function TeamListView({ initialDetailsOpen }: { initialDetailsOpen?: bool
             </p>
           )}
           <p className="fmo-tl-detail" data-testid="tl-sizes">
-            <b>{w.sizes}</b>{" "}
+            <span className="fmo-tl-strong">{w.sizes}</span>{" "}
             {summary.bySize
               .filter((s) => wide || s.pieces > 0)
               .map((s) => `${s.size} ${s.pieces}`)
@@ -538,7 +531,7 @@ export function TeamListView({ initialDetailsOpen }: { initialDetailsOpen?: bool
                     nameLabel={prints.name ? "name" : "nameNotPrinted"}
                     hasNameFlag={prints.name}
                     hasNumberFlag={prints.number}
-                    shown={shownFor(line, index)}
+                    shown={shownFor(line)}
                     menuOpen={menu?.kind === "line" && menu.id === line.id}
                     wording={wording}
                     listOpen={wide && sizeFocus === line.id && listing}
@@ -770,7 +763,7 @@ function BySizeList({ onNames }: { onNames: () => void }) {
           </div>
         );
       })}
-      <p className="fmo-tl-detail"><b>{fill(w.bySize.total, { n: total })}</b></p>
+      <p className="fmo-tl-detail"><span className="fmo-tl-strong">{fill(w.bySize.total, { n: total })}</span></p>
       <button type="button" className="fmo-btn fmo-btn-text" onClick={onNames} data-testid="tl-bag-names-open">
         {w.bySize.addNames}
       </button>

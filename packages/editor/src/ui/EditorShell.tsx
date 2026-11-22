@@ -191,6 +191,8 @@ function useReducedMotion(): boolean {
 }
 
 const RECENT_KEY = "fmo-editor-recent";
+/** The landscape phone's side panel in list view (08-team-list.md 3.3: widened from 320 so a name has room; the stage keeps 380 px). */
+const LIST_PANEL_SHORT = 400;
 
 /** Whether the selected item stays selected when a tool opens: only in its own tool (E3c minor). */
 export function keepsSelection(design: Pick<DesignDocument, "layers">, selectedId: string, tool: ToolId): boolean {
@@ -1007,7 +1009,7 @@ export function EditorShell(props: EditorShellProps) {
   const heights = listTyping ? { normal: typingPanel, expanded: typingPanel } : panelHeights(visibleHeight);
   const growRoom = panelGrowRoom(size.height || 844);
   const editorWidth = size.width || 390;
-  const stageWidth = layout === "wide" ? editorWidth - LAYOUT_SIZES.wide.rail - LAYOUT_SIZES.wide.panel : layout === "short" ? editorWidth - LAYOUT_SIZES.short.rail - (panelOpen || startCard ? LAYOUT_SIZES.short.panel : 0) : editorWidth;
+  const stageWidth = layout === "wide" ? editorWidth - LAYOUT_SIZES.wide.rail - LAYOUT_SIZES.wide.panel : layout === "short" ? editorWidth - LAYOUT_SIZES.short.rail - (panelOpen || startCard ? (listView && panelOpen ? LIST_PANEL_SHORT : LAYOUT_SIZES.short.panel) : 0) : editorWidth;
   const baseInsets = stageInsets(layout, { open: panelOpen || startCard || (kitOpen && layout !== "wide"), height: panelSize.height, width: panelSize.width });
   // The Done panel covers the stage's right side (desktop, landscape) or its lower part (phone): the garment is framed in the rest.
   const insets = doneOpen ? (layout === "compact" ? { ...baseInsets, bottom: doneHeight > 0 ? doneHeight - LAYOUT_SIZES.compact.dock : heights.expanded } : { ...baseInsets, right: layout === "wide" ? 400 : LAYOUT_SIZES.short.panel }) : baseInsets;
@@ -1463,7 +1465,7 @@ export function EditorShell(props: EditorShellProps) {
             partPopover={partMenu ? <PartPopover key={`${partMenu.target.kind}-${partMenu.target.id}-${partMenu.x}-${partMenu.y}`} target={partMenu.target} x={partMenu.x} y={partMenu.y} onClose={() => setPartMenu(null)} /> : null}
             kitButton={
               startCard || doneOpen || (Boolean(selectedLayer) && layout !== "wide" && !typing && mode === "3d") || (layout === "compact" && typing) ? null : (
-                <KitButton count={design.layers.length} compact={(size.width || 390) < 480} open={kitOpen} onClick={() => setKitOpen((o) => !o)} />
+                <KitButton count={design.layers.length} compact={stageWidth < 480} open={kitOpen} onClick={() => setKitOpen((o) => !o)} />
               )
             }
             kitPopover={
@@ -1474,7 +1476,7 @@ export function EditorShell(props: EditorShellProps) {
                 </div>
               ) : null
             }
-            viewControls={viewControlsFor({ layout, typing, panelOpen, detent, startCard, stageHeight: (size.height || 844) - LAYOUT_SIZES.compact.topBar - (startCard ? panelSize.height : 0) })}
+            viewControls={viewControlsFor({ layout, typing, panelOpen, detent, startCard, listView, stageHeight: (size.height || 844) - LAYOUT_SIZES.compact.topBar - (startCard ? panelSize.height : 0) })}
           />
           {layout !== "wide" && (start ?? panel)}
         </div>
