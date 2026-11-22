@@ -109,9 +109,9 @@ export const homeContent: HomeContent = {
   button: {
     label: "Start your team kit",
     // A path without the country code. The hero passes it to the localized
-    // link, which adds the country code. This will change to the editor once
-    // the editor is embedded in the storefront.
-    href: "/store",
+    // link, which adds the country code. It leads to the garment chooser of
+    // the 3D designer.
+    href: "/design",
   },
   secondaryButton: { label: "See the garments", href: "/store" },
   // "#…" after the country code gives "/pk#how-team-orders-work".
@@ -166,7 +166,7 @@ export const homeContent: HomeContent = {
     ],
     paymentLine:
       "The organizer pays 50% when the proof is approved and 50% before shipping.",
-    button: { label: "Start your team kit", href: "/store" },
+    button: { label: "Start your team kit", href: "/design" },
   },
   rosterProof: {
     title: "One page everyone signs off",

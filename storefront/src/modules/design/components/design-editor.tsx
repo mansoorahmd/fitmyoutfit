@@ -54,6 +54,9 @@ import { listLimits, listMinimum } from "@lib/editor/team-list-host"
 import { authHref } from "@lib/util/account-auth"
 import { createListSaver, type ListSaveState, type ListSaver } from "@lib/team-order/list-saver"
 import { editorAcceptsList, savedListFromView } from "@lib/team-order/map"
+import { designerReturnPath, leaveLinks } from "@lib/editor/leave-links"
+import { STORE_NAME } from "@lib/store-config"
+import DesignerMenu from "./designer-menu"
 import { topBarState } from "@lib/team-order/save-words"
 import { runStart, type StartProgress, type StartStep } from "@lib/team-order/start"
 import type { Failure, TeamOrderView } from "@lib/team-order/types"
@@ -251,6 +254,8 @@ export default function DesignEditor({ product: entry, countryCode, fontFamilies
   /** The order as the server last said, the design JSON it holds, and a version made but not yet pointed at. */
   const orderRef = useRef<{ view: TeamOrderView; baseJson: string; pending: { json: string; versionId: string } | null; resendList: boolean } | null>(null)
   const progress = useRef<StartProgress>({})
+  /** Where the page goes once the order's save point is done (the order's page, or the store link that was pressed). */
+  const leaveTarget = useRef<string | null>(null)
   const handle = entry.handle
 
   // ---- the editor's data ---------------------------------------------------
@@ -440,9 +445,10 @@ export default function DesignEditor({ product: entry, countryCode, fontFamilies
    * version, a new design version is made and the order is pointed at it; then the order's page.
    */
   const saveAndOpenOrder = useCallback(
-    async (design: DesignDocument) => {
+    async (design: DesignDocument, to: string | null = orderPage) => {
       const current = orderRef.current
-      if (!orderContext || !current || !orderPage || !data || !store) return
+      if (!orderContext || !current || !orderPage || !data || !store || !to) return
+      leaveTarget.current = to
       latest.current.design = design
       setLeaving({ kind: "saving" })
       const listResult = (await saver.current?.flush()) ?? { kind: "saved" as const }
@@ -488,7 +494,7 @@ export default function DesignEditor({ product: entry, countryCode, fontFamilies
         ...(latest.current.teamList ? { teamList: latest.current.teamList } : {}),
         listDirty: false,
       }).catch(() => undefined)
-      router.push(orderPage)
+      router.push(to)
     },
     [orderContext, orderPage, data, store, context.productId, router],
   )
@@ -584,6 +590,40 @@ export default function DesignEditor({ product: entry, countryCode, fontFamilies
     }
     void (autosave.current?.flush() ?? Promise.resolve()).catch(() => undefined).finally(() => leaveToProduct(false))
   }, [orderContext, session?.locked, orderPage, router, saveAndOpenOrder, leaveToProduct])
+
+  /**
+   * A store link pressed in the designer (its menu or its wordmark). Nothing is lost on the way: an order's
+   * design and list go through the order's save point first, a visitor's design is written to this device
+   * first (the product page and the chooser then offer to continue it). If the save fails, the leaving
+   * notice stays with its choices (try again, stay, leave anyway).
+   */
+  const leaveTo = useCallback(
+    (href: string) => {
+      leaveTarget.current = href
+      if (orderContext) {
+        if (session?.locked || !latest.current.design) {
+          router.push(href)
+          return
+        }
+        void saveAndOpenOrder(latest.current.design, href)
+        return
+      }
+      void (autosave.current?.flush() ?? Promise.resolve()).catch(() => undefined).finally(() => router.push(href))
+    },
+    [orderContext, session?.locked, saveAndOpenOrder, router],
+  )
+
+  const leaveLinkList = useMemo(
+    () =>
+      leaveLinks({
+        countryCode,
+        handle,
+        signedIn: context.signedIn,
+        orderId: orderContext?.view.id ?? null,
+        returnTo: designerReturnPath(handle, orderContext?.view.id ?? null),
+      }),
+    [countryCode, handle, context.signedIn, orderContext],
+  )
 
   // ---- the same order changed somewhere else -------------------------------
   const adoptSavedList = useCallback(async () => {
@@ -703,7 +743,21 @@ export default function DesignEditor({ product: entry, countryCode, fontFamilies
         onClose={onClose}
         style={{ height: "100%" }}
         slots={{
-          brand: "FitMyOutfit",
+          brand: (
+            <a
+              href={`/${countryCode}`}
+              onClick={(e) => {
+                if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
+                e.preventDefault()
+                leaveTo(`/${countryCode}`)
+              }}
+              className="font-heading text-lg font-extrabold text-brand-on-inverse"
+              data-testid="designer-brand-link"
+            >
+              {STORE_NAME}
+            </a>
+          ),
+          account: <DesignerMenu links={leaveLinkList} onLeave={leaveTo} />,
           credit: <Credit entry={entry} short={false} />,
           creditShort: <Credit entry={entry} short />,
           primaryAction: (design) => (
@@ -772,7 +826,7 @@ export default function DesignEditor({ product: entry, countryCode, fontFamilies
                 <button
                   type="button"
                   className="min-h-11 rounded-control border-2 border-brand-ink px-4 font-semibold"
-                  onClick={() => latest.current.design && void saveAndOpenOrder(latest.current.design)}
+                  onClick={() => latest.current.design && void saveAndOpenOrder(latest.current.design, leaveTarget.current ?? orderPage)}
                   data-testid="design-leaving-retry"
                 >
                   {words.leaving.retry}
@@ -783,7 +837,7 @@ export default function DesignEditor({ product: entry, countryCode, fontFamilies
                 <button
                   type="button"
                   className="min-h-11 px-3 font-semibold underline"
-                  onClick={() => orderPage && router.push(orderPage)}
+                  onClick={() => (leaveTarget.current ?? orderPage) && router.push((leaveTarget.current ?? orderPage) as string)}
                   data-testid="design-leaving-anyway"
                 >
                   {words.leaving.leaveAnyway}

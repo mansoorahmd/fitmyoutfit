@@ -35,6 +35,8 @@ export default function ProductPreview({
   headingLevel = 3,
   imageSizes = "(min-width: 1280px) 400px, (min-width: 768px) 33vw, 100vw",
   priority = false,
+  href,
+  footer,
 }: {
   product: HttpTypes.StoreProduct
   /** Kept for the starter's call sites; the card needs only the product. */
@@ -43,6 +45,10 @@ export default function ProductPreview({
   headingLevel?: HeadingLevel
   imageSizes?: string
   priority?: boolean
+  /** Where the card leads, without the country code. The product's page when left out; the designer's chooser sets it. */
+  href?: string
+  /** A line under the price (the chooser's "Design your kit"). */
+  footer?: React.ReactNode
 }) {
   const { cheapestPrice } = getProductPrice({ product })
   const { primary, secondary } = cardImages(product)
@@ -51,7 +57,7 @@ export default function ProductPreview({
 
   return (
     <LocalizedClientLink
-      href={`/products/${product.handle}`}
+      href={href ?? `/products/${product.handle}`}
       className={clx(
         cardFrameClasses,
         "group transition-colors duration-150 ease-out hover:border-brand-ink"
@@ -107,6 +113,7 @@ export default function ProductPreview({
             <span className="whitespace-nowrap text-brand-ink-muted">{priceSuffix}</span>
           </p>
         )}
+        {footer}
       </div>
     </LocalizedClientLink>
   )

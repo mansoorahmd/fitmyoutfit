@@ -52,7 +52,7 @@ export const teamOrderContent = {
     empty: {
       title: "No team orders yet",
       text: "Design your kit in 3D, enter your players, and your team order starts here.",
-      cta: "See the products",
+      cta: "Design your kit",
     },
     // DRAFT WORDING. No id: the store did not answer.
     failed: {

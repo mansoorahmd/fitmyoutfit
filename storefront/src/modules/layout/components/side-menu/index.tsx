@@ -26,7 +26,7 @@ const groupHeading = "type-small font-semibold uppercase tracking-[0.06em] text-
 
 /**
  * The menu drawer below 1280 px (docs/design/03-direction.md, "Header").
- * It opens from the left at 85% of the width (at most 360 px), white, over a
+ * "Design your kit" heads it. It opens from the left at 85% of the width (at most 360 px), white, over a
  * dim backdrop. Headless UI's Dialog traps focus inside it and closes it on
  * Esc and on a press on the backdrop. Contents: the region list, the
  * garments with thumbnails, then Store, Account and Cart. Groups whose pages
@@ -78,6 +78,16 @@ const SideMenu = ({ regions, currentCountryCode, garments }: SideMenuProps) => {
           </div>
 
           <div className="flex flex-col gap-6 px-1 py-4">
+            <LocalizedClientLink
+              href={navigationContent.designLink.href}
+              onClick={close}
+              className="flex min-h-[56px] items-center justify-between rounded-control bg-brand-inverse px-4 type-body font-semibold text-brand-on-inverse"
+              data-testid="menu-design-link"
+            >
+              {navigationContent.designLink.label}
+              <ChevronRightMini aria-hidden="true" />
+            </LocalizedClientLink>
+
             {regions.length > 0 && (
               <section className="flex flex-col gap-2">
                 <h2 id={ids.region} className={groupHeading}>

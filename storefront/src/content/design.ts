@@ -10,6 +10,47 @@ export const designContent = {
     start: "Design your kit",
     resume: "Continue your design",
   },
+  /**
+   * The garment chooser (/design) and the ways in and out of the designer. DRAFT WORDING.
+   * Only garments that have a 3D model are listed (lib/editor/products.ts); prices are the listing's.
+   */
+  chooser: {
+    title: "Design your kit",
+    text: "Pick a garment, then design it in 3D. Add your players when you are ready.",
+    metaDescription: "Choose a garment and design your team's kit in 3D.",
+    /** On each card, under the price. */
+    cardAction: "Design this kit",
+    /** On a card when this device has a saved design for it. */
+    cardResume: "Continue your design",
+    /** More garments are on the way: said once, under the cards. */
+    more: "More garments are coming.",
+    empty: {
+      title: "No garments to design here yet",
+      text: "You can still look at the products.",
+      link: { label: "See the products", href: "/store" },
+    },
+    /** The garments could not be read. */
+    failed: {
+      title: "We couldn't load the garments",
+      text: "Check your connection and try again.",
+      retry: "Try again",
+    },
+  },
+  /** The designer's own menu: the store's way out that never loses work. DRAFT WORDING. */
+  leave: {
+    menuLabel: "Store menu",
+    menuTitle: "Leave the designer",
+    /** Said under the title: nothing is lost by leaving. */
+    note: "Your design and team list are saved before you leave.",
+    home: "Home",
+    product: "Back to the product",
+    changeGarment: "Change garment",
+    account: "Account",
+    teamOrders: "Team orders",
+    signIn: "Sign in",
+    thisOrder: "This team order",
+    close: "Close menu",
+  },
   /** The designer page's tab title is "<title> | <store>". */
   pageTitle: "Design your kit",
   /** Shown while the editor's code and the model arrive. */

@@ -127,6 +127,16 @@ describe("header", () => {
     )
   })
 
+  it("from 1280 px: a plain 'Design your kit' link to the garment chooser, not red", async () => {
+    await renderNav()
+
+    const design = screen.getByTestId("nav-design-link")
+    expect(design).toHaveTextContent("Design your kit")
+    expect(design).toHaveAttribute("href", "/pk/design")
+    expect(classesOf(design)).toEqual(expect.arrayContaining(["hidden", "xl:inline-flex"]))
+    expect(design.className).not.toContain("brand-primary")
+  })
+
   it("links nowhere that does not exist and uses no red", async () => {
     const { container } = await renderNav()
 
@@ -134,7 +144,7 @@ describe("header", () => {
       a.getAttribute("href")
     )
     for (const href of hrefs) {
-      expect(href).toMatch(/^\/pk(\/(products\/[a-z-]+|account|cart))?$/)
+      expect(href).toMatch(/^\/pk(\/(products\/[a-z-]+|account|cart|design))?$/)
     }
     expect(container.innerHTML).not.toContain("brand-primary")
   })
@@ -185,6 +195,16 @@ describe("menu drawer", () => {
     ])
     expect(garments[0].querySelector("img")).toHaveAttribute("src", "j.png")
     expect(within(dialog).queryByText(/Team orders|Help/)).not.toBeInTheDocument()
+  })
+
+  it("heads the menu with 'Design your kit' to the chooser, before the region list", async () => {
+    const dialog = await openMenu()
+
+    const link = within(dialog).getByTestId("menu-design-link")
+    expect(link).toHaveAttribute("href", "/pk/design")
+    expect(link).toHaveTextContent("Design your kit")
+    const text = dialog.textContent ?? ""
+    expect(text.indexOf("Design your kit")).toBeLessThan(text.indexOf("Region"))
   })
 
   it("closes on Esc", async () => {

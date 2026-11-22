@@ -146,12 +146,12 @@ describe("the list of team orders", () => {
     expect(within(cards[1]).getByText("Jersey")).toBeInTheDocument()
   })
 
-  it("empty: says so and leads to the products", async () => {
+  it("empty: says so and leads to the designer", async () => {
     state.list = { ok: true, value: [] }
     await openList()
     const empty = screen.getByTestId("team-orders-empty")
     expect(empty).toHaveTextContent("No team orders yet")
-    expect(within(empty).getByRole("link", { name: "See the products" })).toBeInTheDocument()
+    expect(within(empty).getByRole("link", { name: "Design your kit" })).toBeInTheDocument()
   })
 
   it("the store did not answer: says so with a way to try again", async () => {

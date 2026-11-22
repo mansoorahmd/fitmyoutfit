@@ -1,6 +1,8 @@
 import { Suspense } from "react"
 
 import { listingContent } from "@content/listing"
+import { navigationContent } from "@content/navigation"
+import { ButtonLink } from "@modules/common/components/button"
 import { isPakistan } from "@lib/util/home-regions"
 import SkeletonProductGrid from "@modules/skeletons/templates/skeleton-product-grid"
 import EmptyProducts from "@modules/store/components/empty-products"
@@ -43,6 +45,9 @@ const StoreTemplate = ({
             {listingContent.exportNote}
           </p>
         )}
+        <ButtonLink href={navigationContent.designLink.href} variant="secondary" className="mt-2 self-start" data-testid="store-design-link">
+          {navigationContent.designLink.label}
+        </ButtonLink>
       </header>
       {collectionId ? (
         <Suspense fallback={<SkeletonProductGrid />}>
