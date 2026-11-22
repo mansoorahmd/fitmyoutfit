@@ -45,10 +45,13 @@ vi.mock("@modules/common/components/localized-client-link", () => ({
   ),
 }))
 
+import { existsSync } from "node:fs"
+import { resolve } from "node:path"
+
 import { designContent } from "@content/design"
 import { editorAssetUrl, resolveEditorAsset } from "@lib/editor/asset-path"
 import { designPath, productReturnPath } from "@lib/editor/paths"
-import { editorHandles, editorProductFor } from "@lib/editor/products"
+import { earlierModelIds, editorHandles, editorProductFor, isEarlierModelDesign } from "@lib/editor/products"
 import { hasSavedDesign, setSavedDesignFlag } from "@lib/editor/saved-design"
 import DesignButton from "@modules/design/components/design-button"
 import DesignSavedNotice from "@modules/design/components/design-saved-notice"
@@ -57,17 +60,40 @@ import DesignNotFound from "../app/[countryCode]/(design)/not-found"
 import DesignPage from "../app/[countryCode]/(design)/design/[handle]/page"
 
 describe("which product has which model", () => {
-  it("the jersey and the T-shirt have a model, each with its own definition, file and credit", () => {
+  it("the jersey is our own match jersey (V-neck) with the body under it and no credit line; the T-shirt keeps its stand-in and credit", () => {
     expect(editorHandles()).toEqual(["jersey", "t-shirt"])
-    expect(editorProductFor("jersey")).toMatchObject({
-      definition: "stand-in-jersey",
-      modelFile: "stand-in-jersey.glb",
-      credit: { licence: "CC BY 4.0", author: "Wearable3D", changed: true },
+    expect(editorProductFor("jersey")).toEqual({
+      handle: "jersey",
+      definition: "match-jersey-vneck",
+      modelFile: "match-jersey-vneck.glb",
+      bodyFile: "body-male.glb",
+      shortName: "Jersey",
+      credit: null,
     })
     expect(editorProductFor("t-shirt")).toMatchObject({
       definition: "stand-in-tshirt",
       modelFile: "stand-in-tshirt.glb",
+      credit: { licence: "MIT", author: "Prashant Verma" },
     })
+  })
+
+  it("the files the jersey names are served, and exist in the editor's samples", () => {
+    const jersey = editorProductFor("jersey")!
+    for (const relative of [`models/${jersey.modelFile}`, `models/${jersey.bodyFile}`, `products/${jersey.definition}.json`, `templates/${jersey.definition}/index.json`]) {
+      expect(resolveEditorAsset(relative.split("/"))).not.toBeNull()
+      expect(existsSync(resolve(import.meta.dirname, "../../../packages/editor/samples", relative))).toBe(true)
+    }
+  })
+
+  it("a design for the stand-in jersey is an earlier model's: found by its product id, for the jersey only", () => {
+    const jersey = editorProductFor("jersey")!
+    expect(isEarlierModelDesign({ product: { id: "stand-in-jersey" } }, jersey)).toBe(true)
+    expect(isEarlierModelDesign({ product: { id: "match-jersey-vneck" } }, jersey)).toBe(false)
+    expect(isEarlierModelDesign({ product: { id: "stand-in-jersey" } }, editorProductFor("t-shirt")!)).toBe(false)
+    expect(isEarlierModelDesign(null, jersey)).toBe(false)
+    expect(isEarlierModelDesign({}, jersey)).toBe(false)
+    expect(earlierModelIds("jersey")).toEqual(["stand-in-jersey"])
+    expect(earlierModelIds("t-shirt")).toEqual([])
   })
 
   it("the jacket, the fit kit, an unknown handle and no handle have none", () => {
@@ -248,11 +274,14 @@ const designerContext = (over: Record<string, unknown> = {}) => ({
 describe("the designer returns to the product page", () => {
   const saveDesign = vi.fn()
   const flush = vi.fn()
+  const kvGet = vi.fn()
 
   beforeEach(() => {
     push.mockClear()
     saveDesign.mockReset()
     flush.mockReset()
+    kvGet.mockReset()
+    kvGet.mockResolvedValue(undefined)
     flush.mockResolvedValue(undefined)
     window.localStorage.clear()
     vi.resetModules()
@@ -267,7 +296,7 @@ describe("the designer returns to the product page", () => {
           pruneAssets = vi.fn().mockResolvedValue(undefined)
           clearDesign = vi.fn().mockResolvedValue(undefined)
         },
-        openIndexedDbStore: vi.fn().mockResolvedValue({}),
+        openIndexedDbStore: vi.fn().mockResolvedValue({ get: kvGet }),
         createMemoryKeyValueStore: vi.fn(),
         upgradeDesign: () => ok(design),
         createDeviceAssetStore: () => ({ restore: vi.fn().mockResolvedValue([]) }),
@@ -315,6 +344,23 @@ describe("the designer returns to the product page", () => {
     )
     await screen.findByText("done")
   }
+
+  it("a design this device holds for the earlier stand-in jersey is not opened: the designer says so, and keeps it", async () => {
+    kvGet.mockImplementation(async (_store: string, key: string) =>
+      key === "last:stand-in-jersey" ? { version: 1, productId: "stand-in-jersey", design: {} } : undefined
+    )
+    await mount()
+    const note = await screen.findByTestId("design-earlier-model")
+    expect(note).toHaveTextContent("earlier model of the jersey")
+    expect(note).toHaveTextContent("nothing was deleted")
+    fireEvent.click(screen.getByTestId("design-earlier-model-dismiss"))
+    expect(screen.queryByTestId("design-earlier-model")).toBeNull()
+  })
+
+  it("shows no such note when this device holds nothing for an earlier model", async () => {
+    await mount()
+    expect(screen.queryByTestId("design-earlier-model")).toBeNull()
+  })
 
   it("Done, signed out, saves the design on this device and asks to sign in, then comes back to finish", async () => {
     await mount()

@@ -252,6 +252,12 @@ export const teamOrderContent = {
     locked: {
       designNote: "This team order can't be changed any more. Changes you make to the design here are not saved.",
     },
+    // DRAFT WORDING. No id: a design for an earlier model of the garment was found; the designer opened fresh on the current model.
+    earlierModel: {
+      device: "The design you saved on this device was made for an earlier model of the jersey, so it can't be opened on this one. It is still on this device, and nothing was deleted. You are starting a new design.",
+      order: "This team order's design was made for an earlier model of the jersey, so it can't be opened on this one. You are looking at a new design on the current jersey; your team list is kept as it is. The earlier design stays with the order until you save a new one.",
+      dismiss: "Got it",
+    },
     // DRAFT WORDING. No id: the unsent changes of an order found on this device.
     draftFound: "Your earlier changes to this design were found on this device and are shown here.",
     // DRAFT WORDING. No id: the designer for an order could not load it.

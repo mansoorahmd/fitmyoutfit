@@ -42,7 +42,7 @@ import { designStartPath, teamOrderPath } from "@lib/editor/designer-context"
 import { editorAssetUrl } from "@lib/editor/asset-path"
 import { deleteOrderDraft, readOrderDraft, writeOrderDraft } from "@lib/editor/order-draft"
 import { productReturnPath } from "@lib/editor/paths"
-import type { EditorProduct } from "@lib/editor/products"
+import { earlierModelIds, isEarlierModelDesign, type EditorProduct } from "@lib/editor/products"
 import { setSavedDesignFlag } from "@lib/editor/saved-design"
 import { listLimits, listMinimum } from "@lib/editor/team-list-host"
 import { authHref } from "@lib/util/account-auth"
@@ -94,6 +94,10 @@ async function loadData(entry: EditorProduct, fontFamilies: Record<string, strin
   const product: ProductDefinition = {
     ...checkedProduct.value,
     model: { ...checkedProduct.value.model, url: editorAssetUrl(`models/${entry.modelFile}`) },
+    // the body under the garment, when the product has one: its file is the storefront's too
+    ...(checkedProduct.value.body && entry.bodyFile
+      ? { body: { ...checkedProduct.value.body, url: editorAssetUrl(`models/${entry.bodyFile}`) } }
+      : {}),
   }
 
   // The catalogue's families renamed to the faces next/font generated.
@@ -136,8 +140,7 @@ function newDesign(data: Data): DesignDocument {
 }
 
 /** The model's credit on one line at the top of the stage: a CC BY duty, wherever the model is shown. */
-function Credit({ entry, short }: { entry: EditorProduct; short: boolean }) {
-  const { credit } = entry
+function Credit({ credit, short }: { credit: NonNullable<EditorProduct["credit"]>; short: boolean }) {
   const words = designContent.credit
   return (
     <>
@@ -159,6 +162,19 @@ function Credit({ entry, short }: { entry: EditorProduct; short: boolean }) {
   )
 }
 
+/** Whether this device still holds a design under an earlier editor product of this garment (the store opens another model now). */
+async function hasEarlierDeviceDesign(kv: KeyValueStore, handle: string): Promise<boolean> {
+  try {
+    for (const id of earlierModelIds(handle)) {
+      const raw = (await kv.get("designs", `last:${id}`)) as { version?: number; productId?: string } | undefined
+      if (raw && raw.version === 1 && raw.productId === id) return true
+    }
+  } catch {
+    // storage refused: nothing to tell
+  }
+  return false
+}
+
 type Session = {
   key: number
   design: DesignDocument
@@ -168,6 +184,8 @@ type Session = {
   resume: boolean
   /** The order is no longer a draft: the list is read-only here and nothing is saved. */
   locked: boolean
+  /** A design for an earlier model of this garment exists (on this device, or as the order's design): it is not opened here. */
+  earlierModel: "none" | "device" | "order"
 }
 type Store = { kv: KeyValueStore; designs: DeviceDesignStore; assets: DeviceAssetStore; persistent: boolean; missing: string[] }
 type Leaving = { kind: "idle" } | { kind: "saving" } | { kind: "failed"; list: boolean }
@@ -244,6 +262,7 @@ export default function DesignEditor({ product: entry, countryCode, fontFamilies
   const [defaultTeamName, setDefaultTeamName] = useState("")
   const [leaving, setLeaving] = useState<Leaving>({ kind: "idle" })
   const [conflictBusy, setConflictBusy] = useState(false)
+  const [earlierDismissed, setEarlierDismissed] = useState(false)
   const [chartOpen, setChartOpen] = useState(false)
   const [chartSize, setChartSize] = useState<string | undefined>(undefined)
 
@@ -290,24 +309,41 @@ export default function DesignEditor({ product: entry, countryCode, fontFamilies
         if (orderContext) {
           // A team order: the server's design and list, or this device's unsent draft of them.
           const view = orderContext.view
-          const server = upgradeDesign(orderContext.design, { product: data.product })
+          // A design made for an earlier model of the garment does not fit this one: the designer opens fresh on the
+          // current model, the list as the server has it, and says so. The earlier design stays with the order's versions.
+          const earlier = isEarlierModelDesign(orderContext.design, entry)
+          const server = earlier ? { ok: true as const, value: newDesign(data) } : upgradeDesign(orderContext.design, { product: data.product })
           if (!server.ok) {
             console.error("The order's design could not be read:", server.errors.map((e) => e.message).join("; "))
             if (alive) setError(true)
             return
           }
-          const draft = persistent ? await readOrderDraft(kv, view.id, data.product).catch(() => null) : null
+          const draft = persistent && !earlier ? await readOrderDraft(kv, view.id, data.product).catch(() => null) : null
           const draftDesign = draft?.designDirty ? draft.design : null
           const design = draftDesign ?? server.value
           const teamList = draft?.listDirty && draft.teamList ? draft.teamList : savedListFromView(view, data.product.id)
           if (!alive) return
           const missing = await assets.restore(designAssetIds(design))
           await designs.pruneAssets().catch(() => undefined)
-          orderRef.current = { view, baseJson: designJson(server.value), pending: null, resendList: draft?.listDirty === true && !!draft.teamList }
+          // for an earlier model the base is the earlier design, so the fresh one counts as a change and is saved as a new version
+          orderRef.current = {
+            view,
+            baseJson: earlier ? designJson(orderContext.design as DesignDocument) : designJson(server.value),
+            pending: null,
+            resendList: draft?.listDirty === true && !!draft.teamList,
+          }
           latest.current = { design, teamList }
-          setDesignUnsent(designJson(design) !== designJson(server.value))
+          setDesignUnsent(designJson(design) !== orderRef.current.baseJson)
           setStore({ kv, designs, assets, persistent, missing })
-          setSession({ key: 1, design, teamList, startCard: false, resume: false, locked: !isDraft(view.status) || !editorAcceptsList(view) })
+          setSession({
+            key: 1,
+            design,
+            teamList,
+            startCard: false,
+            resume: false,
+            locked: !isDraft(view.status) || !editorAcceptsList(view),
+            earlierModel: earlier ? "order" : "none",
+          })
           if (draft?.listDirty && draft.teamList) setTouched(true)
           return
         }
@@ -318,6 +354,8 @@ export default function DesignEditor({ product: entry, countryCode, fontFamilies
         if (saved) await designs.pruneAssets().catch(() => undefined)
         // The product page's button reads this flag; the real store is the truth.
         setSavedDesignFlag(handle, !!saved)
+        // a design this device holds for an earlier model of the garment is left where it is, and the visitor is told
+        const earlierOnDevice = saved ? false : await hasEarlierDeviceDesign(kv, handle)
         latest.current = { design: saved?.design ?? null, teamList: saved?.teamList ?? null }
         setStore({ kv, designs, assets, persistent, missing })
         setSession(
@@ -330,8 +368,17 @@ export default function DesignEditor({ product: entry, countryCode, fontFamilies
                 // coming back from signing in to finish starting an order: no "Continue your last design?"
                 resume: !context.resumeStart,
                 locked: false,
+                earlierModel: "none",
               }
-            : { key: 1, design: newDesign(data), teamList: null, startCard: true, resume: false, locked: false },
+            : {
+                key: 1,
+                design: newDesign(data),
+                teamList: null,
+                startCard: true,
+                resume: false,
+                locked: false,
+                earlierModel: earlierOnDevice ? "device" : "none",
+              },
         )
         if (!persistent) setDeviceState("failed")
       })
@@ -760,8 +807,10 @@ export default function DesignEditor({ product: entry, countryCode, fontFamilies
             </a>
           ),
           account: <DesignerMenu links={leaveLinkList} onLeave={leaveTo} />,
-          credit: <Credit entry={entry} short={false} />,
-          creditShort: <Credit entry={entry} short />,
+          // our own match jersey has no credit line; a model under CC BY (the T-shirt) must
+          ...(entry.credit
+            ? { credit: <Credit credit={entry.credit} short={false} />, creditShort: <Credit credit={entry.credit} short /> }
+            : {}),
           primaryAction: (design) => (
             <button type="button" className="fmo-primary" data-done-focus onClick={() => void proceed(design)} data-testid="done-continue">
               {primaryLabel}
@@ -789,6 +838,7 @@ export default function DesignEditor({ product: entry, countryCode, fontFamilies
                 startCard: true,
                 resume: false,
                 locked: false,
+                earlierModel: "none",
               }))
             })
           }}
@@ -803,6 +853,18 @@ export default function DesignEditor({ product: entry, countryCode, fontFamilies
           onKeepMine={() => saver.current?.keepMine()}
           onUseSaved={() => void adoptSavedList()}
         />
+      )}
+      {session.earlierModel !== "none" && !earlierDismissed && (
+        <div
+          role="status"
+          className="fixed inset-x-3 top-16 z-10 mx-auto flex max-w-xl items-start gap-3 rounded-card border border-brand-border bg-brand-surface-alt p-3 type-small text-brand-ink"
+          data-testid="design-earlier-model"
+        >
+          <p className="flex-1">{session.earlierModel === "order" ? words.earlierModel.order : words.earlierModel.device}</p>
+          <button type="button" className="min-h-11 px-3 font-semibold" onClick={() => setEarlierDismissed(true)} data-testid="design-earlier-model-dismiss">
+            {words.earlierModel.dismiss}
+          </button>
+        </div>
       )}
       {orderContext && locked && (
         <div
