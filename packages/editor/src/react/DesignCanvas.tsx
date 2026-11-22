@@ -1436,24 +1436,30 @@ function Throw({ error }: { error: Error }): never {
  */
 function BodyView({ url }: { url: string }) {
   const invalidate = useThree((state) => state.invalidate);
+  const gl = useThree((state) => state.gl);
   const [body, setBody] = useState<Object3D | null>(null);
   useEffect(() => {
     let alive = true;
     let made: Object3D | null = null;
+    // A mark on the stage for tools and tests: "loading" while the body loads, "shown" once it is drawn.
+    const stage = gl.domElement.closest('[data-testid="stage-canvas"]');
+    stage?.setAttribute("data-body", "loading");
     loadModel(url).promise.then(
       (model) => {
         if (!alive) return;
         made = makeBody(model.scene);
         setBody(made);
         invalidate();
+        requestAnimationFrame(() => stage?.setAttribute("data-body", "shown"));
       },
-      () => undefined,
+      () => stage?.removeAttribute("data-body"),
     );
     return () => {
       alive = false;
+      stage?.removeAttribute("data-body");
       if (made) disposeBody(made);
     };
-  }, [url, invalidate]);
+  }, [url, invalidate, gl]);
   return body ? <primitive object={body} /> : null;
 }
 
