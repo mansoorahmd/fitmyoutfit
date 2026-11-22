@@ -81,3 +81,38 @@ export const apiAnswer = (over: { team_order?: Record<string, unknown>; roster?:
     ...rest,
   }
 }
+
+/** A proof without its snapshot, as the contract's `proof` (section 2). */
+export const apiProof = (over: Record<string, unknown> = {}) => ({
+  id: "proof_1",
+  team_order_id: "teamord_1",
+  number: 1,
+  status: "sent",
+  hash: "a".repeat(64),
+  design_version_id: "desver_1",
+  list_version: 3,
+  created_at: "2026-11-22T10:00:00.000Z",
+  closed_at: null,
+  signed_name: null,
+  signed_at: null,
+  schedule_state: null,
+  need_by_date: null,
+  rush: null,
+  promised_delivery_date: null,
+  ...over,
+})
+
+/** The snapshot of a proof, as `GET .../proofs/:proofId` gives it. */
+export const apiSnapshot = (over: Record<string, unknown> = {}) => ({
+  format: 1,
+  design_version_id: "desver_1",
+  product_id: "prod_1",
+  region_id: "reg_uk",
+  team_name: "Lahore Lions",
+  prints: { name: true, number: true },
+  lines: [
+    { name: "Bilal", number: "7", size: "M", count: 1, no_name: false, no_number: false },
+    { name: "علی", number: "٧", size: "L", count: 2, no_name: false, no_number: false },
+  ],
+  ...over,
+})
