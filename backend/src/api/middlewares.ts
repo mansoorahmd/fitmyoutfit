@@ -399,6 +399,11 @@ export default defineMiddlewares({
   errorHandler: errorHandlerWithUndecodableIds,
   routes: [
     {
+      // No method: a global middleware, ahead of the routes.
+      matcher: "/",
+      middlewares: [redactCredentialsInRequestLog],
+    },
+    {
       matcher: "/admin/team-orders/:id",
       method: ["GET"],
       middlewares: [refuseNullCharacters],
@@ -407,11 +412,6 @@ export default defineMiddlewares({
       matcher: "/admin/team-orders/:id/steps",
       method: ["POST"],
       middlewares: [refuseNullCharacters],
-    },
-    {
-      // No method: a global middleware, ahead of the routes.
-      matcher: "/",
-      middlewares: [redactCredentialsInRequestLog],
     },
     {
       matcher: "/store/designs",
