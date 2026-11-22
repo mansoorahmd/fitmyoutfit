@@ -9,6 +9,7 @@
 const SHAPES: { pattern: RegExp; type: string }[] = [
   { pattern: /^models\/[a-z0-9][a-z0-9-]*\.glb$/, type: "model/gltf-binary" },
   { pattern: /^(products|palettes|fonts)\/[a-z0-9][a-z0-9-]*\.json$/, type: "application/json" },
+  { pattern: /^pictures\/[a-z0-9][a-z0-9-]*\.png$/, type: "image/png" },
   { pattern: /^templates\/[a-z0-9][a-z0-9-]*\/[a-z0-9][a-z0-9-]*\.json$/, type: "application/json" },
 ]
 

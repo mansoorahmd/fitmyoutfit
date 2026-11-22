@@ -36,6 +36,13 @@ export const designContent = {
       retry: "Try again",
     },
   },
+  /**
+   * The garment chooser inside the designer (the editor's own sheet, G4). DRAFT WORDING. `inOrder` replaces the sheet's
+   * sentence in a team order, where only the necks of the order's garment are offered.
+   */
+  garments: {
+    inOrder: "This team order is for one garment, so only its necks are here. To design another garment, start a new team order.",
+  },
   /** The designer's own menu: the store's way out that never loses work. DRAFT WORDING. */
   leave: {
     menuLabel: "Store menu",
@@ -45,6 +52,8 @@ export const designContent = {
     home: "Home",
     product: "Back to the product",
     changeGarment: "Change garment",
+    /** Under "Change garment" in a team order where the designer does not offer a garment change. DRAFT WORDING. */
+    garmentInOrder: "A team order is for one garment. To design another garment, start a new team order.",
     account: "Account",
     teamOrders: "Team orders",
     signIn: "Sign in",

@@ -179,8 +179,27 @@ export const teamOrderContent = {
       note: "This list could not be opened here.",
       text: "We could not open the saved team list in the designer, so it is read-only here. Nothing was changed: the list is saved as it was. Open the team order to see it.",
     },
-    // DRAFT WORDING. No id: the Done panel's main button when the list is ready, and the text button under the editor's.
-    continue: "Continue",
+    // DRAFT WORDING. No id: the Done panel's main button for a design with no team order yet. It starts the team order
+    // (the team's name, then the order is made and its page opens); the proof is made later, from the order. 08-team-list
+    // 11.2 says "Continue to the proof" for a draft order that exists, which is `proofContent.make.designerButton`.
+    continue: "Start your team order",
+    // DRAFT WORDING. No id: what the editor tells the designer when a saved list could not be opened whole (G4: the
+    // reader keeps every line it can). {lines} is "line 3", "lines 3 and 5" and so on; the sentences name what was
+    // cut, reset or left out, and say what was kept.
+    readNotes: {
+      title: "Part of your list could not be opened as it was saved",
+      // the last sentence, by where the list is kept
+      keptOrder: "Everything else is kept. The saved list stays as it was until you change the list here.",
+      keptDevice: "Everything else is kept.",
+      close: "Close this message",
+      unusable: "The saved list could not be opened here.",
+      cut: "{lines}: the {field} was too long and was cut to {max} characters.",
+      reset: "{lines}: the {field} could not be read and was reset.",
+      leftOutBroken: "{lines} could not be read and {was} left out.",
+      leftOutLimit: "{lines} {was} left out: the list is over its limit of players.",
+      fields: { name: "name", number: "number", size: "size", id: "line's code", count: "count", noName: "'no name' choice", noNumber: "'no number' choice" } as Record<string, string>,
+      more: " and {count} more",
+    },
     // DRAFT WORDING. No id: the same for an order that exists already, and for one that can not change any more.
     saveAndOpen: "Save and open the team order",
     openOrder: "Open the team order",

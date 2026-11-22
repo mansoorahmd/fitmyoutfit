@@ -16,7 +16,7 @@ describe("the designer's store menu", () => {
     expect(within(panel).getAllByRole("link").map((a) => a.textContent)).toEqual([
       "Home",
       "Back to the product",
-      "Change garment",
+      "Change garmentA team order is for one garment. To design another garment, start a new team order.",
       "This team order",
       "Team orders",
       "Account",
@@ -48,5 +48,37 @@ describe("the designer's store menu", () => {
     fireEvent.click(screen.getByRole("button", { name: "Store menu" }))
     fireEvent.keyDown(document, { key: "Escape" })
     expect(screen.queryByTestId("designer-menu-panel")).not.toBeInTheDocument()
+  })
+})
+
+describe("Change garment in the designer's menu", () => {
+  const editorLinks = leaveLinks({ countryCode: "pk", handle: "jersey", signedIn: true, orderId: "teamord_1", returnTo: "/design/jersey", garments: "editor" })
+
+  it("opens the editor's own chooser where the editor offers one, and does not leave", () => {
+    const onLeave = vi.fn()
+    const onGarments = vi.fn(() => true)
+    render(<DesignerMenu links={editorLinks} onLeave={onLeave} onGarments={onGarments} />)
+    fireEvent.click(screen.getByRole("button", { name: "Store menu" }))
+    expect(screen.queryByTestId("designer-menu-chooser-hint")).toBeNull()
+    fireEvent.click(screen.getByTestId("designer-menu-chooser"))
+    expect(onGarments).toHaveBeenCalled()
+    expect(onLeave).not.toHaveBeenCalled()
+  })
+
+  it("leads to the chooser page when the editor's chooser cannot be opened", () => {
+    const onLeave = vi.fn()
+    render(<DesignerMenu links={editorLinks} onLeave={onLeave} onGarments={() => false} />)
+    fireEvent.click(screen.getByRole("button", { name: "Store menu" }))
+    fireEvent.click(screen.getByTestId("designer-menu-chooser"))
+    expect(onLeave).toHaveBeenCalledWith("/pk/design")
+  })
+
+  it("in a team order without a chooser (one garment, or a locked list) it leads to the page and says how to design another garment", () => {
+    const pageLinks = leaveLinks({ countryCode: "pk", handle: "t-shirt", signedIn: true, orderId: "teamord_1", returnTo: "/x" })
+    expect(pageLinks.find((l) => l.id === "chooser")).toMatchObject({ href: "/pk/design", hint: "A team order is for one garment. To design another garment, start a new team order." })
+    expect(pageLinks.find((l) => l.id === "chooser")!.action).toBeUndefined()
+    // outside an order: a plain link, no sentence
+    const free = leaveLinks({ countryCode: "pk", handle: "jersey", signedIn: false, orderId: null, returnTo: "/x" })
+    expect(free.find((l) => l.id === "chooser")!.hint).toBeUndefined()
   })
 })

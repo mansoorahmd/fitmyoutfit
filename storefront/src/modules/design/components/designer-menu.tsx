@@ -10,9 +10,19 @@ import type { LeaveLink } from "@lib/editor/leave-links"
  * The designer's way out into the store, in the editor's top bar (its `account` slot, which shows on
  * every width): a button that opens a short list of links. A press on a link does not change the page
  * by itself: `onLeave` saves the design and the team list first (the designer's own save points), then
- * changes the page. A link still works as a link (open in a new tab, copy the address).
+ * changes the page. A link still works as a link (open in a new tab, copy the address). "Change garment" opens the editor's
+ * own garment chooser where the editor offers one (`action: "garments"`), and leads to the chooser page otherwise.
  */
-export default function DesignerMenu({ links, onLeave }: { links: LeaveLink[]; onLeave: (href: string) => void }) {
+export default function DesignerMenu({
+  links,
+  onLeave,
+  onGarments,
+}: {
+  links: LeaveLink[]
+  onLeave: (href: string) => void
+  /** Opens the editor's garment chooser; false when it could not (the link then leads to the chooser page as before). */
+  onGarments?: () => boolean
+}) {
   const [open, setOpen] = useState(false)
   const root = useRef<HTMLDivElement>(null)
   const panelId = useId()
@@ -66,12 +76,18 @@ export default function DesignerMenu({ links, onLeave }: { links: LeaveLink[]; o
                     if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
                     e.preventDefault()
                     setOpen(false)
+                    if (link.action === "garments" && onGarments?.()) return
                     onLeave(link.href)
                   }}
-                  className="flex min-h-12 items-center rounded-control px-3 type-body font-semibold hover:bg-brand-surface-alt"
+                  className="flex min-h-12 flex-col justify-center rounded-control px-3 py-2 type-body font-semibold hover:bg-brand-surface-alt"
                   data-testid={`designer-menu-${link.id}`}
                 >
                   {link.label}
+                  {link.hint && (
+                    <span className="type-small font-normal text-brand-ink-muted" data-testid={`designer-menu-${link.id}-hint`}>
+                      {link.hint}
+                    </span>
+                  )}
                 </a>
               </li>
             ))}

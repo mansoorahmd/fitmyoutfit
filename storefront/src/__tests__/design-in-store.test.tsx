@@ -64,7 +64,7 @@ import DesignPage from "../app/[countryCode]/(design)/design/[handle]/page"
 describe("which product has which model", () => {
   it("the jersey is our own match jersey (V-neck) with the body under it and no credit line; the T-shirt keeps its stand-in and credit", () => {
     expect(editorHandles()).toEqual(["jersey", "t-shirt"])
-    expect(editorProductFor("jersey")).toEqual({
+    expect(editorProductFor("jersey")).toMatchObject({
       handle: "jersey",
       definition: "match-jersey-vneck",
       modelFile: "match-jersey-vneck.glb",
@@ -72,6 +72,8 @@ describe("which product has which model", () => {
       shortName: "Jersey",
       credit: null,
     })
+    // its two necks are one store product; a new design opens on the V-neck
+    expect(editorProductFor("jersey")!.garments.map((g) => g.definition)).toEqual(["match-jersey-vneck", "match-jersey-round"])
     expect(editorProductFor("t-shirt")).toMatchObject({
       definition: "stand-in-tshirt",
       modelFile: "stand-in-tshirt.glb",
@@ -311,6 +313,7 @@ describe("the designer returns to the product page", () => {
         designAssetIds: () => [],
         createDesign: () => design,
         applyTemplate: (d: unknown) => d,
+        readSavedListWithNotes: () => ({ lines: [], notes: [] }),
         validateProductDefinition: () => ok({ id: "stand-in-jersey", model: { url: "/x.glb", format: "glb" }, palette: { id: "p" } }),
         validateFontCatalog: () => ok({ fonts: [] }),
         validatePalette: () => ok({ id: "p" }),
