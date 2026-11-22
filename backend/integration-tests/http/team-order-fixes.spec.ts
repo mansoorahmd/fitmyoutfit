@@ -3,6 +3,7 @@
  * that fails without its fix. The races fire the competing requests together, twenty times each.
  */
 import { medusaIntegrationTestRunner } from "@medusajs/test-utils"
+import { MAX_DESIGN_DEPTH } from "../../src/lib/rules/design-input"
 import { TEAM_ORDER_MODULE } from "../../src/modules/team-order/constants"
 import { line, makeWorld, team, type World } from "./support/team-order-world"
 
@@ -66,6 +67,113 @@ medusaIntegrationTestRunner({
             "2:quantity-range",
           ])
           expect(saved.data.roster.summary.ready_for_proof).toBe(false)
+        })
+      })
+
+      // ------------------------------------------------------------------------------------
+      describe("D5.2: odd input is never a 500", () => {
+        const BAD_IDS = ["%00", "teamord_%", "%E0%A4%A", "%", "a%00b", "%ZZ"]
+
+        it("answers 404 or 400 for an id with a bad percent-escape or a NUL, on every store and admin route that takes one", async () => {
+          const as = await w.signIn()
+          const admin = await w.adminHeaders()
+          const store: [string, string][] = []
+          for (const id of BAD_IDS) {
+            store.push(
+              ["get", `/store/designs/${id}`],
+              ["get", `/store/designs/${id}/versions`],
+              ["post", `/store/designs/${id}/versions`],
+              ["get", `/store/designs/${id}/versions/1`],
+              ["get", `/store/designs/desg_x/versions/${id}`],
+              ["get", `/store/team-orders/${id}`],
+              ["post", `/store/team-orders/${id}`],
+              ["delete", `/store/team-orders/${id}`],
+              ["put", `/store/team-orders/${id}/roster`],
+              ["get", `/store/team-orders/${id}/proofs`],
+              ["post", `/store/team-orders/${id}/proofs`],
+              ["get", `/store/team-orders/${id}/proofs/${id}`],
+              ["post", `/store/team-orders/${id}/proofs/${id}/sign`],
+              ["get", `/store/team-orders/${id}/add-ons`],
+              ["post", `/store/team-orders/${id}/add-ons`],
+              ["post", `/store/team-orders/${id}/reorders`],
+              ["post", `/store/team-orders/${id}/reopen`],
+              ["post", `/store/team-orders/${id}/schedule`],
+              ["post", `/store/team-orders/${id}/design-version`],
+              ["get", `/store/team-orders/teamord_x/proofs/${id}`]
+            )
+          }
+          const wrong: string[] = []
+          for (const [method, path] of store) {
+            const r = await (api as any)[method](path, ...(method === "get" || method === "delete" ? [w.h(as)] : [{}, w.h(as)]))
+            if (![400, 404].includes(r.status)) wrong.push(`${method} ${path}: ${r.status}`)
+          }
+          for (const id of BAD_IDS) {
+            for (const [method, path] of [
+              ["get", `/admin/team-orders/${id}`],
+              ["post", `/admin/team-orders/${id}/steps`],
+            ] as const) {
+              const r = await (api as any)[method](path, ...(method === "get" ? [{ headers: admin, ...w.allow }] : [{}, { headers: admin, ...w.allow }]))
+              if (![400, 404].includes(r.status)) wrong.push(`admin ${method} ${path}: ${r.status}`)
+            }
+          }
+          expect(wrong).toEqual([])
+        })
+
+        it("refuses a NUL character in a text of a team-order request body with 400 text_contains_null_character", async () => {
+          const as = await w.signIn()
+          const order = await w.aTeamOrder(as)
+          const id = order.team_order.id
+          const saved = await w.saveDesign(as)
+          const nul = "a\u0000b"
+          const attempts = [
+            await w.putRoster(as, id, 1, [line(1, { name: nul })]),
+            await api.post(`/store/team-orders/${id}`, { team_name: nul }, w.h(as)),
+            await api.post("/store/team-orders", { team_name: "Lions", design_version_id: nul, region_id: w.regionIds["gb"] }, w.h(as)),
+            await api.post("/store/team-orders", { team_name: "Lions", design_version_id: saved.data.version.id, region_id: nul }, w.h(as)),
+            await api.post(`/store/team-orders/${id}/design-version`, { design_version_id: nul }, w.h(as)),
+          ]
+          expect(attempts.map((r) => r.status)).toEqual([400, 400, 400, 400, 400])
+          for (const r of attempts) expect(r.data.code).toBe("text_contains_null_character")
+          expect((await w.read(as, id)).data.roster.version).toBe(1)
+        })
+
+        it("refuses a design JSON with a NUL character in a string or a key (400 design_contains_null_character), and keeps an escaped backslash-u0000 text", async () => {
+          const as = await w.signIn()
+          const raw = (body: string) =>
+            api.post("/store/designs", body, { headers: { ...w.clean(as), "content-type": "application/json" }, ...w.allow })
+          const withProduct = (design: string) => `{"product_id":"${w.productIds["jersey"]}","design":${design}}`
+          for (const design of [
+            '{"schemaVersion":1,"note":"a\\u0000b"}',
+            '{"schemaVersion":1,"a\\u0000b":1}',
+            '{"schemaVersion":1,"layers":[{"value":["x",{"deep":"\\u0000"}]}]}',
+          ]) {
+            const r = await raw(withProduct(design))
+            expect(r.status).toBe(400)
+            expect(r.data.code).toBe("design_contains_null_character")
+          }
+          // the six characters backslash, u, 0, 0, 0, 0 are ordinary text
+          const fine = await raw(withProduct('{"schemaVersion":1,"note":"\\\\u0000"}'))
+          expect(fine.status).toBe(201)
+        })
+
+        it("refuses a design nested 50,000 levels deep with 400 design_too_deep, and allows the limit itself", async () => {
+          const as = await w.signIn()
+          const raw = (design: string) =>
+            api.post("/store/designs", `{"product_id":"${w.productIds["jersey"]}","design":${design}}`, {
+              headers: { ...w.clean(as), "content-type": "application/json" },
+              ...w.allow,
+            })
+          const nested = (levels: number) => `{"schemaVersion":1,"deep":${"[".repeat(levels - 1)}${"]".repeat(levels - 1)}}`
+          const deep = await raw(nested(50_000))
+          expect(deep.status).toBe(400)
+          expect(deep.data.code).toBe("design_too_deep")
+          const at = await raw(nested(MAX_DESIGN_DEPTH))
+          expect(at.status).toBe(201)
+          const over = await raw(nested(MAX_DESIGN_DEPTH + 1))
+          expect(over.status).toBe(400)
+          expect(over.data.code).toBe("design_too_deep")
+          // a real design is far from the limit: the editor's sample designs are 5 levels deep
+          expect(MAX_DESIGN_DEPTH).toBeGreaterThanOrEqual(32)
         })
       })
 

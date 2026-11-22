@@ -1,4 +1,4 @@
-import { checkDesignJson, MAX_DESIGN_BYTES, printedFieldsOf, readDesignName } from "../design-input"
+import { checkDesignJson, MAX_DESIGN_BYTES, MAX_DESIGN_DEPTH, printedFieldsOf, readDesignName } from "../design-input"
 
 describe("checkDesignJson", () => {
   it("accepts an object with a whole-number schemaVersion and returns it", () => {
@@ -51,5 +51,39 @@ describe("printedFieldsOf: what the design prints for each player", () => {
     for (const design of [{}, { layers: "x" }, { layers: [null, 5, "x", []] }, null, 3]) {
       expect(printedFieldsOf(design)).toEqual({ name: false, number: false })
     }
+  })
+})
+
+describe("checkDesignJson: depth and NUL characters", () => {
+  const nest = (levels: number) => {
+    let value: unknown = []
+    for (let i = 1; i < levels; i += 1) value = [value]
+    return value
+  }
+
+  it("refuses a design nested deeper than the limit with design_too_deep, and accepts one at it", () => {
+    expect(MAX_DESIGN_DEPTH).toBe(64)
+    // the design object is level 1, its nested arrays the rest
+    expect(checkDesignJson({ schemaVersion: 1, deep: nest(MAX_DESIGN_DEPTH - 1) })).toEqual({ ok: true, schemaVersion: 1 })
+    expect(checkDesignJson({ schemaVersion: 1, deep: nest(MAX_DESIGN_DEPTH) })).toMatchObject({ ok: false, code: "design_too_deep" })
+    expect(checkDesignJson({ schemaVersion: 1, a: { b: {} } }, 1_000_000, 2)).toMatchObject({ ok: false, code: "design_too_deep" })
+  })
+
+  it("refuses a value nested 50,000 levels deep without overflowing the stack", () => {
+    expect(checkDesignJson({ schemaVersion: 1, deep: nest(50_000) })).toMatchObject({ ok: false, code: "design_too_deep" })
+  })
+
+  it("refuses a NUL character in a text or a key with design_contains_null_character, and keeps the text backslash-u0000", () => {
+    expect(checkDesignJson({ schemaVersion: 1, note: "a\u0000b" })).toMatchObject({ ok: false, code: "design_contains_null_character" })
+    expect(checkDesignJson({ schemaVersion: 1, "a\u0000b": 1 })).toMatchObject({ ok: false, code: "design_contains_null_character" })
+    expect(checkDesignJson({ schemaVersion: 1, layers: [{ v: ["x", { y: "\u0000" }] }] })).toMatchObject({
+      ok: false,
+      code: "design_contains_null_character",
+    })
+    expect(checkDesignJson({ schemaVersion: 1, note: "\u0000" })).toEqual({ ok: true, schemaVersion: 1 })
+  })
+
+  it("the editor's sample designs (5 levels deep) are far from the limit", () => {
+    expect(MAX_DESIGN_DEPTH).toBeGreaterThanOrEqual(5 * 8)
   })
 })

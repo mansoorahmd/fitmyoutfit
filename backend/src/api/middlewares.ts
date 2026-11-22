@@ -34,6 +34,7 @@
 import {
   authenticate,
   defineMiddlewares,
+  errorHandler,
   type MedusaNextFunction,
   type MedusaRequest,
   type MedusaResponse,
@@ -49,6 +50,7 @@ import {
   reservedKeysMessage,
 } from "../lib/rules/order-metadata"
 import { isRushKind } from "../lib/rules/rush-charge"
+import { hasNullInParams, isPathDecodeError, scanJson } from "../lib/rules/odd-input"
 import { redactLoggedRequestFields, type LoggedRequestFields } from "../lib/rules/request-log-redaction"
 import { errorNameForLog } from "../lib/rules/password-reset"
 import { RESET_TOKEN_BUSY_MESSAGE, resetTokenLockKey } from "../lib/rules/reset-token-lock"
@@ -335,10 +337,74 @@ export async function refuseDeletedCustomer(
   }
 }
 
-const customerOnly = [authenticate("customer", ["session", "bearer"]), refuseDeletedCustomer]
+/** The refusal of an id that cannot name anything: 404 in the shape of the routes' own refusals. */
+function notFoundBody(path: string) {
+  const design = path.startsWith("/store/designs")
+  return {
+    type: MedusaError.Types.NOT_FOUND,
+    code: design ? "design_not_found" : "team_order_not_found",
+    message: `${design ? "Design" : "Team order"} not found.`,
+  }
+}
+
+/**
+ * On the routes of designs and team orders (store and admin), after sign-in: an id in the address
+ * with a NUL character (`%00`) is a 404 and a text with a NUL character in the body is a 400
+ * (`text_contains_null_character`), instead of reaching PostgreSQL, which cannot take one and made
+ * a 500. The design's own JSON is checked by checkDesignJson (its own code), not here.
+ */
+export function refuseNullCharacters(req: MedusaRequest, res: MedusaResponse, next: MedusaNextFunction): void {
+  if (hasNullInParams(req.params)) {
+    res.status(404).json(notFoundBody(req.path))
+    return
+  }
+  if (scanJson(req.body, { skipTopLevelKeys: ["design"] }).hasNull) {
+    res.status(400).json({
+      type: MedusaError.Types.INVALID_DATA,
+      code: "text_contains_null_character",
+      message: "A text in the request holds a NUL character (\\u0000), which cannot be stored.",
+    })
+    return
+  }
+  next()
+}
+
+const coreErrorHandler = errorHandler()
+
+/**
+ * Medusa's error handler, with one addition for the routes of designs and team orders: an id in the
+ * address whose percent-escape cannot be decoded (`teamord_%`, `%E0%A4%A`) is a 404, not the 500 it
+ * made (Express raises the error while matching the route, before any middleware runs, so this is
+ * the only place that sees it). Everything else goes to Medusa's handler as before.
+ */
+export function errorHandlerWithUndecodableIds(
+  error: unknown,
+  req: MedusaRequest,
+  res: MedusaResponse,
+  next: MedusaNextFunction
+): Promise<void> | void {
+  if (isPathDecodeError(error) && /^\/(store\/(designs|team-orders)|admin\/team-orders)(\/|$)/.test(req.path)) {
+    res.status(404).json(notFoundBody(req.path))
+    return
+  }
+  return coreErrorHandler(error, req, res, next)
+}
+
+const customerOnly = [authenticate("customer", ["session", "bearer"]), refuseDeletedCustomer, refuseNullCharacters]
 
 export default defineMiddlewares({
+  errorHandler: errorHandlerWithUndecodableIds,
   routes: [
+    {
+      matcher: "/admin/team-orders/:id",
+      method: ["GET"],
+      middlewares: [refuseNullCharacters],
+    },
+    {
+      matcher: "/admin/team-orders/:id/steps",
+      method: ["POST"],
+      middlewares: [refuseNullCharacters],
+    },
     {
       // No method: a global middleware, ahead of the routes.
       matcher: "/",
