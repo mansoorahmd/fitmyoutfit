@@ -83,7 +83,17 @@ export interface Framing extends OrbitLimits {
  * its full size (resizing it while a panel moves would reallocate the drawing
  * buffer every frame); only the projection moves.
  */
-export function frameInFreeArea(size: readonly [number, number, number], fovDegrees: number, viewport: Viewport, insets: ViewInsets = NO_INSETS): Framing {
+export function frameInFreeArea(
+  size: readonly [number, number, number],
+  fovDegrees: number,
+  viewport: Viewport,
+  insets: ViewInsets = NO_INSETS,
+  /**
+   * G3: with a body under the garment, `size` is the box the resting view shows (the garment and the head above it),
+   * and this is the garment's own box: the closest zoom stays as close to the garment as it is without a body.
+   */
+  garmentSize: readonly [number, number, number] = size,
+): Framing {
   const W = Math.max(1, viewport.width);
   const H = Math.max(1, viewport.height);
   const left = clamp(insets.left, 0, W - 1);
@@ -97,10 +107,12 @@ export function frameInFreeArea(size: readonly [number, number, number], fovDegr
   const radius = 0.5 * Math.hypot(size[0], size[1], size[2]);
   const fit = garmentFitDistance(size, (t * fh) / H, (t * fw) / H);
   const base = orbitLimits(size, fovDegrees, W / H);
+  const garmentRadius = 0.5 * Math.hypot(garmentSize[0], garmentSize[1], garmentSize[2]);
+  const garmentFit = garmentSize === size ? fit : garmentFitDistance(garmentSize, (t * fh) / H, (t * fw) / H);
   return {
     ...base,
     fit,
-    minDistance: Math.max(fit * MIN_ZOOM_FACTOR, radius * 1.15),
+    minDistance: Math.max(garmentFit * MIN_ZOOM_FACTOR, garmentRadius * 1.15, garmentSize === size ? 0 : radius * 0.2),
     maxDistance: fit * MAX_ZOOM_FACTOR,
     offset: { x: W / 2 - (left + fw / 2), y: H / 2 - (top + fh / 2) },
     free: { x: left, y: top, width: fw, height: fh },

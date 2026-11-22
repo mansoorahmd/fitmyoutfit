@@ -124,6 +124,8 @@ interface Config {
   printAreas?: Record<string, { x: number; y: number; width: number; height: number }>;
   /** The smallest item per kind, in mm (E3c; placeholders; copied into the product definition). */
   minItemSize?: ProductDefinition["minItemSize"];
+  /** G3: the body model this product is shown on (copied into the product definition). */
+  body?: ProductDefinition["body"];
   /** Where new logos and free text go first (E3c; copied into the product definition). */
   placementOrder?: ProductDefinition["placementOrder"];
   outlineToleranceMm: number;
@@ -401,6 +403,7 @@ const productJson = {
   id: config.product.id,
   name: config.product.name,
   model: { url: config.output.modelUrl, format: "glb" },
+  ...(config.body ? { body: config.body } : {}),
   palette: config.product.palette,
   teamColors: config.teamColors,
   views: config.views,

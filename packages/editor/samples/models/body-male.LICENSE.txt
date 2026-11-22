@@ -1,0 +1,21 @@
+body-male.glb: notice
+=====================
+
+DEVELOPMENT STAND-IN ONLY. To be cleared or replaced before any public deployment.
+
+The body model in body-male.glb is made from the male avatar of Style3D Studio (Style3D), the avatar our match
+jerseys were simulated on (exported as avatar.glb with the match jersey, task S3D-2).
+
+  Title:     Style3D Studio male avatar
+  Author:    Style3D
+  Source:    exported from Style3D Studio on our machine (build/style3d-preview/match-jersey/avatar.glb in the
+             main checkout, git-ignored); not downloaded from anywhere
+  Licence:   NOT CHECKED. Style3D's terms for showing this avatar in a public product are not known.
+
+What we changed: scripts/process-body-model.ts keeps the shoes, hair, scalp, body, face, teeth, lashes and eyes,
+drops the tongue, tears and the eye's clear cover, drops every texture but the base colour, makes plain materials
+(hair and scalp cut out instead of blended), and stores the vertex data as integers (KHR_mesh_quantization). The
+shape is unchanged. The source file's SHA-256 is recorded in body-male.source.json.
+
+Before any public deployment: check Style3D's terms for showing the avatar (or buy or make our own body), then
+replace this notice. No credit line is shown on the canvas for it.

@@ -488,6 +488,7 @@ const makers: Record<string, () => Promise<Template[]>> = {
   "stand-in-jersey": () => jerseyTemplates(STAND_IN_JERSEY),
   "stand-in-tshirt": () => tshirtTemplates(),
   "match-jersey-vneck": () => jerseyTemplates(matchJersey("match-jersey-vneck")),
+  "match-jersey-round": () => jerseyTemplates(matchJersey("match-jersey-round")),
 };
 const wanted = process.argv.slice(2);
 for (const id of wanted) if (!makers[id]) throw new Error(`no templates are made for "${id}"; known: ${Object.keys(makers).join(", ")}`);
