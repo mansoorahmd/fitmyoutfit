@@ -7,7 +7,9 @@ import type { PlaceholderData, ProductKind, SeedData } from "../seed-data/types"
 import { readCodMaxTotal } from "../../lib/settings/cod-max-total"
 import { readDeliveryDays } from "../../lib/settings/delivery-days"
 import { readMinGarmentQuantity } from "../../lib/settings/min-garment-quantity"
+import { readRosterLimits } from "../../lib/settings/roster-limits"
 import { readRushPercentage } from "../../lib/settings/rush-percentage"
+import { readScheduleTimeZone } from "../../lib/settings/schedule-time-zone"
 import { isHttpsUrl } from "./product-images"
 
 const PAYMENT_PROVIDER_RE = /^pp_[a-z0-9-]+(_[a-z0-9-]+)+$/
@@ -282,6 +284,14 @@ export function validateSeedData(seed: SeedData): string[] {
   const deliveryDays = readDeliveryDays(seed.settings.data)
   if (!deliveryDays.ok) {
     problems.push(`settings: ${deliveryDays.error}`)
+  }
+  const rosterLimits = readRosterLimits(seed.settings.data)
+  if (!rosterLimits.ok) {
+    problems.push(`settings: ${rosterLimits.error}`)
+  }
+  const timeZone = readScheduleTimeZone(seed.settings.data)
+  if (!timeZone.ok) {
+    problems.push(`settings: ${timeZone.error}`)
   }
 
   // Region settings and payment providers

@@ -357,6 +357,36 @@ export default defineMiddlewares({
       middlewares: [customerOnly],
     },
     {
+      matcher: "/store/team-orders/:id/proofs",
+      method: ["GET", "POST"],
+      middlewares: [customerOnly],
+    },
+    {
+      matcher: "/store/team-orders/:id/proofs/:proofId",
+      method: ["GET"],
+      middlewares: [customerOnly],
+    },
+    {
+      matcher: "/store/team-orders/:id/proofs/:proofId/sign",
+      method: ["POST"],
+      middlewares: [customerOnly],
+    },
+    {
+      matcher: "/store/team-orders/:id/reopen",
+      method: ["POST"],
+      middlewares: [customerOnly],
+    },
+    {
+      matcher: "/store/team-orders/:id/schedule",
+      method: ["POST"],
+      middlewares: [customerOnly],
+    },
+    {
+      matcher: "/store/team-orders/:id/design-version",
+      method: ["POST"],
+      middlewares: [customerOnly],
+    },
+    {
       matcher: "/auth/:actor_type/emailpass/update",
       method: ["POST"],
       middlewares: [holdResetTokenLockDuringUpdate],

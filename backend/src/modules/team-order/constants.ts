@@ -1,15 +1,8 @@
-/** The module's name in Medusa's container. No imports, so plain code and tests can use it. */
+/** The module name in the Medusa container. */
 export const TEAM_ORDER_MODULE = "teamOrder"
 
-/** The status flow of dev-plan.md (M2). Only `draft` is used in M2-1; the rest come with the proof. */
-export const TEAM_ORDER_STATUSES = [
-  "draft",
-  "proof_sent",
-  "approved",
-  "deposit_paid",
-  "in_production",
-  "balance_due",
-  "shipped",
-] as const
+/** The status flow of dev-plan.md (M2) lives in one place, the plain rule module; re-exported here. */
+export { TEAM_ORDER_STATUSES, type TeamOrderStatus } from "../../lib/rules/team-order-status"
 
-export type TeamOrderStatus = (typeof TEAM_ORDER_STATUSES)[number]
+/** The statuses of a proof (see lib/rules/team-order-status.ts). */
+export { PROOF_STATUSES, type ProofStatus } from "../../lib/rules/team-order-status"

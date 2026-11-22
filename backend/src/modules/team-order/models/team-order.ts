@@ -9,7 +9,9 @@ import { TEAM_ORDER_STATUSES } from "../constants"
  * `product_id` the Medusa product, `region_id` the Medusa region (its `min_garment_quantity`
  * is the minimum). `prints_name` and `prints_number` say which fields the design prints, read
  * from the design version when the order is made: they decide what the team list must hold.
- * `need_by_date` is a calendar date (YYYY-MM-DD) kept as given; nothing is scheduled from it yet.
+ * `need_by_date` is a calendar date (YYYY-MM-DD); the latest day to sign is worked out from it
+ * (lib/rules/team-order-schedule.ts). `rush_requested` is the organizer's choice of rush delivery
+ * (charging for it belongs to the payments milestone).
  *
  * `list_version` counts the saves of the team list, from 1. A save names the version it was made
  * from and is refused when the list has moved on, so two tabs cannot overwrite each other.
@@ -28,5 +30,6 @@ export const TeamOrder = model
     prints_name: model.boolean(),
     prints_number: model.boolean(),
     list_version: model.number().default(1),
+    rush_requested: model.boolean().default(false),
   })
   .indexes([{ on: ["customer_id"] }])

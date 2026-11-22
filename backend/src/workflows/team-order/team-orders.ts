@@ -13,9 +13,22 @@
 import { randomUUID } from "node:crypto"
 import type { MedusaContainer } from "@medusajs/framework/types"
 import { ContainerRegistrationKeys, MedusaError } from "@medusajs/framework/utils"
-import { normalizeLines, parseRosterInput, piecesOf, type RosterInputError, type RosterLimits } from "@fitmyoutfit/team-rules"
+import {
+  normalizeLines,
+  parseRosterInput,
+  piecesOf,
+  resolveLimits,
+  type RosterInputError,
+  type RosterLimits,
+} from "@fitmyoutfit/team-rules"
 import { badRequest, conflict, notAllowed, notFound } from "../../lib/http/refusal"
 import { printedFieldsOf } from "../../lib/rules/design-input"
+import { calendarDateIn } from "../../lib/rules/delivery-promise"
+import { currentProofOf, proofToApi, type StoredProof } from "../../lib/rules/team-order-proof"
+import { isInThePast, scheduleFor } from "../../lib/rules/team-order-schedule"
+import { allowedIn, isStatus } from "../../lib/rules/team-order-status"
+import { readDeliveryDays, type DeliveryDays } from "../../lib/settings/delivery-days"
+import { readScheduleTimeZone } from "../../lib/settings/schedule-time-zone"
 import {
   buildRosterView,
   entriesToLines,
@@ -27,7 +40,7 @@ import {
 import { readMinGarmentQuantity } from "../../lib/settings/min-garment-quantity"
 import { readRosterLimits } from "../../lib/settings/roster-limits"
 import { TEAM_ORDER_MODULE } from "../../modules/team-order/constants"
-import { RosterVersionStale } from "../../modules/team-order/service"
+import { RosterVersionStale, TeamOrderChanged } from "../../modules/team-order/service"
 import type TeamOrderModuleService from "../../modules/team-order/service"
 import { loadOwnVersionById } from "../design/designs"
 
@@ -44,13 +57,14 @@ export type TeamOrderRow = {
   prints_name: boolean
   prints_number: boolean
   list_version: number
+  rush_requested: boolean
   created_at: Date | string
   updated_at: Date | string
 }
 
 type Metadata = Record<string, unknown> | null | undefined
 
-const service = (container: MedusaContainer) => container.resolve<TeamOrderModuleService>(TEAM_ORDER_MODULE)
+export const service = (container: MedusaContainer) => container.resolve<TeamOrderModuleService>(TEAM_ORDER_MODULE)
 
 export function teamOrderToApi(order: TeamOrderRow) {
   return {
@@ -64,6 +78,7 @@ export function teamOrderToApi(order: TeamOrderRow) {
     need_by_date: order.need_by_date,
     prints: { name: order.prints_name, number: order.prints_number },
     list_version: order.list_version,
+    rush_requested: order.rush_requested === true,
     created_at: order.created_at,
     updated_at: order.updated_at,
   }
@@ -78,14 +93,14 @@ export async function loadOwnTeamOrder(container: MedusaContainer, customerId: s
   return found[0]!
 }
 
-async function loadEntries(container: MedusaContainer, teamOrderId: string): Promise<StoredEntry[]> {
+export async function loadEntries(container: MedusaContainer, teamOrderId: string): Promise<StoredEntry[]> {
   return (await service(container).listRosterEntries(
     { team_order_id: teamOrderId },
     { order: { position: "ASC" } }
   )) as StoredEntry[]
 }
 
-async function loadProductSizes(container: MedusaContainer, productId: string): Promise<string[] | null> {
+export async function loadProductSizes(container: MedusaContainer, productId: string): Promise<string[] | null> {
   const query = container.resolve(ContainerRegistrationKeys.QUERY)
   const { data } = await query.graph({
     entity: "product",
@@ -96,7 +111,7 @@ async function loadProductSizes(container: MedusaContainer, productId: string): 
   return product ? sizesFromOptions(product.options) : null
 }
 
-async function loadRegion(container: MedusaContainer, regionId: unknown) {
+export async function loadRegion(container: MedusaContainer, regionId: unknown) {
   if (typeof regionId !== "string" || regionId === "") {
     throw badRequest("region_id_required", "`region_id` must be the id of a region.")
   }
@@ -110,7 +125,7 @@ async function loadRegion(container: MedusaContainer, regionId: unknown) {
 }
 
 /** The region's minimum, in pieces. A setting that is missing or wrong is a server error naming it. */
-function regionMinimum(region: { name?: string | null; metadata?: Metadata }): number {
+export function regionMinimum(region: { name?: string | null; metadata?: Metadata }): number {
   const minimum = readMinGarmentQuantity(region.metadata, region.name)
   if (!minimum.ok) {
     throw new MedusaError(MedusaError.Types.UNEXPECTED_STATE, `The store's region settings are incomplete: ${minimum.error}`)
@@ -118,37 +133,92 @@ function regionMinimum(region: { name?: string | null; metadata?: Metadata }): n
   return minimum.value
 }
 
-async function loadLimits(container: MedusaContainer): Promise<Partial<RosterLimits>> {
+/** The store settings a team order reads at every answer: roster limits, delivery days, the store's day. */
+export type StoreSettings = { limits: Partial<RosterLimits>; deliveryDays: DeliveryDays; timeZone: string }
+
+export async function loadStoreSettings(container: MedusaContainer): Promise<StoreSettings> {
   const query = container.resolve(ContainerRegistrationKeys.QUERY)
   const { data } = await query.graph({ entity: "store", fields: ["metadata"] })
-  const limits = readRosterLimits((data as unknown as { metadata?: Metadata }[])[0]?.metadata)
+  const metadata = (data as unknown as { metadata?: Metadata }[])[0]?.metadata
+  const limits = readRosterLimits(metadata)
   if (!limits.ok) {
     throw new MedusaError(MedusaError.Types.UNEXPECTED_STATE, `The store's roster settings are invalid: ${limits.error}`)
   }
-  return limits.value
+  const days = readDeliveryDays(metadata)
+  if (!days.ok) {
+    throw new MedusaError(MedusaError.Types.UNEXPECTED_STATE, `The store's delivery settings are invalid: ${days.error}`)
+  }
+  const zone = readScheduleTimeZone(metadata)
+  if (!zone.ok) {
+    throw new MedusaError(MedusaError.Types.UNEXPECTED_STATE, `The store's schedule settings are invalid: ${zone.error}`)
+  }
+  return { limits: limits.value, deliveryDays: days.value, timeZone: zone.value }
 }
 
-/** The team order, its team list with the checks' result for every line, and the summary. */
-async function describe(container: MedusaContainer, order: TeamOrderRow) {
-  const [entries, sizes, region, limits] = await Promise.all([
+/** The proofs of a team order, newest first (all of them, signed, withdrawn and replaced). */
+export async function loadProofs(container: MedusaContainer, teamOrderId: string): Promise<StoredProof[]> {
+  return (await service(container).listProofApprovals(
+    { team_order_id: teamOrderId },
+    { order: { proof_number: "DESC" } }
+  )) as unknown as StoredProof[]
+}
+
+/** The store's calendar day (YYYY-MM-DD) in its time zone. */
+export const todayIn = (settings: StoreSettings, now: Date): string => calendarDateIn(now, settings.timeZone)
+
+/** The need-by schedule of a team order as of `now`. */
+export function scheduleOf(order: Pick<TeamOrderRow, "need_by_date">, settings: StoreSettings, now: Date) {
+  return scheduleFor({ needBy: order.need_by_date, today: todayIn(settings, now), days: settings.deliveryDays })
+}
+
+/** The limits the checks used, in the API's names. */
+export function limitsToApi(limits: Partial<RosterLimits>) {
+  const l = resolveLimits(limits)
+  return { max_lines: l.maxLines, min_count: l.minCount, max_count: l.maxCount, max_name_length: l.maxNameLength }
+}
+
+/**
+ * The team order, its team list with the checks' result for every line, the summary, the limits
+ * the checks used, the need-by schedule as of `now`, and the proof it currently holds.
+ */
+export async function describeTeamOrder(container: MedusaContainer, order: TeamOrderRow, now: Date = new Date()) {
+  const [entries, sizes, region, settings, proofs] = await Promise.all([
     loadEntries(container, order.id),
     loadProductSizes(container, order.product_id),
     loadRegion(container, order.region_id),
-    loadLimits(container),
+    loadStoreSettings(container),
+    loadProofs(container, order.id),
   ])
   const productSizes = sizes ?? []
   const view = buildRosterView({
     lines: entriesToLines(entries),
     prints: { name: order.prints_name, number: order.prints_number },
     sizes: productSizes,
-    limits,
+    limits: settings.limits,
     minimum: regionMinimum(region),
   })
+  const current = currentProofOf(proofs)
   return {
     team_order: teamOrderToApi(order),
     sizes: productSizes,
     roster: { version: order.list_version, ...view },
+    limits: limitsToApi(settings.limits),
+    schedule: scheduleOf(order, settings, now),
+    current_proof: current ? proofToApi(current) : null,
   }
+}
+
+const describe = describeTeamOrder
+
+/** The refusal for a change to a team order that is no longer a draft (or, for the schedule, no longer open). */
+export function notEditable(order: Pick<TeamOrderRow, "status">, what: string) {
+  const status = isStatus(order.status) ? order.status : "draft"
+  const frozen = allowedIn(status).listFrozen
+  return notAllowed(
+    "team_order_not_editable",
+    `${what} can only be changed while the team order is a draft${frozen ? " (a proof was made: go back to draft first)" : ""}.`,
+    { status: order.status }
+  )
 }
 
 export async function createTeamOrder(container: MedusaContainer, customerId: string, body: Record<string, unknown>) {
@@ -159,6 +229,15 @@ export async function createTeamOrder(container: MedusaContainer, customerId: st
   const needBy = readNeedByDate(body.need_by_date)
   if (!needBy.ok) {
     throw badRequest("need_by_date_invalid", "`need_by_date` must be a calendar date written YYYY-MM-DD.")
+  }
+  if (body.rush_requested !== undefined && typeof body.rush_requested !== "boolean") {
+    throw badRequest("rush_requested_invalid", "`rush_requested` must be true or false.")
+  }
+  if (needBy.value !== null) {
+    const today = todayIn(await loadStoreSettings(container), new Date())
+    if (isInThePast(needBy.value, today)) {
+      throw badRequest("need_by_date_in_past", "`need_by_date` is before today.", { today })
+    }
   }
   const version = await loadOwnVersionById(container, customerId, body.design_version_id)
   if (body.product_id !== undefined && body.product_id !== version.product_id) {
@@ -182,6 +261,7 @@ export async function createTeamOrder(container: MedusaContainer, customerId: st
     prints_name: prints.name,
     prints_number: prints.number,
     list_version: 1,
+    rush_requested: body.rush_requested === true,
   })) as TeamOrderRow
   return describe(container, created)
 }
@@ -198,12 +278,18 @@ export async function listOwnTeamOrders(container: MedusaContainer, customerId: 
           { team_order_id: orders.map((o) => o.id) },
           { select: ["team_order_id", "count"] }
         )) as { team_order_id: string; count: number }[])
+  const proofs =
+    orders.length === 0
+      ? []
+      : ((await service(container).listProofApprovals({ team_order_id: orders.map((o) => o.id) })) as unknown as StoredProof[])
   return orders.map((order) => {
     const mine = entries.filter((e) => e.team_order_id === order.id)
+    const current = currentProofOf(proofs.filter((p) => p.team_order_id === order.id))
     return {
       ...teamOrderToApi(order),
       players: mine.length,
       pieces: mine.reduce((sum, e) => sum + piecesOf(e), 0),
+      current_proof: current ? proofToApi(current) : null,
     }
   })
 }
@@ -218,8 +304,18 @@ export async function renameTeamOrder(container: MedusaContainer, customerId: st
   if (teamName === null) {
     throw badRequest("team_name_invalid", "`team_name` must be text of 1 to 100 characters.")
   }
-  const updated = (await service(container).updateTeamOrders({ id: order.id, team_name: teamName })) as TeamOrderRow
-  return describe(container, updated)
+  if (!allowedIn(isStatus(order.status) ? order.status : "draft").editTeam) {
+    throw notEditable(order, "The team name")
+  }
+  try {
+    await service(container).updateWhileDraft({ teamOrderId: order.id, teamName })
+  } catch (error) {
+    if (error instanceof TeamOrderChanged) {
+      throw notEditable(await loadOwnTeamOrder(container, customerId, id), "The team name")
+    }
+    throw error
+  }
+  return describe(container, await loadOwnTeamOrder(container, customerId, id))
 }
 
 export async function deleteTeamOrder(container: MedusaContainer, customerId: string, id: string) {
@@ -268,14 +364,14 @@ function malformed(input: RosterInputError) {
  */
 export async function saveRoster(container: MedusaContainer, customerId: string, id: string, body: Record<string, unknown>) {
   const order = await loadOwnTeamOrder(container, customerId, id)
-  if (order.status !== "draft") {
-    throw notAllowed("team_order_not_editable", "The team list can only be changed while the team order is a draft.")
+  if (!allowedIn(isStatus(order.status) ? order.status : "draft").editList) {
+    throw notEditable(order, "The team list")
   }
   const { version } = body
   if (typeof version !== "number" || !Number.isInteger(version) || version < 1) {
     throw badRequest("roster_version_required", "`version` must be the list version the save was made from (a whole number).")
   }
-  const [limits, sizes] = await Promise.all([loadLimits(container), loadProductSizes(container, order.product_id)])
+  const [{ limits }, sizes] = await Promise.all([loadStoreSettings(container), loadProductSizes(container, order.product_id)])
   const parsed = parseRosterInput(withCamelCaseFlags(body.lines), limits)
   if (!parsed.ok) {
     throw malformed(parsed.error)
@@ -302,6 +398,10 @@ export async function saveRoster(container: MedusaContainer, customerId: string,
   } catch (error) {
     if (error instanceof RosterVersionStale) {
       const current = await loadOwnTeamOrder(container, customerId, id)
+      if (current.status !== "draft") {
+        // A proof was made between the read and the write: the list is frozen now.
+        throw notEditable(current, "The team list")
+      }
       throw staleRefusal(current.list_version)
     }
     throw error

@@ -267,6 +267,16 @@ describe("validateSeedData", () => {
     )
   })
 
+  it("rejects a bad roster limit and a bad time zone in the seed settings", () => {
+    const seed = clone()
+    ;(seed.settings.data as Record<string, unknown>).roster_max_lines = 0
+    ;(seed.settings.data as Record<string, unknown>).schedule_time_zone = "Nowhere/Land"
+    const problems = validateSeedData(seed)
+    expect(problems.some((p) => p.startsWith("settings: roster_max_lines"))).toBe(true)
+    expect(problems.some((p) => p.startsWith("settings: schedule_time_zone in the store's metadata must be a time zone name"))).toBe(true)
+    expect(validateSeedData(clone())).toEqual([])
+  })
+
   it("rejects seed rush days that are not lower than the standard days", () => {
     const seed = clone()
     seed.settings.data.delivery_days_rush = seed.settings.data.delivery_days_standard
