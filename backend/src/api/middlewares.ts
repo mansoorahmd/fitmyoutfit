@@ -25,11 +25,14 @@
  * same moment (holdResetTokenLockDuringUpdate).
  *
  * Saved designs and team orders (/store/designs*, /store/team-orders*): the signed-in customer only
- * (`authenticate`, 401 without; 401 also for a deleted customer, refuseDeletedCustomer); a design's JSON may be larger than Medusa's default body limit,
+ * (`authenticate`, 401 without; 401 also for a customer who was deleted: refuseDeletedCustomer), and
+ * no NUL character in an id or a text (refuseNullCharacters; an id that cannot be decoded is 404 through
+ * errorHandlerWithUndecodableIds). A design's JSON may be larger than Medusa's default body limit,
  * so the two routes that take one allow a body of up to DESIGN_BODY_LIMIT.
  *
- * Team orders for staff (/admin/team-orders*) need no middleware of ours: Medusa puts every
- * /admin route behind the admin user's sign-in, and a customer's token is refused there (401).
+ * Team orders for staff (/admin/team-orders*) need no sign-in middleware of ours: Medusa puts every
+ * /admin route behind the admin user's sign-in, and a customer's token is refused there (401). Only
+ * the NUL check above is added for their ids.
  */
 import {
   authenticate,
