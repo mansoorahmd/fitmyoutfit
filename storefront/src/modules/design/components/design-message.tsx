@@ -7,6 +7,7 @@ export default function DesignMessage({
   backHref,
   backLabel,
   action,
+  retry,
 }: {
   title: string
   text: string
@@ -15,6 +16,8 @@ export default function DesignMessage({
   backLabel: string
   /** An extra button, such as "Try again". */
   action?: { label: string; onClick: () => void }
+  /** A link that tries the same page again (for a server-rendered message, which cannot pass a click handler). */
+  retry?: { href: string; label: string }
 }) {
   return (
     <section
@@ -29,6 +32,11 @@ export default function DesignMessage({
           <Button type="button" onClick={action.onClick} fullWidth className="md:w-auto">
             {action.label}
           </Button>
+        )}
+        {retry && (
+          <ButtonLink href={retry.href} fullWidth className="md:w-auto">
+            {retry.label}
+          </ButtonLink>
         )}
         <ButtonLink href={backHref} variant="secondary" fullWidth className="md:w-auto">
           {backLabel}
