@@ -11,7 +11,7 @@
 /** Texels along a tile's side. */
 export const WEAVE_SIZE = 64;
 /** The cloth a tile covers, in millimetres (the models' UVs are in true millimetres of the pattern). */
-export const WEAVE_TILE_MM = 7;
+export const WEAVE_TILE_MM = 12;
 /** Stitch columns and rows in one tile. */
 const COLUMNS = 3;
 const ROWS = 3;

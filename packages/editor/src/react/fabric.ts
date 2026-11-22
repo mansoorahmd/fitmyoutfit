@@ -17,7 +17,7 @@
  * - E3g, the look of sports polyester, by material and light only: a rougher
  *   material (a broad soft highlight, not plastic, not chalk), a fine knit as
  *   a small generated normal map (fabric-weave.ts) that fades out by itself
- *   when it is smaller than about three pixels, and a soft sheen at grazing
+ *   when it is smaller than about eight pixels, and a soft sheen at grazing
  *   angles, tinted by the cloth's own colour. None of it changes the colour
  *   seen square-on, where the colour the customer picked must show true.
  *
@@ -30,6 +30,7 @@ import {
   LinearMipmapLinearFilter,
   RGBAFormat,
   RepeatWrapping,
+  ShaderChunk,
   UnsignedByteType,
   type BufferGeometry,
   type Material,
@@ -57,7 +58,7 @@ export interface FabricShading {
   roughness?: number;
 }
 
-export const DEFAULT_FABRIC_SHADING: FabricShading = { outsideFloor: 0.42, insideFloor: 0.45, insideOpen: 0.85, sheen: 0.35, roughness: 0.64 };
+export const DEFAULT_FABRIC_SHADING: FabricShading = { outsideFloor: 0.38, insideFloor: 0.3, insideOpen: 0.62, sheen: 0.35, roughness: 0.64 };
 
 const number = (x: number) => (Number.isInteger(x) ? `${x}.0` : String(x));
 
@@ -112,12 +113,11 @@ export function patchFabricShader(
       ].join("\n"),
     );
   }
-  // E3g: the knit fades out where one tile is smaller than about three pixels (no shimmer when it turns or recedes).
+  // E3g: the knit fades out where one tile is smaller than about eight pixels (no shimmer when it turns or recedes).
   if (weave) {
-    fragmentShader = fragmentShader.replace(
-      "mapN.xy *= normalScale;",
-      "vec2 fmoPx = fwidth( vNormalMapUv ); mapN.xy *= normalScale * ( 1.0 - smoothstep( 0.12, 0.33, max( fmoPx.x, fmoPx.y ) ) );",
-    );
+    // The chunk is expanded here (the shader still says `#include <normal_fragment_maps>` when this runs).
+    const fade = "vec2 fmoPx = fwidth( vNormalMapUv ); mapN.xy *= normalScale * ( 1.0 - smoothstep( 0.08, 0.14, max( fmoPx.x, fmoPx.y ) ) );";
+    fragmentShader = fragmentShader.replace("#include <normal_fragment_maps>", ShaderChunk.normal_fragment_maps.replace("mapN.xy *= normalScale;", fade));
   }
   if (vertexShader === shader.vertexShader || fragmentShader === shader.fragmentShader) {
     throw new Error("the fabric shading could not find its place in the material's shader (a Three.js change?)");
