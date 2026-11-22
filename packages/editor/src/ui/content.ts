@@ -12,6 +12,7 @@
  * - `{name}` marks a value filled in by `fill`.
  * - A host can replace any of it: `<EditorShell wording={{ frame: { done: "Fertig" } }}>`.
  */
+import type { ProblemCode, RosterNote } from "@fitmyoutfit/team-rules";
 import type { EditLabel } from "../state/history.js";
 
 export const EDITOR_WORDING = {
@@ -56,7 +57,7 @@ export const EDITOR_WORDING = {
     design: "Tap a design to try it on your kit. Your name, logo and colours stay. Undo brings back the one before.",
     colours: "Every part of the kit has its own row of colours: tap a colour to use it. You can also tap a part on the kit.", // CHANGED (E3f)
     team: "Your team name is printed the same on every shirt. Choose where it goes and how it looks.",
-    players: "Each player gets their own name and number. Type a sample to see how they look.",
+    players: "Add each player's name, number and size. The shirt shows the player you are on.",
     logos: "Add your crest or a sponsor's logo. A PNG with a transparent background prints best.",
     text: "Add a motto, a sponsor's name or a year. It is printed the same on every shirt.",
   },
@@ -168,6 +169,104 @@ export const EDITOR_WORDING = {
     hasPictographs: "This has emoji or picture symbols, which can't be printed in a kit colour.", // NEW (E3c, S5): a saved design that holds them
     removePictographs: "Remove them", // NEW (E3c, S5)
     textBlank: "Type some text, or remove this line.", // NEW (E3c): why an empty line of text can't be used (the reason W-ED149 lacked)
+  },
+  /**
+   * The team list in the Players tab (`teamList`, docs/design/08-team-list.md section 15). The checks come from
+   * `@fitmyoutfit/team-rules` as CODES; `problems` has the words for every code (a test reads the package's list).
+   *
+   * // DRAFT WORDING, founders to confirm. W-TL ids are the specification's; P marks a sentence that states a rule of sale.
+   */
+  teamList: {
+    heading: { name: "Name", number: "No.", size: "Size", nameNotPrinted: "Name (not printed)" }, // W-TL3, W-TL73
+    placeholder: { name: "Name", number: "No.", size: "Size" }, // W-TL3
+    listName: "Team list, {n} players", // 13.8
+    lineName: "Player {i} of {n}: {name}, {number}, {size}", // W-TL28
+    noNameYet: "no name yet", // 13.8
+    noNumberYet: "no number yet", // 13.8
+    noSizeYet: "no size yet", // W-TL28
+    fieldName: "Name, player {i}", // 13.8
+    fieldNumber: "Number, player {i}", // 13.8
+    fieldSize: "Size, player {i}", // 13.8
+    empty: { title: "No players yet", body: "Add each player's name, number and size.", add: "Add a player" }, // W-TL4, W-TL5 (the paste half of the sentence waits for the paste view), W-TL6
+    addPlayer: "Add a player", // W-TL6
+    style: "Style", // W-TL2
+    styleLong: "Name and number style", // W-TL7
+    sort: "Sort", // W-TL2
+    sortBy: { number: "By number", name: "By name", size: "By size", entered: "As entered" }, // W-TL18
+    sortedBy: { number: "Sorted by number", name: "Sorted by name", size: "Sorted by size", entered: "Back in the order you entered" }, // W-TL18
+    players: "{n} players", // W-TL10
+    onePlayer: "1 player", // W-TL10
+    toFix: "{k} to fix", // W-TL10
+    allReady: "All ready", // W-TL13
+    shortBar: "Player {i} of {n} · {k} to fix", // W-TL11
+    shortBarReady: "Player {i} of {n} · All ready", // W-TL11
+    summaryOpen: "Show the team summary", // NEW: the disclosure's accessible name
+    summaryClose: "Hide the team summary", // NEW
+    nextToFix: "Next to fix", // W-TL12
+    nextToFixName: "Next line to fix, {k} left", // W-TL12
+    onlyToFix: "Only lines to fix", // W-TL14b
+    showing: "Showing {k} of {n}", // W-TL14
+    showAll: "Show all", // W-TL14
+    removed: "Removed {name}", // W-TL15 (the status line adds its Undo button)
+    removedLine: "player {i}", // NEW: what a removed line is called when it has no name
+    pieces: "{pieces} {noun}", // W-TL16
+    piecesWith: "({name} has {count})", // W-TL16
+    sizes: "Sizes", // W-TL17
+    noSizeCount: "No size yet {n}", // W-TL17
+    readyCount: "Ready {r}", // W-TL17
+    toFixCount: "To fix {k}", // W-TL17
+    limitReached: "You've reached {max} players, the most one list can hold.", // W-TL19
+    minimum: "Orders to {region} need at least {minimum} {noun}. You have {pieces}: add {missing} more.", // W-TL20 P, copy from founders
+    more: "More for {name}", // W-TL21
+    moveUp: "Move up", // W-TL21
+    moveDown: "Move down", // W-TL21
+    remove: "Remove", // W-TL21
+    countItem: "{count} of this shirt…", // W-TL75
+    countName: "{count} of this shirt", // W-TL75
+    countBadge: "×{count}", // W-TL75
+    countLabel: "How many of this shirt", // NEW: the stepper
+    countLess: "One less", // NEW
+    countMore: "One more", // NEW
+    done: "Done", // NEW: closes the line menu's stepper
+    noNameItem: "No name on this shirt", // W-TL22
+    noNumberItem: "No number on this shirt", // W-TL22
+    tagNoName: "No name", // W-TL23
+    tagNoNumber: "No number", // W-TL23
+    sizeChart: "Size chart", // W-TL24
+    sizesGroup: "Sizes", // W-TL25
+    youth: "Youth", // W-TL25
+    adult: "Adult", // W-TL25
+    problemPrefix: "Problem:", // W-TL63 (hidden, for screen readers)
+    unnamedPlayer: "player {i}", // NEW: a player with no name yet, in "Same number as player 3 (7)."
+    /** The words for every code the rules package can return (a test reads the package's list). Beside the field or under the line. */
+    problems: {
+      "name-missing": "Needs a name", // W-TL50
+      "number-missing": "Needs a number", // W-TL51
+      "size-missing": "Needs a size", // W-TL52
+      "number-not-digits": "Use digits only, from 0 to 99.", // W-TL53
+      "number-too-long": "Use 1 or 2 digits, from 0 to 99.", // W-ED79
+      "number-mixed-digits": "Use one kind of digits, not both.", // W-ED80
+      "number-duplicate": "Same number as {name} ({number}).", // W-TL55
+      "number-duplicate-two": "Same number as {name} and 1 other ({number}).", // W-TL55 (three lines on one number)
+      "number-duplicate-many": "Same number as {name} and {k} others ({number}).", // W-TL55
+      "name-character": "Can't print “{character}”. Use letters, spaces, and - ' .", // W-TL56
+      "name-digit": "Numbers go in the No. box, not in the name.", // W-TL57
+      "name-too-long": "Too long for the back: about {k} letters too many. Initials help: {example}.", // W-TL59
+      "size-unknown": "We don't make “{size}” in this {noun}. Sizes: {first} to {last}.", // W-TL62
+      "quantity-range": "Choose from {min} to {max} of this shirt.", // NEW: the stepper cannot do this; the server checks it
+      "list-too-long": "You've reached {max} players, the most one list can hold.", // W-TL19
+    } satisfies Record<ProblemCode | "number-duplicate-two" | "number-duplicate-many" | "name-digit", string>,
+    /** Notes that are not problems (6.1, 7.4). */
+    notes: {
+      "name-mixed-scripts": "Mixes two alphabets. Check it on the shirt.", // W-TL61
+      "mixed-digit-systems": "Some numbers use 0‎–‎9 and some ٠‎–‎٩.", // W-TL71 (direction marks keep the digit ranges from flipping)
+      smaller: "Prints smaller to fit.", // W-TL60
+    } satisfies Record<RosterNote["code"] | "smaller", string>,
+    digitsTo: { western: "Show all numbers as 0‎–‎9", "arabic-indic": "Show all numbers as ٠‎–‎٩" }, // W-TL70
+    numbersOff: "Numbers are off on this design. The numbers you typed are kept and come back if you turn numbers on.", // W-TL72
+    namesOff: "Names are off on this design. The names you typed are kept and come back if you turn names on.", // W-TL72
+    bySize: { addNames: "Add names for the bag labels", hideNames: "Hide the names", total: "Total {n}", sizeCount: "{size}: {count}", less: "One less {size}", more: "One more {size}", title: "How many of each size" }, // W-TL74
+    skipEmpty: "An empty line was removed", // NEW (status)
   },
   /** Logos (`logos`). The simple panel of E3a; the full flow is E3b. */
   logos: {
@@ -356,6 +455,17 @@ export const EDITOR_WORDING = {
     size: "Size",
     align: "Alignment",
     direction: "Direction",
+    "list-name": "Name",
+    "list-number": "Number",
+    "list-size": "Size",
+    "list-add": "Added a player",
+    "list-remove": "Removed a player",
+    "list-move": "Moved a player",
+    "list-sort": "Sorted the list",
+    "list-count": "Shirts for a player",
+    "list-flag": "Name or number on a shirt",
+    "list-digits": "Digits in numbers",
+    "list-paste": "Pasted players",
     fallback: "Change",
   } satisfies Record<EditLabel | "fallback", string>,
   /**
@@ -378,6 +488,13 @@ export const EDITOR_WORDING = {
     outline: "{item} outline",
     size: "{item} size",
     align: "{item} alignment",
+    "list-name": "Name of {item}",
+    "list-number": "Number of {item}",
+    "list-size": "Size of {item}",
+    "list-remove": "Removed {item}",
+    "list-move": "Moved {item}",
+    "list-count": "Shirts for {item}",
+    "list-flag": "Name or number of {item}",
   } as Record<string, string>,
   /**
    * The "Where" chips: words for the products' placement presets, by preset id.

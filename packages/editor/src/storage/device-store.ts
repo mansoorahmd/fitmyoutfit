@@ -18,6 +18,7 @@
 import { upgradeDesign } from "../design/upgrade.js";
 import type { DesignDocument, LogoAssetRef, ProductDefinition } from "../design/schema.js";
 import type { AssetUploader } from "../upload/logo-upload.js";
+import type { SavedTeamList } from "../team-list/types.js";
 
 export type StoreName = "designs" | "assets";
 
@@ -123,6 +124,11 @@ export interface SavedDesign {
   design: DesignDocument;
   /** Whether the coach finished the start card (a design brought back never shows it again). */
   started: boolean;
+  /**
+   * The team list saved with the design, in the same record (08-team-list.md 11.1): "Continue your last design?"
+   * brings back the design and its list. Kept as the host handed it over; the editor checks its shape when it opens.
+   */
+  teamList?: SavedTeamList;
 }
 
 /** A logo file kept on the device. */
@@ -150,11 +156,11 @@ export class DeviceDesignStore {
     if (!raw || raw.version !== 1 || raw.productId !== product.id) return null;
     const checked = upgradeDesign(raw.design, { product });
     if (!checked.ok) return null;
-    return { version: 1, productId: product.id, savedAt: Number(raw.savedAt) || 0, design: checked.value, started: raw.started !== false };
+    return { version: 1, productId: product.id, savedAt: Number(raw.savedAt) || 0, design: checked.value, started: raw.started !== false, ...(raw.teamList && typeof raw.teamList === "object" ? { teamList: raw.teamList } : {}) };
   }
 
-  async saveDesign(productId: string, design: DesignDocument, options: { started?: boolean; now?: number } = {}): Promise<SavedDesign> {
-    const record: SavedDesign = { version: 1, productId, savedAt: options.now ?? Date.now(), design, started: options.started ?? true };
+  async saveDesign(productId: string, design: DesignDocument, options: { started?: boolean; now?: number; teamList?: SavedTeamList | null } = {}): Promise<SavedDesign> {
+    const record: SavedDesign = { version: 1, productId, savedAt: options.now ?? Date.now(), design, started: options.started ?? true, ...(options.teamList ? { teamList: options.teamList } : {}) };
     await this.kv.put("designs", DeviceDesignStore.key(productId), record);
     return record;
   }

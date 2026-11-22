@@ -76,6 +76,18 @@ export const EDIT_LABELS = [
   "size",
   "align",
   "direction",
+  // The team list (08-team-list.md 4.7): one history for the design and the list.
+  "list-name",
+  "list-number",
+  "list-size",
+  "list-add",
+  "list-remove",
+  "list-move",
+  "list-sort",
+  "list-count",
+  "list-flag",
+  "list-digits",
+  "list-paste",
 ] as const;
 export type EditLabel = (typeof EDIT_LABELS)[number];
 
