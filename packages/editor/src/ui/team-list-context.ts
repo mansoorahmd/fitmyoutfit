@@ -46,6 +46,8 @@ export interface TeamListApi {
   setView(view: "list" | "style" | "paste"): void;
   /** The Done panel's "Show" opened the list: the list scrolls to the chosen line once, as it mounts (read once). */
   consumeReveal(): boolean;
+  /** The paste view shows the first player it read on the shirt (5.2): a line that is not in the list, or null to go back to the chosen line. */
+  previewPlayer(line: EditorLine | null): void;
   /** The pasted text, kept for the visit so going back is not a loss (5.2). */
   pasteText: string;
   setPasteText(text: string): void;

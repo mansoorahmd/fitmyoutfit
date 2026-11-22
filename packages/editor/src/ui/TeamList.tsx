@@ -584,13 +584,17 @@ export function TeamListView({ initialDetailsOpen }: { initialDetailsOpen?: bool
           <div className="fmo-tl-empty" data-testid="tl-empty">
             <h3 className="fmo-section-title">{w.empty.title}</h3>
             <p className="fmo-muted">{w.empty.body}</p>
-            <button type="button" className="fmo-btn fmo-btn-block fmo-btn-ink" onClick={() => addAndFocus()} data-testid="tl-empty-add">
-              <EditorIcon name="plus" size={20} />
-              {w.empty.add}
-            </button>
-            <button type="button" className="fmo-btn fmo-btn-block" onClick={() => t.openPaste()} data-testid="tl-empty-paste">
-              {w.paste.button}
-            </button>
+            {!locked && (
+              <>
+                <button type="button" className="fmo-btn fmo-btn-block fmo-btn-ink" onClick={() => addAndFocus()} data-testid="tl-empty-add">
+                  <EditorIcon name="plus" size={20} />
+                  {w.empty.add}
+                </button>
+                <button type="button" className="fmo-btn fmo-btn-block" onClick={() => t.openPaste()} data-testid="tl-empty-paste">
+                  {w.paste.button}
+                </button>
+              </>
+            )}
             <button type="button" className="fmo-btn fmo-btn-text" onClick={() => t.setView("style")} data-testid="tl-style-empty">
               {w.styleLong} ›
             </button>

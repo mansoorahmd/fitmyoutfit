@@ -71,6 +71,13 @@ export function PasteView() {
   }, [wording, preview, effectiveMode, t.sizes, t.noun, t.lines]);
 
   const n = preview?.rows.length ?? 0;
+  // The stage shows the first player read, while this view is open (5.2); the chosen line comes back when it closes.
+  const firstRead = preview?.rows[0]?.line ?? null;
+  const { previewPlayer } = t;
+  useEffect(() => {
+    previewPlayer(firstRead);
+  }, [firstRead, previewPlayer]);
+  useEffect(() => () => previewPlayer(null), [previewPlayer]);
   const pending = text !== readText;
 
   const take = (next: string) => {

@@ -459,11 +459,12 @@ export function EditorShell(props: EditorShellProps) {
     for (const l of lines) if (!entered.current.includes(l.id)) entered.current.push(l.id);
   }, [lines]);
   // The shirt shows the chosen line (7.1): its name and number as they would print, never written into the design.
-  const chosenLine = lines.length > 0 ? lines.find((l) => l.id === chosenId) : undefined;
+  const [previewedLine, setPreviewedLine] = useState<EditorLine | null>(null);
+  const chosenLine = previewedLine ?? (lines.length > 0 ? lines.find((l) => l.id === chosenId) : undefined);
   const shirt = chosenLine ? playerForShirt(chosenLine, prints) : null;
   // Typing never waits for the shirt (13.5): the shirt follows the keys a moment after they pause; choosing another line shows its shirt at once.
   const shirtKey = shirt ? `${shirt.name}\u0000${shirt.number}` : null;
-  const shirtShown = useTrailing(shirtKey, 120, chosenId);
+  const shirtShown = useTrailing(shirtKey, 120, previewedLine?.id ?? chosenId);
   const shirtName = shirtShown === null ? null : shirtShown.split("\u0000")[0]!;
   const shirtNumber = shirtShown === null ? null : (shirtShown.split("\u0000")[1] ?? "");
   const withPlayer = useCallback((d: DesignDocument): DesignDocument => (shirtName === null || shirtNumber === null ? d : designWithPlayer(d, { name: shirtName, number: shirtNumber })), [shirtName, shirtNumber]);
@@ -654,6 +655,7 @@ export function EditorShell(props: EditorShellProps) {
       view: playersView,
       setView: setPlayersView,
       consumeReveal,
+      previewPlayer: setPreviewedLine,
       pasteText,
       setPasteText,
       openPaste,
@@ -678,7 +680,7 @@ export function EditorShell(props: EditorShellProps) {
       nameShrunk,
       closeUpLayerId,
     }),
-    [lines, analysis, prints, listSizes, sizeTable, teamNoun, teamMinimum, listLimitsView, openSizeChart, lockedList, chosenId, step, stepNote, reveal, revealTick, seen, revealAll, playersView, consumeReveal, pasteText, openPaste, addPasted, listMemory, keyboard, beginField, typeField, leaveField, leaveLine, endTyping, addPlayer, removePlayer, movePlayer, sortPlayers, setPlayerCount, setPlayerFlag, convertDigits, setSizeCount, revealAllProblems, setKeyboard, nameShrunk, closeUpLayerId],
+    [lines, analysis, prints, listSizes, sizeTable, teamNoun, teamMinimum, listLimitsView, openSizeChart, lockedList, chosenId, step, stepNote, reveal, revealTick, seen, revealAll, playersView, consumeReveal, setPreviewedLine, pasteText, openPaste, addPasted, listMemory, keyboard, beginField, typeField, leaveField, leaveLine, endTyping, addPlayer, removePlayer, movePlayer, sortPlayers, setPlayerCount, setPlayerFlag, convertDigits, setSizeCount, revealAllProblems, setKeyboard, nameShrunk, closeUpLayerId],
   );
   // What the editor hands to its host (12.2, 11.1): the list and its report, after a second without changes.
   const [hostBridge] = useState(() => {
