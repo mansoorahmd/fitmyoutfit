@@ -194,6 +194,11 @@ export function playersText(players: number, pieces: number): string {
   return pieces === players ? p : `${p}, ${pieces} ${pieces === 1 ? "piece" : "pieces"}`
 }
 
+/** The title over a proof's list: "The list as signed (1 player)", "The list as sent (12 players)". */
+export function proofListTitle(signed: boolean, players: number): string {
+  return `The list as ${signed ? "signed" : "sent"} (${players} ${players === 1 ? "player" : "players"})`
+}
+
 /** The summary per size as "S 3, M 5, L 4"; sizes with no pieces are left out; "-" when there are none. */
 export function sizesText(bySize: { size: string; pieces: number }[], other: { size: string; pieces: number }[] = []): string {
   const parts = [...bySize, ...other].filter((s) => s.pieces > 0).map((s) => `${s.size} ${s.pieces}`)
