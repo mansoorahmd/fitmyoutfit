@@ -6,11 +6,18 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { setTeamName } from "../design/roles.js";
 import { TeamColourRows } from "./ColourRows.js";
+import { fill } from "./content.js";
 import { useEditor } from "./context.js";
 import { EditorIcon } from "./icons.js";
 import { fieldCheck } from "./lettering.js";
 
-export function StartCard({ onClose }: { onClose: (seeDesigns: boolean) => void }) {
+/** G4: with the host's garments the card names the garment and offers to change it. */
+export interface StartCardGarment {
+  name: string;
+  onOpen: () => void;
+}
+
+export function StartCard({ onClose, garment }: { onClose: (seeDesigns: boolean) => void; garment?: StartCardGarment | null }) {
   const api = useEditor();
   const { wording, design } = api;
   const w = wording.start;
@@ -49,6 +56,16 @@ export function StartCard({ onClose }: { onClose: (seeDesigns: boolean) => void 
       </div>
       <div className="fmo-panel-body">
         <div className="fmo-panel-inner fmo-stack">
+          {garment && (
+            <div className="fmo-start-garment" data-testid="start-garment">
+              <span className="fmo-start-garment-name">
+                {wording.garment.startLine}: <span className="fmo-start-garment-value">{garment.name}</span>
+              </span>
+              <button type="button" className="fmo-btn fmo-btn-text" aria-label={fill(wording.garment.buttonName, { name: garment.name })} onClick={garment.onOpen} data-testid="start-garment-change">
+                {wording.garment.change}
+              </button>
+            </div>
+          )}
           {/* R2, D1: one left edge; the step number inline in its label row. */}
           <div data-testid="start-step-colours">
             <p className="fmo-step-label" id={`${id}-colours`}>

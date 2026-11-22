@@ -62,6 +62,13 @@ describe("the team section", () => {
     expect(html).toContain('data-testid="done-team-show"');
     expect(html).toContain('aria-label="Show the team list"');
   });
+  it("never says 'Nothing to check' while the list has lines to fix or is short of the minimum (QA20 S4)", () => {
+    const toFix = text(done([...eighteen.slice(0, 16), line("y", "Usman", "", "")]));
+    expect(toFix).toContain("to fix");
+    expect(toFix).not.toContain("Nothing to check");
+    expect(toFix).toContain(W.done.checksNoneDesign);
+    expect(text(done(eighteen))).toContain("Nothing to check. Your kit looks ready.");
+  });
   it("says 'All ready' with no Show when nothing needs a look, and leaves out the pieces when they are the players", () => {
     const html = done(eighteen);
     expect(text(html)).toContain("18 players · All ready");

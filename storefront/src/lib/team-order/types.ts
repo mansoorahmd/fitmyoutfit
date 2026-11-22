@@ -31,6 +31,54 @@ export type ScheduleView = {
   daysLeftRush: number | null
 }
 
+export const PROOF_STATUSES = ["sent", "signed", "withdrawn", "replaced"] as const
+export type ProofStatus = (typeof PROOF_STATUSES)[number]
+
+/** A roster proof without its snapshot (contract section 3). */
+export type ProofView = {
+  id: string
+  teamOrderId: string
+  /** 1, 2, ... within the team order. */
+  number: number
+  status: ProofStatus
+  /** SHA-256 of the canonical snapshot text: what a signature carries. */
+  hash: string
+  designVersionId: string
+  listVersion: number
+  createdAt: string
+  closedAt: string | null
+  signedName: string | null
+  signedAt: string | null
+  /** The schedule as it was at signing. */
+  scheduleState: ScheduleState | null
+  needByDate: string | null
+  rush: boolean | null
+  promisedDeliveryDate: string | null
+}
+
+/** A line of a proof's snapshot, as frozen. */
+export type ProofLine = { name: string; number: string; size: string; count: number; noName: boolean; noNumber: boolean }
+
+/** What a proof froze (the snapshot, read into camelCase). */
+export type ProofSnapshotView = {
+  format: number
+  designVersionId: string
+  productId: string
+  regionId: string
+  teamName: string
+  prints: { name: boolean; number: boolean }
+  lines: ProofLine[]
+}
+
+/** One proof with its snapshot: the page is built from this, never from the live list. */
+export type ProofDetail = ProofView & {
+  snapshot: ProofSnapshotView
+  /** The canonical text whose SHA-256 is `hash`. */
+  snapshotText: string
+  /** The snapshot as the server sent it (API names), for checking the hash. */
+  rawSnapshot: unknown
+}
+
 /** A line as the editor holds it: the rules package's line with an id. */
 export type EditorLine = RosterLine & { id: string }
 
@@ -59,6 +107,8 @@ export type TeamOrderView = {
   /** Only the limits the server sent. */
   limits: Partial<RosterLimits>
   schedule: ScheduleView
+  /** The proof the order holds now: the one out while `proof_sent`, the signed one from `approved` on, null in a draft. */
+  currentProof: ProofView | null
 }
 
 /** One entry of the list of the customer's team orders. */

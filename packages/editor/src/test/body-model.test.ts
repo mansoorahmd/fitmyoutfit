@@ -51,7 +51,7 @@ describe("the body model file", () => {
     expect(statSync(resolve(root, "samples/models/body-male.glb")).size).toBeLessThan(1_000_000);
     expect(counts.triangles).toBeGreaterThan(30_000);
     expect(counts.triangles).toBeLessThan(40_000);
-    expect(counts.meshes).toBe(8);
+    expect(counts.meshes).toBe(9); // the avatar's eight parts and G4's plain shorts (Mark_Shorts)
   });
   it("says in its notice and its source record that it is a development stand-in, licence not checked", () => {
     const notice = readFileSync(resolve(root, "samples/models/body-male.LICENSE.txt"), "utf8");

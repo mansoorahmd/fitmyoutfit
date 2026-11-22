@@ -2,8 +2,8 @@
 
 import type { SavedTeamList } from "@fitmyoutfit/editor"
 
-import { parseListItem, parseTeamOrderAnswer, rosterBodyFromSaved } from "@lib/team-order/map"
-import type { Outcome, TeamOrderListItem, TeamOrderView } from "@lib/team-order/types"
+import { parseListItem, parseProofAnswer, parseProofList, parseTeamOrderAnswer, rosterBodyFromSaved } from "@lib/team-order/map"
+import type { Outcome, ProofDetail, ProofView, ScheduleState, TeamOrderListItem, TeamOrderView } from "@lib/team-order/types"
 
 import { teamCall } from "./team-call"
 
@@ -191,4 +191,52 @@ export async function saveTeamOrderList(
     body: rosterBodyFromSaved(list, version),
     read: parseTeamOrderAnswer,
   })
+}
+
+// ---- the roster proof (contract section 3) ----------------------------------
+
+/** POST /store/team-orders/:id/proofs: make the proof (a draft whose list is ready). The answer is the order, with `currentProof`. */
+export async function makeProof(id: string): Promise<Outcome<TeamOrderView>> {
+  return teamCall({ method: "POST", path: `/store/team-orders/${enc(id)}/proofs`, read: parseTeamOrderAnswer })
+}
+
+/** GET /store/team-orders/:id/proofs: every proof ever made, newest first, without snapshots. */
+export async function listProofs(id: string): Promise<Outcome<ProofView[]>> {
+  return teamCall({ method: "GET", path: `/store/team-orders/${enc(id)}/proofs`, read: parseProofList })
+}
+
+/** GET /store/team-orders/:id/proofs/:proofId: one proof with its snapshot. */
+export async function retrieveProof(id: string, proofId: string): Promise<Outcome<ProofDetail>> {
+  return teamCall({
+    method: "GET",
+    path: `/store/team-orders/${enc(id)}/proofs/${enc(proofId)}`,
+    read: parseProofAnswer,
+  })
+}
+
+/**
+ * POST .../proofs/:proofId/sign: the typed name and the ticked box, with the hash of the proof that was looked at and
+ * the schedule state that was shown. Signing twice does nothing the second time (the backend answers 200 again).
+ */
+export async function signProof(
+  id: string,
+  proofId: string,
+  input: { proofHash: string; signedName: string; confirmed: true; scheduleState: ScheduleState }
+): Promise<Outcome<TeamOrderView>> {
+  return teamCall({
+    method: "POST",
+    path: `/store/team-orders/${enc(id)}/proofs/${enc(proofId)}/sign`,
+    body: {
+      proof_hash: input.proofHash,
+      signed_name: input.signedName,
+      confirmed: input.confirmed,
+      schedule_state: input.scheduleState,
+    },
+    read: parseTeamOrderAnswer,
+  })
+}
+
+/** POST /store/team-orders/:id/reopen: back to a draft, from a proof that is out or signed (before any payment). */
+export async function reopenTeamOrder(id: string): Promise<Outcome<TeamOrderView>> {
+  return teamCall({ method: "POST", path: `/store/team-orders/${enc(id)}/reopen`, read: parseTeamOrderAnswer })
 }

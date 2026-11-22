@@ -4,6 +4,13 @@
 // here, and only the jersey and the T-shirt have a model; the jacket and the
 // fit kit have none, so they get no designer.
 //
+// The jersey is our own match jersey (V-neck, with the person under it: the
+// editor's `match-jersey-vneck` and its `body-male` model). Its person is a
+// development stand-in whose terms for public use are not checked (the editor's
+// README, "Match jerseys and the body"): no credit line is shown for it, and it
+// must be cleared before the store goes public. The T-shirt is still the
+// open-licence stand-in and keeps its credit line.
+//
 // The files themselves stay in packages/editor/samples/ (one source of
 // truth). The storefront serves them through /api/editor-assets/ (see
 // ./asset-path.ts and app/api/editor-assets), it keeps no copy.
@@ -27,25 +34,29 @@ export type EditorProduct = {
   modelFile: string
   /** The garment's short name in the editor's top bar. */
   shortName: string
-  /** What the model's licence asks to show, wherever the model is shown. */
-  credit: ModelCredit
+  /** The body model shown under the garment (samples/models), when the product has one. */
+  bodyFile?: string
+  /** What the model's licence asks to show, wherever the model is shown; null when our own model needs none. */
+  credit: ModelCredit | null
+}
+
+/**
+ * Editor products the store used to open for a store product and does not any more. A design saved for one of
+ * them belongs to another editor product than the one the designer opens now: it is not opened (it would not
+ * fit), and the customer is told. The key is the old editor product id, the value the store product's handle.
+ */
+export const EARLIER_MODELS: Readonly<Record<string, string>> = {
+  "stand-in-jersey": "jersey",
 }
 
 const EDITOR_PRODUCTS: readonly EditorProduct[] = [
   {
     handle: "jersey",
-    definition: "stand-in-jersey",
-    modelFile: "stand-in-jersey.glb",
+    definition: "match-jersey-vneck",
+    modelFile: "match-jersey-vneck.glb",
+    bodyFile: "body-male.glb",
     shortName: "Jersey",
-    credit: {
-      title: "Jersey Patterns 3D Free",
-      author: "Wearable3D",
-      sourceUrl:
-        "https://sketchfab.com/3d-models/jersey-patterns-3d-free-a6b7401510484ee1b375c02f97f14e86",
-      licence: "CC BY 4.0",
-      licenceUrl: "https://creativecommons.org/licenses/by/4.0/",
-      changed: true,
-    },
+    credit: null,
   },
   {
     handle: "t-shirt",
@@ -72,4 +83,17 @@ export function editorProductFor(handle: string | undefined | null): EditorProdu
 /** The handles that have a model. */
 export function editorHandles(): string[] {
   return EDITOR_PRODUCTS.map((p) => p.handle)
+}
+
+/** Whether a design (any JSON) was made for an editor product the store no longer opens for this handle. */
+export function isEarlierModelDesign(design: unknown, entry: Pick<EditorProduct, "handle" | "definition">): boolean {
+  if (typeof design !== "object" || design === null) return false
+  const product = (design as { product?: unknown }).product
+  const id = typeof product === "object" && product !== null ? (product as { id?: unknown }).id : undefined
+  return typeof id === "string" && id !== entry.definition && EARLIER_MODELS[id] === entry.handle
+}
+
+/** The old editor product ids of a store product (the keys the device may still hold a design under). */
+export function earlierModelIds(handle: string): string[] {
+  return Object.entries(EARLIER_MODELS).flatMap(([id, h]) => (h === handle ? [id] : []))
 }

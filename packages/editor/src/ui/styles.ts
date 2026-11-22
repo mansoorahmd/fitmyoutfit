@@ -229,6 +229,22 @@ export const EDITOR_CSS = /* css */ `
 .fmo-done-panel[data-layout="short"] .fmo-done-inner { overflow-y: auto; overscroll-behavior: contain; }
 .fmo-done-panel[data-layout="short"] .fmo-done-inner > .fmo-done-checks { flex: none; overflow: visible; min-height: 0; }
 .fmo-done-panel[data-layout="short"] .fmo-done-inner > .fmo-primary { position: sticky; bottom: 0; z-index: 1; box-shadow: 0 8px 0 8px var(--fmo-surface); }
+/* G4: the garment chooser's sheet (a Done-panel look: bottom sheet on a phone, 400 px on the right otherwise). */
+.fmo-garment-panel .fmo-done-inner { overflow-y: auto; overscroll-behavior: contain; }
+.fmo-garment-panel[data-layout="compact"] { max-height: min(70dvh, calc(100dvh - 56px - 80px)); }
+.fmo-gm-list { display: flex; flex-direction: column; gap: 8px; }
+.fmo-gm-card { display: flex; align-items: center; gap: 12px; min-height: 76px; padding: 8px 12px; border: 1px solid var(--fmo-border-strong); border-radius: 12px; background: var(--fmo-surface); color: var(--fmo-ink); text-align: start; font: var(--fmo-type-label); }
+button.fmo-gm-card { cursor: pointer; width: 100%; }
+button.fmo-gm-card:hover { background: var(--fmo-surface-alt); }
+.fmo-gm-card[data-current] { border: 2px solid var(--fmo-ink); padding: 7px 11px; background: var(--fmo-surface-alt); }
+.fmo-gm-picture { flex: none; width: 64px; height: 64px; border-radius: 8px; background: var(--fmo-surface-alt); display: inline-flex; align-items: center; justify-content: center; overflow: hidden; color: var(--fmo-ink-muted); }
+.fmo-gm-picture img { width: 64px; height: 64px; object-fit: contain; display: block; }
+.fmo-gm-name { flex: 1 1 auto; min-width: 0; font-weight: 700; }
+.fmo-gm-chips { flex: 0 1 auto; display: inline-flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+.fmo-topbar-garment { display: inline-flex; align-items: baseline; gap: 4px; min-height: 44px; padding: 0 4px; border: 0; background: transparent; color: var(--fmo-on-inverse-muted); font: var(--fmo-type-label); cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.fmo-start-garment { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px; }
+.fmo-start-garment-value { font: var(--fmo-type-section); }
+.fmo-start-garment-name { font: var(--fmo-type-label); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fmo-done-inner { height: 100%; overflow: hidden; padding: 8px var(--fmo-panel-pad) 24px; box-sizing: border-box; display: flex; flex-direction: column; }
 .fmo-done-inner > * { flex: none; }
 /* E3c (S6): the main action is always in view; the list of things to check scrolls when the panel is short (landscape). */
@@ -617,7 +633,7 @@ export const EDITOR_CSS = /* css */ `
 .fmo-tl-menu-item[data-danger="true"] { color: var(--fmo-error); }
 .fmo-tl-check { display: inline-flex; width: 20px; justify-content: center; }
 /* The player chip (08-team-list.md 7.2): a pill, 44 tall, on the stage; ‹ and › are 44 x 44. */
-.fmo-chip { display: inline-flex; align-items: center; max-width: 224px; height: 44px; border: 1px solid var(--fmo-float-line); border-radius: 22px; background: var(--fmo-float-fill); box-shadow: var(--fmo-float-shadow); color: var(--fmo-ink); }
+.fmo-chip { display: inline-flex; align-items: center; max-width: min(272px, calc(100vw - 32px)); height: 44px; border: 1px solid var(--fmo-float-line); border-radius: 22px; background: var(--fmo-float-fill); box-shadow: var(--fmo-float-shadow); color: var(--fmo-ink); }
 .fmo-editor[data-layout="wide"] .fmo-chip { max-width: 320px; }
 .fmo-chip-step { flex: none; width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 22px; background: transparent; color: var(--fmo-ink); cursor: pointer; }
 .fmo-chip-step:hover:not([aria-disabled="true"]) { background: var(--fmo-surface-alt); }
@@ -653,7 +669,7 @@ export const EDITOR_CSS = /* css */ `
 .fmo-tl-locked p { margin: 0; flex: 1 1 160px; }
 .fmo-tl-locked svg { flex: none; }
 .fmo-tl[data-locked="true"] .fmo-tl-input { background: var(--fmo-surface-alt); border-color: transparent; }
-.fmo-tl-toolbar-start { display: inline-flex; align-items: center; gap: 4px; }
+.fmo-tl-toolbar-start { display: inline-flex; align-items: center; gap: 20px; } /* G4: "Paste a list" and "Sort" are two buttons, not one label (they were 4 px apart) */
 /* The paste view (5.2): a sub-view of the Players panel; the actions are stuck to the bottom. */
 .fmo-pv { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; position: relative; }
 .fmo-pv[data-dragging="true"] { outline: 2px dashed var(--fmo-focus); outline-offset: -2px; }

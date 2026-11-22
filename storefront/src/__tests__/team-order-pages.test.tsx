@@ -8,6 +8,7 @@ const { state } = vi.hoisted(() => ({
     customer: "in" as "in" | "out" | "failed",
     order: null as unknown,
     list: null as unknown,
+    proofs: { ok: true, value: [] } as unknown,
     products: [] as unknown[],
     schedule: [] as unknown[],
     scheduleAnswer: (() => ({ ok: true })) as (id: string, change: unknown) => unknown,
@@ -65,6 +66,7 @@ vi.mock("@lib/data/products", () => ({
 vi.mock("@lib/data/team-orders", () => ({
   listTeamOrders: async () => state.list,
   retrieveTeamOrder: async () => state.order,
+  listProofs: async () => state.proofs,
   setTeamOrderSchedule: async (id: string, change: unknown) => {
     state.schedule.push(change)
     return state.scheduleAnswer(id, change)
@@ -79,12 +81,13 @@ vi.mock("@lib/data/team-orders", () => ({
   },
 }))
 
-import { apiAnswer, apiLine, apiSchedule, apiSummary } from "@lib/team-order/fixtures"
-import { parseListItem, parseTeamOrderAnswer } from "@lib/team-order/map"
+import { apiAnswer, apiLine, apiProof, apiSchedule, apiSummary } from "@lib/team-order/fixtures"
+import { parseListItem, parseTeamOrderAnswer, proofFromApi } from "@lib/team-order/map"
 import TeamOrdersPage from "../app/[countryCode]/(main)/account/team-orders/page"
 import TeamOrderPage from "../app/[countryCode]/(main)/account/team-orders/[id]/page"
 import TeamOrderNotFound from "../app/[countryCode]/(main)/account/team-orders/[id]/not-found"
 
+const parseProofView = (raw: Record<string, unknown>) => proofFromApi(raw)!
 const view = (over: Parameters<typeof apiAnswer>[0] = {}) => ({ ok: true, value: parseTeamOrderAnswer(apiAnswer(over))! })
 const item = (over: Record<string, unknown>) =>
   parseListItem({
@@ -203,13 +206,75 @@ describe("one team order: the page", () => {
     expect(screen.getByTestId("team-order-back")).toHaveAttribute("href", "/pk/account/team-orders")
   })
 
-  it("says in one line that the proof is next and not open, and has no button for it (no dead button)", async () => {
+  it("a list the backend would not take for a proof has no proof button, and says what is missing", async () => {
     state.order = view()
     await openOrder()
-    expect(screen.getByTestId("team-order-next")).toHaveTextContent("Next is the proof")
-    expect(screen.getByTestId("team-order-next")).toHaveTextContent("It is not open yet.")
+    expect(screen.queryByTestId("make-proof")).toBeNull()
+    expect(screen.getByTestId("proof-blocked")).toHaveAttribute("data-reason", "minimum")
+    expect(screen.getByTestId("proof-blocked")).toHaveTextContent("needs at least 10 pieces")
+    // nothing offers to pay or to sign: only the proof can be made, and only when it can
     const labels = [...screen.getAllByRole("button"), ...screen.getAllByRole("link")].map((e) => e.textContent ?? "")
-    expect(labels.filter((l) => /proof|deposit|pay|\bsign (it|the|a|your)\b/i.test(l))).toEqual([])
+    expect(labels.filter((l) => /deposit|pay|sign (it|the|a|your)/i.test(l))).toEqual([])
+  })
+
+  it("an empty list says to add players first", async () => {
+    state.order = view({ roster: { lines: [], summary: apiSummary({ players: 0, pieces: 0, ready_lines: 0, minimum: null }) } })
+    await openOrder()
+    expect(screen.queryByTestId("make-proof")).toBeNull()
+    expect(screen.getByTestId("proof-blocked")).toHaveAttribute("data-reason", "empty")
+  })
+
+  it("lines to fix say how many, and no button", async () => {
+    state.order = view({ roster: { summary: apiSummary({ lines_to_fix: 2, ready_lines: 0, minimum: null }) } })
+    await openOrder()
+    expect(screen.queryByTestId("make-proof")).toBeNull()
+    expect(screen.getByTestId("proof-blocked")).toHaveTextContent("Fix 2 lines")
+  })
+
+  it("a ready list has the button that makes the proof", async () => {
+    state.order = view({ roster: { summary: apiSummary({ ready_for_proof: true, minimum: { required: 1, missing: 0, met: true } }) } })
+    await openOrder()
+    expect(screen.getByTestId("make-proof")).toHaveTextContent("Make the proof")
+    expect(screen.queryByTestId("proof-blocked")).toBeNull()
+  })
+
+  it("a proof that is out has a link to it and no make button", async () => {
+    state.order = view({
+      team_order: { status: "proof_sent" },
+      current_proof: apiProof(),
+      roster: { summary: apiSummary({ ready_for_proof: true, minimum: { required: 1, missing: 0, met: true } }) },
+    })
+    state.proofs = { ok: true, value: [parseProofView(apiProof())] }
+    await openOrder()
+    expect(screen.queryByTestId("make-proof")).toBeNull()
+    expect(screen.getByTestId("proof-open")).toHaveAttribute("href", "/pk/account/team-orders/teamord_1/proof")
+    expect(screen.getByTestId("reopen-open")).toHaveTextContent("Change the list")
+  })
+
+  it("a signed proof: the date, the link, what comes next in one line (no payment button), and every proof with its state", async () => {
+    const signed = apiProof({ status: "signed", signed_name: "Ali Raza", signed_at: "2026-11-23T09:30:00.000Z", schedule_state: "none", promised_delivery_date: "2026-12-08" })
+    const first = apiProof({ id: "proof_0", number: 1, status: "replaced", closed_at: "2026-11-22T12:00:00.000Z", signed_name: "Ali Raza", signed_at: "2026-11-22T11:00:00.000Z" })
+    state.order = view({ team_order: { status: "approved" }, current_proof: signed })
+    state.proofs = { ok: true, value: [parseProofView({ ...signed, number: 2 }), parseProofView(first)] }
+    await openOrder()
+    expect(screen.getByTestId("proof-signed")).toHaveTextContent("The proof is signed on 23 November 2026")
+    expect(screen.getByTestId("proof-next")).toHaveTextContent("Next is the deposit. Payment is not open yet")
+    expect(screen.getByTestId("proof-open")).toHaveTextContent("Open the signed proof")
+    const history = screen.getAllByTestId("proof-history-item")
+    expect(history).toHaveLength(2)
+    expect(history[0]).toHaveAttribute("data-status", "signed")
+    expect(history[1]).toHaveAttribute("data-status", "replaced")
+    expect(history[1]).toHaveTextContent("Replaced")
+    expect(within(history[1]!).getByTestId("proof-history-open")).toHaveAttribute("href", "/pk/account/team-orders/teamord_1/proof/proof_0")
+    const labels = [...screen.getAllByRole("button"), ...screen.getAllByRole("link")].map((e) => e.textContent ?? "")
+    expect(labels.filter((l) => /deposit|pay/i.test(l))).toEqual([])
+  })
+
+  it("after the deposit the organizer cannot go back: no Change the list", async () => {
+    state.order = view({ team_order: { status: "deposit_paid" }, current_proof: apiProof({ status: "signed", signed_at: "2026-11-23T09:30:00.000Z", signed_name: "A" }) })
+    await openOrder()
+    expect(screen.queryByTestId("reopen-open")).toBeNull()
+    expect(screen.getByTestId("proof-open")).toBeInTheDocument()
   })
 
   it("the list's state: lines complete, pieces per size, and below the minimum or not, from the backend's answer", async () => {

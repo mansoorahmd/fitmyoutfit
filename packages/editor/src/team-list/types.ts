@@ -2,7 +2,8 @@
  * The team list's types: a line is the rules package's `RosterLine` with an id; what the host gives the editor and
  * gets back (08-team-list.md, section 12). Nothing here knows the store, React or Three.js.
  */
-import type { PrintedFields, RosterAnalysis, RosterLimits, RosterLine } from "@fitmyoutfit/team-rules";
+import type { ReadNote } from "./saved.js";
+import type { PrintedFields, RosterAnalysis, RosterLimits, RosterLine, TakenNumber } from "@fitmyoutfit/team-rules";
 
 /** One line of the list: always has an id (made by the editor, unique, never reused, kept when moved or edited). */
 export type EditorLine = RosterLine & { id: string };
@@ -59,6 +60,20 @@ export interface TeamListHost {
   noun?: TeamListNoun;
   /** The region's minimum; nothing: none is shown. */
   minimum?: TeamListMinimum | null;
+  /**
+   * Called once when the editor opens with what reading `initial` left out or changed (a line that was not an object, a
+   * name cut to 200 characters, a count reset, lines over the limit; `readSavedListWithNotes` gives the same notes).
+   * Not called when everything was read as saved.
+   */
+  onReadNotes?: (notes: readonly ReadNote[]) => void;
+  /**
+   * The numbers already taken outside this list, for a late joiner's add-on order (the first order's signed list and its
+   * other add-ons with a proof out or signed): `{ number, source: "first-order" | "add-on", orderId?, name? }`. A line
+   * whose printed number is one of them shows `number-taken-first-order` or `number-taken-add-on` beside it, like any
+   * other problem (after its number field was left, or with "Next to fix" and Done). Compared as numbers: `7`, `07` and
+   * `٧` are the same. Absent or empty: nothing is taken. A change is checked at once.
+   */
+  taken?: readonly TakenNumber[];
   /** The limits that are not the package's defaults (100 lines, 1 to 10 of one shirt, 18 characters in a name). */
   limits?: Partial<RosterLimits>;
   /** Opens the size chart (the host's own sheet). Without it the "Size chart" button is not shown. */

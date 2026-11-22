@@ -35,6 +35,7 @@ import {
 } from "@fitmyoutfit/editor"
 
 import { designContent } from "@content/design"
+import { proofContent } from "@content/proof"
 import { teamOrderContent } from "@content/team-order"
 import * as teamOrderCalls from "@lib/data/team-orders"
 import { guarded } from "@lib/team-order/guarded"
@@ -42,8 +43,9 @@ import { designStartPath, teamOrderPath } from "@lib/editor/designer-context"
 import { editorAssetUrl } from "@lib/editor/asset-path"
 import { deleteOrderDraft, readOrderDraft, writeOrderDraft } from "@lib/editor/order-draft"
 import { productReturnPath } from "@lib/editor/paths"
-import type { EditorProduct } from "@lib/editor/products"
+import { earlierModelIds, isEarlierModelDesign, type EditorProduct } from "@lib/editor/products"
 import { setSavedDesignFlag } from "@lib/editor/saved-design"
+import { lockedListPlan } from "@lib/editor/locked-list"
 import { listLimits, listMinimum } from "@lib/editor/team-list-host"
 import { authHref } from "@lib/util/account-auth"
 import { createListSaver, type ListSaveState, type ListSaver } from "@lib/team-order/list-saver"
@@ -55,6 +57,8 @@ import { topBarState } from "@lib/team-order/save-words"
 import { runStart, type StartProgress, type StartStep } from "@lib/team-order/start"
 import type { Failure, TeamOrderView } from "@lib/team-order/types"
 import { failureSentence, isDraft, statusWords } from "@lib/team-order/words"
+import { dayOfMoment } from "@lib/team-order/proof"
+import { stepFailure } from "@lib/team-order/signing"
 import { SizeChartSheet } from "@modules/products/components/size-chart"
 
 import DesignMessage from "./design-message"
@@ -94,6 +98,10 @@ async function loadData(entry: EditorProduct, fontFamilies: Record<string, strin
   const product: ProductDefinition = {
     ...checkedProduct.value,
     model: { ...checkedProduct.value.model, url: editorAssetUrl(`models/${entry.modelFile}`) },
+    // the body under the garment, when the product has one: its file is the storefront's too
+    ...(checkedProduct.value.body && entry.bodyFile
+      ? { body: { ...checkedProduct.value.body, url: editorAssetUrl(`models/${entry.bodyFile}`) } }
+      : {}),
   }
 
   // The catalogue's families renamed to the faces next/font generated.
@@ -136,8 +144,7 @@ function newDesign(data: Data): DesignDocument {
 }
 
 /** The model's credit on one line at the top of the stage: a CC BY duty, wherever the model is shown. */
-function Credit({ entry, short }: { entry: EditorProduct; short: boolean }) {
-  const { credit } = entry
+function Credit({ credit, short }: { credit: NonNullable<EditorProduct["credit"]>; short: boolean }) {
   const words = designContent.credit
   return (
     <>
@@ -159,6 +166,19 @@ function Credit({ entry, short }: { entry: EditorProduct; short: boolean }) {
   )
 }
 
+/** Whether this device still holds a design under an earlier editor product of this garment (the store opens another model now). */
+async function hasEarlierDeviceDesign(kv: KeyValueStore, handle: string): Promise<boolean> {
+  try {
+    for (const id of earlierModelIds(handle)) {
+      const raw = (await kv.get("designs", `last:${id}`)) as { version?: number; productId?: string } | undefined
+      if (raw && raw.version === 1 && raw.productId === id) return true
+    }
+  } catch {
+    // storage refused: nothing to tell
+  }
+  return false
+}
+
 type Session = {
   key: number
   design: DesignDocument
@@ -168,9 +188,16 @@ type Session = {
   resume: boolean
   /** The order is no longer a draft: the list is read-only here and nothing is saved. */
   locked: boolean
+  /** A design for an earlier model of this garment exists (on this device, or as the order's design): it is not opened here. */
+  earlierModel: "none" | "device" | "order"
 }
 type Store = { kv: KeyValueStore; designs: DeviceDesignStore; assets: DeviceAssetStore; persistent: boolean; missing: string[] }
-type Leaving = { kind: "idle" } | { kind: "saving" } | { kind: "failed"; list: boolean }
+type Leaving =
+  | { kind: "idle" }
+  | { kind: "saving"; proof?: boolean }
+  | { kind: "failed"; list: boolean }
+  | { kind: "proof-failed"; text: string; signedOut: boolean }
+type ChangeList = { kind: "closed" } | { kind: "asking" } | { kind: "working" } | { kind: "failed"; text: string }
 
 /** Keeps the page from scrolling or bouncing behind the editor (a phone's rubber band included). */
 function useLockedPage() {
@@ -194,6 +221,8 @@ function useLockedPage() {
 const addSavedDesignVersion = guarded(teamOrderCalls.addSavedDesignVersion)
 const createSavedDesign = guarded(teamOrderCalls.createSavedDesign)
 const createTeamOrder = guarded(teamOrderCalls.createTeamOrder)
+const makeProof = guarded(teamOrderCalls.makeProof)
+const reopenTeamOrder = guarded(teamOrderCalls.reopenTeamOrder)
 const retrieveTeamOrder = guarded(teamOrderCalls.retrieveTeamOrder)
 const saveTeamOrderList = guarded(teamOrderCalls.saveTeamOrderList)
 const setTeamOrderDesignVersion = guarded(teamOrderCalls.setTeamOrderDesignVersion)
@@ -243,7 +272,13 @@ export default function DesignEditor({ product: entry, countryCode, fontFamilies
   const [startStatus, setStartStatus] = useState<StartStatus>({ kind: "idle" })
   const [defaultTeamName, setDefaultTeamName] = useState("")
   const [leaving, setLeaving] = useState<Leaving>({ kind: "idle" })
+  const [changeList, setChangeList] = useState<ChangeList>({ kind: "closed" })
+  // The order as the server last said it: a proof made here, or a list reopened here, changes its status.
+  const [liveView, setLiveView] = useState<TeamOrderView | null>(orderContext?.view ?? null)
+  // Whether the list is locked, for the handlers below: while it is, nothing is sent to the server, whatever the editor says.
+  const lockedRef = useRef(false)
   const [conflictBusy, setConflictBusy] = useState(false)
+  const [earlierDismissed, setEarlierDismissed] = useState(false)
   const [chartOpen, setChartOpen] = useState(false)
   const [chartSize, setChartSize] = useState<string | undefined>(undefined)
 
@@ -290,24 +325,41 @@ export default function DesignEditor({ product: entry, countryCode, fontFamilies
         if (orderContext) {
           // A team order: the server's design and list, or this device's unsent draft of them.
           const view = orderContext.view
-          const server = upgradeDesign(orderContext.design, { product: data.product })
+          // A design made for an earlier model of the garment does not fit this one: the designer opens fresh on the
+          // current model, the list as the server has it, and says so. The earlier design stays with the order's versions.
+          const earlier = isEarlierModelDesign(orderContext.design, entry)
+          const server = earlier ? { ok: true as const, value: newDesign(data) } : upgradeDesign(orderContext.design, { product: data.product })
           if (!server.ok) {
             console.error("The order's design could not be read:", server.errors.map((e) => e.message).join("; "))
             if (alive) setError(true)
             return
           }
-          const draft = persistent ? await readOrderDraft(kv, view.id, data.product).catch(() => null) : null
+          const draft = persistent && !earlier ? await readOrderDraft(kv, view.id, data.product).catch(() => null) : null
           const draftDesign = draft?.designDirty ? draft.design : null
           const design = draftDesign ?? server.value
           const teamList = draft?.listDirty && draft.teamList ? draft.teamList : savedListFromView(view, data.product.id)
           if (!alive) return
           const missing = await assets.restore(designAssetIds(design))
           await designs.pruneAssets().catch(() => undefined)
-          orderRef.current = { view, baseJson: designJson(server.value), pending: null, resendList: draft?.listDirty === true && !!draft.teamList }
+          // for an earlier model the base is the earlier design, so the fresh one counts as a change and is saved as a new version
+          orderRef.current = {
+            view,
+            baseJson: earlier ? designJson(orderContext.design as DesignDocument) : designJson(server.value),
+            pending: null,
+            resendList: draft?.listDirty === true && !!draft.teamList,
+          }
           latest.current = { design, teamList }
-          setDesignUnsent(designJson(design) !== designJson(server.value))
+          setDesignUnsent(designJson(design) !== orderRef.current.baseJson)
           setStore({ kv, designs, assets, persistent, missing })
-          setSession({ key: 1, design, teamList, startCard: false, resume: false, locked: !isDraft(view.status) || !editorAcceptsList(view) })
+          setSession({
+            key: 1,
+            design,
+            teamList,
+            startCard: false,
+            resume: false,
+            locked: !isDraft(view.status) || !editorAcceptsList(view),
+            earlierModel: earlier ? "order" : "none",
+          })
           if (draft?.listDirty && draft.teamList) setTouched(true)
           return
         }
@@ -318,6 +370,8 @@ export default function DesignEditor({ product: entry, countryCode, fontFamilies
         if (saved) await designs.pruneAssets().catch(() => undefined)
         // The product page's button reads this flag; the real store is the truth.
         setSavedDesignFlag(handle, !!saved)
+        // a design this device holds for an earlier model of the garment is left where it is, and the visitor is told
+        const earlierOnDevice = saved ? false : await hasEarlierDeviceDesign(kv, handle)
         latest.current = { design: saved?.design ?? null, teamList: saved?.teamList ?? null }
         setStore({ kv, designs, assets, persistent, missing })
         setSession(
@@ -330,15 +384,28 @@ export default function DesignEditor({ product: entry, countryCode, fontFamilies
                 // coming back from signing in to finish starting an order: no "Continue your last design?"
                 resume: !context.resumeStart,
                 locked: false,
+                earlierModel: "none",
               }
-            : { key: 1, design: newDesign(data), teamList: null, startCard: true, resume: false, locked: false },
+            : {
+                key: 1,
+                design: newDesign(data),
+                teamList: null,
+                startCard: true,
+                resume: false,
+                locked: false,
+                earlierModel: earlierOnDevice ? "device" : "none",
+              },
         )
         if (!persistent) setDeviceState("failed")
       })
     return () => {
       alive = false
     }
-  }, [data, handle, orderContext, context.resumeStart])
+  }, [data, handle, entry, orderContext, context.resumeStart])
+
+  useEffect(() => {
+    lockedRef.current = session?.locked ?? false
+  }, [session?.locked])
 
   // ---- the device copy: the design (and the list), written after a second of quiet ----
   useEffect(() => {
@@ -411,6 +478,8 @@ export default function DesignEditor({ product: entry, countryCode, fontFamilies
   // ---- what the editor reports ---------------------------------------------
   const onDesignChange = useCallback(
     (design: DesignDocument, info: { started: boolean }) => {
+      // a locked order is never written over (the editor's undo can still change a locked list on screen)
+      if (lockedRef.current) return
       started.current = info.started
       latest.current.design = design
       setTouched(true)
@@ -421,6 +490,7 @@ export default function DesignEditor({ product: entry, countryCode, fontFamilies
   )
 
   const onTeamListChange = useCallback((list: SavedTeamList) => {
+    if (lockedRef.current) return
     latest.current.teamList = list
     setTouched(true)
     if (orderRef.current) saver.current?.push(list)
@@ -444,19 +514,18 @@ export default function DesignEditor({ product: entry, countryCode, fontFamilies
 
   /**
    * A save point of an order: the list is on the server, then, if the design changed since the order's
-   * version, a new design version is made and the order is pointed at it; then the order's page.
+   * version, a new design version is made and the order is pointed at it. True when everything is saved.
    */
-  const saveAndOpenOrder = useCallback(
-    async (design: DesignDocument, to: string | null = orderPage) => {
+  const savePoint = useCallback(
+    async (design: DesignDocument, notice: Leaving = { kind: "saving" }): Promise<boolean> => {
       const current = orderRef.current
-      if (!orderContext || !current || !orderPage || !data || !store || !to) return
-      leaveTarget.current = to
+      if (!orderContext || !current || !data || !store) return false
       latest.current.design = design
-      setLeaving({ kind: "saving" })
+      setLeaving(notice)
       const listResult = (await saver.current?.flush()) ?? { kind: "saved" as const }
       if (listResult.kind !== "saved") {
         setLeaving({ kind: "failed", list: true })
-        return
+        return false
       }
       const json = designJson(design)
       if (json !== current.baseJson) {
@@ -470,7 +539,7 @@ export default function DesignEditor({ product: entry, countryCode, fontFamilies
           })
           if (!made.ok) {
             setLeaving({ kind: "failed", list: false })
-            return
+            return false
           }
           versionId = made.value.versionId
           current.pending = { json, versionId }
@@ -478,7 +547,7 @@ export default function DesignEditor({ product: entry, countryCode, fontFamilies
         const pointed = await setTeamOrderDesignVersion(orderContext.view.id, versionId)
         if (!pointed.ok) {
           setLeaving({ kind: "failed", list: false })
-          return
+          return false
         }
         current.view = pointed.value
         current.baseJson = json
@@ -496,14 +565,55 @@ export default function DesignEditor({ product: entry, countryCode, fontFamilies
         ...(latest.current.teamList ? { teamList: latest.current.teamList } : {}),
         listDirty: false,
       }).catch(() => undefined)
-      router.push(to)
+      return true
     },
-    [orderContext, orderPage, data, store, context.productId, router],
+    [orderContext, data, store, context.productId]
+  )
+
+  /** A save point, then the order's page (or the store link that was pressed). */
+  const saveAndOpenOrder = useCallback(
+    async (design: DesignDocument, to: string | null = orderPage) => {
+      if (!to) return
+      leaveTarget.current = to
+      if (await savePoint(design)) router.push(to)
+    },
+    [savePoint, orderPage, router]
+  )
+
+  /**
+   * The Done panel's main action when the list is ready: a save point, then the proof is made (the backend says
+   * whether the list is ready; its refusal is shown in one sentence), then the proof page. The order's page says
+   * what is missing when the backend does not think the list is ready.
+   */
+  const continueToProof = useCallback(
+    async (design: DesignDocument) => {
+      const current = orderRef.current
+      if (!orderContext || !current || !orderPage) return
+      leaveTarget.current = orderPage
+      if (!(await savePoint(design, { kind: "saving", proof: true }))) return
+      if (!orderRef.current?.view.summary.readyForProof) {
+        router.push(orderPage)
+        return
+      }
+      const made = await makeProof(orderContext.view.id)
+      if (!made.ok) {
+        const step = stepFailure("make", made.failure)
+        setLeaving({ kind: "proof-failed", text: step.text, signedOut: step.signedOut })
+        return
+      }
+      if (orderRef.current) orderRef.current.view = made.value
+      setLiveView(made.value)
+      router.push(`${orderPage}/proof`)
+    },
+    [orderContext, orderPage, savePoint, router]
   )
 
   const signInHref = authHref("signin", { next: orderContext ? `/design/${handle}?order=${orderContext.view.id}` : designStartPath(handle) })
 
-  /** The Done panel's actions ("Continue", "Save and finish later"). */
+  /**
+   * "Save and finish later" and the Done panel's closing action: an order's save point and its page; a locked
+   * order's page at once; for a design with no order yet, the one short step that starts it.
+   */
   const proceed = useCallback(
     async (design: DesignDocument) => {
       if (orderContext) {
@@ -520,6 +630,23 @@ export default function DesignEditor({ product: entry, countryCode, fontFamilies
       setStartStep(context.signedIn ? "start" : "sign-in")
     },
     [orderContext, session?.locked, orderPage, router, saveAndOpenOrder, flushDevice, context.signedIn],
+  )
+
+  /** The Done panel's main button: "Continue to the proof" for a draft order, the proof for a locked one, the start step for a new design. */
+  const primary = useCallback(
+    async (design: DesignDocument) => {
+      if (orderContext) {
+        if (session?.locked) {
+          const proofNow = liveView?.currentProof
+          router.push(proofNow && orderPage ? `${orderPage}/proof` : (orderPage ?? "/"))
+          return
+        }
+        await continueToProof(design)
+        return
+      }
+      await proceed(design)
+    },
+    [orderContext, session?.locked, liveView, orderPage, router, continueToProof, proceed],
   )
 
   // back from signing in: the one short step opens by itself
@@ -642,6 +769,41 @@ export default function DesignEditor({ product: entry, countryCode, fontFamilies
     setSession((s) => s && { ...s, key: s.key + 1, design: latest.current.design ?? s.design, teamList: list })
   }, [orderContext, data])
 
+  /** The order is a draft again: the list is editable (the editor opens afresh, with the list as the server has it). */
+  const unlock = useCallback(
+    (view: TeamOrderView) => {
+      if (!data) return
+      if (orderRef.current) orderRef.current.view = view
+      setLiveView(view)
+      const list = savedListFromView(view, data.product.id)
+      latest.current.teamList = list
+      lockedRef.current = false
+      setChangeList({ kind: "closed" })
+      setSession((s) => s && { ...s, key: s.key + 1, design: latest.current.design ?? s.design, teamList: list, locked: !editorAcceptsList(view) })
+    },
+    [data]
+  )
+
+  /** "Change the list": the backend takes the order back to a draft (the proof is withdrawn or replaced), then the list is editable again. */
+  const reopenList = useCallback(async () => {
+    if (!orderContext) return
+    setChangeList({ kind: "working" })
+    const result = await reopenTeamOrder(orderContext.view.id)
+    if (!result.ok) {
+      // an order that is a draft already is as good as reopened: read it and carry on
+      if (result.failure.kind === "refused" && result.failure.code === "team_order_already_draft") {
+        const again = await retrieveTeamOrder(orderContext.view.id)
+        if (again.ok) {
+          unlock(again.value)
+          return
+        }
+      }
+      setChangeList({ kind: "failed", text: stepFailure("reopen", result.failure).text })
+      return
+    }
+    unlock(result.value)
+  }, [orderContext, unlock])
+
   const assets = useMemo(
     () =>
       store
@@ -658,8 +820,14 @@ export default function DesignEditor({ product: entry, countryCode, fontFamilies
     [store],
   )
 
-  const view = orderContext?.view ?? null
+  const view = liveView
   const locked = session?.locked ?? false
+
+  // What the locked list says and offers: "Signed on ...", "Change the list" while a proof is out or signed.
+  const lockedPlan = useMemo(
+    () => (locked && view ? lockedListPlan(view, { unreadable: isDraft(view.status) }) : null),
+    [locked, view]
+  )
 
   // The team list's host props: the product's sizes and noun, the region's minimum, the server's limits once an order exists.
   const teamListHost = useMemo<TeamListHost>(
@@ -682,10 +850,15 @@ export default function DesignEditor({ product: entry, countryCode, fontFamilies
       debounceMs: 0,
       listRequiredToContinue: true,
       ...(locked && view
-        ? { locked: { signedOn: isDraft(view.status) ? words.listUnreadable.note : statusWords(view.status).text } }
+        ? {
+            locked: {
+              signedOn: lockedPlan?.signedOn ?? "",
+              ...(lockedPlan?.canChange ? { onChangeList: () => setChangeList({ kind: "asking" }) } : {}),
+            },
+          }
         : {}),
     }),
-    [session?.teamList, context.sizes, context.noun, context.region.minimum, context.region.phrase, context.sizeChart, view, locked, onTeamListChange],
+    [session?.teamList, context.sizes, context.noun, context.region.minimum, context.region.phrase, context.sizeChart, view, locked, lockedPlan, onTeamListChange],
   )
 
   const bar = topBarState({ list: listState, device: deviceState, designUnsent, touched })
@@ -693,10 +866,11 @@ export default function DesignEditor({ product: entry, countryCode, fontFamilies
     const overrides: WordingOverrides = {}
     // The list is on the server: the top bar says only "Saved", unless the design has changes only this device has.
     if (orderContext && bar.savedWords === "server") overrides.frame = { saved: words.saved }
-    // The editor's note for a signed list names a signature; an order that can't change says its own status.
-    if (locked) overrides.teamList = { locked: { note: "{date}", change: "" } } as WordingOverrides["teamList"]
+    // The editor's note for a signed list names a signature: only a signed proof has one. Otherwise the note says
+    // where the order is (the proof is out, or its status), in the order's own words.
+    if (locked && lockedPlan?.note === "plain") overrides.teamList = { locked: { note: "{date}" } } as WordingOverrides["teamList"]
     return Object.keys(overrides).length > 0 ? overrides : undefined
-  }, [orderContext, bar.savedWords, locked, words.saved])
+  }, [orderContext, bar.savedWords, locked, lockedPlan, words.saved])
 
   if (error) {
     return (
@@ -711,7 +885,13 @@ export default function DesignEditor({ product: entry, countryCode, fontFamilies
   }
   if (!data || !session || !assets || !store) return <DesignLoading />
 
-  const primaryLabel = orderContext ? (locked ? words.openOrder : words.saveAndOpen) : words.continue
+  const primaryLabel = orderContext
+    ? locked
+      ? view?.currentProof
+        ? proofContent.designer.openProof
+        : words.openOrder
+      : proofContent.make.designerButton
+    : words.continue
 
   return (
     <div
@@ -760,10 +940,12 @@ export default function DesignEditor({ product: entry, countryCode, fontFamilies
             </a>
           ),
           account: <DesignerMenu links={leaveLinkList} onLeave={leaveTo} />,
-          credit: <Credit entry={entry} short={false} />,
-          creditShort: <Credit entry={entry} short />,
+          // our own match jersey has no credit line; a model under CC BY (the T-shirt) must
+          ...(entry.credit
+            ? { credit: <Credit credit={entry.credit} short={false} />, creditShort: <Credit credit={entry.credit} short /> }
+            : {}),
           primaryAction: (design) => (
-            <button type="button" className="fmo-primary" data-done-focus onClick={() => void proceed(design)} data-testid="done-continue">
+            <button type="button" className="fmo-primary" data-done-focus onClick={() => void primary(design)} data-testid="done-continue">
               {primaryLabel}
             </button>
           ),
@@ -789,6 +971,7 @@ export default function DesignEditor({ product: entry, countryCode, fontFamilies
                 startCard: true,
                 resume: false,
                 locked: false,
+                earlierModel: "none",
               }))
             })
           }}
@@ -804,13 +987,67 @@ export default function DesignEditor({ product: entry, countryCode, fontFamilies
           onUseSaved={() => void adoptSavedList()}
         />
       )}
+      {session.earlierModel !== "none" && !earlierDismissed && (
+        <div
+          role="status"
+          className="fixed inset-x-3 top-16 z-10 mx-auto flex max-w-xl items-start gap-3 rounded-card border border-brand-border bg-brand-surface-alt p-3 type-small text-brand-ink"
+          data-testid="design-earlier-model"
+        >
+          <p className="flex-1">{session.earlierModel === "order" ? words.earlierModel.order : words.earlierModel.device}</p>
+          <button type="button" className="min-h-11 px-3 font-semibold" onClick={() => setEarlierDismissed(true)} data-testid="design-earlier-model-dismiss">
+            {words.earlierModel.dismiss}
+          </button>
+        </div>
+      )}
       {orderContext && locked && (
         <div
           role="status"
           className="fixed inset-x-3 top-16 z-10 mx-auto max-w-xl rounded-card border border-brand-border bg-brand-surface-alt p-3 type-small text-brand-ink"
           data-testid="design-locked-note"
         >
-          {view && isDraft(view.status) ? words.listUnreadable.text : words.locked.designNote}
+          {view && isDraft(view.status)
+            ? words.listUnreadable.text
+            : view && (view.status === "proof_sent" || view.status === "approved")
+              ? proofContent.designer.designFixed
+              : words.locked.designNote}
+        </div>
+      )}
+      {changeList.kind !== "closed" && (
+        <div
+          role="alertdialog"
+          aria-labelledby="design-change-list-title"
+          className="fixed inset-x-3 bottom-4 z-30 mx-auto flex max-w-xl flex-col gap-3 rounded-card border border-brand-border bg-white p-4 type-body text-brand-ink shadow-lg"
+          data-testid="design-change-list"
+        >
+          <h2 id="design-change-list-title" className="type-h3">
+            {proofContent.reopen.title}
+          </h2>
+          <p>{view?.status === "approved" ? proofContent.reopen.textSigned : proofContent.reopen.textSent}</p>
+          {changeList.kind === "failed" && (
+            <p role="alert" className="text-brand-error" data-testid="design-change-list-error">
+              {changeList.text}
+            </p>
+          )}
+          <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              className="min-h-11 rounded-control border-2 border-brand-ink px-4 font-semibold"
+              disabled={changeList.kind === "working"}
+              onClick={() => void reopenList()}
+              data-testid="design-change-list-confirm"
+            >
+              {changeList.kind === "working" ? proofContent.reopen.working : proofContent.reopen.confirm}
+            </button>
+            <button
+              type="button"
+              className="min-h-11 px-3 font-semibold underline"
+              disabled={changeList.kind === "working"}
+              onClick={() => setChangeList({ kind: "closed" })}
+              data-testid="design-change-list-cancel"
+            >
+              {proofContent.reopen.cancel}
+            </button>
+          </div>
         </div>
       )}
       {leaving.kind !== "idle" && (
@@ -820,7 +1057,33 @@ export default function DesignEditor({ product: entry, countryCode, fontFamilies
           data-testid="design-leaving"
         >
           {leaving.kind === "saving" ? (
-            <p>{words.leaving.saving}</p>
+            <p>{leaving.proof ? proofContent.designer.makingProof : words.leaving.saving}</p>
+          ) : leaving.kind === "proof-failed" ? (
+            <>
+              <p data-testid="design-proof-failure">{leaving.text}</p>
+              <div className="flex flex-wrap gap-3">
+                {leaving.signedOut ? (
+                  <a className="min-h-11 rounded-control border-2 border-brand-ink px-4 py-2.5 font-semibold" href={signInHref}>
+                    {teamOrderContent.refusals.signedOut}
+                  </a>
+                ) : (
+                  <button
+                    type="button"
+                    className="min-h-11 rounded-control border-2 border-brand-ink px-4 font-semibold"
+                    onClick={() => latest.current.design && void continueToProof(latest.current.design)}
+                    data-testid="design-proof-retry"
+                  >
+                    {proofContent.designer.tryAgain}
+                  </button>
+                )}
+                <button type="button" className="min-h-11 px-3 font-semibold underline" onClick={() => orderPage && router.push(orderPage)} data-testid="design-proof-open-order">
+                  {proofContent.designer.openOrder}
+                </button>
+                <button type="button" className="min-h-11 px-3 font-semibold underline" onClick={() => setLeaving({ kind: "idle" })}>
+                  {proofContent.designer.keepDesigning}
+                </button>
+              </div>
+            </>
           ) : (
             <>
               <p>{leaving.list ? words.leaving.listFailed : words.leaving.failed}</p>

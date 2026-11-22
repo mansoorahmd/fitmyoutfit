@@ -24,8 +24,13 @@ import { parseRosterInput } from "@fitmyoutfit/team-rules"
 import type { SavedTeamList } from "@fitmyoutfit/editor"
 
 import {
+  PROOF_STATUSES,
   TEAM_ORDER_STATUSES,
   type EditorLine,
+  type ProofDetail,
+  type ProofLine,
+  type ProofStatus,
+  type ProofView,
   type ScheduleState,
   type ScheduleView,
   type TeamOrderListItem,
@@ -224,6 +229,91 @@ export function scheduleFromApi(raw: unknown): ScheduleView | null {
   }
 }
 
+// ---- proofs ----------------------------------------------------------------
+
+const isProofStatus = (value: unknown): value is ProofStatus => PROOF_STATUSES.includes(value as ProofStatus)
+const textOrNull = (value: unknown): string | null => (typeof value === "string" ? value : null)
+
+/** A proof without its snapshot (`current_proof`, and the entries of the list of proofs). Null when it is not one. */
+export function proofFromApi(raw: unknown): ProofView | null {
+  if (!isRaw(raw)) return null
+  const number = int(raw.number)
+  if (
+    typeof raw.id !== "string" ||
+    typeof raw.team_order_id !== "string" ||
+    number === null ||
+    !isProofStatus(raw.status) ||
+    typeof raw.hash !== "string" ||
+    typeof raw.design_version_id !== "string"
+  ) {
+    return null
+  }
+  return {
+    id: raw.id,
+    teamOrderId: raw.team_order_id,
+    number,
+    status: raw.status,
+    hash: raw.hash,
+    designVersionId: raw.design_version_id,
+    listVersion: int(raw.list_version) ?? 0,
+    createdAt: str(raw.created_at),
+    closedAt: textOrNull(raw.closed_at),
+    signedName: textOrNull(raw.signed_name),
+    signedAt: textOrNull(raw.signed_at),
+    scheduleState: SCHEDULE_STATES.includes(raw.schedule_state as ScheduleState) ? (raw.schedule_state as ScheduleState) : null,
+    needByDate: textOrNull(raw.need_by_date),
+    rush: typeof raw.rush === "boolean" ? raw.rush : null,
+    promisedDeliveryDate: textOrNull(raw.promised_delivery_date),
+  }
+}
+
+function proofLineFromApi(raw: unknown): ProofLine | null {
+  if (!isRaw(raw)) return null
+  return {
+    name: str(raw.name),
+    number: str(raw.number),
+    size: str(raw.size),
+    count: int(raw.count) ?? 1,
+    noName: bool(raw.no_name),
+    noNumber: bool(raw.no_number),
+  }
+}
+
+/** `GET .../proofs/:proofId`: the proof with its snapshot. Null when it is not one. */
+export function parseProofAnswer(json: unknown): ProofDetail | null {
+  if (!isRaw(json) || !isRaw(json.proof)) return null
+  const proof = proofFromApi(json.proof)
+  const snapshot = json.proof.snapshot
+  if (!proof || !isRaw(snapshot) || typeof json.proof.snapshot_text !== "string" || !Array.isArray(snapshot.lines)) return null
+  const prints = isRaw(snapshot.prints) ? snapshot.prints : {}
+  return {
+    ...proof,
+    snapshot: {
+      format: int(snapshot.format) ?? 1,
+      designVersionId: str(snapshot.design_version_id),
+      productId: str(snapshot.product_id),
+      regionId: str(snapshot.region_id),
+      teamName: str(snapshot.team_name),
+      prints: { name: bool(prints.name), number: bool(prints.number) },
+      lines: snapshot.lines.flatMap((l) => {
+        const line = proofLineFromApi(l)
+        return line ? [line] : []
+      }),
+    },
+    snapshotText: json.proof.snapshot_text,
+    rawSnapshot: snapshot,
+  }
+}
+
+/** `GET .../proofs`: every proof, newest first. */
+export function parseProofList(json: unknown): ProofView[] | null {
+  if (!isRaw(json) || !Array.isArray(json.proofs)) return null
+  return json.proofs.flatMap((p) => {
+    const proof = proofFromApi(p)
+    return proof ? [proof] : []
+  })
+}
+
 // ---- the whole answer ------------------------------------------------------
 
 const isStatus = (value: unknown): value is TeamOrderStatus => TEAM_ORDER_STATUSES.includes(value as TeamOrderStatus)
@@ -281,6 +371,7 @@ export function parseTeamOrderAnswer(json: unknown): TeamOrderView | null {
     summary,
     limits: limitsFromApi(json.limits),
     schedule,
+    currentProof: proofFromApi(json.current_proof),
   }
 }
 

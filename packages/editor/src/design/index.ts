@@ -23,6 +23,7 @@ export * from "./svg-path.js";
 export * from "./pattern.js";
 export * from "./placement.js";
 export * from "./print-area.js";
+export * from "./carry.js";
 export * from "./snapping.js";
 export * from "./item-edits.js";
 export * from "./new-layers.js";

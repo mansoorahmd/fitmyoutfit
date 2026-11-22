@@ -86,6 +86,10 @@ export interface StageProps {
    * short); or none (a phone while typing: the keyboard leaves room only for the item being typed).
    */
   viewControls: "full" | "reset-only" | "list" | "none";
+  /** G4: the product has a body; the view controls then offer a button to hide and show the person. */
+  hasBody?: boolean;
+  showBody?: boolean;
+  onToggleBody?: () => void;
   /** The player chip (08-team-list.md 7.2): at the top centre of the free stage, or, in the phone's list view (`viewControls` "list"), in the bottom row with `wholeToggle`. */
   chip?: ReactNode;
   wholeToggle?: ReactNode;
@@ -300,6 +304,11 @@ export function Stage({ canvasRef, ...props }: StageProps) {
             ))}
           </div>
           <div className="fmo-zoom">
+            {props.hasBody && (
+              <button type="button" className="fmo-round" aria-label={props.showBody ? v.hidePerson : v.showPerson} title={props.showBody ? v.hidePerson : v.showPerson} aria-pressed={props.showBody} onClick={props.onToggleBody} data-testid="toggle-body">
+                <EditorIcon name={props.showBody ? "person" : "personOff"} />
+              </button>
+            )}
             <button type="button" className="fmo-round" aria-label={v.zoomIn} title={v.zoomIn} aria-disabled={!camera.canZoomIn} onClick={() => camera.canZoomIn && props.onZoom("in")} data-testid="zoom-in">
               <EditorIcon name="plus" />
             </button>

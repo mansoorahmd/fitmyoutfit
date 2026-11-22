@@ -12,6 +12,24 @@ const settings = { prints: { name: true, number: true }, sizes: DEFAULT_TEAM_SIZ
 const codes = (analysis: ReturnType<typeof analyseList>, id: string, seen = {}, reveal = false, lines: EditorLine[] = []) =>
   shownProblems(analysis, lines.find((l) => l.id === id)!, seen, reveal).map((p) => p.code);
 
+describe("numbers already taken (a late joiner's add-on, S3)", () => {
+  const lines = [line("a", "Ali", "07", "M"), line("b", "Bilal", "8", "L")];
+  const taken = [{ number: "7", source: "first-order" as const, name: "Hamza" }, { number: "8", source: "add-on" as const }];
+  it("a taken number is a problem on its line, compared as a number, and shows once the number field was left", () => {
+    const a = analyseList(lines, { ...settings, taken });
+    expect(a.byLine.get("a")!.map((p) => p.code)).toEqual(["number-taken-first-order"]);
+    expect(a.byLine.get("b")!.map((p) => p.code)).toEqual(["number-taken-add-on"]);
+    expect(a.toFix).toEqual(["a", "b"]);
+    expect(codes(a, "a", {}, false, lines)).toEqual([]);
+    expect(codes(a, "a", { a: { number: true } }, false, lines)).toEqual(["number-taken-first-order"]);
+    expect(codes(a, "b", {}, true, lines)).toEqual(["number-taken-add-on"]);
+  });
+  it("without taken (or an empty list) nothing is taken", () => {
+    expect(analyseList(lines, settings).toFix).toEqual([]);
+    expect(analyseList(lines, { ...settings, taken: [] }).toFix).toEqual([]);
+  });
+});
+
 describe("the analysis", () => {
   it("counts only the lines somebody typed into (a new empty line is not a player and is never flagged)", () => {
     const lines = [line("a", "Ali", "10", "M"), newLine("b")];
@@ -155,9 +173,9 @@ describe("saving and restoring", () => {
       expect(readSavedList(bad, { productId: "p1" })).toEqual([]);
     }
   });
-  it("refuses a list over the host's line limit", () => {
+  it("keeps the first lines of a list over the host's line limit (G4: it no longer drops the whole list; the rest is reported)", () => {
     const many = { version: 1, productId: "p1", lines: Array.from({ length: 5 }, (_, i) => ({ name: `P${i}` })) };
-    expect(readSavedList(many, { productId: "p1", limits: { maxLines: 3 } })).toEqual([]);
+    expect(readSavedList(many, { productId: "p1", limits: { maxLines: 3 } }).map((l) => l.name)).toEqual(["P0", "P1", "P2"]);
     expect(readSavedList(many, { productId: "p1", limits: { maxLines: 5 } })).toHaveLength(5);
   });
 });
