@@ -36,6 +36,32 @@
     --radius-sheet: 16px;
   }
 
+  /*
+   * The 3D editor (packages/editor) reads the store's colour names as whole colours,
+   * `--fmo-inverse: var(--c-inverse, #0b1530)`, and the store keeps them as "r g b" triplets for
+   * Tailwind. Used as they are, the editor's top bar, Done button and panels are invalid (transparent,
+   * white text on white). Inside the designer (`.fmo-host`) the editor's own variables are made from the
+   * store's triplets: no second palette, and the store's `--c-*` stay as they are for its own classes.
+   */
+  .fmo-host .fmo-editor {
+    --fmo-surface: rgb(var(--c-surface));
+    --fmo-surface-alt: rgb(var(--c-surface-alt));
+    --fmo-ink: rgb(var(--c-ink));
+    --fmo-ink-muted: rgb(var(--c-ink-muted));
+    --fmo-inverse: rgb(var(--c-inverse));
+    --fmo-on-inverse: rgb(var(--c-on-inverse));
+    --fmo-on-inverse-muted: rgb(var(--c-on-inverse-muted));
+    --fmo-primary: rgb(var(--c-primary));
+    --fmo-primary-hover: rgb(var(--c-primary-hover));
+    --fmo-border: rgb(var(--c-border));
+    --fmo-border-strong: rgb(var(--c-border-strong));
+    --fmo-success: rgb(var(--c-success));
+    --fmo-error: rgb(var(--c-error));
+    --fmo-error-surface: rgb(var(--c-error-surface));
+    --fmo-success-surface: rgb(var(--c-success-surface));
+    --fmo-focus: rgb(var(--c-focus));
+  }
+
   body {
     @apply bg-brand-bg text-brand-ink font-sans antialiased;
   }

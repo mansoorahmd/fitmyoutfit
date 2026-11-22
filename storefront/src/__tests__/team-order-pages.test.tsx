@@ -254,6 +254,12 @@ describe("one team order: the page", () => {
     expect(screen.getByTestId("list-summary")).toHaveTextContent("No players in the list yet.")
   })
 
+  it("a region with a minimum of one piece (Pakistan) says nothing about a minimum", async () => {
+    state.order = view({ roster: { summary: apiSummary({ minimum: { required: 1, missing: 0, met: true } }) } })
+    await openOrder()
+    expect(screen.queryByTestId("list-minimum")).not.toBeInTheDocument()
+  })
+
   it("a list that meets the minimum says so", async () => {
     state.order = view({ roster: { summary: apiSummary({ minimum: { required: 10, missing: 0, met: true } }) } })
     await openOrder()

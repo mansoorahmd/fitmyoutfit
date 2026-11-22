@@ -713,7 +713,7 @@ export default function DesignEditor({ product: entry, countryCode, fontFamilies
 
   return (
     <div
-      className="fixed inset-0 bg-white"
+      className="fmo-host fixed inset-0 bg-white"
       style={{
         height: "100dvh",
         overscrollBehavior: "none",

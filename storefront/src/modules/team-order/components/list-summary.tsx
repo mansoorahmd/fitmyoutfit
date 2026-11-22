@@ -147,7 +147,8 @@ export default function ListSummary({ order }: { order: TeamOrderView }) {
 /** Below the region's minimum or not: the backend's numbers (`required`, `missing`), a rule of sale worded for the founders to confirm. */
 function MinimumLine({ order }: { order: TeamOrderView }) {
   const minimum = order.summary.minimum
-  if (!minimum) return null
+  // A region that needs one piece has no minimum to talk about (Pakistan): nothing is said.
+  if (!minimum || minimum.required <= 1) return null
   return (
     <p className="type-body" data-testid="list-minimum" data-met={minimum.met ? "true" : "false"}>
       {minimum.met
