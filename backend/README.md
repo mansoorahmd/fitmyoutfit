@@ -9,9 +9,13 @@ Medusa v2 for the store. Setup, ports, commands and the contracts are in the [ro
 | `src/lib/http/refusal.ts` | The refusal a store route answers with: `{ type, code, message, ... }` |
 | `src/modules/cash-collection` | The cash-collection record of an order |
 | `src/modules/design` | Saved designs and their versions (`design`, `design_version`) |
-| `src/modules/team-order` | Team orders and their team lists (`team_order`, `roster_entry`); `replaceRoster` saves a list atomically against a version number |
+| `src/modules/team-order` | Team orders, their team lists and their proofs (`team_order`, `roster_entry`, `proof_approval`), the record of status steps (`team_order_step`) and the record of emails (`team_order_email`); `replaceRoster` saves a list atomically against a version number, and each step of the status flow (make a proof, sign, back to draft, the admin's steps) is one conditional write inside its transaction, recorded with who made it |
 | `src/workflows/` | The Medusa glue the routes call (thin; the rules are in `lib/`) |
-| `src/api/store/designs`, `src/api/store/team-orders` | The store routes of M2-1; each route file's comment lists its body, answer and refusals |
+| `src/api/store/designs`, `src/api/store/team-orders` | The store routes of M2-1 to M2-3 (the proof, its signature, back to draft, the schedule, the design version, add-ons for late joiners, reorders); each route file's comment lists its body, answer and refusals |
+| `src/api/admin/team-orders` | The admin's routes: the list, one order, the admin's steps (M2-3) |
+| `src/admin/routes/team-orders`, `src/admin/lib/team-orders.ts` | The admin pages "Team orders" (list and detail) and the plain functions behind their words and colours |
+| `src/lib/content/team-order-emails.ts` | The words of the emails to the organizer: one content file, **draft wording** for the founders to confirm |
+| `src/jobs/team-order-reminders.ts` | The daily job: reminders 3 and 1 day before the latest day to sign, and a retry of failed emails |
 | `integration-tests/http/` | One spec per area, run against a real Medusa with a temporary database |
 
 **The roster rules are a package, not backend code.** The checks, the summary, the clean-up and the pasted-list reader are `@fitmyoutfit/team-rules` (`../packages/team-rules`), which the backend depends on as `file:../packages/team-rules`. The package must be built before the backend compiles or runs its tests; the `build`, `dev`, `typecheck` and test scripts here do it first (`npm run build:rules`). `dist/` of the package is not committed. See "Team orders, part one (M2-1)" in the root README for how a production deployment gets it.

@@ -27,7 +27,8 @@ export const notFound = (code: string, message: string) => new Refusal(404, "not
 export const conflict = (code: string, message: string, extra?: Record<string, unknown>) =>
   new Refusal(409, "conflict", code, message, extra)
 
-export const notAllowed = (code: string, message: string) => new Refusal(400, "not_allowed", code, message)
+export const notAllowed = (code: string, message: string, extra?: Record<string, unknown>) =>
+  new Refusal(400, "not_allowed", code, message, extra)
 
 /**
  * Wraps a route handler: a thrown `Refusal` is answered as such; any other error goes to Medusa's

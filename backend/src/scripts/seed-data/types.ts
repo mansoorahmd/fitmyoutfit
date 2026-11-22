@@ -118,6 +118,12 @@ export type StoreSettingsSeed = {
   delivery_days_standard: number
   /** The same, with paid rush. */
   delivery_days_rush: number
+  /** Team lists: most lines in a list, most of one shirt on a line, longest name (characters). */
+  roster_max_lines: number
+  roster_max_count: number
+  roster_max_name_length: number
+  /** IANA time zone of the store's day, for the need-by date of a team order. */
+  schedule_time_zone: string
 }
 
 /**

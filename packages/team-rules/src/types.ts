@@ -63,6 +63,35 @@ export interface RosterSettings {
   sizes: readonly (string | SizeSpec)[];
   /** Only the limits to change; the rest are the defaults. */
   limits?: Partial<RosterLimits>;
+  /**
+   * Numbers already taken outside this list: for a late joiner's add-on order, the numbers of the
+   * first order's signed list and of its other add-ons that have a proof out or signed. A line
+   * whose number (as a number: "7", "07" and "٧" are the same) is in this list has a
+   * `number-taken-first-order` or `number-taken-add-on` problem. Empty or absent: nothing is taken.
+   * Only lines whose number is printed and not switched off are compared, as for duplicates.
+   */
+  taken?: readonly TakenNumber[];
+}
+
+/** Where a taken number is taken. */
+export type TakenSource = "first-order" | "add-on";
+
+/** A number that another list of the same team already uses (see `RosterSettings.taken`). */
+export interface TakenNumber {
+  /** As written in that list. Compared as a number; one that is not a valid number is ignored. */
+  number: string;
+  source: TakenSource;
+  /** The order the number is taken in, when the host has one. */
+  orderId?: string;
+  /** The player's name on that line, for a message such as "Taken by Bilal in the first order". */
+  name?: string;
+}
+
+/** One place a number is taken, in a problem's `detail`. */
+export interface TakenRef {
+  source: TakenSource;
+  orderId?: string;
+  name?: string;
 }
 
 export type LineField = "name" | "number" | "size" | "count";
@@ -75,6 +104,8 @@ export type ProblemCode =
   | "number-too-long"
   | "number-mixed-digits"
   | "number-duplicate"
+  | "number-taken-first-order"
+  | "number-taken-add-on"
   | "name-character"
   | "name-too-long"
   | "size-unknown"
@@ -101,6 +132,8 @@ export interface RosterProblem {
     /** number-duplicate: the shared value, and the other lines that have it. */
     value?: number;
     others?: LineRef[];
+    /** number-taken-*: the shared value (`value`, above) and every place it is taken. */
+    takenIn?: TakenRef[];
     /** name-character: the characters that cannot be printed, and whether one is a digit. */
     characters?: string[];
     hasDigit?: boolean;

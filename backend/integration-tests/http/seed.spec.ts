@@ -314,7 +314,18 @@ medusaIntegrationTestRunner({
           "cod_max_total",
           "delivery_days_standard",
           "delivery_days_rush",
+          "roster_max_lines",
+          "roster_max_count",
+          "roster_max_name_length",
+          "schedule_time_zone",
         ])
+        const [seeded] = await getContainer().resolve(Modules.STORE).listStores({})
+        expect(seeded.metadata).toMatchObject({
+          roster_max_lines: 100,
+          roster_max_count: 10,
+          roster_max_name_length: 18,
+          schedule_time_zone: "Asia/Karachi",
+        })
         const storeModule = getContainer().resolve(Modules.STORE)
         const [store] = await storeModule.listStores({})
         expect(store.metadata).toMatchObject({ rush_percentage: 20 })
@@ -894,9 +905,9 @@ medusaIntegrationTestRunner({
         const byCountry = Object.fromEntries(
           regions.regions.map((r: any) => [r.countries[0].iso_2, r])
         )
-        expect(byCountry.pk.metadata).toEqual({ tax_final: false, min_garment_quantity: 1 })
+        expect(byCountry.pk.metadata).toEqual({ tax_final: false, min_garment_quantity: 1, addon_min_garment_quantity: 1 })
         for (const country of ["gb", "ae", "us"]) {
-          expect(byCountry[country].metadata).toEqual({ tax_final: false, min_garment_quantity: 10 })
+          expect(byCountry[country].metadata).toEqual({ tax_final: false, min_garment_quantity: 10, addon_min_garment_quantity: 1 })
         }
         for (const [country, expected] of [
           ["pk", ["pp_cod_cod", "pp_system_default"]],
@@ -966,7 +977,7 @@ medusaIntegrationTestRunner({
             input: {
               selector: { id: region.id },
               update: {
-                metadata: { min_garment_quantity: "" },
+                metadata: { min_garment_quantity: "", addon_min_garment_quantity: "" },
                 payment_providers: ["pp_system_default"],
               },
             },
@@ -989,12 +1000,24 @@ medusaIntegrationTestRunner({
 
         const rerun = await seedStore(container, adminOptions)
         expect(rerun.created).toMatchObject({
-          settings: ["cod_max_total", "delivery_days_standard", "delivery_days_rush"],
+          settings: [
+            "cod_max_total",
+            "delivery_days_standard",
+            "delivery_days_rush",
+            "roster_max_lines",
+            "roster_max_count",
+            "roster_max_name_length",
+            "schedule_time_zone",
+          ],
           regionSettings: [
             "Pakistan: min_garment_quantity",
+            "Pakistan: addon_min_garment_quantity",
             "United Kingdom: min_garment_quantity",
+            "United Kingdom: addon_min_garment_quantity",
             "United Arab Emirates: min_garment_quantity",
+            "United Arab Emirates: addon_min_garment_quantity",
             "United States: min_garment_quantity",
+            "United States: addon_min_garment_quantity",
           ],
           sizeCharts: ["jersey", "t-shirt", "jacket", "fit-kit"],
           stockLocation: true,

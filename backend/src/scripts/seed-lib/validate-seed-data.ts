@@ -6,8 +6,11 @@
 import type { PlaceholderData, ProductKind, SeedData } from "../seed-data/types"
 import { readCodMaxTotal } from "../../lib/settings/cod-max-total"
 import { readDeliveryDays } from "../../lib/settings/delivery-days"
+import { readAddOnMinGarmentQuantity } from "../../lib/settings/addon-min-garment-quantity"
 import { readMinGarmentQuantity } from "../../lib/settings/min-garment-quantity"
+import { readRosterLimits } from "../../lib/settings/roster-limits"
 import { readRushPercentage } from "../../lib/settings/rush-percentage"
+import { readScheduleTimeZone } from "../../lib/settings/schedule-time-zone"
 import { isHttpsUrl } from "./product-images"
 
 const PAYMENT_PROVIDER_RE = /^pp_[a-z0-9-]+(_[a-z0-9-]+)+$/
@@ -283,12 +286,24 @@ export function validateSeedData(seed: SeedData): string[] {
   if (!deliveryDays.ok) {
     problems.push(`settings: ${deliveryDays.error}`)
   }
+  const rosterLimits = readRosterLimits(seed.settings.data)
+  if (!rosterLimits.ok) {
+    problems.push(`settings: ${rosterLimits.error}`)
+  }
+  const timeZone = readScheduleTimeZone(seed.settings.data)
+  if (!timeZone.ok) {
+    problems.push(`settings: ${timeZone.error}`)
+  }
 
   // Region settings and payment providers
   for (const region of regions) {
     const minimum = readMinGarmentQuantity(region.metadata, region.name)
     if (!minimum.ok) {
       problems.push(`regions: ${minimum.error}`)
+    }
+    const addOnMinimum = readAddOnMinGarmentQuantity(region.metadata, region.name)
+    if (!addOnMinimum.ok) {
+      problems.push(`regions: ${addOnMinimum.error}`)
     }
     const providers = region.payment_providers
     if (!Array.isArray(providers) || providers.length === 0) {

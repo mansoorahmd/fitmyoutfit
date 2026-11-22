@@ -10,7 +10,7 @@ import type { PlaceholderData, StoreSettingsSeed } from "./types"
  */
 export const settings: PlaceholderData<StoreSettingsSeed> = {
   placeholder: true,
-  note: "Placeholder rush percentage, cash-on-delivery limit and delivery days until the founders confirm them.",
+  note: "Placeholder rush percentage, cash-on-delivery limit, delivery days, roster limits and time zone until the founders confirm them.",
   data: {
     rush_percentage: 20,
     // Largest cart total, in PKR (major units: 20000 = Rs 20,000), payable by cash on delivery.
@@ -18,5 +18,11 @@ export const settings: PlaceholderData<StoreSettingsSeed> = {
     // Calendar days from proof approval to delivery, standard and with paid rush.
     delivery_days_standard: 15,
     delivery_days_rush: 10,
+    // Team lists (decision 012): most lines in a list, most of one shirt on a line, longest name.
+    roster_max_lines: 100,
+    roster_max_count: 10,
+    roster_max_name_length: 18,
+    // The time zone of the store's day: "today" for a team order's need-by arithmetic.
+    schedule_time_zone: "Asia/Karachi",
   },
 }
