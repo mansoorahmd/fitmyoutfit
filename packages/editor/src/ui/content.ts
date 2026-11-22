@@ -530,6 +530,7 @@ export const EDITOR_WORDING = {
     checksMany: "{count} things to check", // W-ED161
     checksOne: "1 thing to check", // W-ED161
     checksNone: "Nothing to check. Your kit looks ready.", // NEW
+    checksNoneDesign: "Your design has nothing to check.", // NEW (G4, S4): said instead of checksNone while the team list has lines to fix or is short of the minimum: the design is fine, the kit is not ready yet
     show: "Show", // W-ED161
     checkLine: "{item}: {reason}", // NEW: one line of the summary ("Logo on the left chest: may print blurry at this size.")
     checkHardToRead: "hard to read on {colour}.", // NEW (W-ED85 in the summary)
