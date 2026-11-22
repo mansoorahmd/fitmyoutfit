@@ -70,6 +70,41 @@ medusaIntegrationTestRunner({
       })
 
       // ------------------------------------------------------------------------------------
+      describe("D4: a deleted customer's token", () => {
+        it("answers 401 on every design and team-order route once the customer is deleted: read, create, sign", async () => {
+          const as = await w.signIn()
+          const me = await api.get("/store/customers/me", w.h(as))
+          expect(me.status).toBe(200)
+          const customerId = me.data.customer.id
+          // before the delete: the token works, and a proof waits for a signature
+          const order = await w.aTeamOrder(as)
+          const id = order.team_order.id
+          expect((await w.putRoster(as, id, 1, team(10))).status).toBe(200)
+          const made = await w.makeProof(as, id)
+          expect(made.status).toBe(201)
+          expect((await api.get("/store/designs", w.h(as))).status).toBe(200)
+
+          const admin = await w.adminHeaders()
+          const deleted = await api.delete(`/admin/customers/${customerId}`, { headers: admin, ...w.allow })
+          expect(deleted.status).toBe(200)
+
+          const unsigned = (r: any) => {
+            expect(r.status).toBe(401)
+            expect(r.data.type).toBe("unauthorized")
+          }
+          unsigned(await api.get("/store/designs", w.h(as)))
+          unsigned(await w.saveDesign(as))
+          unsigned(await api.get("/store/team-orders", w.h(as)))
+          unsigned(await w.read(as, id))
+          unsigned(await w.sign(as, id, made.data.current_proof.id, w.signBody(made.data)))
+          unsigned(await w.reopen(as, id))
+          unsigned(await api.delete(`/store/team-orders/${id}`, w.h(as)))
+          // nothing was signed or changed by the old token
+          const stored = (await (getContainer().resolve(TEAM_ORDER_MODULE) as any).listProofApprovals({ team_order_id: id })) as any[]
+          expect(stored.map((p) => p.status)).toEqual(["sent"])
+        })
+      })
+
       // ------------------------------------------------------------------------------------
       describe("D1, D2, D5.1: one lock on the first order's row", () => {
         const TRIES = 20

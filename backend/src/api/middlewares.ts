@@ -25,7 +25,7 @@
  * same moment (holdResetTokenLockDuringUpdate).
  *
  * Saved designs and team orders (/store/designs*, /store/team-orders*): the signed-in customer only
- * (`authenticate`, 401 without); a design's JSON may be larger than Medusa's default body limit,
+ * (`authenticate`, 401 without; 401 also for a deleted customer, refuseDeletedCustomer); a design's JSON may be larger than Medusa's default body limit,
  * so the two routes that take one allow a body of up to DESIGN_BODY_LIMIT.
  *
  * Team orders for staff (/admin/team-orders*) need no middleware of ours: Medusa puts every
@@ -39,7 +39,7 @@ import {
   type MedusaResponse,
 } from "@medusajs/framework/http"
 import { validateAndTransformQuery } from "@medusajs/framework"
-import { ContainerRegistrationKeys, MedusaError } from "@medusajs/framework/utils"
+import { ContainerRegistrationKeys, MedusaError, Modules } from "@medusajs/framework/utils"
 import * as StoreCartQueryConfig from "@medusajs/medusa/api/store/carts/query-config"
 import { StoreGetCartsCart } from "@medusajs/medusa/api/store/carts/validators"
 import { COD_PAYMENT_PROVIDER_ID } from "../modules/cod/constants"
@@ -308,7 +308,34 @@ export function holdResetTokenLockDuringUpdate(
  */
 export const DESIGN_BODY_LIMIT = "2mb"
 
-const customerOnly = authenticate("customer", ["session", "bearer"])
+/**
+ * After `authenticate`, on the routes of designs and team orders: answers 401 when the customer the
+ * token names no longer exists (deleted through the admin). A token stays valid until it expires,
+ * so without this an old token of a deleted customer kept reading and creating designs and would
+ * sign a proof. One primary-key lookup in the customer module per request (a deleted customer is
+ * soft-deleted, so the lookup ignores it); nothing is cached, so the next request already sees it.
+ */
+export async function refuseDeletedCustomer(
+  req: MedusaRequest,
+  _res: MedusaResponse,
+  next: MedusaNextFunction
+): Promise<void> {
+  try {
+    const customerId = (req as MedusaRequest & { auth_context?: { actor_id?: string } }).auth_context?.actor_id
+    if (customerId) {
+      const customers = req.scope.resolve(Modules.CUSTOMER)
+      const found = await customers.listCustomers({ id: customerId }, { select: ["id"], take: 1 })
+      if (found.length === 0) {
+        return next(new MedusaError(MedusaError.Types.UNAUTHORIZED, "Unauthorized"))
+      }
+    }
+    return next()
+  } catch (error) {
+    return next(error)
+  }
+}
+
+const customerOnly = [authenticate("customer", ["session", "bearer"]), refuseDeletedCustomer]
 
 export default defineMiddlewares({
   routes: [
@@ -321,83 +348,83 @@ export default defineMiddlewares({
       matcher: "/store/designs",
       method: ["POST"],
       bodyParser: { sizeLimit: DESIGN_BODY_LIMIT },
-      middlewares: [customerOnly],
+      middlewares: customerOnly,
     },
     {
       matcher: "/store/designs/:id/versions",
       method: ["POST"],
       bodyParser: { sizeLimit: DESIGN_BODY_LIMIT },
-      middlewares: [customerOnly],
+      middlewares: customerOnly,
     },
     {
       matcher: "/store/designs",
       method: ["GET"],
-      middlewares: [customerOnly],
+      middlewares: customerOnly,
     },
     {
       matcher: "/store/designs/:id",
       method: ["GET"],
-      middlewares: [customerOnly],
+      middlewares: customerOnly,
     },
     {
       matcher: "/store/designs/:id/versions/:version",
       method: ["GET"],
-      middlewares: [customerOnly],
+      middlewares: customerOnly,
     },
     {
       matcher: "/store/team-orders",
       method: ["GET", "POST"],
-      middlewares: [customerOnly],
+      middlewares: customerOnly,
     },
     {
       matcher: "/store/team-orders/:id",
       method: ["GET", "POST", "DELETE"],
-      middlewares: [customerOnly],
+      middlewares: customerOnly,
     },
     {
       matcher: "/store/team-orders/:id/roster",
       method: ["PUT"],
-      middlewares: [customerOnly],
+      middlewares: customerOnly,
     },
     {
       matcher: "/store/team-orders/:id/proofs",
       method: ["GET", "POST"],
-      middlewares: [customerOnly],
+      middlewares: customerOnly,
     },
     {
       matcher: "/store/team-orders/:id/proofs/:proofId",
       method: ["GET"],
-      middlewares: [customerOnly],
+      middlewares: customerOnly,
     },
     {
       matcher: "/store/team-orders/:id/proofs/:proofId/sign",
       method: ["POST"],
-      middlewares: [customerOnly],
+      middlewares: customerOnly,
     },
     {
       matcher: "/store/team-orders/:id/add-ons",
       method: ["GET", "POST"],
-      middlewares: [customerOnly],
+      middlewares: customerOnly,
     },
     {
       matcher: "/store/team-orders/:id/reorders",
       method: ["POST"],
-      middlewares: [customerOnly],
+      middlewares: customerOnly,
     },
     {
       matcher: "/store/team-orders/:id/reopen",
       method: ["POST"],
-      middlewares: [customerOnly],
+      middlewares: customerOnly,
     },
     {
       matcher: "/store/team-orders/:id/schedule",
       method: ["POST"],
-      middlewares: [customerOnly],
+      middlewares: customerOnly,
     },
     {
       matcher: "/store/team-orders/:id/design-version",
       method: ["POST"],
-      middlewares: [customerOnly],
+      middlewares: customerOnly,
     },
     {
       matcher: "/auth/:actor_type/emailpass/update",
