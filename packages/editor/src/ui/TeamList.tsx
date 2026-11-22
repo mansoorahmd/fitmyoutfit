@@ -9,7 +9,7 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 import { readSize } from "@fitmyoutfit/team-rules";
 import { nextToFix, shownProblems } from "../team-list/checks.js";
-import { fieldsOf, keyAction, type Field, type KeyAction } from "../team-list/keys.js";
+import { fieldsOf, focusAfterRemoval, keyAction, type Field, type KeyAction } from "../team-list/keys.js";
 import type { SortBy } from "../team-list/lines.js";
 import type { EditorLine } from "../team-list/types.js";
 import { fill } from "./content.js";
@@ -656,6 +656,7 @@ export function TeamListView({ initialDetailsOpen }: { initialDetailsOpen?: bool
       {menu && menu.kind === "line" && menuLine && (
         <MenuView
           anchor={anchor}
+          sheet={api.layout !== "wide"}
           label={fill(w.more, { name: menuLine.name || fill(w.unnamedPlayer, { i: menuIndex + 1 }) })}
           onClose={closeMenu}
           stepper={menu.stepper ? { count: menuLine.count, min: t.limits.minCount, max: t.limits.maxCount, onChange: (n) => t.setCount(menuLine.id, n), label: w.countLabel, less: w.countLess, more: w.countMore, done: w.done } : undefined}
@@ -666,10 +667,11 @@ export function TeamListView({ initialDetailsOpen }: { initialDetailsOpen?: bool
             ...(prints.name ? [{ id: "noname", label: w.noNameItem, checked: menuLine.noName, onSelect: () => t.setFlag(menuLine.id, "noName", !menuLine.noName) }] : []),
             ...(prints.number ? [{ id: "nonumber", label: w.noNumberItem, checked: menuLine.noNumber, onSelect: () => t.setFlag(menuLine.id, "noNumber", !menuLine.noNumber) }] : []),
             { id: "remove", label: w.remove, danger: true, onSelect: () => {
-              const at = menuIndex;
+              // Focus goes to the SAME field of the line that took its place (4.7, 13.7), never to the top of the page.
+              const was = valueAtFocus.current;
+              const next = focusAfterRemoval({ lines, removedId: menuLine.id, lastField: was && was.id === menuLine.id ? was.field : null, showNumber, phoneWithoutKeyboard: api.layout === "compact" && !t.keyboard });
               t.remove(menuLine.id);
-              const after = lines[at + 1] ?? lines[at - 1];
-              if (after) pending.current = { id: after.id, field: "line" };
+              if (next) pending.current = next;
             } },
           ]}
         />
@@ -709,12 +711,13 @@ interface MenuItem {
 }
 
 /** A small menu (the line menu 4.6 and Sort): arrow keys move, Enter chooses, Esc closes and returns focus to its button. */
-function MenuView({ anchor, align = "end", label, items, onClose, stepper }: { anchor: HTMLElement | null; align?: "start" | "end"; label: string; items: MenuItem[]; onClose: () => void; stepper?: { count: number; min: number; max: number; onChange: (n: number) => void; label: string; less: string; more: string; done: string } }) {
+export function MenuView({ anchor, align = "end", label, items, onClose, stepper, sheet = false }: { anchor: HTMLElement | null; align?: "start" | "end"; sheet?: boolean; label: string; items: MenuItem[]; onClose: () => void; stepper?: { count: number; min: number; max: number; onChange: (n: number) => void; label: string; less: string; more: string; done: string } }) {
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null);
   // Placed beside its button in the page's own coordinates (the menu is fixed: the panel's box does not clip it), and again
   // once the panel has settled (opening the menu takes focus from the field, so a phone's keyboard layout ends).
   const place = useCallback(() => {
+    if (sheet) return;
     const box = anchor?.getBoundingClientRect();
     const host = anchor?.closest<HTMLElement>(".fmo-editor")?.getBoundingClientRect();
     if (!box || !host) return;
@@ -722,14 +725,14 @@ function MenuView({ anchor, align = "end", label, items, onClose, stepper }: { a
     const height = ref.current?.offsetHeight ?? 240;
     const below = box.bottom + 4 + height <= host.bottom - 8;
     setPos({ top: below ? box.bottom + 4 : Math.max(host.top + 8, box.top - 4 - height), left: Math.max(host.left + 12, Math.min(align === "start" ? box.left : box.right - width, host.right - width - 12)), width });
-  }, [anchor, align]);
+  }, [anchor, align, sheet]);
   useLayoutEffect(() => {
     place();
     const timer = setTimeout(place, 320);
     return () => clearTimeout(timer);
   }, [place, items.length, stepper]);
   // Focus goes into the menu once it is placed (a hidden element cannot take focus).
-  const placed = pos !== null;
+  const placed = pos !== null || sheet;
   const hasStepper = stepper !== undefined;
   useEffect(() => {
     if (placed) ref.current?.querySelector<HTMLElement>('[role^="menuitem"]:not([aria-disabled="true"]), button')?.focus({ preventScroll: true });
@@ -756,7 +759,10 @@ function MenuView({ anchor, align = "end", label, items, onClose, stepper }: { a
     buttons[(k + (event.key === "ArrowDown" ? 1 : -1) + buttons.length) % buttons.length]?.focus();
   };
   return (
-    <div className="fmo-tl-menu" role="menu" aria-label={label} ref={ref} style={pos ? { top: pos.top, left: pos.left, width: pos.width } : { visibility: "hidden" }} onKeyDown={onKey} data-testid="tl-menu">
+    <>
+    {sheet && <div className="fmo-tl-scrim" aria-hidden="true" data-testid="tl-menu-scrim" />}
+    <div className={sheet ? "fmo-tl-menu fmo-tl-sheet" : "fmo-tl-menu"} role="menu" aria-label={label} ref={ref} style={sheet ? undefined : pos ? { top: pos.top, left: pos.left, width: pos.width } : { visibility: "hidden" }} onKeyDown={onKey} data-sheet={sheet ? "true" : undefined} data-testid="tl-menu">
+      {sheet && <p className="fmo-label fmo-tl-sheet-title" aria-hidden="true"><bdi dir="auto">{label}</bdi></p>}
       {stepper ? (
         <div className="fmo-tl-stepper" role="group" aria-label={stepper.label}>
           <span className="fmo-label">{stepper.label}</span>
@@ -794,6 +800,7 @@ function MenuView({ anchor, align = "end", label, items, onClose, stepper }: { a
         ))
       )}
     </div>
+    </>
   );
 }
 

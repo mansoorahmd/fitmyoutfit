@@ -260,12 +260,25 @@ export function SizeListbox({ id, sizes, typed, active, onPick, wording }: { id:
   const key = typed.trim().toLowerCase().replace(/[\s\-._]+/g, "");
   const shown = key === "" ? sizes : sizes.filter((s) => s.code.toLowerCase().startsWith(key) || (s.label ?? "").toLowerCase().startsWith(key));
   const list = shown.length > 0 ? shown : sizes;
+  // Two groups, Youth then Adult (4.5), each named for a screen reader and headed for the eye; the keyboard walks `list` in order.
+  const groups = [
+    { label: w.youth, items: list.filter((s) => s.group === "youth") },
+    { label: w.adult, items: list.filter((s) => s.group !== "youth") },
+  ].filter((g) => g.items.length > 0);
   return (
     <ul className="fmo-tl-listbox" role="listbox" id={id} aria-label={w.sizesGroup} data-testid="tl-size-list">
-      {list.map((s, i) => (
-        <li key={s.code} role="option" id={`${id}-${s.code}`} aria-selected={i === active} data-size={s.code} onMouseDown={(e) => e.preventDefault()} onClick={() => onPick(s.code)}>
-          <span>{s.label ?? s.code}</span>
-          <span className="fmo-muted">{s.group === "youth" ? w.youth : w.adult}</span>
+      {groups.map((g) => (
+        <li key={g.label} role="presentation" className="fmo-tl-listgroup">
+          <ul role="group" aria-label={g.label}>
+            <li role="presentation" className="fmo-tl-listhead" aria-hidden="true">
+              {g.label}
+            </li>
+            {g.items.map((s) => (
+              <li key={s.code} role="option" id={`${id}-${s.code}`} aria-selected={list.indexOf(s) === active} data-size={s.code} onMouseDown={(e) => e.preventDefault()} onClick={() => onPick(s.code)}>
+                <span>{s.label ?? s.code}</span>
+              </li>
+            ))}
+          </ul>
         </li>
       ))}
     </ul>

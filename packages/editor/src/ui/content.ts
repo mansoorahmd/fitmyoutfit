@@ -122,6 +122,10 @@ export const EDITOR_WORDING = {
   },
   /** Team, players, text (`lettering`). */
   lettering: {
+    letters: "Letters", // NEW (E4b, Q-TL2): the Style view's choice for names
+    lettersUpper: "Capitals", // NEW (E4b)
+    lettersTyped: "As typed", // NEW (E4b)
+    lettersNote: "Arabic and Urdu names have no capitals: they print as typed.", // NEW (E4b)
     teamName: "Team name", // W-ED60
     where: "Where", // W-ED61
     off: "Off", // W-ED62
@@ -568,6 +572,7 @@ export const EDITOR_WORDING = {
     "list-flag": "Name or number on a shirt",
     "list-digits": "Digits in numbers",
     "list-paste": "Pasted players",
+    "letter-case": "Letters of names", // NEW (E4b)
     fallback: "Change",
   } satisfies Record<EditLabel | "fallback", string>,
   /**
@@ -598,6 +603,7 @@ export const EDITOR_WORDING = {
     "list-count": "Shirts for {item}",
     "list-flag": "Name or number of {item}",
     "list-paste": "Pasted {item}", // W-TL44 ("Undone: Pasted 18 players")
+    "letter-case": "Letters of names", // NEW (E4b)
   } as Record<string, string>,
   /**
    * The "Where" chips: words for the products' placement presets, by preset id.

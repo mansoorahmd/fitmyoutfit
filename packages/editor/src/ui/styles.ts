@@ -640,6 +640,14 @@ export const EDITOR_CSS = /* css */ `
 .fmo-done-team-line { margin: 0; display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px; font: var(--fmo-type-body); }
 .fmo-done-team-line > span { min-width: 0; }
 .fmo-done-team[data-state="fix"] .fmo-done-team-line > span { font-weight: 600; }
+.fmo-tl-listgroup ul { list-style: none; margin: 0; padding: 0; }
+.fmo-tl-listbox .fmo-tl-listgroup { display: block; min-height: 0; padding: 0; cursor: default; }
+.fmo-tl-listbox .fmo-tl-listgroup:hover { background: transparent; }
+.fmo-tl-listhead { padding: 4px 12px 0; min-height: 0; font: var(--fmo-type-label); color: var(--fmo-ink-muted); cursor: default; }
+.fmo-tl-listbox .fmo-tl-listhead { display: block; min-height: 24px; }
+.fmo-tl-scrim { position: absolute; inset: 0; z-index: 7; background: rgb(11 21 48 / 0.32); }
+.fmo-tl-menu.fmo-tl-sheet { position: absolute; z-index: 8; inset: auto 0 0 0; width: auto; max-height: 100%; overflow-y: auto; padding: 8px var(--fmo-panel-pad) 12px; border: 0; border-top: 1px solid var(--fmo-border); border-radius: 16px 16px 0 0; box-shadow: 0 -6px 20px rgb(11 21 48 / 0.22); }
+.fmo-tl-sheet-title { margin: 0; padding: 8px 12px 4px; }
 .fmo-tl-toolbar-start { display: inline-flex; align-items: center; gap: 4px; }
 /* The paste view (5.2): a sub-view of the Players panel; the actions are stuck to the bottom. */
 .fmo-pv { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; position: relative; }

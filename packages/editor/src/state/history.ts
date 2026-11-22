@@ -88,6 +88,8 @@ export const EDIT_LABELS = [
   "list-flag",
   "list-digits",
   "list-paste",
+  // Names in capitals or as typed (decision 012).
+  "letter-case",
 ] as const;
 export type EditLabel = (typeof EDIT_LABELS)[number];
 
