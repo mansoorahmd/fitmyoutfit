@@ -4,11 +4,16 @@
   "private": true,
   "description": "Storefront for the FitMyOutfit custom apparel store",
   "scripts": {
+    "ensure-editor": "node scripts/ensure-editor.mjs",
+    "predev": "npm run ensure-editor",
     "dev": "node scripts/next-with-port.mjs dev --turbopack",
+    "prebuild": "npm run ensure-editor",
     "build": "next build",
     "start": "node scripts/next-with-port.mjs start",
     "lint": "eslint src",
+    "pretypecheck": "npm run ensure-editor",
     "typecheck": "tsc --noEmit",
+    "pretest": "npm run ensure-editor",
     "test": "vitest run",
     "test:watch": "vitest"
   },
