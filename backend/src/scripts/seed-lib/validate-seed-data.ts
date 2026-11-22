@@ -6,6 +6,7 @@
 import type { PlaceholderData, ProductKind, SeedData } from "../seed-data/types"
 import { readCodMaxTotal } from "../../lib/settings/cod-max-total"
 import { readDeliveryDays } from "../../lib/settings/delivery-days"
+import { readAddOnMinGarmentQuantity } from "../../lib/settings/addon-min-garment-quantity"
 import { readMinGarmentQuantity } from "../../lib/settings/min-garment-quantity"
 import { readRosterLimits } from "../../lib/settings/roster-limits"
 import { readRushPercentage } from "../../lib/settings/rush-percentage"
@@ -299,6 +300,10 @@ export function validateSeedData(seed: SeedData): string[] {
     const minimum = readMinGarmentQuantity(region.metadata, region.name)
     if (!minimum.ok) {
       problems.push(`regions: ${minimum.error}`)
+    }
+    const addOnMinimum = readAddOnMinGarmentQuantity(region.metadata, region.name)
+    if (!addOnMinimum.ok) {
+      problems.push(`regions: ${addOnMinimum.error}`)
     }
     const providers = region.payment_providers
     if (!Array.isArray(providers) || providers.length === 0) {

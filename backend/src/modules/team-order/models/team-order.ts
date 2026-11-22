@@ -1,5 +1,5 @@
 import { model } from "@medusajs/framework/utils"
-import { TEAM_ORDER_STATUSES } from "../constants"
+import { TEAM_ORDER_KINDS, TEAM_ORDER_STATUSES } from "../constants"
 
 /**
  * A team order: an organizer's order for a team, with its team list (roster-entry.ts).
@@ -12,6 +12,11 @@ import { TEAM_ORDER_STATUSES } from "../constants"
  * `need_by_date` is a calendar date (YYYY-MM-DD); the latest day to sign is worked out from it
  * (lib/rules/team-order-schedule.ts). `rush_requested` is the organizer's choice of rush delivery
  * (charging for it belongs to the payments milestone).
+ *
+ * `kind` is `order` (an ordinary team order), `add_on` (a late joiner's order, linked to the first
+ * order) or `reorder` (a new full order made from a signed past one). `linked_order_id` is the order
+ * an add-on or a reorder belongs to (null for an ordinary order). An add-on has the same design
+ * version, product and region as the first order, its own team list, proof and signature.
  *
  * `list_version` counts the saves of the team list, from 1. A save names the version it was made
  * from and is refused when the list has moved on, so two tabs cannot overwrite each other.
@@ -31,5 +36,7 @@ export const TeamOrder = model
     prints_number: model.boolean(),
     list_version: model.number().default(1),
     rush_requested: model.boolean().default(false),
+    kind: model.enum([...TEAM_ORDER_KINDS]).default("order"),
+    linked_order_id: model.text().nullable(),
   })
-  .indexes([{ on: ["customer_id"] }])
+  .indexes([{ on: ["customer_id"] }, { on: ["linked_order_id"] }])

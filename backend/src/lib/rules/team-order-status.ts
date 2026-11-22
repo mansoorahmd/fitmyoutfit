@@ -7,9 +7,10 @@
  * and two ways back to `draft` (the organizer changes something): from `proof_sent` (before
  * signing) and from `approved` (after signing, before any payment).
  *
- * Only the organizer's steps have routes in M2-2. The steps of the payment system and of the admin
- * are listed here so the flow is in one place; the store routes refuse them (they ask `mayStep("organizer", ...)`), and
- * the admin pages (next part) and the payments (M3) call them.
+ * The organizer's steps have store routes (M2-2). The admin's steps have admin routes (M2-3,
+ * lib/rules/team-order-steps.ts lists the buttons); the store routes refuse them (they ask
+ * `mayStep("organizer", ...)`). The payment system's step is made by hand by an admin until the
+ * payments milestone (M3) makes it.
  */
 
 export const TEAM_ORDER_STATUSES = [
@@ -24,8 +25,10 @@ export const TEAM_ORDER_STATUSES = [
 
 export type TeamOrderStatus = (typeof TEAM_ORDER_STATUSES)[number]
 
+export const STEP_ACTORS = ["organizer", "admin", "system"] as const
+
 /** Who makes a step. `system` is the payment system (a payment arrives). */
-export type Actor = "organizer" | "admin" | "system"
+export type Actor = (typeof STEP_ACTORS)[number]
 
 export type Step = {
   from: TeamOrderStatus
@@ -33,6 +36,12 @@ export type Step = {
   /** Short name of the step. */
   name: "make_proof" | "withdraw_proof" | "sign_proof" | "reopen" | "pay_deposit" | "start_production" | "ask_balance" | "ship"
   by: readonly Actor[]
+  /**
+   * Who may make the step by hand while payments do not exist (the admin marks a payment as received
+   * on the admin pages, and the record says so). Only the deposit step has one; when the payments
+   * milestone arrives the system makes that step and this can be removed.
+   */
+  byHand?: readonly Actor[]
 }
 
 export const STEPS: readonly Step[] = [
@@ -41,7 +50,7 @@ export const STEPS: readonly Step[] = [
   { from: "proof_sent", to: "approved", name: "sign_proof", by: ["organizer"] },
   // Only while nothing is paid: `approved` is before the deposit, so no payment can exist yet.
   { from: "approved", to: "draft", name: "reopen", by: ["organizer"] },
-  { from: "approved", to: "deposit_paid", name: "pay_deposit", by: ["system"] },
+  { from: "approved", to: "deposit_paid", name: "pay_deposit", by: ["system"], byHand: ["admin"] },
   { from: "deposit_paid", to: "in_production", name: "start_production", by: ["admin"] },
   { from: "in_production", to: "balance_due", name: "ask_balance", by: ["admin"] },
   // The balance must be paid first; the payments milestone adds that check where the step is made.
@@ -60,6 +69,11 @@ export function stepBetween(from: TeamOrderStatus, to: TeamOrderStatus): Step | 
 /** True when `actor` may move a team order from `from` to `to`. */
 export function mayStep(actor: Actor, from: TeamOrderStatus, to: TeamOrderStatus): boolean {
   return stepBetween(from, to)?.by.includes(actor) ?? false
+}
+
+/** True when `actor` may make the step by hand (a payment marked as received, no payment system yet). */
+export function mayStepByHand(actor: Actor, from: TeamOrderStatus, to: TeamOrderStatus): boolean {
+  return stepBetween(from, to)?.byHand?.includes(actor) ?? false
 }
 
 /** The steps `actor` may make from `status`. */

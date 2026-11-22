@@ -14,6 +14,7 @@ import { buildSizeTable, normalizeSize, readSize, type SizeTable } from "./sizes
 import { cleanText, disallowedNameCharacters, mixesScripts, nameLength } from "./text.js";
 import type {
   LineRef,
+  TakenRef,
   RosterAnalysis,
   RosterLimits,
   RosterLine,
@@ -109,6 +110,32 @@ export function checkRoster(
     else byValue.set(result.value, [index]);
   });
 
+  // Numbers taken outside this list (a late joiner's add-on): value to the places it is taken.
+  const takenByValue = new Map<number, TakenRef[]>();
+  for (const taken of settings.taken ?? []) {
+    const result = checkJerseyNumber(taken.number, limits.numberRules);
+    if (!result.ok) continue;
+    const ref: TakenRef = { source: taken.source };
+    if (taken.orderId !== undefined) ref.orderId = taken.orderId;
+    if (taken.name !== undefined) ref.name = taken.name;
+    const places = takenByValue.get(result.value);
+    if (places) places.push(ref);
+    else takenByValue.set(result.value, [ref]);
+  }
+  const takenProblems = new Map<number, RosterProblem>();
+  for (const [value, indexes] of byValue) {
+    const places = takenByValue.get(value);
+    if (!places) continue;
+    for (const index of indexes) {
+      takenProblems.set(index, {
+        code: places.some((p) => p.source === "first-order") ? "number-taken-first-order" : "number-taken-add-on",
+        ...base(lines[index]!, index),
+        field: "number",
+        detail: { value, takenIn: places },
+      });
+    }
+  }
+
   const duplicateProblems = new Map<number, RosterProblem>();
   for (const [value, indexes] of byValue) {
     if (indexes.length < 2) continue;
@@ -160,7 +187,7 @@ export function checkRoster(
       if (line.number === "") {
         problems.push({ code: "number-missing", ...base(line, index), field: "number" });
       } else {
-        const found = numberProblems.get(index) ?? duplicateProblems.get(index);
+        const found = numberProblems.get(index) ?? duplicateProblems.get(index) ?? takenProblems.get(index);
         if (found) problems.push(found);
       }
     }

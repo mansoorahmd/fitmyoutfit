@@ -104,8 +104,10 @@ describe("planRegions", () => {
   it("adds a missing metadata key and keeps every value that is set", () => {
     const plan = planRegions(
       [
-        region("reg_gb", "UK", "gb", { metadata: { tax_final: true, note: "admin" } }),
-        region("reg_pk", "Pakistan", "pk", { metadata: { tax_final: false, min_garment_quantity: 5 } }),
+        region("reg_gb", "UK", "gb", { metadata: { tax_final: true, note: "admin", addon_min_garment_quantity: 2 } }),
+        region("reg_pk", "Pakistan", "pk", {
+          metadata: { tax_final: false, min_garment_quantity: 5, addon_min_garment_quantity: 3 },
+        }),
       ],
       seeds
     )
@@ -113,15 +115,30 @@ describe("planRegions", () => {
       {
         regionId: "reg_gb",
         seedName: "United Kingdom",
-        metadata: { tax_final: true, note: "admin", min_garment_quantity: 10 },
+        metadata: { tax_final: true, note: "admin", addon_min_garment_quantity: 2, min_garment_quantity: 10 },
         added: ["min_garment_quantity"],
+      },
+    ])
+  })
+
+  it("adds the add-on minimum to a region seeded before M2-3 and keeps the rest", () => {
+    const plan = planRegions(
+      [region("reg_pk", "Pakistan", "pk", { metadata: { tax_final: false, min_garment_quantity: 5 } })],
+      seeds
+    )
+    expect(plan.addMetadata).toEqual([
+      {
+        regionId: "reg_pk",
+        seedName: "Pakistan",
+        metadata: { tax_final: false, min_garment_quantity: 5, addon_min_garment_quantity: 1 },
+        added: ["addon_min_garment_quantity"],
       },
     ])
   })
 
   it("treats null metadata as empty", () => {
     const plan = planRegions([region("reg_pk", "Pakistan", "pk", { metadata: null })], seeds)
-    expect(plan.addMetadata[0].added).toEqual(["tax_final", "min_garment_quantity"])
+    expect(plan.addMetadata[0].added).toEqual(["tax_final", "min_garment_quantity", "addon_min_garment_quantity"])
   })
 
   it("ignores regions that hold none of the seed countries", () => {
