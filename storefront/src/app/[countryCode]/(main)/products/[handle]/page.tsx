@@ -9,7 +9,7 @@ import { HttpTypes } from "@medusajs/types"
 
 type Props = {
   params: Promise<{ countryCode: string; handle: string }>
-  searchParams: Promise<{ v_id?: string }>
+  searchParams: Promise<{ v_id?: string; design?: string }>
 }
 
 export async function generateStaticParams() {
@@ -135,6 +135,7 @@ export default async function ProductPage(props: Props) {
       region={region}
       countryCode={params.countryCode}
       images={images}
+      designSaved={searchParams.design === "saved"}
     />
   )
 }
