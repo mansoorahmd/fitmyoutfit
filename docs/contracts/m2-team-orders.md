@@ -1,12 +1,12 @@
 # Contract: saved designs and team orders (M2), as built
 
-Status: **as built in M2-1, M2-2 and M2-3, on `master` since 22 Nov 2026** (the roster rules package, saved designs with versions, team orders with their team list, the roster proof and its signature, the status flow, the need-by date, late joiners as add-on orders, reorders, the record of steps, the emails, the admin routes). Payments are a later milestone. Written by the backend developer from the code and from real runs against the backend; checked by the coordinator against those runs' output; a QA review of the whole milestone is under way. For a storefront developer: nothing here needs the code.
+Status: **as built in M2-1, M2-2, M2-3 and the fix round M2-4, on `master` since 22 Nov 2026** (the roster rules package, saved designs with versions, team orders with their team list, the roster proof and its signature, the status flow, the need-by date, late joiners as add-on orders, reorders, the record of steps, the emails, the admin routes). Payments are a later milestone. Written by the backend developer from the code and from real runs against the backend; checked by the coordinator against those runs' output; reviewed by QA on 22 Nov 2026 (accepted with fixes; the fixes are in). For a storefront developer: nothing here needs the code.
 
 ## 0. Conventions
 
-- **Base:** the Medusa backend, `/store/...` (and, in section 9, `/admin/...`). Every store route needs the header `x-publishable-api-key` (Medusa's rule; without it Medusa answers 400 before our code runs) **and** a signed-in customer: `Authorization: Bearer <customer token>` (or the session cookie). No sign-in: **401** `{"message":"Unauthorized"}` (Medusa's own body; it has no `code`).
+- **Base:** the Medusa backend, `/store/...` (and, in section 9, `/admin/...`). Every store route needs the header `x-publishable-api-key` (Medusa's rule; without it Medusa answers 400 before our code runs) **and** a signed-in customer: `Authorization: Bearer <customer token>` (or the session cookie). No sign-in: **401** `{"message":"Unauthorized"}` (Medusa's own body; it has no `code`). The same **401** for a token of a customer who has since been deleted (through the admin): every store route of designs and team orders looks the customer up once per request (one primary-key read in the customer module, nothing cached).
 - **How a customer signs in:** `POST /auth/customer/emailpass/register` `{email,password}` gives a token; `POST /store/customers` with that token creates the customer; `POST /auth/customer/emailpass` gives the token to use on the routes below.
-- **Own data only.** A design, a design version, a team order or a proof of another customer is **404**, the same as an unknown id. The lists show only the caller's own.
+- **Own data only.** A design, a design version, a team order or a proof of another customer is **404**, the same as an unknown id. The lists show only the caller's own. An id in the address that cannot name anything (a NUL character, `%00`, or a percent-escape that cannot be decoded, `teamord_%`) is 404 as well, with `code` `design_not_found` on the design routes and `team_order_not_found` on the team-order routes, store and admin; never 500. A text with a NUL character in the body of a team-order request is **400** `text_contains_null_character`.
 - **Names are snake_case** in bodies and answers (`no_name`, `team_name`, `design_version_id`). The design JSON is stored and returned exactly as sent, so its own names (`schemaVersion`, `teamName`, ...) are the editor's.
 - **Refusals** from these routes have one shape: `{ "type": "invalid_data" | "not_found" | "not_allowed" | "conflict", "code": "<machine code>", "message": "<sentence for developers, not for customers>", ...extra }`. Build the customer's wording from `code`. Status: 400 for `invalid_data` and `not_allowed`, 404 for `not_found`, 409 for `conflict`. A 500 is Medusa's usual `{type, message}` (a missing store or region setting; the message names it).
 - **Dates** are ISO 8601 strings (`created_at`, `signed_at`); `need_by_date` and the other calendar dates (`today`, `latest_sign_standard`, `promised_delivery_date`, ...) are `YYYY-MM-DD`.
@@ -26,13 +26,13 @@ version  { id, design_id, version: number, product_id, schema_version: number, c
 
 ### What a version may hold
 
-`design` must be a JSON object (not null, not an array) with a whole-number `schemaVersion` of 1 or more, and at most **1,000,000 bytes** as JSON text. Nothing else is checked: **the editor's full schema is not validated by the server yet** (follow-up). The request body limit of the two POST routes is 2 MB; a larger body is 413. `product_id` is a Medusa product id; the product must exist and must not be the fit kit or the rush add-on. Nothing is ever overwritten: every save is a new version, numbered from 1 in its design; two saves at the same moment get different numbers.
+`design` must be a JSON object (not null, not an array) with a whole-number `schemaVersion` of 1 or more, at most **1,000,000 bytes** as JSON text, nested at most **64 levels** deep (`MAX_DESIGN_DEPTH`; the editor's sample designs are 5 deep), and without a NUL character (`\u0000`) in any text or key (the database cannot store one). Nothing else is checked: **the editor's full schema is not validated by the server yet** (follow-up). The request body limit of the two POST routes is 2 MB; a larger body is 413. `product_id` is a Medusa product id; the product must exist and must not be the fit kit or the rush add-on. Nothing is ever overwritten: every save is a new version, numbered from 1 in its design; two saves at the same moment get different numbers.
 
 ### POST /store/designs
 
 Body `{ "name"?: string, "product_id": string, "design": object }`. `name`: 1 to 100 characters, no control characters (default "Untitled design").
 **201** `{ "design": design, "version": version }` (version number 1, without its JSON).
-Refusals (400): `design_not_an_object`, `design_schema_version`, `design_too_large`, `design_name_invalid`, `product_id_required`, `product_not_found`, `product_not_designable`.
+Refusals (400): `design_not_an_object`, `design_schema_version`, `design_too_deep`, `design_contains_null_character`, `design_too_large`, `design_name_invalid`, `product_id_required`, `product_not_found`, `product_not_designable`.
 
 ### GET /store/designs
 
@@ -163,7 +163,7 @@ links {                                               // what the order is linke
 
 | code | field | meaning | `detail` |
 | --- | --- | --- | --- |
-| `name-missing` | name | the design prints names, the line has no "no name" flag, the name is empty | |
+| `name-missing` | name | the design prints names, the line has no "no name" flag, and the name is empty or has no letter (only `-`, `'`, `.`, a combining mark or the zero-width non-joiner) | |
 | `number-missing` | number | the design prints numbers, the line has no "no number" flag, the number is empty | |
 | `size-missing` | size | no size | |
 | `number-not-digits` | number | a character that is not a digit (letters, a space inside, a sign, full-width digits) | |
@@ -218,7 +218,7 @@ Body `{ "team_name": string }`. **200** the whole read answer. 400 `team_name_in
 
 ### DELETE /store/team-orders/:id
 
-Deletes a draft team order and its list (an add-on while it is a draft, too). **200** `{ "id", "object": "team_order", "deleted": true }`. 400 `team_order_not_draft` (not a draft), 400 `team_order_has_linked_orders` (it has add-ons or reorders); 404. Proofs of a deleted order are kept in the database (never deleted).
+Deletes a draft team order and its list (an add-on while it is a draft, too), in one transaction under a lock on the order's row. **200** `{ "id", "object": "team_order", "deleted": true }`. 400 `team_order_not_draft` (not a draft), 400 `team_order_has_linked_orders` (it has add-ons or reorders); 404. A proof made at the same moment as the delete and the delete cannot both succeed: if the delete wins, the proof request is answered 404; if the proof wins, the delete is 400 `team_order_not_draft`. Proofs of a deleted order that were made earlier (withdrawn or replaced ones of a draft that went back) are kept in the database, as before; a proof can no longer be made for it.
 
 ### POST /store/team-orders/:id/design-version
 
@@ -237,7 +237,7 @@ Body `{ "version": number, "lines": line-input[] }`.
 Cleaning before storage: name and number are trimmed, runs of white space become one space, text is put in Unicode NFC, direction marks and zero-width spaces are removed (the zero-width non-joiner stays); the number is kept as written (`07`, `٧` stay); a size that is one of the product's (in any usual spelling, any case) is stored in the product's spelling (`xxl` becomes `2XL`), any other size is stored as typed; nothing is shortened or capitalised.
 
 Refusals:
-- **400 `roster_malformed`**: `lines` is not an array, a line is not an object, a field has the wrong type (text not a string, `count` not a number, a flag not a boolean), a text is too long, or two lines share an id. `detail` says where: `{ code: "not-a-list" | "line-not-an-object" | "wrong-type" | "too-long" | "duplicate-line-id", index?, field?, max?, id? }` (`field` in the API's names, e.g. `no_name`).
+- **400 `roster_malformed`**: `lines` is not an array, a line is not an object, a field has the wrong type (text not a string, `count` not a whole number that the stored count can hold, that is a fraction such as `1.5` or a number beyond 2,147,483,647 in size, a flag not a boolean), a text is too long, or two lines share an id. `detail` says where: `{ code: "not-a-list" | "line-not-an-object" | "wrong-type" | "too-long" | "duplicate-line-id", index?, field?, max?, id? }` (`field` in the API's names, e.g. `no_name`; for a bad count `detail` is `{ code: "wrong-type", index, field: "count" }`). A whole number outside 1 to 10 is not malformed: it is saved and reported as `quantity-range`.
 - **400 `roster_too_many_lines`**: more than the limit (default 100); `detail { code: "too-many-lines", lines, max }`.
 - **400 `roster_version_required`**: `version` missing or not a whole number of 1 or more.
 - **400 `team_order_not_editable`** with `status`: the team order is not a draft (a proof is out or signed, or later). This also holds when a proof is made at the same moment as the save: the list is frozen from the moment the proof exists.
@@ -326,9 +326,9 @@ Refusals (400 `not_allowed`): `add_on_of_add_on` (an add-on cannot have add-ons;
 ### What is different for an add-on
 
 - **It is read, filled, proofed and signed through the existing routes** (sections 2 and 3); a draft add-on can be deleted (`DELETE /store/team-orders/:id`), one with a proof out cannot. Reading the first order lists its add-ons and their statuses in `links.add_ons`.
-- **Its team-list checks also look at the numbers already taken**: the printed numbers of the first order's signed list (its current signed proof's snapshot), and of the first order's **other** add-ons whose proof is out or signed (an add-on in `draft` takes no number yet; one that went back to draft frees its numbers). A taken number is a problem on the line: `number-taken-first-order` or `number-taken-add-on` (section 2, with where it is taken). `7`, `07` and Arabic digits are the same number, as for duplicates. A line with "no number", or a design that prints no numbers, takes and conflicts with nothing. The proof is refused (`roster_has_problems`) while a number is taken. The check is made when the list is read or the proof is made; two add-ons that make a proof at the very same moment with the same number can both pass (not guarded).
+- **Its team-list checks also look at the numbers already taken**: the printed numbers of the first order's signed list (its current signed proof's snapshot), and of the first order's **other** add-ons whose proof is out or signed (an add-on in `draft` takes no number yet; one that went back to draft frees its numbers). A taken number is a problem on the line: `number-taken-first-order` or `number-taken-add-on` (section 2, with where it is taken). `7`, `07` and Arabic digits are the same number, as for duplicates. A line with "no number", or a design that prints no numbers, takes and conflicts with nothing. The proof is refused (`roster_has_problems`) while a number is taken. The check is made when the list is read and again when the proof is made, inside the transaction that makes it, under a lock on the first order's row: of two add-ons of one first order that make a proof at the very same moment with the same number, exactly one gets the proof and the other is refused with `roster_has_problems` (its list then shows `number-taken-add-on`).
 - **Its minimum is its own**: the region's `addon_min_garment_quantity` (Region metadata; **placeholder 1 in every region**, seeded, for the founders to decide), not the region's ordinary minimum. `roster.summary.minimum` shows it.
-- **The first order cannot go back to draft while it has add-ons** (`team_order_has_add_ons`, section 3), and cannot be deleted.
+- **The first order cannot go back to draft while it has add-ons** (`team_order_has_add_ons`, section 3), and cannot be deleted. This also holds when the add-on is made at the same moment as the reopen: both steps lock the first order's row and check under the lock, so of the two exactly one wins (an add-on made against a first order that has just gone back to draft is refused with `team_order_not_signed`, with `status` `draft`).
 - **Add-ons and the emails and steps:** an add-on gets the same emails as any order, with a sentence naming it as the add-on order (section 7); the admin steps its status like any order's (section 9). Moving an add-on never moves the first order.
 
 ## 6. Reorders

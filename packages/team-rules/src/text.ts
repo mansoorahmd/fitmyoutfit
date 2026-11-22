@@ -49,6 +49,17 @@ export function disallowedNameCharacters(name: string): NameCharacterReport | nu
   return found.length > 0 ? { characters: found, hasDigit } : null;
 }
 
+/**
+ * True when the name holds at least one letter (any script). A name of only the allowed marks (a
+ * hyphen, an apostrophe, a full stop, the ZWNJ, a lone combining mark) shows nothing to print.
+ */
+export function hasLetter(name: string): boolean {
+  for (const char of name) {
+    if (IS_LETTER.test(char)) return true;
+  }
+  return false;
+}
+
 /** The length of a name in characters: marks and the zero-width non-joiner do not count. */
 export function nameLength(name: string): number {
   let length = 0;

@@ -13,6 +13,7 @@ import {
   kindLabel,
   personText,
   playersText,
+  proofListTitle,
   proofStatusColor,
   proofStatusLabel,
   rangeText,
@@ -80,6 +81,10 @@ describe("formatting", () => {
     expect(playersText(1, 1)).toBe("1 player")
     expect(playersText(12, 12)).toBe("12 players")
     expect(playersText(5, 7)).toBe("5 players, 7 pieces")
+    expect(proofListTitle(true, 1)).toBe("The list as signed (1 player)")
+    expect(proofListTitle(true, 12)).toBe("The list as signed (12 players)")
+    expect(proofListTitle(false, 1)).toBe("The list as sent (1 player)")
+    expect(proofListTitle(false, 0)).toBe("The list as sent (0 players)")
     expect(sizesText([{ size: "S", pieces: 3 }, { size: "M", pieces: 0 }, { size: "L", pieces: 4 }], [{ size: "kid", pieces: 1 }])).toBe(
       "S 3, L 4, kid 1"
     )

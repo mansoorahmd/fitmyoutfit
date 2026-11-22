@@ -18,6 +18,12 @@ describe("parseRosterInput: the shape only", () => {
     expect(parseRosterInput([])).toEqual({ ok: true, lines: [] });
   });
 
+  it("keeps a whole count outside the limits (a problem for the checks) up to what a 32-bit column holds", () => {
+    for (const count of [0, -1, 11, 99, 2147483647, -2147483647]) {
+      expect(parseRosterInput([{ count }])).toMatchObject({ ok: true, lines: [{ count }] });
+    }
+  });
+
   it("accepts an incomplete or wrong list: that is for the checks, not the shape", () => {
     expect(parseRosterInput([{ name: "", number: "abc", size: "4XL", count: 99 }]).ok).toBe(true);
   });
@@ -34,6 +40,13 @@ describe("parseRosterInput: the shape only", () => {
     [[{ size: {} }], { code: "wrong-type", index: 0, field: "size" }],
     [[{ count: "2" }], { code: "wrong-type", index: 0, field: "count" }],
     [[{ count: Number.NaN }], { code: "wrong-type", index: 0, field: "count" }],
+    [[{}, { count: 1.5 }], { code: "wrong-type", index: 1, field: "count" }],
+    [[{ count: 10.5 }], { code: "wrong-type", index: 0, field: "count" }],
+    [[{ count: 3e9 }], { code: "wrong-type", index: 0, field: "count" }],
+    [[{ count: 1e300 }], { code: "wrong-type", index: 0, field: "count" }],
+    [[{ count: -3e9 }], { code: "wrong-type", index: 0, field: "count" }],
+    [[{ count: 2147483648 }], { code: "wrong-type", index: 0, field: "count" }],
+    [[{ count: Number.POSITIVE_INFINITY }], { code: "wrong-type", index: 0, field: "count" }],
     [[{ noName: "yes" }], { code: "wrong-type", index: 0, field: "noName" }],
     [[{ noNumber: 1 }], { code: "wrong-type", index: 0, field: "noNumber" }],
     [[{ id: 3 }], { code: "wrong-type", index: 0, field: "id" }],

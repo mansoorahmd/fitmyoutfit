@@ -19,6 +19,7 @@ import {
   kindLabel,
   personText,
   playersText,
+  proofListTitle,
   proofStatusColor,
   proofStatusLabel,
   scheduleColor,
@@ -299,7 +300,7 @@ const TeamOrderPage = () => {
             <div className="px-6 py-3">
               <details>
                 <summary className="cursor-pointer txt-small text-ui-fg-interactive">
-                  The list as {proof.status === "signed" ? "signed" : "sent"} ({proof.snapshot.lines.length} players)
+                  {proofListTitle(proof.status === "signed", proof.snapshot.lines.length)}
                 </summary>
                 <div className="mt-2">
                   <LinesTable lines={proof.snapshot.lines} />

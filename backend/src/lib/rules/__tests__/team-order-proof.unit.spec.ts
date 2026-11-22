@@ -83,6 +83,13 @@ describe("readSignedName", () => {
     expect(readSignedName("  Ali   Khan ")).toBe("Ali Khan")
     expect(readSignedName("علی خان")).toBe("علی خان")
   })
+  it("accepts exactly 100 characters (letters or emoji counted once each) and refuses 101", () => {
+    expect(readSignedName("a".repeat(100))).toBe("a".repeat(100))
+    expect(readSignedName("😀".repeat(100))).toBe("😀".repeat(100))
+    expect(readSignedName("a".repeat(101))).toBeNull()
+    expect(readSignedName("😀".repeat(101))).toBeNull()
+    expect(readSignedName(" " + "a".repeat(100) + " ")).toBe("a".repeat(100))
+  })
   it.each(["", "   ", "​", "a".repeat(101), 5, null, undefined, "a\nb", "a\u0000b"])("refuses %j", (v) => {
     expect(readSignedName(v)).toBeNull()
   })

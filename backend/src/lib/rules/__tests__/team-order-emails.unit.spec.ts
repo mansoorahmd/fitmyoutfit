@@ -120,3 +120,21 @@ describe("mayRetry", () => {
     expect(mayRetry({ status: "pending", attempts: 0, lastAttemptAt: null }, now)).toBe(true)
   })
 })
+
+describe("reminderDue: on the latest day itself the standard count still holds (0 is not 'past')", () => {
+  // The rush day is 3 or 1 days after the standard day here, so a reminder would go out if a latest
+  // day that is today were counted as past and the rush day took over (standard >= 0 turned > 0).
+  it.each([
+    ["rush day 3 days later", { standard: 13, rush: 10 }],
+    ["rush day 1 day later", { standard: 11, rush: 10 }],
+  ])("sends nothing on the standard latest day: %s", (_label, days) => {
+    const needBy = "2026-12-31"
+    const latestStandard = addCalendarDays(needBy, -days.standard)
+    const today = scheduleFor({ needBy, today: latestStandard, days })
+    expect(today.days_left_standard).toBe(0)
+    expect([3, 1]).toContain(today.days_left_rush)
+    expect(reminderDue({ status: "draft" }, today)).toBeNull()
+    expect(reminderDue({ status: "proof_sent" }, today)).toBeNull()
+  })
+
+})

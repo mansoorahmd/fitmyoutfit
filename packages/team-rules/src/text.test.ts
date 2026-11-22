@@ -48,3 +48,32 @@ describe("mixesScripts", () => {
     expect(mixesScripts("Ali 7")).toBe(false);
   });
 });
+
+describe("cleanText: every direction mark is removed, and its neighbours stay", () => {
+  const removed = [
+    "\u200B",
+    "\u200E",
+    "\u200F",
+    "\u202A",
+    "\u202B",
+    "\u202C",
+    "\u202D",
+    "\u202E",
+    "\u2066",
+    "\u2067",
+    "\u2068",
+    "\u2069",
+    "\uFEFF",
+  ];
+  it.each(removed.map((mark) => [mark.codePointAt(0)!.toString(16).toUpperCase().padStart(4, "0"), mark]))(
+    "removes U+%s",
+    (_code, mark) => {
+      expect(cleanText(`a${mark}b`)).toBe("ab");
+    },
+  );
+
+  it("keeps the zero-width non-joiner and joiner next to them", () => {
+    expect(cleanText("a\u200Cb")).toBe("a\u200Cb");
+    expect(cleanText("a\u200Db")).toBe("a\u200Db");
+  });
+});
