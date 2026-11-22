@@ -370,3 +370,82 @@ describe("normalising for storage", () => {
     expect(input[0]!.name).toBe(" A ");
   });
 });
+
+describe("numbers already taken in the first order and its other add-ons (late joiners)", () => {
+  const taken = (list: NonNullable<RosterSettings["taken"]>): RosterSettings => ({ ...BOTH, taken: list });
+
+  it("a number taken in the first order is a problem on the line, naming where", () => {
+    const result = checkRoster(
+      [line({ id: "a", number: "7" }), line({ id: "b", number: "8", name: "Free" })],
+      taken([{ number: "7", source: "first-order", orderId: "teamord_1", name: "Bilal" }]),
+    );
+    expect(result.problems).toEqual([
+      {
+        code: "number-taken-first-order",
+        index: 0,
+        lineId: "a",
+        field: "number",
+        detail: { value: 7, takenIn: [{ source: "first-order", orderId: "teamord_1", name: "Bilal" }] },
+      },
+    ]);
+  });
+
+  it("a number taken in another add-on has its own code", () => {
+    expect(codes([line({ number: "12" })], taken([{ number: "12", source: "add-on", orderId: "teamord_2" }]))).toEqual([
+      "0:number:number-taken-add-on",
+    ]);
+  });
+
+  it("taken in both: the first order's code, both places listed", () => {
+    const result = checkRoster(
+      [line({ number: "9" })],
+      taken([
+        { number: "9", source: "add-on", orderId: "teamord_2" },
+        { number: "09", source: "first-order", orderId: "teamord_1" },
+      ]),
+    );
+    expect(result.problems[0]?.code).toBe("number-taken-first-order");
+    expect(result.problems[0]?.detail?.takenIn).toHaveLength(2);
+  });
+
+  it('"7", "07" and Arabic digits are the same number, on either side', () => {
+    const list = taken([{ number: "٧", source: "first-order" }]);
+    expect(codes([line({ number: "7" })], list)).toEqual(["0:number:number-taken-first-order"]);
+    expect(codes([line({ number: "07" })], list)).toEqual(["0:number:number-taken-first-order"]);
+    expect(codes([line({ number: "۷" })], list)).toEqual(["0:number:number-taken-first-order"]);
+    expect(codes([line({ number: "7" })], taken([{ number: "007", source: "add-on" }]))).toEqual([]);
+    expect(codes([line({ number: "7" })], taken([{ number: "07", source: "add-on" }]))).toEqual([
+      "0:number:number-taken-add-on",
+    ]);
+  });
+
+  it("a free number is fine, and no taken list changes nothing", () => {
+    expect(codes([line({ number: "5" })], taken([{ number: "7", source: "first-order" }]))).toEqual([]);
+    expect(codes([line({ number: "7" })], taken([]))).toEqual([]);
+    expect(codes([line({ number: "7" })])).toEqual([]);
+  });
+
+  it("a taken number that is not a number is ignored", () => {
+    expect(codes([line({ number: "7" })], taken([{ number: "A7", source: "first-order" }, { number: "", source: "add-on" }]))).toEqual([]);
+  });
+
+  it("a number not printed, or switched off on the line, is not compared", () => {
+    const list = taken([{ number: "7", source: "first-order" }]);
+    expect(codes([line({ number: "7", noNumber: true })], list)).toEqual([]);
+    expect(codes([line({ number: "7" })], { ...list, prints: { name: true, number: false } })).toEqual([]);
+  });
+
+  it("a duplicate inside the list is reported as a duplicate, as before", () => {
+    const result = checkRoster(
+      [line({ number: "7" }), line({ number: "07", name: "Other" })],
+      taken([{ number: "7", source: "first-order" }]),
+    );
+    expect(result.problems.map((p) => p.code)).toEqual(["number-duplicate", "number-duplicate"]);
+  });
+
+  it("a taken number does not break the summary's readiness", () => {
+    const analysis = analyzeRoster([line({ number: "7" })], taken([{ number: "7", source: "first-order" }]), { minimum: 1 });
+    expect(analysis.summary.readyForProof).toBe(false);
+    expect(analysis.summary.indexesToFix).toEqual([0]);
+  });
+});
