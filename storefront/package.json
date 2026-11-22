@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@fitmyoutfit/editor": "*",
+    "@fitmyoutfit/team-rules": "*",
     "@headlessui/react": "^2.2.0",
     "@medusajs/icons": "2.22.6",
     "@medusajs/js-sdk": "2.22.6",
