@@ -457,10 +457,10 @@ export function EditorShell(props: EditorShellProps) {
   const chosenLine = lines.length > 0 ? lines.find((l) => l.id === chosenId) : undefined;
   const shirt = chosenLine ? playerForShirt(chosenLine, prints) : null;
   // Typing never waits for the shirt (13.5): the shirt follows the keys a moment after they pause; choosing another line shows its shirt at once.
-  const shirtKey = shirt ? `${shirt.name} ${shirt.number}` : null;
+  const shirtKey = shirt ? `${shirt.name}\u0000${shirt.number}` : null;
   const shirtShown = useTrailing(shirtKey, 120, chosenId);
-  const shirtName = shirtShown === null ? null : shirtShown.split(" ")[0]!;
-  const shirtNumber = shirtShown === null ? null : (shirtShown.split(" ")[1] ?? "");
+  const shirtName = shirtShown === null ? null : shirtShown.split("\u0000")[0]!;
+  const shirtNumber = shirtShown === null ? null : (shirtShown.split("\u0000")[1] ?? "");
   const withPlayer = useCallback((d: DesignDocument): DesignDocument => (shirtName === null || shirtNumber === null ? d : designWithPlayer(d, { name: shirtName, number: shirtNumber })), [shirtName, shirtNumber]);
   const withPlayerRef = useRef(withPlayer);
   useEffect(() => {

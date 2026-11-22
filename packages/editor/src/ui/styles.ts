@@ -525,7 +525,8 @@ export const EDITOR_CSS = /* css */ `
 /* The team list (08-team-list.md section 14): the Players tab's list view. */
 .fmo-editor[data-layout="wide"][data-list="true"] { grid-template: "top top top" 64px "rail panel work" 1fr / 88px 480px 1fr; }
 .fmo-panel-body:has(.fmo-tl) { overflow: hidden; display: flex; flex-direction: column; padding-bottom: 0; }
-.fmo-panel-inner:has(.fmo-tl) { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; max-width: none; width: 100%; margin: 0; }
+.fmo-panel-inner:has(.fmo-tl) { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; width: 100%; }
+.fmo-editor[data-layout="short"][data-list="true"] .fmo-panel { width: 400px; }
 .fmo-tl { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; position: relative; }
 .fmo-tl > * + * { margin-top: 0; }
 .fmo-tl-bar { flex: none; display: flex; align-items: center; gap: 8px; min-height: 48px; }
@@ -547,6 +548,7 @@ export const EDITOR_CSS = /* css */ `
 .fmo-tl-heading span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fmo-tl-heading .fmo-tl-h-size { grid-column: 4; text-align: center; }
 .fmo-tl-rows { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; position: relative; margin-inline: calc(-1 * var(--fmo-panel-pad)); padding-bottom: 16px; scroll-padding-block: 8px; }
+.fmo-tl-above { padding-inline: var(--fmo-panel-pad); }
 .fmo-tl-list { list-style: none; margin: 0; padding: 0; }
 .fmo-tl-line { position: relative; padding: 4px var(--fmo-panel-pad) 4px; outline: none; }
 .fmo-tl-line:hover { background: color-mix(in srgb, var(--fmo-surface-alt) 50%, transparent); }

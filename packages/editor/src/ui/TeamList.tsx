@@ -403,34 +403,10 @@ export function TeamListView({ initialDetailsOpen }: { initialDetailsOpen?: bool
       {w.style} ›
     </button>
   );
-  return (
-    <div className="fmo-tl" ref={root} data-keep-typing data-testid="team-list" data-keyboard={typingShort ? "true" : undefined} onFocus={onFocusIn} onBlur={onFocusOut}>
-      <div className="sr-only fmo-sr-only" role="status" aria-live="polite" data-testid="tl-live">{spoken}</div>
-      {!empty && (
-        <div className="fmo-tl-bar" data-testid="tl-summary-bar">
-          <button type="button" className="fmo-tl-count" aria-expanded={detailsOpen} aria-label={detailsOpen ? w.summaryClose : w.summaryOpen} onClick={() => setDetailsOpen((o) => !o)} data-testid="tl-summary-toggle">
-            <EditorIcon name={detailsOpen ? "chevronUp" : "chevronDown"} size={20} />
-            <span data-testid="tl-count-line">
-              {typingShort ? shortLine : countLine}
-              {!typingShort && players > 0 && analysis.toFix.length === 0 && <EditorIcon name="check" size={16} className="fmo-tl-ok" />}
-            </span>
-          </button>
-          {analysis.toFix.length > 0 && (
-            <button type="button" className="fmo-btn fmo-btn-text fmo-tl-next" aria-label={fill(w.nextToFixName, { k: analysis.toFix.length })} onClick={() => goToFix(1)} data-testid="tl-next-to-fix">
-              {w.nextToFix} ›
-            </button>
-          )}
-          {inBar && !typingShort && (
-            <>
-              {sortButton}
-              {styleButton}
-            </>
-          )}
-          <button type="button" className="fmo-icon-btn fmo-tl-plus" aria-label={w.addPlayer} aria-disabled={atLimit} onClick={() => !atLimit && addAndFocus()} data-testid="tl-add-top">
-            <EditorIcon name="plus" />
-          </button>
-        </div>
-      )}
+  // Under the summary bar: the details, the minimum, Sort and Style, notes. On a desktop they sit between the bar and the lines; on a phone
+  // they scroll with the lines (the bar alone is stuck at the top), so the lines get the room (3.2).
+  const above = (
+    <>
       {!empty && detailsOpen && !typingShort && (
         <div className="fmo-tl-details" data-testid="tl-summary-details">
           {summary.pieces !== summary.players && (
@@ -490,6 +466,37 @@ export function TeamListView({ initialDetailsOpen }: { initialDetailsOpen?: bool
           <button type="button" className="fmo-btn fmo-btn-text" onClick={() => startOnlyFix(false)}>{w.showAll}</button>
         </p>
       )}
+    </>
+  );
+  return (
+    <div className="fmo-tl" ref={root} data-keep-typing data-testid="team-list" data-keyboard={typingShort ? "true" : undefined} onFocus={onFocusIn} onBlur={onFocusOut}>
+      <div className="sr-only fmo-sr-only" role="status" aria-live="polite" data-testid="tl-live">{spoken}</div>
+      {!empty && (
+        <div className="fmo-tl-bar" data-testid="tl-summary-bar">
+          <button type="button" className="fmo-tl-count" aria-expanded={detailsOpen} aria-label={detailsOpen ? w.summaryClose : w.summaryOpen} onClick={() => setDetailsOpen((o) => !o)} data-testid="tl-summary-toggle">
+            <EditorIcon name={detailsOpen ? "chevronUp" : "chevronDown"} size={20} />
+            <span data-testid="tl-count-line">
+              {typingShort ? shortLine : countLine}
+              {!typingShort && players > 0 && analysis.toFix.length === 0 && <EditorIcon name="check" size={16} className="fmo-tl-ok" />}
+            </span>
+          </button>
+          {analysis.toFix.length > 0 && (
+            <button type="button" className="fmo-btn fmo-btn-text fmo-tl-next" aria-label={fill(w.nextToFixName, { k: analysis.toFix.length })} onClick={() => goToFix(1)} data-testid="tl-next-to-fix">
+              {w.nextToFix} ›
+            </button>
+          )}
+          {inBar && !typingShort && (
+            <>
+              {sortButton}
+              {styleButton}
+            </>
+          )}
+          <button type="button" className="fmo-icon-btn fmo-tl-plus" aria-label={w.addPlayer} aria-disabled={atLimit} onClick={() => !atLimit && addAndFocus()} data-testid="tl-add-top">
+            <EditorIcon name="plus" />
+          </button>
+        </div>
+      )}
+      {wide && above}
       {wide && !empty && shownLines.length > 0 && (
         <div className="fmo-tl-heading" aria-hidden="true">
           <span className="fmo-tl-index">#</span>
@@ -499,6 +506,7 @@ export function TeamListView({ initialDetailsOpen }: { initialDetailsOpen?: bool
         </div>
       )}
       <div className="fmo-tl-rows" ref={rows} data-testid="tl-rows">
+        {!wide && <div className="fmo-tl-above">{above}</div>}
         {empty ? (
           <div className="fmo-tl-empty" data-testid="tl-empty">
             <h3 className="fmo-section-title">{w.empty.title}</h3>
