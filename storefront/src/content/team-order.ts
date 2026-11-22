@@ -237,7 +237,7 @@ export const teamOrderContent = {
       text: "Another tab or device saved a different list for this team order. Nothing you typed here has been thrown away. Choose which one to keep.",
       keepMine: "Keep what I typed here",
       useSaved: "Use the saved list",
-      useSavedNote: "Using the saved list replaces what is in the list here.",
+      useSavedNote: "Using the saved list replaces what is in the list here. Keeping yours replaces the saved list.",
     },
     // DRAFT WORDING. No id: leaving the designer saves a new version of the design when it changed.
     leaving: {

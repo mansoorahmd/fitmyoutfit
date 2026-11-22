@@ -32,8 +32,10 @@ export default function DesignerMenu({ links, onLeave }: { links: LeaveLink[]; o
     }
   }, [open])
 
+  // The wrapper sits a little closer to its neighbours (the button stays 44 px), so a phone's top bar
+  // still has room to say "Not saved" in full.
   return (
-    <div ref={root} className="relative" data-testid="designer-menu">
+    <div ref={root} className="relative -ms-2 -me-0.5" data-testid="designer-menu">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
