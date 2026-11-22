@@ -144,7 +144,7 @@ describe("order history and overview (05, 9.2 and 9.3)", () => {
   it("the empty state is the heading and the home page's button", () => {
     render(<NoOrders />)
     expect(screen.getByRole("heading", { level: 2 })).toHaveTextContent("No orders yet")
-    expect(screen.getByRole("link", { name: "Start your team kit" })).toHaveAttribute("href", "/pk/store")
+    expect(screen.getByRole("link", { name: "Start your team kit" })).toHaveAttribute("href", "/pk/design")
   })
 
   it("overview: recent orders with See all orders, and the default address", () => {

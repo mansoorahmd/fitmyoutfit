@@ -283,7 +283,9 @@ describe("to and from the editor's saved list", () => {
     const view = parseTeamOrderAnswer(apiAnswer())!
     const list = savedListFromView(view, "stand-in-jersey")
     expect(readSavedList(list, { productId: "stand-in-jersey" }).map((l) => l.id)).toEqual(view.lines.map((l) => l.id))
-  })
+    // and under any other id it would be dropped: why the store's "prod_..." id must not be handed over
+    expect(readSavedList({ ...list, productId: view.productId }, { productId: "stand-in-jersey" })).toEqual([])
+  }, 60000)
 
   it("says when the editor would drop the list (too many lines for its limits), and when a count out of range is still fine", () => {
     const view = parseTeamOrderAnswer(apiAnswer())!
