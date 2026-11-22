@@ -116,7 +116,10 @@ export function patchFabricShader(
   // E3g: the knit fades out where one tile is smaller than about eight pixels (no shimmer when it turns or recedes).
   if (weave) {
     // The chunk is expanded here (the shader still says `#include <normal_fragment_maps>` when this runs).
-    const fade = "vec2 fmoPx = fwidth( vNormalMapUv ); mapN.xy *= normalScale * ( 1.0 - smoothstep( 0.08, 0.14, max( fmoPx.x, fmoPx.y ) ) );";
+    // The amount is one uniform for the whole garment, set from the zoom in CSS pixels (knitAmount); the per-pixel
+    // fade stays only as a guard against shimmer where a tile is under about three device pixels (very grazing).
+    const fade = "vec2 fmoPx = fwidth( vNormalMapUv ); mapN.xy *= normalScale * fmoKnit * ( 1.0 - smoothstep( 0.3, 0.5, max( fmoPx.x, fmoPx.y ) ) );";
+    fragmentShader = fragmentShader.replace("uniform float fmoInsideMix;", "uniform float fmoInsideMix;\nuniform float fmoKnit;");
     fragmentShader = fragmentShader.replace("#include <normal_fragment_maps>", ShaderChunk.normal_fragment_maps.replace("mapN.xy *= normalScale;", fade));
   }
   if (vertexShader === shader.vertexShader || fragmentShader === shader.fragmentShader) {
@@ -129,6 +132,8 @@ export function patchFabricShader(
 export interface Fabric {
   /** The texture the inside shows (the colour zones without prints), or null to show the outside's texture. */
   setInsideMap(texture: Texture | null): void;
+  /** How much of the knit shows, 0 to 1 (fabric-weave.ts `knitAmount`); no effect on a fabric without a knit. */
+  setKnit(amount: number): void;
 }
 
 /**
@@ -153,12 +158,14 @@ export function makeFabric(
   if (weave) standard.normalMap = weaveTexture(weaveRepeat);
   const insideMap: { value: Texture | null } = { value: null };
   const insideMix = { value: 0 };
+  const knit = { value: 0 };
   material.onBeforeCompile = (parameters: WebGLProgramParametersWithUniforms) => {
     const patched = patchFabricShader(parameters, hasOcclusion, shading, weave);
     parameters.vertexShader = patched.vertexShader;
     parameters.fragmentShader = patched.fragmentShader;
     parameters.uniforms.fmoInsideMap = insideMap;
     parameters.uniforms.fmoInsideMix = insideMix;
+    parameters.uniforms.fmoKnit = knit;
   };
   const key = `fmo-fabric:${hasOcclusion ? 1 : 0}:${shading.outsideFloor}:${shading.insideFloor}:${shading.insideOpen}:${shading.sheen ?? 0}:${weave ? 1 : 0}`;
   material.customProgramCacheKey = () => key;
@@ -167,6 +174,9 @@ export function makeFabric(
     setInsideMap(texture) {
       insideMap.value = texture;
       insideMix.value = texture ? 1 : 0;
+    },
+    setKnit(amount) {
+      knit.value = amount;
     },
   };
 }

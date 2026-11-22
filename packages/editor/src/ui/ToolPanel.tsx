@@ -69,6 +69,8 @@ export interface ToolPanelProps {
   /** E3e: how much taller each resting height may grow to end on a whole row (layout.panelGrowRoom); none when absent. */
   growRoom?: { normal: number; expanded: number };
   typing: boolean;
+  /** The team list (08-team-list.md 3.2) opens at the expanded height and stays there unless the coach asks for less: its content is not "short" when it is empty. */
+  holdExpanded?: boolean;
   onDetent: (detent: PanelDetent) => void;
   onClose: () => void;
   /** The panel's size as it settles (for the camera's framing). */
@@ -156,7 +158,7 @@ export function ToolPanel(props: ToolPanelProps) {
     onDetent.current = props.onDetent;
   });
   useEffect(() => {
-    if (compact && detent === "expanded" && fitsNormal) onDetent.current("normal");
+    if (compact && detent === "expanded" && fitsNormal && !props.holdExpanded) onDetent.current("normal");
     // Only when the tool changes, not while the coach is looking at an expanded panel.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tool, fitsNormal]);

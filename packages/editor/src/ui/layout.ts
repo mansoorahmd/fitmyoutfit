@@ -52,7 +52,8 @@ export function sheetUnderDone<T extends string>(input: { layout: EditorLayout; 
   if (input.layout !== "compact" || !input.panelOpen || !input.tool) return null;
   return { tool: input.tool, detent: input.detent };
 }
-export function viewControlsFor(input: { layout: EditorLayout; typing: boolean; panelOpen: boolean; detent: PanelDetent; startCard: boolean; stageHeight: number }): "full" | "reset-only" | "none" {
+export function viewControlsFor(input: { layout: EditorLayout; typing: boolean; panelOpen: boolean; detent: PanelDetent; startCard: boolean; stageHeight: number; /** The team list is open (08-team-list.md 3.3): in landscape its 400 px panel leaves the stage 380 px, which has no room for the sides and the zoom. */ listView?: boolean }): "full" | "reset-only" | "none" {
+  if (input.layout === "short" && input.listView && input.panelOpen) return "reset-only";
   if (input.layout !== "compact") return "full";
   if (input.typing) return "none";
   if (input.panelOpen && input.detent === "expanded") return "reset-only";

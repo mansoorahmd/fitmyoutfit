@@ -203,3 +203,87 @@ export function pageAudit() {
   }
   return out;
 }
+
+// ---- The team list (E4a, docs/design/08-team-list.md 14): what applies to its lines and controls. Runs in the page.
+export function teamListAudit() {
+  const TOL = 1;
+  const R = (el) => el.getBoundingClientRect();
+  const out = { failures: [], measured: {} };
+  const fail = (rule, what) => out.failures.push(`${rule}: ${what}`);
+  const root = document.querySelector('[data-testid="team-list"]');
+  if (!root) return out;
+  const shown = (el) => {
+    const r = R(el);
+    const cs = getComputedStyle(el);
+    return r.width > 0.5 && r.height > 0.5 && cs.visibility !== "hidden" && cs.display !== "none";
+  };
+  const label = (el) => (el.dataset?.testid || el.getAttribute("aria-label") || el.className || el.tagName).toString().slice(0, 40);
+  const rows = root.querySelector('[data-testid="tl-rows"]');
+  const rowsBox = rows ? R(rows) : null;
+  const inRows = (el) => !rowsBox || (R(el).bottom > rowsBox.top - TOL && R(el).top < rowsBox.bottom + TOL);
+
+  // Touch targets: every control a finger meets is 44 px high at least, and 44 wide (the fields and size buttons too).
+  const controls = [...root.querySelectorAll("input, button, [role='menuitem'], [role='menuitemcheckbox'], [role='option']")].filter((el) => shown(el) && inRows(el));
+  const small = [];
+  for (const el of controls) {
+    const r = R(el);
+    const isText = el.classList.contains("fmo-btn-text") || el.classList.contains("fmo-tl-count");
+    if (r.height < 44 - TOL || (r.width < 44 - TOL && !isText)) small.push(`${label(el)} ${Math.round(r.width)}x${Math.round(r.height)}`);
+  }
+  out.measured.controls = controls.length;
+  for (const s of [...new Set(small)].slice(0, 6)) fail("touch target", `${s} (44 x 44 at least)`);
+
+  // Contrast: the words a line shows (messages, placeholders, the count line, tags) against what is behind them: 4.5.
+  const channel = (c) => { const v = c / 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+  const lum = ([r, g, b]) => 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+  const parse = (s) => { const m = s.match(/rgba?\(([^)]+)\)/); if (!m) return null; const p = m[1].split(/[ ,/]+/).map(Number); return { rgb: p.slice(0, 3), a: p.length > 3 ? p[3] : 1 }; };
+  const backdrop = (el) => { for (let e = el; e; e = e.parentElement) { const c = parse(getComputedStyle(e).backgroundColor); if (c && c.a > 0.5) return c.rgb; } return [255, 255, 255]; };
+  const ratio = (a, b) => { const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x); return (hi + 0.05) / (lo + 0.05); };
+  const texts = [...root.querySelectorAll(".fmo-tl-msg, .fmo-tl-count, .fmo-tl-tag, .fmo-tl-detail, .fmo-tl-minimum, .fmo-tl-index, .fmo-tl-heading span")].filter((el) => shown(el) && el.textContent.trim() && inRows(el));
+  let worst = 99;
+  for (const el of texts) {
+    const fg = parse(getComputedStyle(el).color);
+    if (!fg) continue;
+    const r = ratio(fg.rgb, backdrop(el));
+    worst = Math.min(worst, r);
+    if (r < 4.5) fail("contrast", `${label(el)} is ${r.toFixed(2)}:1 (4.5 at least)`);
+  }
+  for (const el of [...root.querySelectorAll("input")].filter((e) => shown(e) && e.placeholder && !e.value && inRows(e))) {
+    const ph = parse(getComputedStyle(el, "::placeholder").color);
+    if (!ph) continue;
+    const r = ratio(ph.rgb, backdrop(el));
+    worst = Math.min(worst, r);
+    if (r < 4.5) fail("contrast", `the placeholder of ${label(el)} is ${r.toFixed(2)}:1 (4.5 at least)`);
+  }
+  out.measured.worstContrast = Math.round(worst * 100) / 100;
+
+  // Nothing cut off: no sideways scrolling in the list, no message clipped, no field's words clipped, no two fields overlapping.
+  if (rows && rows.scrollWidth > rows.clientWidth + TOL) fail("cut off", `the list scrolls sideways (${rows.scrollWidth} > ${rows.clientWidth})`);
+  const canvas = document.createElement("canvas").getContext("2d");
+  for (const el of root.querySelectorAll(".fmo-tl-msg span, .fmo-tl-minimum span")) {
+    if (!el.classList.contains("fmo-sr-only") && shown(el) && el.scrollWidth > el.clientWidth + TOL) fail("cut off", `a message is clipped: ${el.textContent.trim().slice(0, 40)}`);
+  }
+  for (const el of [...root.querySelectorAll("input")].filter((e) => shown(e) && inRows(e))) {
+    const cs = getComputedStyle(el);
+    // The room for the words: the box without its borders and padding (an input's own clientWidth is not reliable for this).
+    const inner = R(el).width - parseFloat(cs.borderLeftWidth) - parseFloat(cs.borderRightWidth) - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    if (el.value) {
+      if (el.scrollWidth > el.clientWidth + TOL && el.value.length < 10) fail("cut off", `the value of ${label(el)} is clipped`);
+    } else if (el.placeholder) {
+      const ph = getComputedStyle(el, "::placeholder");
+      canvas.font = `${ph.fontWeight} ${ph.fontSize} ${ph.fontFamily}`;
+      const w = canvas.measureText(el.placeholder).width;
+      if (w > inner + TOL) fail("cut off", `the words in ${label(el)} are clipped ("${el.placeholder}" is ${Math.round(w)} px in ${Math.round(inner)})`);
+    }
+  }
+  for (const li of root.querySelectorAll(".fmo-tl-fields")) {
+    const boxes = [...li.children].filter(shown).map((c) => ({ c, r: R(c) }));
+    for (let i = 0; i < boxes.length; i++) for (let j = i + 1; j < boxes.length; j++) {
+      const a = boxes[i].r, b = boxes[j].r;
+      if (Math.min(a.right, b.right) - Math.max(a.left, b.left) > TOL && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > TOL) fail("cut off", `two parts of a line overlap (${label(boxes[i].c)}, ${label(boxes[j].c)})`);
+    }
+    if (rowsBox && inRows(li)) for (const { c, r } of boxes) if (r.right > rowsBox.right + TOL || r.left < rowsBox.left - TOL) fail("cut off", `${label(c)} is outside the list`);
+  }
+  out.failures = [...new Set(out.failures)];
+  return out;
+}

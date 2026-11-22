@@ -154,6 +154,9 @@ describe("E3d (R5): the view buttons over a phone's stage", () => {
     expect(viewControlsFor({ ...base, typing: true, stageHeight: 416 })).toBe("none");
     expect(viewControlsFor({ ...base, startCard: false, panelOpen: true, detent: "expanded", stageHeight: 416 })).toBe("reset-only");
     expect(viewControlsFor({ ...base, layout: "wide", stageHeight: 100 })).toBe("full");
+    // E4a: the landscape phone with the team list open (a 400 px panel, a 380 px stage) keeps only Reset.
+    expect(viewControlsFor({ ...base, layout: "short", panelOpen: true, listView: true, stageHeight: 300 })).toBe("reset-only");
+    expect(viewControlsFor({ ...base, layout: "short", panelOpen: true, stageHeight: 300 })).toBe("full");
   });
 });
 

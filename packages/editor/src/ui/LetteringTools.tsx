@@ -25,6 +25,7 @@ import { EditorIcon } from "./icons.js";
 import { commonColoursAfterTeam, convertDigits, digitChoiceOf, fieldCheck, fieldStep, fontDisplayName, playerSwitches, presetsFor, type DigitChoice, type FieldState } from "./lettering.js";
 import { Alert, PresetChips, Segmented, Swatch, SwitchRow } from "./parts.js";
 import { colourName } from "./stage-logic.js";
+import { useTeamList } from "./team-list-context.js";
 
 type TextLike = Extract<Layer, { kind: "text" | "number" }>;
 
@@ -355,15 +356,16 @@ function TeamToolView() {
   );
 }
 
-function PlayersToolView() {
+function PlayersStyleView({ onBack, showPreviewAs }: { onBack: () => void; showPreviewAs: boolean }) {
   const api = useEditor();
+  const list = useTeamList();
   const { design, product, wording, textFits } = api;
   const w = wording.lettering;
   const [fonts, setFonts] = useState<ValueRole | null>(null);
   const nameLayer = roleLayers(design, "player-name")[0];
   const numberLayer = roleLayers(design, "player-number")[0];
   const shrunk = textFits.some((f) => f.role === "player-name" && f.shrunk);
-  const digits = digitChoiceOf(design.samplePlayer.number);
+  const digits = digitChoiceOf(list.lines.find((l) => l.number !== "")?.number ?? design.samplePlayer.number);
   if (fonts) return <FontList role={fonts} sample={fonts === "player-number" ? design.samplePlayer.number || w.sampleNumber : design.samplePlayer.name || w.sampleName} onBack={() => setFonts(null)} />;
 
   // The field refuses a number that breaks the rule (the model keeps the last good number).
@@ -371,15 +373,24 @@ function PlayersToolView() {
 
   return (
     <>
-      <p className="fmo-muted">{w.fromTeamList}</p>
-      <span className="fmo-section-title" data-keep-typing>
-        {w.previewAs}
-      </span>
-      <div className="fmo-fields" data-keep-typing>
-        <ValueField label={w.playerName} value={design.samplePlayer.name} placeholder={w.sampleName} layerId={nameLayer?.id ?? null} onType={(v) => api.preview((d) => setSamplePlayer(d, { name: v }))} note={shrunk ? w.shrunk : null} testId="player-name" editLabel="player-name" />
-        <ValueField label={w.number} value={design.samplePlayer.number} placeholder={w.sampleNumber} numeric layerId={numberLayer?.id ?? null} onType={typeNumber} testId="player-number" editLabel="player-number" />
+      <div className="fmo-back-row">
+        <button type="button" onClick={onBack} data-testid="back-to-list">
+          {api.wording.tools.back}
+        </button>
       </div>
-      {hasPictographs(design.samplePlayer.name) && <PictographAlert onRemove={(d) => setSamplePlayer(d, { name: stripPictographs(d.samplePlayer.name) })} testId="pictographs-player-name" />}
+      {showPreviewAs && (
+        <>
+          <p className="fmo-muted">{w.fromTeamList}</p>
+          <span className="fmo-section-title" data-keep-typing>
+            {w.previewAs}
+          </span>
+          <div className="fmo-fields" data-keep-typing>
+            <ValueField label={w.playerName} value={design.samplePlayer.name} placeholder={w.sampleName} layerId={nameLayer?.id ?? null} onType={(v) => api.preview((d) => setSamplePlayer(d, { name: v }))} note={shrunk ? w.shrunk : null} testId="player-name" editLabel="player-name" />
+            <ValueField label={w.number} value={design.samplePlayer.number} placeholder={w.sampleNumber} numeric layerId={numberLayer?.id ?? null} onType={typeNumber} testId="player-number" editLabel="player-number" />
+          </div>
+          {hasPictographs(design.samplePlayer.name) && <PictographAlert onRemove={(d) => setSamplePlayer(d, { name: stripPictographs(d.samplePlayer.name) })} testId="pictographs-player-name" />}
+        </>
+      )}
       <section className="fmo-section" aria-label={w.onTheShirt}>
         <span className="fmo-section-title">{w.onTheShirt}</span>
         {playerSwitches(product, wording).map((s) => (
@@ -413,7 +424,7 @@ function PlayersToolView() {
               { value: "western", label: w.digitSystems.western },
               { value: "arabic-indic", label: w.digitSystems["arabic-indic"] },
             ]}
-            onChange={(to) => api.commit((d) => setSamplePlayer(d, { number: convertDigits(d.samplePlayer.number, to) }), "player-number")}
+            onChange={(to) => (list.analysis.filled.length > 0 ? list.convertDigits(to) : api.commit((d) => setSamplePlayer(d, { number: convertDigits(d.samplePlayer.number, to) }), "player-number"))}
             testId="digits"
           />
         </div>
@@ -425,5 +436,5 @@ function PlayersToolView() {
 /** E3d (speed): re-renders only when its props or the editor's data change. */
 export const TeamTool = memo(TeamToolView);
 
-/** E3d (speed): re-renders only when its props or the editor's data change. */
-export const PlayersTool = memo(PlayersToolView);
+/** E3d (speed): re-renders only when its props or the editor's data change. The Players tab's style view (the team list is `PlayersTool`). */
+export const PlayersStyle = memo(PlayersStyleView);

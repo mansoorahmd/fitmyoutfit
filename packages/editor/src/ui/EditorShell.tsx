@@ -21,7 +21,16 @@ import { assetsNoLongerUsed, designAssetIds } from "../storage/device-store.js";
 import { createItemGestures, forwardGestures, type GestureEndReason, type GesturePhase, type ItemGestures } from "./item-gestures.js";
 import { layerSide } from "../design/roles.js";
 import { sameJson, type EditLabel } from "../state/history.js";
-import { useDesignHistory } from "../react/useDesignHistory.js";
+import { useEditorHistory } from "../react/useEditorHistory.js";
+import { useTrailing } from "../react/useTrailing.js";
+import { buildSizeTable, resolveLimits } from "@fitmyoutfit/team-rules";
+import { analyseList, designWithPlayer, playerForShirt, toSavedList, type SeenMap } from "../team-list/checks.js";
+import { addLine, cleanField, convertAllDigits, moveLine, newLine, removeLine, setCount as setLineCount, setField as setLineField, setFlag as setLineFlag, setSizeCountLines, sortLines, type SortBy } from "../team-list/lines.js";
+import { createHandOver } from "../team-list/hand-over.js";
+import { readSavedList } from "../team-list/saved.js";
+import { DEFAULT_TEAM_NOUN, DEFAULT_TEAM_SIZES, type EditorLine, type SavedTeamList, type TeamListHost, type TeamListReport } from "../team-list/types.js";
+import { TeamListContext, type TeamListApi } from "./team-list-context.js";
+import { PlayersTool } from "./PlayersTool.js";
 import type { CameraInfo, CanvasHover, DesignCanvasHandle, LayerDragEvent, PieceGuide, TextureDrawInfo, ZoneTap } from "../react/DesignCanvas.js";
 import type { GestureTiming } from "../react/draft-quality.js";
 import { mayMoveCamera } from "../react/camera.js";
@@ -37,7 +46,7 @@ import { PartPopover } from "./PartPopover.js";
 import { changeWords, fill, mergeWording, type WordingOverrides } from "./content.js";
 import { EditorContext, type ColourTarget, type EditorApi, type EditorAssets, type ToolId } from "./context.js";
 import { CARD_HEIGHT, CARD_WIDTH, DesignTool } from "./DesignTool.js";
-import { PlayersTool, TeamTool } from "./LetteringTools.js";
+import { TeamTool } from "./LetteringTools.js";
 import { LogosTool, TextTool } from "./LogosTool.js";
 import { LAYOUT_SIZES, START_CARD_STAGE_MIN, chooseLayout, panelGrowRoom, panelHeights, saveStateWords, sheetUnderDone, stageInsets, viewControlsFor, type PanelDetent } from "./layout.js";
 import { ConfirmDialog } from "./parts.js";
@@ -126,6 +135,11 @@ export interface EditorShellProps {
   /** Replaces any of the wording (translations, the founders' confirmed sentences). */
   wording?: WordingOverrides;
   slots?: EditorSlots;
+  /**
+   * The team list in the Players tab (docs/design/08-team-list.md section 12): everything the host gives it and
+   * gets back. All optional: without it the list starts empty, with the store's usual sizes, and its changes go nowhere.
+   */
+  teamList?: TeamListHost;
   /** The font set text is loaded with. Default: `document.fonts`. */
   fontSet?: FontSetLike | null;
   /** The 3D texture's size (default 2048). */
@@ -177,6 +191,8 @@ function useReducedMotion(): boolean {
 }
 
 const RECENT_KEY = "fmo-editor-recent";
+/** The landscape phone's side panel in list view (08-team-list.md 3.3: widened from 320 so a name has room; the stage keeps 380 px). */
+const LIST_PANEL_SHORT = 400;
 
 /** Whether the selected item stays selected when a tool opens: only in its own tool (E3c minor). */
 export function keepsSelection(design: Pick<DesignDocument, "layers">, selectedId: string, tool: ToolId): boolean {
@@ -243,7 +259,10 @@ export function EditorShell(props: EditorShellProps) {
   }, []);
   const reducedMotion = useReducedMotion();
   // A design brought back (or upgraded) gets the print-area rule once: every item inside its area.
-  const history = useDesignHistory(() => fitDesignToAreas(props.product, props.initialDesign));
+  const history = useEditorHistory(() => ({
+    design: fitDesignToAreas(props.product, props.initialDesign),
+    lines: readSavedList(props.teamList?.initial, { productId: props.product.id, ...(props.teamList?.limits ? { limits: props.teamList.limits } : {}) }),
+  }));
   const design = history.design;
   const designRef = useRef(design);
   useEffect(() => {
@@ -324,11 +343,11 @@ export function EditorShell(props: EditorShellProps) {
   const [saveInfo, setSaveInfo] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const timing = useRef<{ name: string; start: number } | null>(null);
-  const displayDesign = hover ?? design;
+  const hoverDesign = hover ?? design;
 
   // The stage's tone follows the body's colour, with a gap so it does not flicker (12.2).
   const [tone, setTone] = useState<StageTone>(() => nextStageTone("normal", bodyColour(product, design)?.hex ?? null));
-  const nextTone = nextStageTone(tone, bodyColour(product, displayDesign)?.hex ?? null);
+  const nextTone = nextStageTone(tone, bodyColour(product, hoverDesign)?.hex ?? null);
   if (nextTone !== tone) setTone(nextTone);
 
 
@@ -404,6 +423,195 @@ export function EditorShell(props: EditorShellProps) {
     [history],
   );
 
+  // ---- The team list (docs/design/08-team-list.md): its lines live in the editor's one undo history, beside the
+  // design; the chosen line (the shirt on the stage) and what has been left (when a check shows) are view state.
+  const teamHost = props.teamList;
+  const listSizes = teamHost?.sizes ?? DEFAULT_TEAM_SIZES;
+  const sizeTable = useMemo(() => buildSizeTable(listSizes), [listSizes]);
+  const listLimits = useMemo(() => resolveLimits(teamHost?.limits), [teamHost?.limits]);
+  const printsName = design.layers.some((l) => l.role === "player-name");
+  const printsNumber = design.layers.some((l) => l.role === "player-number");
+  const prints = useMemo(() => ({ name: printsName, number: printsNumber }), [printsName, printsNumber]);
+  const lines = history.lines as readonly EditorLine[];
+  const linesRef = useRef(lines);
+  useEffect(() => {
+    linesRef.current = lines;
+  });
+  const hostLimits = teamHost?.limits;
+  const hostMinimum = teamHost?.minimum?.pieces ?? null;
+  const listSettings = useMemo(() => ({ prints, sizes: listSizes, ...(hostLimits ? { limits: hostLimits } : {}), minimum: hostMinimum }), [prints, listSizes, hostLimits, hostMinimum]);
+  const analysis = useMemo(() => analyseList(lines, listSettings), [lines, listSettings]);
+  const [chosen, setChosen] = useState<string | null>(null);
+  // Only an empty list has no chosen line: the first line when the editor opens, the next one after a removal (7.3).
+  const chosenId = chosen !== null && lines.some((l) => l.id === chosen) ? chosen : (lines[0]?.id ?? null);
+  const [seen, setSeen] = useState<SeenMap>({});
+  const [revealAll, setRevealAll] = useState(false);
+  const [playersView, setPlayersView] = useState<"list" | "style">("list");
+  const [listMemory] = useState(() => {
+    let scrollTop = 0;
+    return { get: () => scrollTop, set: (value: number) => void (scrollTop = value) };
+  });
+  const entered = useRef<string[]>([]);
+  useEffect(() => {
+    for (const l of lines) if (!entered.current.includes(l.id)) entered.current.push(l.id);
+  }, [lines]);
+  // The shirt shows the chosen line (7.1): its name and number as they would print, never written into the design.
+  const chosenLine = lines.length > 0 ? lines.find((l) => l.id === chosenId) : undefined;
+  const shirt = chosenLine ? playerForShirt(chosenLine, prints) : null;
+  // Typing never waits for the shirt (13.5): the shirt follows the keys a moment after they pause; choosing another line shows its shirt at once.
+  const shirtKey = shirt ? `${shirt.name}\u0000${shirt.number}` : null;
+  const shirtShown = useTrailing(shirtKey, 120, chosenId);
+  const shirtName = shirtShown === null ? null : shirtShown.split("\u0000")[0]!;
+  const shirtNumber = shirtShown === null ? null : (shirtShown.split("\u0000")[1] ?? "");
+  const withPlayer = useCallback((d: DesignDocument): DesignDocument => (shirtName === null || shirtNumber === null ? d : designWithPlayer(d, { name: shirtName, number: shirtNumber })), [shirtName, shirtNumber]);
+  const withPlayerRef = useRef(withPlayer);
+  useEffect(() => {
+    withPlayerRef.current = withPlayer;
+  });
+  const displayDesign = useMemo(() => withPlayer(hoverDesign), [withPlayer, hoverDesign]);
+  const describedDesign = useMemo(() => withPlayer(design), [withPlayer, design]);
+  const nameOfLine = useCallback(
+    (id: string) => {
+      const at = linesRef.current.findIndex((l) => l.id === id);
+      const line = linesRef.current[at];
+      return line && line.name !== "" ? line.name : fill(wording.teamList.unnamedPlayer, { i: at + 1 });
+    },
+    [wording],
+  );
+  const markSeen = useCallback((id: string, part: "left" | "name" | "number" | "size") => setSeen((s) => (s[id]?.[part] ? s : { ...s, [id]: { ...s[id], [part]: true } })), []);
+  const maxLines = listLimits.maxLines;
+  const maxCount = listLimits.maxCount;
+  const minCount = listLimits.minCount;
+  const beginField = useCallback((id: string, field: "name" | "number" | "size") => history.beginLines(`list-${field}|${nameOfLine(id)}`), [history, nameOfLine]);
+  const typeField = useCallback((id: string, field: "name" | "number" | "size", value: string) => history.previewLines((ls) => setLineField(ls as EditorLine[], id, field, value)), [history]);
+  const leaveField = useCallback(
+    (id: string, field: "name" | "number" | "size") => {
+      markSeen(id, field);
+      history.previewLines((ls) => cleanField(ls as EditorLine[], id, field, sizeTable));
+      history.endLines();
+    },
+    [history, markSeen, sizeTable],
+  );
+  const leaveLine = useCallback((id: string) => markSeen(id, "left"), [markSeen]);
+  const endTyping = useCallback(() => history.endLines(), [history]);
+  const addPlayer = useCallback(() => {
+    if (linesRef.current.length >= maxLines) return null;
+    const line = newLine();
+    history.beginLines("list-add");
+    history.previewLines((ls) => addLine(ls as EditorLine[], line));
+    setChosen(line.id);
+    return line.id;
+  }, [history, maxLines]);
+  const removePlayer = useCallback(
+    (id: string, options?: { silent?: boolean }) => {
+      const current = linesRef.current;
+      const at = current.findIndex((l) => l.id === id);
+      if (at < 0) return;
+      const name = nameOfLine(id);
+      const after = current[at + 1] ?? current[at - 1];
+      if (options?.silent) {
+        history.beginLines("list-remove");
+        history.previewLines((ls) => removeLine(ls as EditorLine[], id));
+        history.endLines();
+      } else {
+        history.commitLines((ls) => removeLine(ls as EditorLine[], id), `list-remove|${name}`);
+        announce(fill(wording.teamList.removed, { name }), { undo: true, ms: 6000 });
+      }
+      setChosen(after?.id ?? null);
+    },
+    [history, nameOfLine, announce, wording],
+  );
+  const movePlayer = useCallback((id: string, delta: -1 | 1) => history.commitLines((ls) => moveLine(ls as EditorLine[], id, delta), `list-move|${nameOfLine(id)}`), [history, nameOfLine]);
+  const sortPlayers = useCallback((by: SortBy) => history.commitLines((ls) => sortLines(ls as EditorLine[], by, { sizes: listSizes, entered: entered.current }), "list-sort"), [history, listSizes]);
+  const setPlayerCount = useCallback((id: string, count: number) => history.commitLines((ls) => setLineCount(ls as EditorLine[], id, count), `list-count|${nameOfLine(id)}`), [history, nameOfLine]);
+  const setPlayerFlag = useCallback((id: string, flag: "noName" | "noNumber", on: boolean) => history.commitLines((ls) => setLineFlag(ls as EditorLine[], id, flag, on), `list-flag|${nameOfLine(id)}`), [history, nameOfLine]);
+  const convertDigits = useCallback((to: "western" | "arabic-indic") => history.commitLines((ls) => convertAllDigits(ls as EditorLine[], to), "list-digits"), [history]);
+  const setSizeCount = useCallback((code: string, count: number) => history.commitLines((ls) => setSizeCountLines(ls as EditorLine[], code, count, { table: sizeTable, maxCount }), `list-count|${code}`), [history, sizeTable, maxCount]);
+  const revealAllProblems = useCallback(() => setRevealAll(true), []);
+  const compactLayout = layout === "compact";
+  const setKeyboard = useCallback(
+    (on: boolean) => {
+      if (compactLayout) setTypingState(on);
+    },
+    [compactLayout],
+  );
+  const nameShrunk = textFits.some((f) => f.role === "player-name" && f.shrunk);
+  const closeUpLayerId = design.layers.find((l) => l.role === "player-name")?.id ?? design.layers.find((l) => l.role === "player-number")?.id ?? null;
+  const teamNoun = teamHost?.noun ?? DEFAULT_TEAM_NOUN;
+  const teamMinimum = teamHost?.minimum ?? null;
+  const openSizeChart = teamHost?.openSizeChart ?? null;
+  const keyboard = typing && compactLayout;
+  const listLimitsView = useMemo(() => ({ maxLines, minCount, maxCount }), [maxLines, minCount, maxCount]);
+  const teamApi: TeamListApi = useMemo(
+    () => ({
+      lines,
+      analysis,
+      prints,
+      sizes: listSizes,
+      sizeTable,
+      noun: teamNoun,
+      minimum: teamMinimum,
+      limits: listLimitsView,
+      openSizeChart,
+      chosenId,
+      choose: setChosen,
+      seen,
+      revealAll,
+      view: playersView,
+      setView: setPlayersView,
+      memory: listMemory,
+      keyboard,
+      beginField,
+      typeField,
+      leaveField,
+      leaveLine,
+      endTyping,
+      add: addPlayer,
+      remove: removePlayer,
+      move: movePlayer,
+      sort: sortPlayers,
+      setCount: setPlayerCount,
+      setFlag: setPlayerFlag,
+      convertDigits,
+      setSizeCount,
+      revealAllProblems,
+      setKeyboard,
+      nameShrunk,
+      closeUpLayerId,
+    }),
+    [lines, analysis, prints, listSizes, sizeTable, teamNoun, teamMinimum, listLimitsView, openSizeChart, chosenId, seen, revealAll, playersView, listMemory, keyboard, beginField, typeField, leaveField, leaveLine, endTyping, addPlayer, removePlayer, movePlayer, sortPlayers, setPlayerCount, setPlayerFlag, convertDigits, setSizeCount, revealAllProblems, setKeyboard, nameShrunk, closeUpLayerId],
+  );
+  // What the editor hands to its host (12.2, 11.1): the list and its report, after a second without changes.
+  const [hostBridge] = useState(() => {
+    let current: TeamListHost | undefined;
+    return { get: () => current, set: (next: TeamListHost | undefined) => void (current = next) };
+  });
+  useLayoutEffect(() => hostBridge.set(teamHost));
+  const lastHanded = useRef<string | null>(null);
+  const [handOver] = useState(() => createHandOver<{ saved: SavedTeamList; report: TeamListReport }>({ delayMs: () => hostBridge.get()?.debounceMs ?? 1000, emit: ({ saved, report }) => hostBridge.get()?.onChange?.(saved, report) }));
+  useEffect(() => {
+    if (!hostBridge.get()?.onChange) return;
+    const saved = toSavedList(lines, product.id, { prints, sizes: listSizes });
+    const key = JSON.stringify([saved.lines, saved.prints]);
+    // The list as it opened is not a change.
+    if (lastHanded.current === null) {
+      lastHanded.current = key;
+      return;
+    }
+    if (key === lastHanded.current) return;
+    lastHanded.current = key;
+    handOver.schedule({ saved, report: analysis.report });
+  }, [lines, prints, listSizes, product.id, analysis.report, handOver, hostBridge]);
+  const flushList = useCallback(() => handOver.flush(), [handOver]);
+  useEffect(() => () => handOver.flush(), [handOver]);
+  // A name or number item selected on the model opens the Players tab on its style, not on the list (the item's own controls).
+  const selectedRole = selectedId ? design.layers.find((l) => l.id === selectedId)?.role : undefined;
+  const [styleFor, setStyleFor] = useState<string | null>(null);
+  if (styleFor !== selectedId) {
+    setStyleFor(selectedId);
+    if (selectedRole === "player-name" || selectedRole === "player-number") setPlayersView("style");
+  }
+
   // ---- The camera: only in answer to the coach's own action, never while they hold the garment (6.3).
   const cameraFree = () => mayMoveCamera({ now: performance.now(), pointerDown: pointer.current.down, lastUserTurnAt: pointer.current.lastUserTurnAt });
   const showSide = useCallback((side: "front" | "back" | "left" | "right") => {
@@ -430,7 +638,7 @@ export function EditorShell(props: EditorShellProps) {
   );
   const undo = useCallback(() => {
     if (!history.canUndo) return;
-    const target = history.history.gestureStart ? history.history.gestureStart.value : history.history.past[history.history.past.length - 1];
+    const target = (history.history.gestureStart ? history.history.gestureStart.value : history.history.past[history.history.past.length - 1])?.design;
     announce(fill(wording.states.undone, { change: changeWords(wording, history.undoLabel) }));
     turnToChange(design, target);
     history.undo();
@@ -438,12 +646,35 @@ export function EditorShell(props: EditorShellProps) {
   const redo = useCallback(() => {
     if (!history.canRedo) return;
     announce(fill(wording.states.redone, { change: changeWords(wording, history.redoLabel) }));
-    turnToChange(design, history.history.future[0]);
+    turnToChange(design, history.history.future[0]?.design);
     history.redo();
   }, [history, announce, wording, turnToChange, design]);
 
   // ---- Tools.
   const toolsReady = mode === "flat" || (load.ready && fontsReadyOnce);
+  // The team list on a phone frames the back close-up: the name and number fill the free stage (3.2). The camera
+  // moves only when the list opens (an action of the coach's), never while lines are chosen; it goes back when the list closes.
+  const listView = activeTool === "players" && playersView === "list" && !startCard;
+  const listTyping = typing && layout === "compact" && listView;
+  const closeUpLayer = closeUpLayerId;
+  const listCloseUp = layout === "compact" && listView && !doneOpen && toolsReady && closeUpLayer !== null;
+  const wasCloseUp = useRef(false);
+  // The close-up is aimed at the free stage, so it is aimed again once the panel's height has settled (the keyboard
+  // opening or closing changes it).
+  const [settledPanel, setSettledPanel] = useState(0);
+  useEffect(() => {
+    const timer = setTimeout(() => setSettledPanel(panelSize.height), 280);
+    return () => clearTimeout(timer);
+  }, [panelSize.height]);
+  useEffect(() => {
+    if (listCloseUp) {
+      wasCloseUp.current = true;
+      focusOn(closeUpLayer, { zoom: true });
+    } else if (wasCloseUp.current) {
+      wasCloseUp.current = false;
+      canvas.current?.focusOn(null);
+    }
+  }, [listCloseUp, closeUpLayer, focusOn, settledPanel]);
   const fontsLoading = (fontStatus?.loading.length ?? 0) > 0;
   const fontsFailed = (fontStatus?.failed.length ?? 0) > 0 || (fontStatus?.missing.length ?? 0) > 0;
   const openTool = useCallback(
@@ -452,6 +683,7 @@ export function EditorShell(props: EditorShellProps) {
       setDetent(nextDetent);
       setStartCard(false);
       setKitOpen(false);
+      if (next === "players") setPlayersView("list");
       // The camera turns to the side the tool works on (6.3), unless the coach tapped an item on the model
       // (they are already looking at it).
       if (options.turn === false) return;
@@ -476,15 +708,15 @@ export function EditorShell(props: EditorShellProps) {
     if (selectedId && keepsSelection(designRef.current, selectedId, next) === false) setSelectedId(null);
     if (startCard) setStartCard(false);
     if (kitOpen) {
-      openTool(next, detent === "expanded" ? "expanded" : "normal");
+      openTool(next, detent === "expanded" || (next === "players" && layout === "compact") ? "expanded" : "normal");
       return;
     }
     if (activeTool === next && layout !== "wide") {
       setTool(null);
       return;
     }
-    // Changing tools keeps an expanded panel expanded (3.3).
-    openTool(next, detent === "expanded" ? "expanded" : "normal");
+    // Changing tools keeps an expanded panel expanded (3.3); the team list opens at the expanded height (3.2).
+    openTool(next, detent === "expanded" || (next === "players" && layout === "compact") ? "expanded" : "normal");
   };
   const closePanel = useCallback(() => {
     setMarkedPart(null);
@@ -722,9 +954,9 @@ export function EditorShell(props: EditorShellProps) {
   const releaseFile = assets.release;
   useEffect(() => {
     const h = history.history;
-    for (const state of [h.present, ...h.past, ...h.future]) for (const id of designAssetIds(state)) knownAssets.add(id);
+    for (const state of [h.present, ...h.past, ...h.future]) for (const id of designAssetIds(state.design)) knownAssets.add(id);
     if (!releaseFile) return;
-    for (const id of assetsNoLongerUsed(knownAssets, [h.present, ...h.past, ...h.future, h.gestureStart?.value, gestureDraft.current?.start])) {
+    for (const id of assetsNoLongerUsed(knownAssets, [h.present.design, ...h.past.map((x) => x.design), ...h.future.map((x) => x.design), h.gestureStart?.value.design, gestureDraft.current?.start])) {
       knownAssets.delete(id);
       releaseFile(id);
     }
@@ -765,14 +997,19 @@ export function EditorShell(props: EditorShellProps) {
   // ---- The stage's description in words, debounced (11.2).
   const [description, setDescription] = useState("");
   useEffect(() => {
-    const timer = setTimeout(() => setDescription(describeStage(wording, product, design, { productName: props.productName, side: camera.side, palette })), description ? 1000 : 0);
+    const timer = setTimeout(() => setDescription(describeStage(wording, product, describedDesign, { productName: props.productName, side: camera.side, palette })), description ? 1000 : 0);
     return () => clearTimeout(timer);
-  }, [design, camera.side, wording, product, palette, props.productName, description]);
+  }, [describedDesign, camera.side, wording, product, palette, props.productName, description]);
 
-  const heights = panelHeights(size.height || 844);
+  // The team list on a phone: opened, the expanded height; with the keyboard open (a list field has focus) the stage
+  // keeps clamp(120, 32% of the visible height, 200) and the rows fill the rest (3.3).
+  const visibleHeight = size.height || 844;
+  const stageClamp = Math.max(120, Math.min(200, Math.round(visibleHeight * 0.32)));
+  const typingPanel = Math.max(160, visibleHeight - LAYOUT_SIZES.compact.topBar - stageClamp);
+  const heights = listTyping ? { normal: typingPanel, expanded: typingPanel } : panelHeights(visibleHeight);
   const growRoom = panelGrowRoom(size.height || 844);
   const editorWidth = size.width || 390;
-  const stageWidth = layout === "wide" ? editorWidth - LAYOUT_SIZES.wide.rail - LAYOUT_SIZES.wide.panel : layout === "short" ? editorWidth - LAYOUT_SIZES.short.rail - (panelOpen || startCard ? LAYOUT_SIZES.short.panel : 0) : editorWidth;
+  const stageWidth = layout === "wide" ? editorWidth - LAYOUT_SIZES.wide.rail - LAYOUT_SIZES.wide.panel : layout === "short" ? editorWidth - LAYOUT_SIZES.short.rail - (panelOpen || startCard ? (listView && panelOpen ? LIST_PANEL_SHORT : LAYOUT_SIZES.short.panel) : 0) : editorWidth;
   const baseInsets = stageInsets(layout, { open: panelOpen || startCard || (kitOpen && layout !== "wide"), height: panelSize.height, width: panelSize.width });
   // The Done panel covers the stage's right side (desktop, landscape) or its lower part (phone): the garment is framed in the rest.
   const insets = doneOpen ? (layout === "compact" ? { ...baseInsets, bottom: doneHeight > 0 ? doneHeight - LAYOUT_SIZES.compact.dock : heights.expanded } : { ...baseInsets, right: layout === "wide" ? 400 : LAYOUT_SIZES.short.panel }) : baseInsets;
@@ -911,7 +1148,7 @@ export function EditorShell(props: EditorShellProps) {
           const next = update(g.current);
           if (next === g.current) return;
           g.current = next;
-          canvas.current?.preview(next);
+          canvas.current?.preview(withPlayerRef.current(next));
         },
         end: () => {
           const g = gestureDraft.current;
@@ -1031,7 +1268,8 @@ export function EditorShell(props: EditorShellProps) {
         layout={layout}
         tool={activeTool}
         wording={wording}
-        detent={detent}
+        detent={listTyping ? "expanded" : detent}
+        holdExpanded={listView}
         heights={heights}
         growRoom={growRoom}
         typing={typing}
@@ -1066,6 +1304,7 @@ export function EditorShell(props: EditorShellProps) {
 
   return (
     <EditorContext.Provider value={api}>
+      <TeamListContext.Provider value={teamApi}>
       {props.injectStyles !== false && (
         <style href="fitmyoutfit-editor-css" precedence="default">
           {EDITOR_CSS}
@@ -1078,6 +1317,7 @@ export function EditorShell(props: EditorShellProps) {
         data-layout={layout}
         data-typing={typing}
         data-detent={panelOpen ? detent : "closed"}
+        data-list={panelOpen && listView ? "true" : undefined}
         data-start={startCard}
         data-reduced-motion={reducedMotion}
         data-selected={selectedId ?? ""}
@@ -1101,6 +1341,7 @@ export function EditorShell(props: EditorShellProps) {
           onClose={() => (props.saveState === "failed" ? setLeaving(true) : props.onClose?.())}
           onDone={() => {
             gestures.finish("done-panel");
+            setRevealAll(true);
             // The Done panel lets go of the selected item (E3c minor): no handles behind it.
             setSelectedId(null);
             setKitOpen(false);
@@ -1224,7 +1465,7 @@ export function EditorShell(props: EditorShellProps) {
             partPopover={partMenu ? <PartPopover key={`${partMenu.target.kind}-${partMenu.target.id}-${partMenu.x}-${partMenu.y}`} target={partMenu.target} x={partMenu.x} y={partMenu.y} onClose={() => setPartMenu(null)} /> : null}
             kitButton={
               startCard || doneOpen || (Boolean(selectedLayer) && layout !== "wide" && !typing && mode === "3d") || (layout === "compact" && typing) ? null : (
-                <KitButton count={design.layers.length} compact={(size.width || 390) < 480} open={kitOpen} onClick={() => setKitOpen((o) => !o)} />
+                <KitButton count={design.layers.length} compact={stageWidth < 480} open={kitOpen} onClick={() => setKitOpen((o) => !o)} />
               )
             }
             kitPopover={
@@ -1235,7 +1476,7 @@ export function EditorShell(props: EditorShellProps) {
                 </div>
               ) : null
             }
-            viewControls={viewControlsFor({ layout, typing, panelOpen, detent, startCard, stageHeight: (size.height || 844) - LAYOUT_SIZES.compact.topBar - (startCard ? panelSize.height : 0) })}
+            viewControls={viewControlsFor({ layout, typing, panelOpen, detent, startCard, listView, stageHeight: (size.height || 844) - LAYOUT_SIZES.compact.topBar - (startCard ? panelSize.height : 0) })}
           />
           {layout !== "wide" && (start ?? panel)}
         </div>
@@ -1258,6 +1499,7 @@ export function EditorShell(props: EditorShellProps) {
           onSize={setDoneHeight}
           onSaveAndGoBack={() => {
             setDoneOpen(false);
+            flushList();
             props.onDone?.(designRef.current);
           }}
           onShow={(check) => {
@@ -1301,6 +1543,7 @@ export function EditorShell(props: EditorShellProps) {
           }
         />
       </div>
+      </TeamListContext.Provider>
     </EditorContext.Provider>
   );
 }

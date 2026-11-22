@@ -69,3 +69,25 @@ export function makeWeaveNormals(size = WEAVE_SIZE, strength = 2.2): Uint8Array 
   }
   return out;
 }
+
+/** The model files are in metres (a jersey is about 0.7 units high, the camera 2 away): this many units to the millimetre. */
+const UNITS_PER_MM = 0.001;
+/** The knit is absent while a tile is narrower than this many CSS pixels, and complete from `KNIT_FULL_PX`. */
+export const KNIT_OFF_PX = 14;
+export const KNIT_FULL_PX = 25;
+
+/** How wide one knit tile is on the screen, in CSS pixels, for a camera `distance` away and a view `cssHeight` high. */
+export function tileCssPixels(distance: number, fovDegrees: number, cssHeight: number): number {
+  const seen = 2 * Math.max(1e-6, distance) * Math.tan((fovDegrees * Math.PI) / 360);
+  return (WEAVE_TILE_MM * UNITS_PER_MM * cssHeight) / seen;
+}
+
+/**
+ * How much of the knit shows (0 to 1). It depends on the zoom in CSS pixels, never on device pixels (a phone at two
+ * or three pixels to the pixel shows what a desktop shows), and it is one number for the whole garment (no patch
+ * where one part of the cloth is nearer than another): the resting view is even, and the knit comes in smoothly.
+ */
+export function knitAmount(tilePx: number): number {
+  const t = Math.max(0, Math.min(1, (tilePx - KNIT_OFF_PX) / (KNIT_FULL_PX - KNIT_OFF_PX)));
+  return t * t * (3 - 2 * t);
+}

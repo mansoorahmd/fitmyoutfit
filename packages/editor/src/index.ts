@@ -28,6 +28,19 @@ export * from "./design/index.js";
 // The interface (task E3a-2): the editor a coach uses, and its parts a host needs.
 export { EditorShell, type EditorShellProps, type EditorSlots, type EditorTiming } from "./ui/EditorShell.js";
 export { ResumePrompt, DoneNotice } from "./ui/dialogs.js";
+// The team list in the Players tab (08-team-list.md section 12): what a host gives the editor and gets back.
+export {
+  DEFAULT_TEAM_NOUN,
+  DEFAULT_TEAM_SIZES,
+  type EditorLine,
+  type SavedTeamList,
+  type TeamListHost,
+  type TeamListMinimum,
+  type TeamListNoun,
+  type TeamListReport,
+  type TeamListSize,
+} from "./team-list/types.js";
+export { readSavedList } from "./team-list/saved.js";
 export { EDITOR_WORDING, mergeWording, fill, changeWords, type EditorWording, type WordingOverrides } from "./ui/content.js";
 export { EDITOR_CSS } from "./ui/styles.js";
 export type { EditorAssets, ToolId } from "./ui/context.js";

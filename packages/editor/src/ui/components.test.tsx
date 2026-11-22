@@ -14,7 +14,10 @@ import { EditorContext, type EditorApi, type ToolId } from "./context";
 import { ColoursTool } from "./ColoursTool";
 import { DesignTool } from "./DesignTool";
 import { EditorShell } from "./EditorShell";
-import { PlayersTool, TeamTool } from "./LetteringTools";
+import { PlayersStyle, TeamTool } from "./LetteringTools";
+import { PlayersTool } from "./PlayersTool";
+import { TeamListContext } from "./team-list-context";
+import { fakeTeamApi } from "./team-list-test-api";
 import { LogosTool, TextTool } from "./LogosTool";
 import { StartCard } from "./StartCard";
 import { ToolTabs, TOOL_ORDER } from "./ToolPanel";
@@ -44,7 +47,7 @@ function api(overrides: Partial<EditorApi> = {}): EditorApi {
     ...overrides,
   };
 }
-const inTool = (node: React.ReactNode, overrides: Partial<EditorApi> = {}) => renderToStaticMarkup(<EditorContext.Provider value={api(overrides)}>{node}</EditorContext.Provider>);
+const inTool = (node: React.ReactNode, overrides: Partial<EditorApi> = {}) => renderToStaticMarkup(<EditorContext.Provider value={api(overrides)}><TeamListContext.Provider value={fakeTeamApi()}>{node}</TeamListContext.Provider></EditorContext.Provider>);
 const text = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, "&").replace(/\s+/g, " ");
 
 describe("the shell", () => {
@@ -148,13 +151,14 @@ describe("the tools", () => {
     expect(text(html)).toContain(W.lettering.style);
   });
 
-  it("Players: the sample player, the switches with the right ones on, the long-name note while shrunk", () => {
-    const html = inTool(<PlayersTool />, { textFits: [{ layerId: "x", role: "player-name", scale: 0.6, shrunk: true }] });
+  it("Players, style view: the sample player (only while the list is empty), the switches with the right ones on, the long-name note while shrunk", () => {
+    const html = inTool(<PlayersStyle onBack={() => undefined} showPreviewAs />, { textFits: [{ layerId: "x", role: "player-name", scale: 0.6, shrunk: true }] });
     expect(text(html)).toContain(W.lettering.fromTeamList);
     expect(html).toMatch(/data-testid="slot-back-name"[^>]*checked=""|checked=""[^>]*data-testid="slot-back-name"/);
     expect(html).toContain('inputMode="numeric"');
     expect(text(html)).toContain(W.lettering.shrunk);
-    expect(text(inTool(<PlayersTool />))).not.toContain(W.lettering.shrunk);
+    expect(text(inTool(<PlayersStyle onBack={() => undefined} showPreviewAs />))).not.toContain(W.lettering.shrunk);
+    expect(text(inTool(<PlayersStyle onBack={() => undefined} showPreviewAs={false} />))).not.toContain(W.lettering.previewAs);
   });
 
   it("Logos and Text: the simple panels in the coach's words", () => {

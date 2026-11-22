@@ -40,6 +40,7 @@ import {
   type Palette,
   type ProductDefinition,
   type SaveState,
+  type SavedTeamList,
   type Template,
 } from "../src";
 import { chooseProduct, type DemoProduct } from "./products";
@@ -58,6 +59,10 @@ interface DemoData {
 const PARAMS = new URLSearchParams(window.location.search);
 const DEV = PARAMS.get("dev") === "1";
 const DEMO_PRODUCT = chooseProduct(window.location.search);
+// The export minimum the team list shows for a region (a placeholder of 10 pieces, 08-team-list.md 8.3): ?region=pk
+// (Pakistan: none), uk (default), uae, us. The store passes the real one from its duty-paid quotes.
+const REGIONS: Record<string, { name: string; minimum: number }> = { pk: { name: "Pakistan", minimum: 0 }, uk: { name: "the UK", minimum: 10 }, uae: { name: "the UAE", minimum: 10 }, us: { name: "the US", minimum: 10 } };
+const REGION = REGIONS[PARAMS.get("region") ?? "uk"] ?? REGIONS.uk!;
 const PRODUCT_URL = `/products/${DEMO_PRODUCT.id}.json`;
 // Placeholder colours, as data, NOT print-tested: the founders' print-tested palette replaces the file.
 const PALETTE_URL = "/palettes/placeholder-palette.json";
@@ -150,6 +155,8 @@ function ModelCreditShort({ demoProduct }: { demoProduct: DemoProduct }) {
 interface Session {
   key: number;
   design: DesignDocument;
+  /** The team list saved with the design on this device, or nothing. */
+  teamList: SavedTeamList | null;
   startCard: boolean;
   resume: boolean;
 }
@@ -163,6 +170,8 @@ function EditorPage({ data }: { data: DemoData }) {
   const [done, setDone] = useState(false);
   const [otherTab, setOtherTab] = useState(false);
   const started = useRef(true);
+  /** The latest design and team list: one record on the device saves both. */
+  const latest = useRef<{ design: DesignDocument | null; teamList: SavedTeamList | null }>({ design: null, teamList: null });
   const autosave = useRef<Autosave | null>(null);
   const tabs = useRef<ReturnType<typeof watchOtherTabs>>(null);
 
@@ -181,7 +190,8 @@ function EditorPage({ data }: { data: DemoData }) {
         const missing = saved ? await assets.restore(designAssetIds(saved.design)) : [];
         if (saved) await designs.pruneAssets().catch(() => undefined);
         setStore({ designs, assets, persistent, missing });
-        setSession(saved ? { key: 1, design: saved.design, startCard: false, resume: true } : { key: 1, design: newDesign(data), startCard: true, resume: false });
+        latest.current = { design: saved?.design ?? null, teamList: saved?.teamList ?? null };
+        setSession(saved ? { key: 1, design: saved.design, teamList: saved.teamList ?? null, startCard: false, resume: true } : { key: 1, design: newDesign(data), teamList: null, startCard: true, resume: false });
         if (!persistent) setSaveState("failed");
       });
     return () => {
@@ -194,7 +204,7 @@ function EditorPage({ data }: { data: DemoData }) {
     autosave.current = createAutosave({
       save: async (design) => {
         if (!store.persistent) throw new Error("no storage");
-        const record = await store.designs.saveDesign(product.id, design, { started: started.current });
+        const record = await store.designs.saveDesign(product.id, design, { started: started.current, teamList: latest.current.teamList });
         tabs.current?.announce(record.savedAt);
       },
       onState: setSaveState,
@@ -208,10 +218,30 @@ function EditorPage({ data }: { data: DemoData }) {
 
   const onDesignChange = useCallback((design: DesignDocument, info: { started: boolean }) => {
     started.current = info.started;
+    latest.current.design = design;
     // For the review scripts: the current design (never shown on the page).
     (window as unknown as { __editorDesign: DesignDocument }).__editorDesign = design;
     autosave.current?.schedule(design);
   }, []);
+
+  // The team list changed (the editor hands it over): the same record on the device is saved again, with the design.
+  const onTeamListChange = useCallback((list: SavedTeamList) => {
+    latest.current.teamList = list;
+    (window as unknown as { __teamList: SavedTeamList }).__teamList = list;
+    if (latest.current.design) autosave.current?.schedule(latest.current.design);
+  }, []);
+  // What the demo gives the list (the store will give its own): this product's sizes, noun and a sample minimum.
+  const teamListHost = useMemo(
+    () => ({
+      initial: session?.teamList ?? null,
+      noun: { one: DEMO_PRODUCT.shortName.toLowerCase(), many: `${DEMO_PRODUCT.shortName.toLowerCase()}s` },
+      minimum: REGION.minimum > 0 ? { pieces: REGION.minimum, region: REGION.name } : null,
+      onChange: onTeamListChange,
+      // The device save has its own second of waiting: the list is handed over at once.
+      debounceMs: 0,
+    }),
+    [session?.teamList, onTeamListChange],
+  );
 
   const onDone = useCallback((design: DesignDocument) => {
     autosave.current?.schedule(design);
@@ -244,6 +274,7 @@ function EditorPage({ data }: { data: DemoData }) {
         fonts={data.fonts}
         templates={data.templates}
         initialDesign={session.design}
+        teamList={teamListHost}
         showStartCard={session.startCard}
         productName={DEMO_PRODUCT.shortName}
         assets={assets}
@@ -278,7 +309,8 @@ function EditorPage({ data }: { data: DemoData }) {
           autosave.current?.dispose();
           void store.designs.clearDesign(product.id).finally(() => {
             setSaveState(null);
-            setSession((s) => ({ key: (s?.key ?? 0) + 1, design: newDesign(data), startCard: true, resume: false }));
+            latest.current = { design: null, teamList: null };
+            setSession((s) => ({ key: (s?.key ?? 0) + 1, design: newDesign(data), teamList: null, startCard: true, resume: false }));
           });
         }}
       />
