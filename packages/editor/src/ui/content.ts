@@ -249,6 +249,8 @@ export const EDITOR_WORDING = {
       "number-duplicate": "Same number as {name} ({number}).", // W-TL55
       "number-duplicate-two": "Same number as {name} and 1 other ({number}).", // W-TL55 (three lines on one number)
       "number-duplicate-many": "Same number as {name} and {k} others ({number}).", // W-TL55
+      "number-taken-first-order": "This number is already taken in the team's signed list.", // NEW (a late player's add-on order, M2-3)
+      "number-taken-add-on": "This number is already taken by another late player.", // NEW (a late player's add-on order, M2-3)
       "name-character": "Can't print “{character}”. Use letters, spaces, and - ' .", // W-TL56
       "name-digit": "Numbers go in the No. box, not in the name.", // W-TL57
       "name-too-long": "Too long for the back: about {k} letters too many. Initials help: {example}.", // W-TL59
