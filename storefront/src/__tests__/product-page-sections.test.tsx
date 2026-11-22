@@ -342,3 +342,47 @@ describe("details", () => {
     expect(container).toBeEmptyDOMElement()
   })
 })
+
+describe("the 3D designer's way in (S1-12)", () => {
+  it("a product with a 3D model has the Design your kit button under its name", () => {
+    render(<ProductTemplate product={jersey} region={regionPk} countryCode="pk" images={[]} />)
+
+    const column = screen.getByTestId("product-buy-column")
+    expect(within(column).getByRole("link", { name: "Design your kit" })).toHaveAttribute(
+      "href",
+      "/pk/design/jersey"
+    )
+    expect(screen.queryByTestId("design-saved-notice")).toBeNull()
+  })
+
+  it("a product with no 3D model has no button", () => {
+    render(<ProductTemplate product={fitKit} region={regionPk} countryCode="pk" images={[]} />)
+
+    expect(screen.queryByTestId("design-button")).toBeNull()
+    render(
+      <ProductTemplate
+        product={{ ...jersey, handle: "jacket" }}
+        region={regionPk}
+        countryCode="pk"
+        images={[]}
+      />
+    )
+    expect(screen.queryByTestId("design-button")).toBeNull()
+  })
+
+  it("after Done (?design=saved) the page shows the notice, only for a product with a model", () => {
+    render(
+      <ProductTemplate product={jersey} region={regionPk} countryCode="pk" images={[]} designSaved />
+    )
+    expect(screen.getByTestId("design-saved-notice")).toHaveTextContent(
+      "Your design is saved on this device."
+    )
+  })
+
+  it("the notice is not shown for a product with no model, even with the flag", () => {
+    render(
+      <ProductTemplate product={fitKit} region={regionPk} countryCode="pk" images={[]} designSaved />
+    )
+    expect(screen.queryByTestId("design-saved-notice")).toBeNull()
+  })
+})

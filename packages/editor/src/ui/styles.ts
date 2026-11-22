@@ -319,8 +319,8 @@ export const EDITOR_CSS = /* css */ `
   :is(.fmo-panel-body, .fmo-kit-popover, .fmo-done-checks)::-webkit-scrollbar-track, :is(.fmo-panel-body, .fmo-kit-popover, .fmo-done-checks)::-webkit-scrollbar-button { background: transparent; display: none; }
 }
 @supports not selector(::-webkit-scrollbar) { :is(.fmo-panel-body, .fmo-kit-popover, .fmo-done-checks) { scrollbar-width: thin; scrollbar-color: var(--fmo-border-strong) transparent; } }
-/* R39: on a phone a panel whose content goes on below fades over its last 28 px (a cut line reads as "more"). */
-.fmo-editor[data-layout="compact"] .fmo-panel-body[data-more-below="true"] { -webkit-mask-image: linear-gradient(to top, transparent 0, #000 28px); mask-image: linear-gradient(to top, transparent 0, #000 28px); }
+/* R39: on a phone a panel whose content goes on below fades over its last 16 px (E3g: 28 covered a swatch row) (a cut line reads as "more"). */
+.fmo-editor[data-layout="compact"] .fmo-panel-body[data-more-below="true"] { -webkit-mask-image: linear-gradient(to top, transparent 0, #000 16px); mask-image: linear-gradient(to top, transparent 0, #000 16px); }
 .fmo-editor[data-layout="compact"] .fmo-panel[data-typing="true"] .fmo-panel-inner > :not([data-keep-typing]) { display: none; }
 .fmo-editor[data-layout="compact"] .fmo-panel[data-typing="true"] .fmo-fields > :not(:focus-within) { display: none; }
 .fmo-editor[data-layout="compact"] .fmo-panel[data-typing="true"] .fmo-fields { grid-template-columns: 1fr; }
@@ -445,6 +445,14 @@ export const EDITOR_CSS = /* css */ `
 .fmo-part-popover .fmo-scroll-row { flex-wrap: wrap; overflow: visible; padding: 0; margin-inline: 0; -webkit-mask-image: none; mask-image: none; }
 .fmo-family > .fmo-label, .fmo-family > .fmo-group-label { display: block; margin: 0 0 8px; }
 .fmo-start-skip { text-align: center; }
+/* E3g: on a desktop's start card the swatches are a little smaller (30 px, 6 px apart: nine to a row) and the rows sit closer, so the two rows, the name and both buttons fit a 612 px window. */
+.fmo-editor[data-layout="wide"] .fmo-start .fmo-swatch { width: 30px; height: 30px; }
+.fmo-editor[data-layout="wide"] .fmo-start .fmo-scroll-row { gap: 6px; }
+.fmo-editor[data-layout="wide"] .fmo-start .fmo-chip { min-height: 30px; padding: 0 12px; }
+.fmo-editor[data-layout="wide"] .fmo-start .fmo-colour-rows > * + * { margin-top: 8px; }
+.fmo-editor[data-layout="wide"] .fmo-start .fmo-row-head { margin-bottom: 4px; }
+.fmo-editor[data-layout="wide"] .fmo-start .fmo-add-accent { min-height: 36px; }
+.fmo-add-accent { align-self: flex-start; }
 /* R5: while the start card is open on a phone only Reset stays over the small stage. */
 .fmo-editor[data-layout="compact"][data-start="true"] .fmo-zoom > :not(:last-child) { display: none; }
 .fmo-match { display: grid; grid-template-columns: auto auto 1fr; gap: 6px 14px; align-items: center; padding: 12px; border: 1px solid var(--fmo-border); border-radius: var(--fmo-radius-card); }

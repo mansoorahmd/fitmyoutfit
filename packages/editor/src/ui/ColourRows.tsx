@@ -62,6 +62,8 @@ export function TeamColourRows({ prefix }: { prefix: "start" | "team" }) {
   const { design, palette, wording } = api;
   const w = wording.colours;
   const [all, setAll] = useState<TeamColourRole | null>(null);
+  // E3g: on the start card the accent row stays closed behind one line until the coach opens it (or the kit has an accent).
+  const [accentOpen, setAccentOpen] = useState(false);
   const common = coloursCommonFirst(palette).filter((c) => palette.common.includes(c.id));
   const pick = (role: TeamColourRole, c: PaletteColour) => {
     if (api.commit((d) => setTeamColor(d, role, paletteColourRef(c)), "team-colour")) api.useColour(c.id);
@@ -76,6 +78,14 @@ export function TeamColourRows({ prefix }: { prefix: "start" | "team" }) {
     <div className="fmo-colour-rows" data-testid={`${prefix}-colour-rows`}>
       {TEAM_COLOUR_ROLES.map((role) => {
         const own = design.teamColors[role];
+        if (prefix === "start" && role === "accent" && !own && !accentOpen) {
+          return (
+            <button key={role} type="button" className="fmo-chip fmo-add-accent" aria-expanded="false" onClick={() => setAccentOpen(true)} data-testid="start-add-accent">
+              <EditorIcon name="plus" size={18} />
+              {w.addAccentColour}
+            </button>
+          );
+        }
         const swatch = swatchFor(role);
         const open = all === role;
         // The colour in use stays in view when it came from "All colours".

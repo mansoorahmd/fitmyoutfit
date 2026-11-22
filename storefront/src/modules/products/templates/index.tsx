@@ -1,6 +1,9 @@
 import React, { Suspense } from "react"
 
+import { editorProductFor } from "@lib/editor/products"
 import { hasRelatedProducts } from "@lib/util/product-page"
+import DesignButton from "@modules/design/components/design-button"
+import DesignSavedNotice from "@modules/design/components/design-saved-notice"
 import ImageGallery from "@modules/products/components/image-gallery"
 import ProductActions from "@modules/products/components/product-actions"
 import ProductBreadcrumb from "@modules/products/components/product-breadcrumb"
@@ -20,6 +23,8 @@ type ProductTemplateProps = {
   region: HttpTypes.StoreRegion
   countryCode: string
   images: HttpTypes.StoreProductImage[] | null
+  /** The designer's "Done" sent the customer back here (?design=saved). */
+  designSaved?: boolean
 }
 
 /**
@@ -40,10 +45,14 @@ const ProductTemplate: React.FC<ProductTemplateProps> = ({
   region,
   countryCode,
   images,
+  designSaved = false,
 }) => {
   if (!product || !product.id) {
     return notFound()
   }
+
+  // Only a product that has a 3D model gets the designer's button.
+  const hasDesigner = !!editorProductFor(product.handle)
 
   return (
     <div className={productLayout.page} data-testid="product-container">
@@ -59,6 +68,8 @@ const ProductTemplate: React.FC<ProductTemplateProps> = ({
         <div className={productLayout.buy} data-testid="product-buy-column">
           <div className="flex flex-col gap-4">
             <ProductInfo product={product} />
+            {hasDesigner && designSaved && <DesignSavedNotice />}
+            {hasDesigner && <DesignButton handle={product.handle} />}
             <Suspense
               fallback={
                 <ProductActions
