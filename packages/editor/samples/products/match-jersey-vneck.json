@@ -6,6 +6,12 @@
     "url": "/models/match-jersey-vneck.glb",
     "format": "glb"
   },
+  "body": {
+    "url": "/models/body-male.glb",
+    "format": "glb",
+    "frameAbove": 0.32,
+    "frameBelow": 0.1
+  },
   "palette": {
     "id": "placeholder-palette",
     "version": 1

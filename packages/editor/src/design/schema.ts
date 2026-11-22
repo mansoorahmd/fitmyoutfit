@@ -562,6 +562,25 @@ export const productDefinitionSchema = z.strictObject({
     url: z.string().min(1),
     format: z.literal("glb"),
   }),
+  /**
+   * G3: an optional body model the garment is shown on (a person with a head and neck). It is only for looking at:
+   * the canvas loads it after the garment, never picks, hovers, colours or prints on it, and the editor works the same
+   * without one. The model is in the garment's frame (the same metres, Y up, front +Z); nothing in a design refers
+   * to it. `url`: absolute, or a path the host app serves.
+   */
+  body: z
+    .strictObject({
+      url: z.string().min(1),
+      format: z.literal("glb"),
+      /**
+       * The resting view shows the garment and this much more above it (the head and neck), in metres of the
+       * garment's frame, and `frameBelow` metres under its hem. Both are looked at, never measured: the view
+       * does not wait for the body to load.
+       */
+      frameAbove: z.number().finite().min(0).max(2),
+      frameBelow: z.number().finite().min(0).max(2),
+    })
+    .optional(),
   /** Palette new designs for this product start from. */
   palette: paletteRefSchema,
   /** Team colours a new design starts with. */

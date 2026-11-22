@@ -35,6 +35,36 @@
       ],
       "additionalProperties": false
     },
+    "body": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string",
+          "minLength": 1
+        },
+        "format": {
+          "type": "string",
+          "const": "glb"
+        },
+        "frameAbove": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 2
+        },
+        "frameBelow": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 2
+        }
+      },
+      "required": [
+        "url",
+        "format",
+        "frameAbove",
+        "frameBelow"
+      ],
+      "additionalProperties": false
+    },
     "palette": {
       "type": "object",
       "properties": {

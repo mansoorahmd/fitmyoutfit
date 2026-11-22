@@ -44,6 +44,7 @@ import { FontWatcher, type FontSetLike, type FontStatus } from "../texture/fonts
 import { AssetImageCache, type AssetUrlResolver } from "./asset-images.js";
 import { NO_INSETS, frameInFreeArea, type Framing, type ViewInsets } from "./camera.js";
 import { CameraRig } from "./camera-rig.js";
+import { disposeBody, makeBody } from "./body-model.js";
 import { makeFabric, DEFAULT_FABRIC_SHADING, type Fabric } from "./fabric.js";
 import { MICRO_TILE_MM, microAmount, cssPxPerMm } from "./fabric-weave.js";
 import { loadModel, type LoadedModel, type ModelLoadProgress } from "./model-loader.js";
@@ -271,6 +272,8 @@ export interface DesignCanvasProps {
    */
   hover?: boolean;
   onHover?: (hover: CanvasHover | null) => void;
+  /** G3: show the product's body under the garment (default true; only a product with a `body` has one). */
+  showBody?: boolean;
   /** A zone or group of shapes to show on the model (the zone flash; editor only). */
   highlight?: ZoneHighlight | null;
   /** The model's download progress (N17). */
@@ -311,6 +314,8 @@ interface PreparedModel {
   fabrics: Fabric[];
   center: [number, number, number];
   size: [number, number, number];
+  /** The garment's own box; `center` and `size` are the resting view's box (the garment and, with a body, the head above it). */
+  garmentSize: [number, number, number];
 }
 
 /** The name a model object was given in the file (Three.js may sanitise `name`; GLTFLoader keeps the original in `userData`). */
@@ -366,7 +371,17 @@ function prepareModel(source: Object3D, product: ProductDefinition): PreparedMod
   const box = new Box3().setFromObject(scene);
   const center = box.getCenter(new Vector3());
   const size = box.getSize(new Vector3());
-  return { scene, materials, pieceMaterials, pieceMeshes, fabrics, center: center.toArray(), size: size.toArray() };
+  const garmentSize = size.toArray();
+  const body = product.body;
+  if (body) {
+    // G3: the resting view shows the person from the top of the head to a little below the hem; the box is set by the
+    // product's data, so the view does not change when the body arrives.
+    box.min.y -= body.frameBelow;
+    box.max.y += body.frameAbove;
+    box.getCenter(center);
+    box.getSize(size);
+  }
+  return { scene, materials, pieceMaterials, pieceMeshes, fabrics, center: center.toArray(), size: size.toArray(), garmentSize };
 }
 
 interface PatternSurface {
@@ -594,7 +609,7 @@ function ModelView({
   const gestureNow = useLatest(gesture);
 
   const { center, size } = prepared;
-  const framing: Framing = frameInFreeArea(size, FOV, viewSize, viewInsets);
+  const framing: Framing = frameInFreeArea(size, FOV, viewSize, viewInsets, prepared.garmentSize);
   const fit = framing.fit;
 
   // The camera (camera-rig.ts): framed in the free area, re-framed when it changes, animated moves.
@@ -1414,6 +1429,35 @@ function Throw({ error }: { error: Error }): never {
 }
 
 /**
+ * G3: the body the garment is shown on. Loaded after the garment (it mounts when the garment's model is there), and
+ * kept apart from it: its own clone of the model in a scene object of its own, no part of it in `prepared`, so
+ * picking, hovering, the pattern texture and the fabric never see it (and its meshes also answer no ray). A failed
+ * load shows no body and no error: the editor works the same without one.
+ */
+function BodyView({ url }: { url: string }) {
+  const invalidate = useThree((state) => state.invalidate);
+  const [body, setBody] = useState<Object3D | null>(null);
+  useEffect(() => {
+    let alive = true;
+    let made: Object3D | null = null;
+    loadModel(url).promise.then(
+      (model) => {
+        if (!alive) return;
+        made = makeBody(model.scene);
+        setBody(made);
+        invalidate();
+      },
+      () => undefined,
+    );
+    return () => {
+      alive = false;
+      if (made) disposeBody(made);
+    };
+  }, [url, invalidate]);
+  return body ? <primitive object={body} /> : null;
+}
+
+/**
  * Shows a product's 3D model with the design drawn on it: the pattern pieces,
  * coloured per zone, and the design's text, numbers and logos, drawn into a
  * texture from the product definition and the design every time the design
@@ -1438,6 +1482,7 @@ export function DesignCanvas({ className, style, onError, errorFallback, onLoadP
     [],
   );
   const url = view.product.model.url;
+  const showBody = view.showBody ?? true;
   const [loaded, setLoaded] = useState<{ url: string; model: LoadedModel | null; error: Error | null } | null>(null);
   const callbacks = useLatest({ onLoadProgress, onModelReady });
   useEffect(() => {
@@ -1474,6 +1519,7 @@ export function DesignCanvas({ className, style, onError, errorFallback, onLoadP
             gl={{ antialias: true, preserveDrawingBuffer: false, toneMapping: NeutralToneMapping }}
           >
             {current?.model && <ModelView {...view} model={current.model} handle={handle} />}
+            {current?.model && view.product.body && showBody && <BodyView url={view.product.body.url} />}
           </Canvas>
         )}
       </ModelErrorBoundary>

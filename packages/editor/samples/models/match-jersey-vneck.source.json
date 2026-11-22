@@ -31,6 +31,12 @@
       "version": 1
     }
   },
+  "body": {
+    "url": "/models/body-male.glb",
+    "format": "glb",
+    "frameAbove": 0.32,
+    "frameBelow": 0.1
+  },
   "teamColors": {
     "main": {
       "id": "placeholder-white",
