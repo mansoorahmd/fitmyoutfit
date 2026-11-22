@@ -316,6 +316,8 @@ interface PreparedModel {
   size: [number, number, number];
   /** The garment's own box; `center` and `size` are the resting view's box (the garment and, with a body, the head above it). */
   garmentSize: [number, number, number];
+  /** The garment's own box centre: the resting view when the body is hidden (as before the body existed). */
+  garmentCenter: [number, number, number];
 }
 
 /** The name a model object was given in the file (Three.js may sanitise `name`; GLTFLoader keeps the original in `userData`). */
@@ -372,6 +374,7 @@ function prepareModel(source: Object3D, product: ProductDefinition): PreparedMod
   const center = box.getCenter(new Vector3());
   const size = box.getSize(new Vector3());
   const garmentSize = size.toArray();
+  const garmentCenter = center.toArray();
   const body = product.body;
   if (body) {
     // G3: the resting view shows the person from the top of the head to a little below the hem; the box is set by the
@@ -381,7 +384,7 @@ function prepareModel(source: Object3D, product: ProductDefinition): PreparedMod
     box.getCenter(center);
     box.getSize(size);
   }
-  return { scene, materials, pieceMaterials, pieceMeshes, fabrics, center: center.toArray(), size: size.toArray(), garmentSize };
+  return { scene, materials, pieceMaterials, pieceMeshes, fabrics, center: center.toArray(), size: size.toArray(), garmentSize, garmentCenter };
 }
 
 interface PatternSurface {
@@ -589,6 +592,7 @@ function ModelView({
   highlight = null,
   onContextLost,
   onContextRestored,
+  showBody = true,
   handle,
 }: ModelViewProps) {
   const prepared = useMemo(() => prepareModel(model.scene, product), [model, product]);
@@ -608,7 +612,10 @@ function ModelView({
   const gestureTiming = useLatest(onGestureTiming);
   const gestureNow = useLatest(gesture);
 
-  const { center, size } = prepared;
+  // G4: with the body hidden the resting view is the garment alone, framed as it was before the body existed.
+  const withBody = showBody && Boolean(product.body);
+  const center = withBody ? prepared.center : prepared.garmentCenter;
+  const size = withBody ? prepared.size : prepared.garmentSize;
   const framing: Framing = frameInFreeArea(size, FOV, viewSize, viewInsets, prepared.garmentSize);
   const fit = framing.fit;
 

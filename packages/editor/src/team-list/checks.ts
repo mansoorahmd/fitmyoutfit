@@ -5,7 +5,7 @@
  * the problems are codes, the wording is `src/ui/content.ts`.
  */
 import { analyzeRoster, checkJerseyNumber, cleanText, disallowedNameCharacters, normalizeLines } from "@fitmyoutfit/team-rules";
-import type { PrintedFields, ProblemCode, RosterLimits, RosterNote, RosterProblem } from "@fitmyoutfit/team-rules";
+import type { PrintedFields, ProblemCode, RosterLimits, RosterNote, RosterProblem, TakenNumber } from "@fitmyoutfit/team-rules";
 import type { DesignDocument } from "../design/schema.js";
 import { filledLines } from "./lines.js";
 import type { EditorLine, SavedTeamList, TeamListReport, TeamListSize } from "./types.js";
@@ -16,6 +16,8 @@ export interface ListSettings {
   limits?: Partial<RosterLimits>;
   /** The region's minimum in pieces, or nothing. */
   minimum?: number | null;
+  /** Numbers already taken outside this list (a late joiner's add-on order); see `TeamListHost.taken`. */
+  taken?: readonly TakenNumber[];
 }
 
 /** The analysis of a list, with its problems and notes by line id (what the lines show). */
@@ -37,7 +39,7 @@ export interface ListAnalysis {
 /** The checks and the summary of the lines that are not empty. */
 export function analyseList(lines: readonly EditorLine[], settings: ListSettings): ListAnalysis {
   const filled = filledLines(lines);
-  const roster = { prints: settings.prints, sizes: settings.sizes, ...(settings.limits ? { limits: settings.limits } : {}) };
+  const roster = { prints: settings.prints, sizes: settings.sizes, ...(settings.limits ? { limits: settings.limits } : {}), ...(settings.taken && settings.taken.length > 0 ? { taken: settings.taken } : {}) };
   const report = analyzeRoster(filled, roster, { minimum: settings.minimum ?? null });
   const byLine = new Map<string, RosterProblem[]>();
   const notesByLine = new Map<string, RosterNote[]>();
@@ -85,7 +87,7 @@ export function isShown(problem: RosterProblem, seen: LineSeen | undefined, reve
   if (AT_ONCE.has(problem.code)) return true;
   if (revealAll) return true;
   if (MISSING.has(problem.code)) return Boolean(seen?.left);
-  if (problem.code === "number-duplicate") return Boolean(seen?.number);
+  if (problem.code === "number-duplicate" || problem.code === "number-taken-first-order" || problem.code === "number-taken-add-on") return Boolean(seen?.number);
   if (problem.code === "size-unknown") return Boolean(seen?.size);
   return false;
 }

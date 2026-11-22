@@ -25,9 +25,9 @@ import { useEditorHistory } from "../react/useEditorHistory.js";
 import { useTrailing } from "../react/useTrailing.js";
 import { buildSizeTable, resolveLimits } from "@fitmyoutfit/team-rules";
 import { analyseList, designWithPlayer, nextToFix, playerForShirt, toSavedList, type SeenMap } from "../team-list/checks.js";
-import { addLine, cleanField, convertAllDigits, moveLine, newLine, removeLine, setCount as setLineCount, setField as setLineField, setFlag as setLineFlag, setSizeCountLines, sortLines, type SortBy } from "../team-list/lines.js";
+import { addLine, printsOf, cleanField, convertAllDigits, moveLine, newLine, removeLine, setCount as setLineCount, setField as setLineField, setFlag as setLineFlag, setSizeCountLines, sortLines, type SortBy } from "../team-list/lines.js";
 import { createHandOver } from "../team-list/hand-over.js";
-import { readSavedList } from "../team-list/saved.js";
+import { readSavedListWithNotes, type ReadNote } from "../team-list/saved.js";
 import { DEFAULT_TEAM_NOUN, DEFAULT_TEAM_SIZES, type EditorLine, type SavedTeamList, type TeamListHost, type TeamListReport } from "../team-list/types.js";
 import { applyPaste, type PasteMode } from "../team-list/paste.js";
 import { PlayerChip, WholeShirtToggle } from "./PlayerChip.js";
@@ -54,6 +54,8 @@ import { LAYOUT_SIZES, START_CARD_STAGE_MIN, chooseLayout, panelGrowRoom, panelH
 import { ConfirmDialog } from "./parts.js";
 import { Stage, type StageLoad } from "./Stage.js";
 import { StartCard } from "./StartCard.js";
+import { GarmentSheet } from "./GarmentSheet.js";
+import { planGarmentChange, type GarmentChange, type GarmentChoice, type GarmentPlan } from "./garment.js";
 import { bodyColour, describeStage, nextStageTone, type StageTone } from "./stage-logic.js";
 import { EDITOR_CSS } from "./styles.js";
 import { TOOL_ORDER, ToolPanel, ToolTabs } from "./ToolPanel.js";
@@ -142,6 +144,22 @@ export interface EditorShellProps {
    * gets back. All optional: without it the list starts empty, with the store's usual sizes, and its changes go nowhere.
    */
   teamList?: TeamListHost;
+  /**
+   * The garment chooser (G4): the garments the customer may choose between (a sheet from the start card and from the
+   * product's name in the top bar; with fewer than two it is not offered). Data only: the editor fetches nothing.
+   */
+  garments?: readonly GarmentChoice[];
+  /** Which garment is being designed (a `GarmentChoice.id`). Default: the product's id. */
+  garmentId?: string;
+  /**
+   * The customer chose another garment (and, where something would be left behind, confirmed). The host answers by
+   * giving the editor the new `product` (and `initialDesign`, from `change.design` or the new garment's own saved
+   * design, see `GarmentChange.samePattern`) with a new `key`, so the editor starts again on it; `teamList.initial`
+   * is `change.teamList`. It should save the old garment's design first: it stays saved, so choosing it again brings it back.
+   */
+  onChooseGarment?: (change: GarmentChange) => void;
+  /** A sentence to say in the status line when the editor opens (`GarmentChange.notice`, handed back after a change of garment). */
+  startNotice?: string;
   /** The font set text is loaded with. Default: `document.fonts`. */
   fontSet?: FontSetLike | null;
   /** The 3D texture's size (default 2048). */
@@ -193,6 +211,15 @@ function useReducedMotion(): boolean {
 }
 
 const RECENT_KEY = "fmo-editor-recent";
+/** G4: whether the person under the garment is shown, remembered for the browser session (not saved with the design). */
+const BODY_KEY = "fmo-editor-show-body";
+function readShowBody(): boolean {
+  try {
+    return typeof sessionStorage === "undefined" || sessionStorage.getItem(BODY_KEY) !== "off";
+  } catch {
+    return true;
+  }
+}
 /** The landscape phone's side panel in list view (08-team-list.md 3.3: widened from 320 so a name has room; the stage keeps 380 px). */
 const LIST_PANEL_SHORT = 400;
 
@@ -261,10 +288,18 @@ export function EditorShell(props: EditorShellProps) {
   }, []);
   const reducedMotion = useReducedMotion();
   // A design brought back (or upgraded) gets the print-area rule once: every item inside its area.
-  const history = useEditorHistory(() => ({
-    design: fitDesignToAreas(props.product, props.initialDesign),
-    lines: readSavedList(props.teamList?.initial, { productId: props.product.id, ...(props.teamList?.limits ? { limits: props.teamList.limits } : {}) }),
-  }));
+  const readNotes = useRef<readonly ReadNote[]>([]);
+  const history = useEditorHistory(() => {
+    const read = readSavedListWithNotes(props.teamList?.initial, { productId: props.product.id, ...(props.teamList?.limits ? { limits: props.teamList.limits } : {}) });
+    readNotes.current = read.notes;
+    return { design: fitDesignToAreas(props.product, props.initialDesign), lines: read.lines };
+  });
+  // G4 S2: what reading the saved list left out or changed is told to the host once, when the editor opens.
+  useEffect(() => {
+    if (readNotes.current.length > 0) props.teamList?.onReadNotes?.(readNotes.current);
+    readNotes.current = [];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const design = history.design;
   const designRef = useRef(design);
   useEffect(() => {
@@ -280,7 +315,7 @@ export function EditorShell(props: EditorShellProps) {
   const panelOpen = !startCard && activeTool !== null;
   const [panelSize, setPanelSize] = useState({ width: 0, height: 0 });
   const [typing, setTypingState] = useState(false);
-  const [status, setStatus] = useState<{ text: string; undo: boolean } | null>(null);
+  const [status, setStatus] = useState<{ text: string; undo: boolean } | null>(() => (props.startNotice ? { text: props.startNotice, undo: false } : null));
   const statusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [camera, setCamera] = useState<CameraInfo>({ side: "front", canZoomIn: true, canZoomOut: true, panned: false });
   const pointer = useRef<{ down: boolean; lastUserTurnAt: number | null }>({ down: false, lastUserTurnAt: null });
@@ -323,6 +358,20 @@ export function EditorShell(props: EditorShellProps) {
   const [snapOn, setSnapOn] = useState(true);
   // "On this kit" is open (4.8): on phones in the panel's place, on desktop as a popover.
   const [kitOpen, setKitOpen] = useState(false);
+  // G4: the garment chooser.
+  const [garmentOpen, setGarmentOpen] = useState(false);
+  const [garmentAsk, setGarmentAsk] = useState<{ to: GarmentChoice; plan: GarmentPlan } | null>(null);
+  const [showBody, setShowBody] = useState(readShowBody);
+  const toggleBody = useCallback(() => {
+    setShowBody((on) => {
+      try {
+        sessionStorage.setItem(BODY_KEY, on ? "off" : "on");
+      } catch {
+        // Storage refused: the choice lasts until the page is closed.
+      }
+      return !on;
+    });
+  }, []);
   // The Done panel (9.2).
   const [doneOpen, setDoneOpen] = useState(false);
   /** R38: the tool panel open when the Done panel opened on a phone (it comes back when the Done panel closes). */
@@ -441,7 +490,8 @@ export function EditorShell(props: EditorShellProps) {
   });
   const hostLimits = teamHost?.limits;
   const hostMinimum = teamHost?.minimum?.pieces ?? null;
-  const listSettings = useMemo(() => ({ prints, sizes: listSizes, ...(hostLimits ? { limits: hostLimits } : {}), minimum: hostMinimum }), [prints, listSizes, hostLimits, hostMinimum]);
+  const hostTaken = teamHost?.taken;
+  const listSettings = useMemo(() => ({ prints, sizes: listSizes, ...(hostLimits ? { limits: hostLimits } : {}), minimum: hostMinimum, ...(hostTaken ? { taken: hostTaken } : {}) }), [prints, listSizes, hostLimits, hostMinimum, hostTaken]);
   const analysis = useMemo(() => analyseList(lines, listSettings), [lines, listSettings]);
   const [chosen, setChosen] = useState<string | null>(null);
   // Only an empty list has no chosen line: the first line when the editor opens, the next one after a removal (7.3).
@@ -704,6 +754,54 @@ export function EditorShell(props: EditorShellProps) {
     handOver.schedule({ saved, report: analysis.report });
   }, [lines, prints, listSizes, product.id, analysis.report, handOver, hostBridge]);
   const flushList = useCallback(() => handOver.flush(), [handOver]);
+
+  // ---- The garment chooser (G4).
+  const garmentList = props.garments ?? [];
+  const garmentId = props.garmentId ?? product.id;
+  const garmentNow: (GarmentChoice & { product: ProductDefinition }) | null = useMemo(() => {
+    const own = garmentList.find((g) => g.id === garmentId);
+    return { ...(own ?? { id: garmentId, name: props.productName }), product: own?.product ?? product };
+  }, [garmentList, garmentId, props.productName, product]);
+  const garmentsOffered = garmentList.length >= 2 && Boolean(props.onChooseGarment);
+  const switchGarment = useCallback(
+    (to: GarmentChoice, plan: GarmentPlan) => {
+      setGarmentOpen(false);
+      setGarmentAsk(null);
+      flushList();
+      const carried = plan.carry?.design ?? designRef.current;
+      const filled = linesRef.current.filter((l) => !(l.name === "" && l.number === "" && l.size === "" && !l.noName && !l.noNumber && l.count === 1));
+      const targetId = to.product?.id ?? to.id;
+      const teamList = filled.length > 0 ? toSavedList(linesRef.current as EditorLine[], targetId, { prints: printsOf(carried), sizes: listSizes }) : null;
+      props.onChooseGarment?.({ garmentId: to.id, design: carried, samePattern: plan.carry?.samePattern ?? false, leftBehind: plan.carry?.leftBehind.length ?? 0, teamList, notice: plan.notice });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [flushList, listSizes, props.onChooseGarment],
+  );
+  const chooseGarment = useCallback(
+    (to: GarmentChoice) => {
+      if (!garmentNow || to.id === garmentId) {
+        setGarmentOpen(false);
+        return;
+      }
+      const plan = planGarmentChange(wording, designRef.current, garmentNow, to);
+      // Nothing is left behind without asking first.
+      if (plan.ask) {
+        setGarmentOpen(false);
+        setGarmentAsk({ to, plan });
+      } else switchGarment(to, plan);
+    },
+    [garmentNow, garmentId, wording, switchGarment],
+  );
+  const openGarments = useCallback(() => {
+    if (garmentsOffered) setGarmentOpen(true);
+  }, [garmentsOffered]);
+  // The sentence the editor opened with (the status line starts with it) goes after a while.
+  useEffect(() => {
+    if (!props.startNotice) return;
+    const timer = setTimeout(() => setStatus((s) => (s?.text === props.startNotice ? null : s)), 9000);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   useEffect(() => () => handOver.flush(), [handOver]);
   // A name or number item selected on the model opens the Players tab on its style, not on the list (the item's own controls).
   const selectedRole = selectedId ? design.layers.find((l) => l.id === selectedId)?.role : undefined;
@@ -737,19 +835,22 @@ export function EditorShell(props: EditorShellProps) {
     },
     [product, showSide],
   );
+  // B1: a signed list is read-only, and one history holds the design and the list. While it is locked nothing is undone or
+  // redone at all (the buttons are off too): a step in either direction could carry the list back to an earlier state.
+  const listLocked = Boolean(teamHost?.locked);
   const undo = useCallback(() => {
-    if (!history.canUndo) return;
+    if (!history.canUndo || listLocked) return;
     const target = (history.history.gestureStart ? history.history.gestureStart.value : history.history.past[history.history.past.length - 1])?.design;
     announce(fill(wording.states.undone, { change: changeWords(wording, history.undoLabel) }));
     turnToChange(design, target);
     history.undo();
-  }, [history, announce, wording, turnToChange, design]);
+  }, [history, announce, wording, turnToChange, design, listLocked]);
   const redo = useCallback(() => {
-    if (!history.canRedo) return;
+    if (!history.canRedo || listLocked) return;
     announce(fill(wording.states.redone, { change: changeWords(wording, history.redoLabel) }));
     turnToChange(design, history.history.future[0]?.design);
     history.redo();
-  }, [history, announce, wording, turnToChange, design]);
+  }, [history, announce, wording, turnToChange, design, listLocked]);
 
   // ---- Tools.
   const toolsReady = mode === "flat" || (load.ready && fontsReadyOnce);
@@ -1417,6 +1518,7 @@ export function EditorShell(props: EditorShellProps) {
     <div style={layout === "compact" ? { position: "absolute", inset: 0, pointerEvents: "none" } : layout === "short" ? { position: "absolute", inset: 0, pointerEvents: "none" } : { display: "contents" }}>
       <StartCardFrame layout={layout} maxHeight={(size.height || 844) - LAYOUT_SIZES.compact.topBar - START_CARD_STAGE_MIN} onSize={setPanelSize}>
         <StartCard
+          garment={garmentsOffered && garmentNow ? { name: garmentNow.name, onOpen: openGarments } : null}
           onClose={(seeDesigns) => {
             setStartCard(false);
             if (seeDesigns && tools.includes("design")) openTool("design", "expanded");
@@ -1452,11 +1554,12 @@ export function EditorShell(props: EditorShellProps) {
         <TopBar
           layout={layout}
           wording={wording}
-          productName={props.productName}
-          canUndo={history.canUndo}
-          canRedo={history.canRedo}
+          productName={garmentsOffered && garmentNow ? garmentNow.name : props.productName}
+          canUndo={history.canUndo && !listLocked}
+          canRedo={history.canRedo && !listLocked}
           undoTitle={`${wording.frame.undo}: ${changeWords(wording, history.undoLabel)} (Ctrl+Z)`}
           redoTitle={`${wording.frame.redo}: ${changeWords(wording, history.redoLabel)} (Ctrl+Shift+Z)`}
+          onGarment={garmentsOffered ? openGarments : undefined}
           onUndo={undo}
           onRedo={redo}
           saveState={props.saveState ?? null}
@@ -1509,7 +1612,11 @@ export function EditorShell(props: EditorShellProps) {
             description={description}
             assetUrl={assets.url}
             canvasRef={canvas}
+            hasBody={Boolean(product.body)}
+            showBody={showBody}
+            onToggleBody={toggleBody}
             canvasProps={{
+              showBody,
               textureSize: props.textureSize,
               fonts: props.fontSet,
               reducedMotion,
@@ -1634,6 +1741,26 @@ export function EditorShell(props: EditorShellProps) {
             setDoneOpen(false);
             api.select(check.layerId, { turn: true, openTool: true });
           }}
+        />
+        {garmentsOffered && (
+          <GarmentSheet open={garmentOpen} layout={layout} wording={wording} garments={garmentList} currentId={garmentId} onPick={chooseGarment} onClose={() => setGarmentOpen(false)} />
+        )}
+        <ConfirmDialog
+          open={garmentAsk !== null}
+          title={garmentAsk?.plan.ask?.title ?? ""}
+          body={garmentAsk?.plan.ask?.body}
+          onCancel={() => setGarmentAsk(null)}
+          testId="garment-ask"
+          actions={
+            <>
+              <button type="button" className="fmo-btn" onClick={() => garmentAsk && switchGarment(garmentAsk.to, garmentAsk.plan)} data-testid="garment-ask-switch">
+                {garmentAsk?.plan.ask?.switchLabel}
+              </button>
+              <button type="button" className="fmo-btn fmo-btn-ink" onClick={() => setGarmentAsk(null)} data-testid="garment-ask-stay" data-dialog-focus autoFocus>
+                {garmentAsk?.plan.ask?.stayLabel}
+              </button>
+            </>
+          }
         />
         <ConfirmDialog
           open={saveInfo}

@@ -57,6 +57,19 @@ async function framing(page, tag) {
       if (y > maxY) maxY = y;
     }
   if (maxX < 0) return { garment: null };
+  // G4: with a person, the head is not cut off (the top of everything drawn is inside the free stage and clear of its edge) and the
+  // hem is in view (the garment's main colour, red here, ends above the free stage's bottom edge, down the middle of the person).
+  const person = { top: minY / sc, headCut: minY / sc < free.top + 1 };
+  {
+    const midX = Math.round(((free.left + free.right) / 2) * sc);
+    let lastRed = -1;
+    for (let y = Math.round(free.top * sc); y < Math.round(free.bottom * sc); y++) {
+      const k = (y * img.width + midX) * 4;
+      if (img.data[k] > 140 && img.data[k + 1] < 70 && img.data[k + 2] < 90) lastRed = y;
+    }
+    person.hemY = lastRed < 0 ? null : lastRed / sc;
+    person.hemInView = lastRed >= 0 && lastRed / sc < free.bottom - 2;
+  }
   const g = { left: minX / sc, top: minY / sc, right: (maxX + 1) / sc, bottom: (maxY + 1) / sc };
   const h = free.bottom - free.top;
   const w = free.right - free.left;
@@ -66,6 +79,7 @@ async function framing(page, tag) {
     fillH: +((g.bottom - g.top) / h).toFixed(2),
     fillW: +((g.right - g.left) / w).toFixed(2),
     underRow: g.top < free.top - 1 || g.bottom > free.bottom + 1,
+    person,
   };
 }
 
@@ -115,9 +129,26 @@ async function runSize(size) {
     await page.type('[data-testid="start-team-name"]', "LAHORE LIONS");
     await page.click('[data-testid="start-skip"]');
     await sleep(1500);
-    // At rest: 4.6 framing.
+    // At rest: 4.6 framing. With a person (G4) the rule measures the garment, so it runs with the person hidden (the
+    // view control); a separate rule (4.6b) holds the resting view with the person: head not cut off, hem in view.
+    const hasBody = await page.exists('[data-testid="toggle-body"]');
+    let withPerson = null;
+    if (hasBody) {
+      withPerson = await framing(page, `${size}-rest-person`);
+      await page.click('[data-testid="toggle-body"]');
+      await sleep(1500);
+    }
     const rest = await framing(page, `${size}-rest`);
     record.framing.rest = rest;
+    if (hasBody) {
+      await page.click('[data-testid="toggle-body"]');
+      await sleep(1500);
+      record.framing.restWithPerson = withPerson;
+      if (withPerson?.person) {
+        if (withPerson.person.headCut) record.failures.push(`${size} rest: 4.6b the head is cut off or under a row (top at ${Math.round(withPerson.person.top)} px)`);
+        if (!withPerson.person.hemInView) record.failures.push(`${size} rest: 4.6b the hem is not in view`);
+      }
+    }
     if (rest?.garment) {
       const [lo, hi] = record.states.start?.layout === "wide" ? [0.75, 0.8] : [0.72, 0.8];
       const widthBound = rest.fillW >= 0.85;

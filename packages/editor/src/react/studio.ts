@@ -24,7 +24,7 @@ export interface StudioLight {
 
 export const STUDIO_LIGHTS: { sky: { color: string; ground: string; intensity: number }; lights: StudioLight[] } = {
   // Light from above, a warm grey from below (the floor of the studio).
-  sky: { color: "#ffffff", ground: "#b8b2a8", intensity: 0.8 },
+  sky: { color: "#ffffff", ground: "#c4c4c4", intensity: 1.35 },
   lights: [
     // Key: above, to the right of the camera; gives the folds their shape.
     { name: "key", intensity: 2.6, color: "#fffaf2", right: 0.6, up: 1.1, toward: 1.2 },

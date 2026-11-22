@@ -18,7 +18,7 @@ import { createHash } from "node:crypto";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { type BodyRecord, compactPrimitive, packUvs } from "./model-prep/body.js";
+import { type BodyRecord, clipAtY, compactPrimitive, packUvs } from "./model-prep/body.js";
 import { readAccessor, readGlb, worldMatrices, worldPositions } from "./model-prep/glb.js";
 import { KHRMeshQuantization, quantizationFrame, quantizeNormals, quantizePositions } from "./model-prep/quantize.js";
 
@@ -83,11 +83,39 @@ const parts: Part[] = [];
     const normal = readAccessor(glb, prim.attributes.NORMAL);
     const uv = readAccessor(glb, prim.attributes.TEXCOORD_0);
     const indices = readAccessor(glb, prim.indices);
-    const compact = compactPrimitive(worldPositions(position.values, matrix), normal.values, uv.values, indices.values);
+    const placed = worldPositions(position.values, matrix);
+    // G4: the avatar's grey briefs are painted in the body texture. The record's `shorts` names the triangles that are
+    // the shorts (a band of heights close to the body's middle, so the arms are never taken; the lower edge is cut
+    // straight through the triangles); they become a mesh of their own with a plain material of the record's colour,
+    // so they read as sports shorts. Nothing else changes.
+    const sh = record.shorts;
+    if (sh && sh.material === materialName) {
+      const cut = clipAtY(placed, normal.values, uv.values, indices.values, sh.minY);
+      const inShorts: number[] = [];
+      const rest: number[] = [];
+      for (let t = 0; t < cut.indices.length; t += 3) {
+        const tri = [cut.indices[t]!, cut.indices[t + 1]!, cut.indices[t + 2]!];
+        const y = (cut.positions[tri[0]! * 3 + 1]! + cut.positions[tri[1]! * 3 + 1]! + cut.positions[tri[2]! * 3 + 1]!) / 3;
+        const narrow = tri.every((v) => Math.abs(cut.positions[v * 3]!) <= sh.maxAbsX);
+        (narrow && y >= sh.minY && y <= sh.maxY ? inShorts : rest).push(...tri);
+      }
+      for (const [list, material, suffix] of [[rest, materialName, ""], [inShorts, "Mark_Shorts", "_shorts"]] as const) {
+        const compact = compactPrimitive(cut.positions, cut.normals, cut.uvs, Uint32Array.from(list));
+        parts.push({ name: `${mesh.name}_${materialName}${suffix}`.replace(/\s+/g, "_"), material, ...compact });
+      }
+      continue;
+    }
+    const compact = compactPrimitive(placed, normal.values, uv.values, indices.values);
     if (compact.positions.length / 3 > 65535) throw new Error(`${materialName} has more than 65535 vertices`);
     parts.push({ name: `${mesh.name}_${materialName}`.replace(/\s+/g, "_"), material: materialName, ...compact });
   }
 });
+
+/** An sRGB hex colour as the glTF's linear base colour factor. */
+function linearFromHex(hex: string): [number, number, number, number] {
+  const c = [1, 3, 5].map((i) => Number.parseInt(hex.slice(i, i + 2), 16) / 255).map((v) => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+  return [c[0]!, c[1]!, c[2]!, 1];
+}
 
 const doc = new Document();
 doc.createExtension(KHRMeshQuantization).setRequired(true);
@@ -101,6 +129,10 @@ scene.addChild(body);
 const made = new Map<string, ReturnType<Document["createMaterial"]>>();
 for (const part of parts) {
   let material = made.get(part.material);
+  if (!material && part.material === "Mark_Shorts") {
+    material = doc.createMaterial("Mark_Shorts").setMetallicFactor(0).setRoughnessFactor(record.shorts!.roughness).setDoubleSided(false).setBaseColorFactor(linearFromHex(record.shorts!.colour));
+    made.set(part.material, material);
+  }
   if (!material) {
     const src = json.materials!.find((m) => m.name === part.material)!;
     material = doc.createMaterial(part.material).setMetallicFactor(0).setRoughnessFactor(record.roughness[part.material] ?? 0.7).setDoubleSided(false);

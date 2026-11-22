@@ -3,7 +3,7 @@
  * sorting, the count and the two flags, and the clean-up on leaving a field. Each returns a new array and never
  * changes its input. No React: the interface calls these and puts the result in the editor's history.
  */
-import { buildSizeTable, cleanText, jerseyNumberValue, normalizeSize, type SizeTable } from "@fitmyoutfit/team-rules";
+import { ARABIC_INDIC_DIGITS, DEFAULT_JERSEY_NUMBER_RULES, WESTERN_DIGITS, buildSizeTable, cleanText, jerseyNumberValue, normalizeSize, type DigitSystem, type SizeTable } from "@fitmyoutfit/team-rules";
 import type { PrintedFields, RosterLine } from "@fitmyoutfit/team-rules";
 import type { DesignDocument } from "../design/schema.js";
 import type { EditorLine, TeamListSize } from "./types.js";
@@ -74,6 +74,9 @@ export function moveLine(lines: readonly EditorLine[], id: string, delta: -1 | 1
   return next;
 }
 
+/** The order of names: one fixed locale, so the same list sorts the same in every browser and on every phone's language setting. */
+const NAME_ORDER = new Intl.Collator("en", { sensitivity: "base" });
+
 export type SortBy = "number" | "name" | "size" | "entered";
 
 /**
@@ -100,7 +103,7 @@ export function sortLines(lines: readonly EditorLine[], by: SortBy, options: { s
   indexed.sort((a, b) => {
     if (by === "name") {
       if (a.l.name === "" || b.l.name === "") return a.l.name === b.l.name ? a.i - b.i : a.l.name === "" ? 1 : -1;
-      return a.l.name.localeCompare(b.l.name, undefined, { sensitivity: "base" }) || a.i - b.i;
+      return NAME_ORDER.compare(a.l.name, b.l.name) || a.i - b.i;
     }
     const ra = rank(a.l);
     const rb = rank(b.l);
@@ -112,13 +115,15 @@ export function sortLines(lines: readonly EditorLine[], by: SortBy, options: { s
 
 /** Every number written in one digit system (7.4): "0-9" or the Arabic-Indic digits. Leading zeros and other characters stay. */
 export function convertAllDigits(lines: readonly EditorLine[], to: "western" | "arabic-indic"): EditorLine[] {
-  const zero = to === "western" ? 0x30 : 0x660;
+  // The package's digit systems are the one table (no second copy of the ranges here).
+  const target = to === "western" ? WESTERN_DIGITS : ARABIC_INDIC_DIGITS;
+  const systems: readonly DigitSystem[] = DEFAULT_JERSEY_NUMBER_RULES.digitSystems;
   const convert = (value: string) => {
     let out = "";
     for (const ch of value) {
       const code = ch.codePointAt(0)!;
-      const digit = code >= 0x30 && code <= 0x39 ? code - 0x30 : code >= 0x660 && code <= 0x669 ? code - 0x660 : code >= 0x6f0 && code <= 0x6f9 ? code - 0x6f0 : -1;
-      out += digit >= 0 ? String.fromCodePoint(zero + digit) : ch;
+      const from = systems.find((s) => code >= s.zero && code <= s.zero + 9);
+      out += from ? String.fromCodePoint(target.zero + (code - from.zero)) : ch;
     }
     return out;
   };

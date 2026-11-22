@@ -4,7 +4,7 @@
  */
 import type { ReactNode } from "react";
 import type { SaveState } from "../storage/device-store.js";
-import type { EditorWording } from "./content.js";
+import { fill, type EditorWording } from "./content.js";
 import { EditorIcon } from "./icons.js";
 import type { EditorLayout, SaveStateWords } from "./layout.js";
 
@@ -30,6 +30,8 @@ export interface TopBarProps {
   price?: ReactNode;
   share?: ReactNode;
   account?: ReactNode;
+  /** G4: with the host's garments, the product's name opens the garment chooser (on a phone, an icon beside Redo). */
+  onGarment?: () => void;
 }
 
 function SaveStateView({ state, wording, form, onInfo }: { state: SaveState | null; wording: EditorWording; form: SaveStateWords; onInfo: () => void }) {
@@ -76,7 +78,14 @@ export function TopBar(props: TopBarProps) {
       {wide && (
         <div className="fmo-topbar-brand">
           {props.brand}
-          <small>{props.productName}</small>
+          {props.onGarment ? (
+            <button type="button" className="fmo-topbar-garment" aria-label={fill(wording.garment.buttonName, { name: props.productName })} onClick={props.onGarment} data-testid="garment-button">
+              {props.productName}
+              <EditorIcon name="chevronDown" size={16} />
+            </button>
+          ) : (
+            <small>{props.productName}</small>
+          )}
         </div>
       )}
       <button type="button" className={wide ? "fmo-tb-btn" : "fmo-tb-btn fmo-icon-only"} aria-label={f.undo} title={props.undoTitle} aria-disabled={!props.canUndo} onClick={() => props.canUndo && props.onUndo()} data-testid="undo">
@@ -87,6 +96,11 @@ export function TopBar(props: TopBarProps) {
         <EditorIcon name="redo" />
         {wide && <span>{f.redo}</span>}
       </button>
+      {!wide && props.onGarment && (
+        <button type="button" className="fmo-tb-btn fmo-icon-only" aria-label={fill(wording.garment.buttonName, { name: props.productName })} title={props.productName} onClick={props.onGarment} data-testid="garment-button">
+          <EditorIcon name="players" />
+        </button>
+      )}
       <SaveStateView state={props.saveState} wording={wording} form={props.saveWords} onInfo={props.onSaveInfo} />
       {wide && <div className="fmo-topbar-spacer" />}
       {wide && props.share && <div className="fmo-topbar-slot">{props.share}</div>}

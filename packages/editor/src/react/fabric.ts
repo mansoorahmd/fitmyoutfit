@@ -63,7 +63,7 @@ export interface FabricShading {
   microDepth?: number;
 }
 
-export const DEFAULT_FABRIC_SHADING: FabricShading = { outsideFloor: 0.38, insideFloor: 0.3, insideOpen: 0.62, sheen: 0.3, roughness: 0.5, microDepth: 0.6 };
+export const DEFAULT_FABRIC_SHADING: FabricShading = { outsideFloor: 0.38, insideFloor: 0.3, insideOpen: 0.62, sheen: 0.3, roughness: 0.72, microDepth: 0.6 };
 
 const number = (x: number) => (Number.isInteger(x) ? `${x}.0` : String(x));
 

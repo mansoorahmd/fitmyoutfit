@@ -37,16 +37,20 @@ import {
   type DeviceAssetStore,
   type EditorTiming,
   type FontCatalog,
+  type GarmentChange,
+  type GarmentChoice,
   type Palette,
   type ProductDefinition,
   type SaveState,
   type SavedTeamList,
   type Template,
 } from "../src";
-import { chooseProduct, type DemoProduct } from "./products";
+import { DEMO_PRODUCTS, chooseProduct, type DemoProduct } from "./products";
 import type { EditorProps } from "./Editor";
 
 interface DemoData {
+  /** The garments of the chooser (G4), each with its product definition. */
+  garments: GarmentChoice[];
   product: ProductDefinition;
   palette: Palette;
   fonts: FontCatalog;
@@ -68,12 +72,12 @@ const REGION = REGIONS[PARAMS.get("region") ?? "uk"] ?? REGIONS.uk!;
 // ?signed=20%20Nov%202026: the proof is signed, so the list is read-only (11.3).
 const LIST_REQUIRED = PARAMS.get("listRequired") === "1";
 const SIGNED_ON = PARAMS.get("signed");
-const PRODUCT_URL = `/products/${DEMO_PRODUCT.id}.json`;
+const productUrl = (id: string) => `/products/${id}.json`;
 // Placeholder colours, as data, NOT print-tested: the founders' print-tested palette replaces the file.
 const PALETTE_URL = "/palettes/placeholder-palette.json";
 const FONTS_URL = "/fonts/placeholder-fonts.json";
 // The product's sample templates (samples/templates/<product>/index.json lists them); none for the placeholder.
-const TEMPLATES_URL = `/templates/${DEMO_PRODUCT.id}`;
+const templatesUrl = (id: string) => `/templates/${id}`;
 
 async function fetchJson(url: string): Promise<unknown> {
   const response = await fetch(url);
@@ -93,6 +97,7 @@ function readPalette(json: unknown, product: ProductDefinition): Palette {
 
 /** The product's templates, each validated against the product and the fonts; none when the product has no index. */
 async function loadTemplates(product: ProductDefinition, fonts: FontCatalog): Promise<Template[]> {
+  const TEMPLATES_URL = templatesUrl(product.id);
   const response = await fetch(`${TEMPLATES_URL}/index.json`);
   if (!response.ok || !(response.headers.get("content-type") ?? "").includes("json")) return [];
   const index = (await response.json()) as { templates: string[] };
@@ -105,16 +110,33 @@ async function loadTemplates(product: ProductDefinition, fonts: FontCatalog): Pr
   );
 }
 
+/** The garments of the chooser: the match jersey with its two necks, the T-shirt and the stand-in jersey, each with its product definition (data the store has too). */
+async function loadGarments(): Promise<GarmentChoice[]> {
+  const GROUPS: Record<string, { group: string; groupName: string; variant?: string; picture?: string }> = {
+    "match-jersey-vneck": { group: "match-jersey", groupName: "Jersey", variant: "V-neck", picture: "/pictures/match-jersey-vneck.png" },
+    "match-jersey-round": { group: "match-jersey", groupName: "Jersey", variant: "Round neck", picture: "/pictures/match-jersey-round.png" },
+  };
+  const shown = DEMO_PRODUCTS.filter((p) => p.id !== "placeholder-jersey");
+  return Promise.all(
+    shown.map(async (p) => {
+      const checked = validateProductDefinition(await fetchJson(productUrl(p.id)));
+      if (!checked.ok) throw new Error(`product ${p.id}: ${checked.errors.map((e) => e.message).join("; ")}`);
+      const own = GROUPS[p.id];
+      return { id: p.id, name: own ? `${own.groupName}, ${own.variant}` : p.shortName === "T-shirt" ? "T-shirt" : "Football jersey", ...(own ?? {}), product: checked.value };
+    }),
+  );
+}
+
 /** The product definition, the colours, the fonts and the templates: data, fetched as JSON and validated, not imported as code. */
-async function loadData(): Promise<DemoData> {
-  const [productJson, paletteJson, fontsJson] = await Promise.all([fetchJson(PRODUCT_URL), fetchJson(PALETTE_URL), fetchJson(FONTS_URL)]);
+async function loadData(productId: string): Promise<DemoData> {
+  const [productJson, paletteJson, fontsJson, garments] = await Promise.all([fetchJson(productUrl(productId)), fetchJson(PALETTE_URL), fetchJson(FONTS_URL), loadGarments()]);
   const product = validateProductDefinition(productJson);
   if (!product.ok) throw new Error(product.errors.map((e) => e.message).join("; "));
   const fonts = validateFontCatalog(fontsJson);
   if (!fonts.ok) throw new Error(fonts.errors.map((e) => e.message).join("; "));
   const palette = readPalette(paletteJson, product.value);
   const templates = await loadTemplates(product.value, fonts.value);
-  return { product: product.value, palette, fonts: fonts.value, templates };
+  return { product: product.value, palette, fonts: fonts.value, templates, garments };
 }
 
 /** A new design: the product's first template applied (a helpful default, 06-editor.md 7.2), no team name yet, a sample player. */
@@ -157,8 +179,15 @@ function ModelCreditShort({ demoProduct }: { demoProduct: DemoProduct }) {
   );
 }
 
+/** What a change of garment hands to the next editor (G4): the carried design and list, and which design to open. */
+interface Handoff {
+  change: GarmentChange;
+}
+
 interface Session {
   key: number;
+  /** The sentence the editor opens with after a change of garment. */
+  notice?: string;
   design: DesignDocument;
   /** The team list saved with the design on this device, or nothing. */
   teamList: SavedTeamList | null;
@@ -167,7 +196,7 @@ interface Session {
 }
 
 /** The editor as a coach sees it: the interface of task E3a-2, saving on this device. */
-function EditorPage({ data }: { data: DemoData }) {
+function EditorPage({ data, demoProduct, handoff, onChooseGarment }: { data: DemoData; demoProduct: DemoProduct; handoff: Handoff | null; onChooseGarment: (change: GarmentChange) => void }) {
   const { product } = data;
   const [store, setStore] = useState<{ designs: DeviceDesignStore; assets: DeviceAssetStore; persistent: boolean; missing: string[] } | null>(null);
   const [session, setSession] = useState<Session | null>(null);
@@ -191,10 +220,25 @@ function EditorPage({ data }: { data: DemoData }) {
         const assets = createDeviceAssetStore(designs);
         const saved = persistent ? await designs.loadDesign(product).catch(() => null) : null;
         if (!alive) return;
+        // G4, a change of garment: the necks of one jersey share their pattern, so the carried design wins; another
+        // garment keeps its own saved design when it has one (choosing a garment again brings its design back).
+        const own = handoff && !handoff.change.samePattern && saved ? saved.design : null;
+        const shown = handoff ? (own ?? handoff.change.design) : (saved?.design ?? null);
         // A design brought back: its files (the missing ones are told to the editor, S2); the files it does not use go (S7).
-        const missing = saved ? await assets.restore(designAssetIds(saved.design)) : [];
-        if (saved) await designs.pruneAssets().catch(() => undefined);
+        const missing = shown ? await assets.restore(designAssetIds(shown)) : [];
+        if (shown && !handoff) await designs.pruneAssets().catch(() => undefined);
         setStore({ designs, assets, persistent, missing });
+        if (handoff) {
+          const { change } = handoff;
+          const design = shown!;
+          const teamList = change.teamList ?? saved?.teamList ?? null;
+          const notice = own ? EDITOR_WORDING.garment.noticeBack.replaceAll("{name}", demoProduct.shortName) : change.notice;
+          latest.current = { design, teamList };
+          if (persistent) await designs.saveDesign(product.id, design, { started: true, teamList }).catch(() => undefined);
+          setSession({ key: 1, design, teamList, startCard: false, resume: false, notice });
+          if (!persistent) setSaveState("failed");
+          return;
+        }
         latest.current = { design: saved?.design ?? null, teamList: saved?.teamList ?? null };
         setSession(saved ? { key: 1, design: saved.design, teamList: saved.teamList ?? null, startCard: false, resume: true } : { key: 1, design: newDesign(data), teamList: null, startCard: true, resume: false });
         if (!persistent) setSaveState("failed");
@@ -202,7 +246,7 @@ function EditorPage({ data }: { data: DemoData }) {
     return () => {
       alive = false;
     };
-  }, [data, product]);
+  }, [data, product, handoff, demoProduct.shortName]);
 
   useEffect(() => {
     if (!store) return;
@@ -239,7 +283,7 @@ function EditorPage({ data }: { data: DemoData }) {
   const teamListHost = useMemo(
     () => ({
       initial: session?.teamList ?? null,
-      noun: { one: DEMO_PRODUCT.shortName.toLowerCase(), many: `${DEMO_PRODUCT.shortName.toLowerCase()}s` },
+      noun: { one: demoProduct.shortName.toLowerCase(), many: `${demoProduct.shortName.toLowerCase()}s` },
       minimum: REGION.minimum > 0 ? { pieces: REGION.minimum, region: REGION.name } : null,
       ...(LIST_REQUIRED ? { listRequiredToContinue: true } : {}),
       ...(SIGNED_ON ? { locked: { signedOn: SIGNED_ON, onChangeList: () => window.alert("In the store this starts a new proof.") } } : {}),
@@ -247,7 +291,7 @@ function EditorPage({ data }: { data: DemoData }) {
       // The device save has its own second of waiting: the list is handed over at once.
       debounceMs: 0,
     }),
-    [session?.teamList, onTeamListChange],
+    [session?.teamList, onTeamListChange, demoProduct.shortName],
   );
 
   const onDone = useCallback((design: DesignDocument) => {
@@ -283,7 +327,15 @@ function EditorPage({ data }: { data: DemoData }) {
         initialDesign={session.design}
         teamList={teamListHost}
         showStartCard={session.startCard}
-        productName={DEMO_PRODUCT.shortName}
+        productName={demoProduct.shortName}
+        garments={data.garments}
+        garmentId={product.id}
+        onChooseGarment={(change) => {
+          // The old garment is saved first: its design stays on the device, so choosing it again brings it back.
+          if (latest.current.design) autosave.current?.schedule(latest.current.design);
+          void (autosave.current?.flush() ?? Promise.resolve()).catch(() => undefined).finally(() => onChooseGarment(change));
+        }}
+        {...(session.notice ? { startNotice: session.notice } : {})}
         assets={assets}
         onDesignChange={onDesignChange}
         saveState={saveState}
@@ -294,8 +346,8 @@ function EditorPage({ data }: { data: DemoData }) {
         }}
         slots={{
           brand: "FitMyOutfit",
-          credit: DEMO_PRODUCT.credit ? <ModelCredit demoProduct={DEMO_PRODUCT} /> : undefined,
-          creditShort: DEMO_PRODUCT.credit ? <ModelCreditShort demoProduct={DEMO_PRODUCT} /> : undefined,
+          credit: demoProduct.credit ? <ModelCredit demoProduct={demoProduct} /> : undefined,
+          creditShort: demoProduct.credit ? <ModelCreditShort demoProduct={demoProduct} /> : undefined,
         }}
         onTiming={onTiming}
         onGestureTiming={(t) => {
@@ -349,17 +401,29 @@ function DevPage({ data }: { data: DemoData }) {
 function App() {
   const [data, setData] = useState<DemoData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // G4: the garment being designed. The chooser changes it; the address follows (?product=), so a reload stays on it.
+  const [productId, setProductId] = useState(DEMO_PRODUCT.id);
+  const [handoff, setHandoff] = useState<Handoff | null>(null);
   useEffect(() => {
-    loadData()
+    loadData(productId)
       .then(setData)
       .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)));
+  }, [productId]);
+  const onChooseGarment = useCallback((change: GarmentChange) => {
+    setHandoff({ change });
+    setData(null);
+    setProductId(change.garmentId);
+    const url = new URL(window.location.href);
+    url.searchParams.set("product", change.garmentId);
+    window.history.replaceState(window.history.state, "", url);
   }, []);
   if (error) {
     console.error("The demo data could not be loaded:", error);
     return DEV ? <p role="alert">Could not load the demo data: {error}</p> : <p role="alert">{EDITOR_WORDING.states.failed}</p>;
   }
   if (!data) return null;
-  return DEV ? <DevPage data={data} /> : <EditorPage data={data} />;
+  const demoProduct = DEMO_PRODUCTS.find((p) => p.id === productId) ?? DEMO_PRODUCT;
+  return DEV ? <DevPage data={data} /> : <EditorPage key={productId} data={data} demoProduct={demoProduct} handoff={handoff} onChooseGarment={onChooseGarment} />;
 }
 
 const container = document.getElementById("root");

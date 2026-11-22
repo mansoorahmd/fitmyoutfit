@@ -65,7 +65,7 @@ describe("what the host gives and gets", () => {
   it("limits are the host's when it gives them, and none is a constant of the editor", () => {
     expect(resolveLimits({ maxLines: 40, maxCount: 4, maxNameLength: 12 })).toMatchObject({ maxLines: 40, minCount: 1, maxCount: 4, maxNameLength: 12 });
     const many = { version: 1, productId: product.id, lines: Array.from({ length: 41 }, (_, i) => ({ name: `P${i}` })) };
-    expect(readSavedList(many, { productId: product.id, limits: { maxLines: 40 } })).toEqual([]);
+    expect(readSavedList(many, { productId: product.id, limits: { maxLines: 40 } })).toHaveLength(40);
     expect(readSavedList(many, { productId: product.id })).toHaveLength(41);
   });
   it("the types and defaults are exported from the package's entry point", () => {

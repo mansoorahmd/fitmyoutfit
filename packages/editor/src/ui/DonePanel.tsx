@@ -153,7 +153,7 @@ export function DonePanel(props: DonePanelProps) {
           <section aria-labelledby="fmo-done-checks" className="fmo-done-checks" data-testid="done-checks">
             <h3 id="fmo-done-checks" className="fmo-done-checks-title">
               {count === 0 ? null : <EditorIcon name="alert" size={20} />}
-              <span>{count === 0 ? w.checksNone : count === 1 ? w.checksOne : fill(w.checksMany, { count })}</span>
+              <span>{count === 0 ? (section.kind !== "empty" && (section.toFix > 0 || section.missing > 0) ? w.checksNoneDesign : w.checksNone) : count === 1 ? w.checksOne : fill(w.checksMany, { count })}</span>
             </h3>
             {count > 0 && (
               <ul className="fmo-done-list">
