@@ -1,4 +1,4 @@
-import { ButtonLink } from "@modules/common/components/button"
+import { Button, ButtonLink } from "@modules/common/components/button"
 
 /** A plain full-screen message with a way back: no 3D in this browser, or the designer did not load. */
 export default function DesignMessage({
@@ -26,13 +26,9 @@ export default function DesignMessage({
       <p className="type-body-lg max-w-xl text-brand-ink-muted">{text}</p>
       <div className="flex w-full flex-col gap-3 md:w-auto md:flex-row">
         {action && (
-          <button
-            type="button"
-            onClick={action.onClick}
-            className="inline-flex h-12 items-center justify-center rounded-control border-2 border-brand-primary bg-brand-primary px-6 font-heading text-[18px] font-bold uppercase leading-none tracking-[0.04em] text-brand-on-primary"
-          >
+          <Button type="button" onClick={action.onClick} fullWidth className="md:w-auto">
             {action.label}
-          </button>
+          </Button>
         )}
         <ButtonLink href={backHref} variant="secondary" fullWidth className="md:w-auto">
           {backLabel}
