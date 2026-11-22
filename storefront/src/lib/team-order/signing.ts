@@ -12,7 +12,6 @@ import type { Failure, ScheduleView } from "./types"
 /** The typed name's longest length (the contract: 1 to 100 characters after cleaning). */
 export const SIGNED_NAME_MAX = 100
 
-// eslint-disable-next-line no-control-regex
 const CONTROL = /[\u0000-\u001F\u007F-\u009F]/
 
 /** The name as the backend cleans it: trimmed, runs of white space made one space, Unicode NFC. */

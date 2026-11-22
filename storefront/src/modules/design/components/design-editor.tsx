@@ -401,7 +401,7 @@ export default function DesignEditor({ product: entry, countryCode, fontFamilies
     return () => {
       alive = false
     }
-  }, [data, handle, orderContext, context.resumeStart])
+  }, [data, handle, entry, orderContext, context.resumeStart])
 
   useEffect(() => {
     lockedRef.current = session?.locked ?? false
