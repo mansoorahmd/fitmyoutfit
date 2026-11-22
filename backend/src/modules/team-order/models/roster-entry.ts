@@ -8,7 +8,8 @@ import { model } from "@medusajs/framework/utils"
  * the same when the line is edited or moved. `position` is the place in the list, from 0.
  * `product_id` is the team order's product (copied, as dev-plan.md lists it). Values are stored
  * cleaned (@fitmyoutfit/team-rules normalizeLines) but never judged: a line with problems is saved
- * as it is, and its problems are worked out when the list is read. `locked` is for the proof (next part).
+ * as it is, and its problems are worked out when the list is read. There is no `locked` column: whether the list can change is the team order's status
+ * (lib/rules/team-order-status.ts, `allowedIn`), the one source of truth.
  */
 export const RosterEntry = model
   .define("roster_entry", {
@@ -23,6 +24,5 @@ export const RosterEntry = model
     count: model.number().default(1),
     no_name: model.boolean().default(false),
     no_number: model.boolean().default(false),
-    locked: model.boolean().default(false),
   })
   .indexes([{ on: ["team_order_id", "position"] }])
