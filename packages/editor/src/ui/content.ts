@@ -117,6 +117,7 @@ export const EDITOR_WORDING = {
     none: "None", // NEW (E3f): no accent colour
     usedAs: "{colour}, already used for {role}", // NEW (E3f): a dimmed swatch's name; the same colour is never in two rows
     fewer: "Fewer colours", // NEW (E3f): closes a row's "All colours"
+    addAccentColour: "Add an accent colour", // NEW (E3g): on the start card, the accent row is closed behind this line and opens in place
   },
   /** Team, players, text (`lettering`). */
   lettering: {

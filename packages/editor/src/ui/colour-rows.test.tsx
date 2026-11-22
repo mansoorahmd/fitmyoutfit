@@ -62,22 +62,38 @@ beforeEach(() => {
 });
 
 describe("E3f: the team colours as three rows", () => {
+  it("E3g: on the start card the accent row is closed behind one line; with an accent already chosen, or in Edit team colours, it is open", () => {
+    const closed = render(<TeamColourRows prefix="start" />);
+    expect(closed).toContain('data-testid="start-add-accent"');
+    expect(closed).toContain(W.colours.addAccentColour);
+    expect(closed).not.toContain('data-testid="start-row-accent"');
+    expect(closed).toContain('data-testid="start-row-second"');
+    const gold = palette.colors.find((c) => c.id === "placeholder-gold")!;
+    const withAccent = { ...design, teamColors: { ...design.teamColors, accent: { id: gold.id, hex: gold.hex } } } as DesignDocument;
+    const open = render(<TeamColourRows prefix="start" />, withAccent);
+    expect(open).not.toContain('data-testid="start-add-accent"');
+    expect(open).toContain('data-testid="start-row-accent"');
+    const edit = render(<TeamColourRows prefix="team" />);
+    expect(edit).not.toContain("add-accent");
+    expect(edit).toContain('data-testid="team-row-accent"');
+  });
+
   it("each colour is a heading with its swatches under it; the accent is optional and has None", () => {
-    const html = render(<TeamColourRows prefix="start" />);
+    const html = render(<TeamColourRows prefix="team" />);
     const t = text(html);
     expect(t.indexOf(W.colours.roleHeading.main)).toBeGreaterThanOrEqual(0);
     expect(t.indexOf(W.colours.roleHeading.main)).toBeLessThan(t.indexOf(W.colours.roleHeading.second));
     expect(t.indexOf(W.colours.roleHeading.second)).toBeLessThan(t.indexOf(W.colours.roleHeading.accent));
     expect(t).toContain(`${W.colours.roleHeading.accent} ${W.colours.optional}`);
-    expect(html).toContain('data-testid="start-no-accent"');
+    expect(html).toContain('data-testid="team-no-accent"');
     // No "choose the role first": no role chips, no radio group of slots.
     expect(html).not.toContain("team-slot");
     // The swatches sit inside their own row, after its heading.
     for (const role of ["main", "second", "accent"]) {
-      const row = html.slice(html.indexOf(`data-testid="start-row-${role}"`));
-      expect(row.indexOf("<h3")).toBeLessThan(row.indexOf(`start-colour-${role}-`));
+      const row = html.slice(html.indexOf(`data-testid="team-row-${role}"`));
+      expect(row.indexOf("<h3")).toBeLessThan(row.indexOf(`team-colour-${role}-`));
     }
-    expect(seen.filter((s) => s.testId?.startsWith("start-colour-main-")).length).toBeGreaterThan(3);
+    expect(seen.filter((s) => s.testId?.startsWith("team-colour-main-")).length).toBeGreaterThan(3);
   });
 
   it("one click sets the colour (one undo step); the chosen swatch is marked", () => {

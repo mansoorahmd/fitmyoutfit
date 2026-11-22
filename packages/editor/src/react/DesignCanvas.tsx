@@ -44,7 +44,8 @@ import { FontWatcher, type FontSetLike, type FontStatus } from "../texture/fonts
 import { AssetImageCache, type AssetUrlResolver } from "./asset-images.js";
 import { NO_INSETS, frameInFreeArea, type Framing, type ViewInsets } from "./camera.js";
 import { CameraRig } from "./camera-rig.js";
-import { makeFabric, type Fabric } from "./fabric.js";
+import { makeFabric, DEFAULT_FABRIC_SHADING, type Fabric } from "./fabric.js";
+import { WEAVE_TILE_MM } from "./fabric-weave.js";
 import { loadModel, type LoadedModel, type ModelLoadProgress } from "./model-loader.js";
 import { STUDIO_BACKGROUND, STUDIO_LIGHTS, studioLightPosition } from "./studio.js";
 
@@ -330,6 +331,9 @@ function prepareModel(source: Object3D, product: ProductDefinition): PreparedMod
   const pieceMaterials: MeshStandardMaterial[] = [];
   const pieceMeshes = new Map<Mesh, string>();
   const fabrics: Fabric[] = [];
+  // E3g: the knit's tiles per UV unit: the models' UVs are one scale in true millimetres (a piece's mm over its UV width).
+  const first = product.pieces[0];
+  const weaveRepeat = first ? first.width / first.uv.width / WEAVE_TILE_MM : 0;
   scene.traverse((object) => {
     const mesh = object as Mesh;
     if (!mesh.isMesh) return;
@@ -346,7 +350,7 @@ function prepareModel(source: Object3D, product: ProductDefinition): PreparedMod
           if ("map" in material && "color" in material) pieceMaterials.push(material as MeshStandardMaterial);
           // A garment is one layer of cloth: both sides are drawn, the inside shaded as the inside.
           material.side = DoubleSide;
-          fabrics.push(makeFabric(material, mesh.geometry));
+          fabrics.push(makeFabric(material, mesh.geometry, DEFAULT_FABRIC_SHADING, weaveRepeat));
         }
         break;
       }

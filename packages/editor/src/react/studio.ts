@@ -24,14 +24,14 @@ export interface StudioLight {
 
 export const STUDIO_LIGHTS: { sky: { color: string; ground: string; intensity: number }; lights: StudioLight[] } = {
   // Light from above, a warm grey from below (the floor of the studio).
-  sky: { color: "#ffffff", ground: "#b8b2a8", intensity: 1.15 },
+  sky: { color: "#ffffff", ground: "#b8b2a8", intensity: 0.8 },
   lights: [
     // Key: above, to the right of the camera; gives the folds their shape.
-    { name: "key", intensity: 2.1, color: "#fffaf2", right: 0.9, up: 1.1, toward: 1 },
+    { name: "key", intensity: 2.6, color: "#fffaf2", right: 0.6, up: 1.1, toward: 1.2 },
     // Fill: low, to the left; lifts the key's shadows without flattening them.
-    { name: "fill", intensity: 0.75, color: "#f2f5ff", right: -1.2, up: 0.2, toward: 0.8 },
+    { name: "fill", intensity: 0.55, color: "#f2f5ff", right: -1.3, up: 0.1, toward: 0.8 },
     // Rim: behind and above the garment; separates its edges from the background.
-    { name: "rim", intensity: 1.1, color: "#ffffff", right: 0.3, up: 1.2, toward: -1 },
+    { name: "rim", intensity: 1.3, color: "#ffffff", right: 0.5, up: 1.2, toward: -1 },
   ],
 };
 
