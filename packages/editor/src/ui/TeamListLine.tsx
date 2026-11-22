@@ -6,6 +6,7 @@
 import { memo, useEffect, useId, useRef, type ReactNode } from "react";
 import { readSize } from "@fitmyoutfit/team-rules";
 import type { SizeTable } from "@fitmyoutfit/team-rules";
+import { FIELD_MAX } from "../team-list/saved.js";
 import type { EditorLine, TeamListSize } from "../team-list/types.js";
 import { fill, type EditorWording } from "./content.js";
 import { EditorIcon } from "./icons.js";
@@ -110,6 +111,7 @@ function LineRowView(props: LineRowProps) {
             type="text"
             dir="auto"
             data-field="name"
+            maxLength={FIELD_MAX.name}
             data-id={line.id}
             data-state={state("name")}
             enterKeyHint="next"
@@ -165,6 +167,7 @@ function LineRowView(props: LineRowProps) {
             aria-controls={props.listOpen ? `${uid}-sizes` : undefined}
             aria-autocomplete="list"
             data-field="size"
+            maxLength={FIELD_MAX.size}
             data-id={line.id}
             data-state={state("size")}
             enterKeyHint="next"

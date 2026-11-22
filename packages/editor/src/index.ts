@@ -40,7 +40,7 @@ export {
   type TeamListReport,
   type TeamListSize,
 } from "./team-list/types.js";
-export { readSavedList } from "./team-list/saved.js";
+export { readSavedList, readSavedListWithNotes, FIELD_MAX, type ReadNote as SavedListReadNote, type SavedListRead } from "./team-list/saved.js";
 export { EDITOR_WORDING, mergeWording, fill, changeWords, type EditorWording, type WordingOverrides } from "./ui/content.js";
 export { EDITOR_CSS } from "./ui/styles.js";
 export type { EditorAssets, ToolId } from "./ui/context.js";

@@ -155,9 +155,9 @@ describe("saving and restoring", () => {
       expect(readSavedList(bad, { productId: "p1" })).toEqual([]);
     }
   });
-  it("refuses a list over the host's line limit", () => {
+  it("keeps the first lines of a list over the host's line limit (G4: it no longer drops the whole list; the rest is reported)", () => {
     const many = { version: 1, productId: "p1", lines: Array.from({ length: 5 }, (_, i) => ({ name: `P${i}` })) };
-    expect(readSavedList(many, { productId: "p1", limits: { maxLines: 3 } })).toEqual([]);
+    expect(readSavedList(many, { productId: "p1", limits: { maxLines: 3 } }).map((l) => l.name)).toEqual(["P0", "P1", "P2"]);
     expect(readSavedList(many, { productId: "p1", limits: { maxLines: 5 } })).toHaveLength(5);
   });
 });

@@ -27,7 +27,7 @@ import { buildSizeTable, resolveLimits } from "@fitmyoutfit/team-rules";
 import { analyseList, designWithPlayer, nextToFix, playerForShirt, toSavedList, type SeenMap } from "../team-list/checks.js";
 import { addLine, cleanField, convertAllDigits, moveLine, newLine, removeLine, setCount as setLineCount, setField as setLineField, setFlag as setLineFlag, setSizeCountLines, sortLines, type SortBy } from "../team-list/lines.js";
 import { createHandOver } from "../team-list/hand-over.js";
-import { readSavedList } from "../team-list/saved.js";
+import { readSavedListWithNotes, type ReadNote } from "../team-list/saved.js";
 import { DEFAULT_TEAM_NOUN, DEFAULT_TEAM_SIZES, type EditorLine, type SavedTeamList, type TeamListHost, type TeamListReport } from "../team-list/types.js";
 import { applyPaste, type PasteMode } from "../team-list/paste.js";
 import { PlayerChip, WholeShirtToggle } from "./PlayerChip.js";
@@ -261,10 +261,18 @@ export function EditorShell(props: EditorShellProps) {
   }, []);
   const reducedMotion = useReducedMotion();
   // A design brought back (or upgraded) gets the print-area rule once: every item inside its area.
-  const history = useEditorHistory(() => ({
-    design: fitDesignToAreas(props.product, props.initialDesign),
-    lines: readSavedList(props.teamList?.initial, { productId: props.product.id, ...(props.teamList?.limits ? { limits: props.teamList.limits } : {}) }),
-  }));
+  const readNotes = useRef<readonly ReadNote[]>([]);
+  const history = useEditorHistory(() => {
+    const read = readSavedListWithNotes(props.teamList?.initial, { productId: props.product.id, ...(props.teamList?.limits ? { limits: props.teamList.limits } : {}) });
+    readNotes.current = read.notes;
+    return { design: fitDesignToAreas(props.product, props.initialDesign), lines: read.lines };
+  });
+  // G4 S2: what reading the saved list left out or changed is told to the host once, when the editor opens.
+  useEffect(() => {
+    if (readNotes.current.length > 0) props.teamList?.onReadNotes?.(readNotes.current);
+    readNotes.current = [];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const design = history.design;
   const designRef = useRef(design);
   useEffect(() => {

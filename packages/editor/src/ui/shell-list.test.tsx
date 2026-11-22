@@ -118,3 +118,19 @@ describe("every way of changing a locked list is refused (S5)", () => {
     }
   });
 });
+
+describe("the inputs hold no more than the reader accepts (S2)", () => {
+  it("Name 200, No. 8 (under 40), Size 40 characters", () => {
+    const view = mount({ initial: saved(["Ali"]) });
+    expect((view.getByTestId("tl-name-0") as HTMLInputElement).maxLength).toBe(200);
+    expect((view.getByTestId("tl-number-0") as HTMLInputElement).maxLength).toBeLessThanOrEqual(40);
+    expect((view.getByTestId("tl-size-0") as HTMLInputElement).maxLength).toBe(40);
+  });
+  it("tells the host what reading the saved list left out, once, and keeps the rest", () => {
+    const notes: unknown[] = [];
+    const initial = { ...saved(["Ali", "Bilal"]), lines: [...saved(["Ali", "Bilal"]).lines, 7 as never] };
+    const view = mount({ initial, onReadNotes: (n) => notes.push(n) });
+    expect(names(view)).toEqual(["Ali", "Bilal"]);
+    expect(notes).toEqual([[{ code: "line-left-out", index: 2, reason: "not-an-object" }]]);
+  });
+});
