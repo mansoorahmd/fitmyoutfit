@@ -523,6 +523,31 @@ export const EDITOR_WORDING = {
     flatFront: "Front", // NEW: flat view captions
     flatBack: "Back", // NEW
   },
+  /** The garment chooser (G4). DRAFT WORDING, founders to confirm. */
+  garment: {
+    buttonName: "Garment: {name}. Change it", // NEW: the top bar's and the start card's button (accessible name)
+    change: "Change", // NEW: the start card's button
+    startLine: "Garment", // NEW: the start card's row label
+    title: "Choose your garment", // NEW
+    body: "Your team colours, name and list come with you. Items come too where they fit.", // NEW
+    close: "Close", // NEW
+    current: "Current", // NEW: said (to a screen reader) of the garment being designed
+    pick: "{name}", // NEW: a choice's accessible name
+    askTitle: "Not everything fits the {name}", // NEW
+    askBody: "{count} of your items has no place on the {name}: {items}. They stay with your {old} design, saved on this device. Choose the {old} again to get them back.", // NEW (one)
+    askBodyMany: "{count} of your items have no place on the {name}: {items}. They stay with your {old} design, saved on this device. Choose the {old} again to get them back.", // NEW (many)
+    askSwitch: "Switch to the {name}", // NEW
+    askStay: "Stay on the {old}", // NEW
+    noticeKept: "Now designing the {name}. Your design came with you.", // NEW: the two necks, nothing left
+    noticeAdjusted: "Now designing the {name}. {count} items were moved to stay inside their print area.", // NEW
+    noticeAdjustedOne: "Now designing the {name}. 1 item was moved to stay inside its print area.", // NEW
+    noticeOther: "Now designing the {name}. Your colours, names and list came with you.", // NEW
+    noticeLeft: "Now designing the {name}. {count} items stay with your {old} design, saved on this device.", // NEW
+    noticeLeftOne: "Now designing the {name}. 1 item stays with your {old} design, saved on this device.", // NEW
+    noticeBack: "Back on the {name}. Your {name} design is back.", // NEW: the host brought the garment's own saved design back
+    noticePattern: " The stripes and pattern stay with your {old} design.", // NEW
+    noPicture: "No picture", // NEW
+  },
   /** Done (`done`). The Done panel is E3b; E3a saves and hands the design to the host. */
   done: {
     title: "Your kit", // W-ED160
