@@ -355,16 +355,28 @@ export function TeamListView({ initialDetailsOpen }: { initialDetailsOpen?: bool
   const typingShort = api.layout === "compact" && t.keyboard;
   // The phone's normal height (3.2) is the header, the summary bar and the chosen line: the toolbar waits for "Show all".
   const collapsed = api.layout === "compact" && api.detent !== "expanded" && !typingShort;
-  // In a small panel the chosen line is kept in view: with the keyboard open it sits at the foot of the rows, directly
-  // above the keyboard (or the size strip), the lines typed before it above it, like a chat (3.3).
+  // In a small panel the chosen line is kept in view. When the keyboard opens, the line sits at the foot of the rows, directly
+  // above the keyboard, the lines typed before it above it, like a chat (3.3); after that, moving between lines only scrolls
+  // when the line is not in view (a tap on a line never moves the list).
   const chosenForView = t.chosenId;
   const sizeStripOpen = sizeFocus !== null;
+  const wasTyping = useRef(false);
   useEffect(() => {
+    const opened = typingShort && !wasTyping.current;
+    wasTyping.current = typingShort;
     if (!collapsed && !typingShort) return;
-    const place = () => rows.current?.querySelector<HTMLElement>('li[data-chosen="true"]')?.scrollIntoView?.({ block: typingShort ? "end" : "nearest" });
-    place();
+    const place = (block: ScrollLogicalPosition) => {
+      const li = rows.current?.querySelector<HTMLElement>('li[data-chosen="true"]');
+      const box = rows.current?.getBoundingClientRect();
+      if (!li || !box) return;
+      const r = li.getBoundingClientRect();
+      if (block === "nearest" && r.top >= box.top && r.bottom <= box.bottom) return;
+      li.scrollIntoView?.({ block });
+    };
+    place(opened ? "end" : "nearest");
+    if (!opened && !sizeStripOpen) return;
     // Again once the panel has settled at its new height.
-    const timer = setTimeout(place, 300);
+    const timer = setTimeout(() => place(opened ? "end" : "nearest"), 300);
     return () => clearTimeout(timer);
   }, [chosenForView, collapsed, typingShort, sizeStripOpen]);
 
@@ -584,6 +596,7 @@ export function TeamListView({ initialDetailsOpen }: { initialDetailsOpen?: bool
       {menu && menu.kind === "sort" && (
         <MenuView
           anchor={anchor}
+          align="start"
           label={w.sort}
           onClose={closeMenu}
           items={(["number", "name", "size", "entered"] as SortBy[]).map((by) => ({
@@ -652,18 +665,25 @@ interface MenuItem {
 }
 
 /** A small menu (the line menu 4.6 and Sort): arrow keys move, Enter chooses, Esc closes and returns focus to its button. */
-function MenuView({ anchor, label, items, onClose, stepper }: { anchor: HTMLElement | null; label: string; items: MenuItem[]; onClose: () => void; stepper?: { count: number; min: number; max: number; onChange: (n: number) => void; label: string; less: string; more: string; done: string } }) {
+function MenuView({ anchor, align = "end", label, items, onClose, stepper }: { anchor: HTMLElement | null; align?: "start" | "end"; label: string; items: MenuItem[]; onClose: () => void; stepper?: { count: number; min: number; max: number; onChange: (n: number) => void; label: string; less: string; more: string; done: string } }) {
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null);
-  useLayoutEffect(() => {
+  // Placed beside its button in the page's own coordinates (the menu is fixed: the panel's box does not clip it), and again
+  // once the panel has settled (opening the menu takes focus from the field, so a phone's keyboard layout ends).
+  const place = useCallback(() => {
     const box = anchor?.getBoundingClientRect();
     const host = anchor?.closest<HTMLElement>(".fmo-editor")?.getBoundingClientRect();
     if (!box || !host) return;
     const width = Math.min(260, host.width - 24);
     const height = ref.current?.offsetHeight ?? 240;
     const below = box.bottom + 4 + height <= host.bottom - 8;
-    setPos({ top: (below ? box.bottom + 4 : Math.max(host.top + 8, box.top - 4 - height)) - host.top, left: Math.max(12, Math.min(box.right - host.left - width, host.width - width - 12)), width });
-  }, [anchor, items.length, stepper]);
+    setPos({ top: below ? box.bottom + 4 : Math.max(host.top + 8, box.top - 4 - height), left: Math.max(host.left + 12, Math.min(align === "start" ? box.left : box.right - width, host.right - width - 12)), width });
+  }, [anchor, align]);
+  useLayoutEffect(() => {
+    place();
+    const timer = setTimeout(place, 320);
+    return () => clearTimeout(timer);
+  }, [place, items.length, stepper]);
   // Focus goes into the menu once it is placed (a hidden element cannot take focus).
   const placed = pos !== null;
   const hasStepper = stepper !== undefined;
@@ -724,8 +744,7 @@ function MenuView({ anchor, label, items, onClose, stepper }: { anchor: HTMLElem
             }}
             data-testid={`tl-menu-${item.id}`}
           >
-            {item.danger && <EditorIcon name="trash" size={20} />}
-            {item.checked !== undefined && <span className="fmo-tl-check">{item.checked ? <EditorIcon name="check" size={18} /> : null}</span>}
+            <span className="fmo-tl-check">{item.danger ? <EditorIcon name="trash" size={20} /> : item.checked ? <EditorIcon name="check" size={18} /> : null}</span>
             <span>{item.label}</span>
           </button>
         ))

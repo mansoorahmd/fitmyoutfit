@@ -610,7 +610,7 @@ export const EDITOR_CSS = /* css */ `
 .fmo-tl-listbox { list-style: none; margin: 0; padding: 4px; min-width: 140px; max-height: 280px; overflow-y: auto; border: 1px solid var(--fmo-border); border-radius: var(--fmo-radius-card); background: var(--fmo-surface); box-shadow: 0 6px 20px rgb(11 21 48 / 0.18); }
 .fmo-tl-listbox li { display: flex; justify-content: space-between; gap: 12px; align-items: center; min-height: 36px; padding: 0 12px; border-radius: var(--fmo-radius-control); cursor: pointer; font: var(--fmo-type-body); }
 .fmo-tl-listbox li[aria-selected="true"], .fmo-tl-listbox li:hover { background: var(--fmo-surface-alt); }
-.fmo-tl-menu { position: absolute; z-index: 8; display: flex; flex-direction: column; padding: 4px; border: 1px solid var(--fmo-border); border-radius: var(--fmo-radius-card); background: var(--fmo-surface); box-shadow: 0 6px 20px rgb(11 21 48 / 0.22); }
+.fmo-tl-menu { position: fixed; z-index: 8; display: flex; flex-direction: column; padding: 4px; border: 1px solid var(--fmo-border); border-radius: var(--fmo-radius-card); background: var(--fmo-surface); box-shadow: 0 6px 20px rgb(11 21 48 / 0.22); }
 .fmo-tl-menu-item { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 0 12px; border: 0; border-radius: var(--fmo-radius-control); background: transparent; color: var(--fmo-ink); cursor: pointer; font: var(--fmo-type-body); text-align: start; }
 .fmo-tl-menu-item:hover, .fmo-tl-menu-item:focus-visible { background: var(--fmo-surface-alt); }
 .fmo-tl-menu-item[aria-disabled="true"] { color: var(--fmo-ink-muted); opacity: 0.5; cursor: default; }

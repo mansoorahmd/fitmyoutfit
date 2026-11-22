@@ -212,7 +212,6 @@ export function teamListAudit() {
   const fail = (rule, what) => out.failures.push(`${rule}: ${what}`);
   const root = document.querySelector('[data-testid="team-list"]');
   if (!root) return out;
-  const wide = document.querySelector(".fmo-editor")?.dataset.layout !== "compact";
   const shown = (el) => {
     const r = R(el);
     const cs = getComputedStyle(el);
