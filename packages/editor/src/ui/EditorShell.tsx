@@ -737,19 +737,22 @@ export function EditorShell(props: EditorShellProps) {
     },
     [product, showSide],
   );
+  // B1: a signed list is read-only, and one history holds the design and the list. While it is locked nothing is undone or
+  // redone at all (the buttons are off too): a step in either direction could carry the list back to an earlier state.
+  const listLocked = Boolean(teamHost?.locked);
   const undo = useCallback(() => {
-    if (!history.canUndo) return;
+    if (!history.canUndo || listLocked) return;
     const target = (history.history.gestureStart ? history.history.gestureStart.value : history.history.past[history.history.past.length - 1])?.design;
     announce(fill(wording.states.undone, { change: changeWords(wording, history.undoLabel) }));
     turnToChange(design, target);
     history.undo();
-  }, [history, announce, wording, turnToChange, design]);
+  }, [history, announce, wording, turnToChange, design, listLocked]);
   const redo = useCallback(() => {
-    if (!history.canRedo) return;
+    if (!history.canRedo || listLocked) return;
     announce(fill(wording.states.redone, { change: changeWords(wording, history.redoLabel) }));
     turnToChange(design, history.history.future[0]?.design);
     history.redo();
-  }, [history, announce, wording, turnToChange, design]);
+  }, [history, announce, wording, turnToChange, design, listLocked]);
 
   // ---- Tools.
   const toolsReady = mode === "flat" || (load.ready && fontsReadyOnce);
@@ -1453,8 +1456,8 @@ export function EditorShell(props: EditorShellProps) {
           layout={layout}
           wording={wording}
           productName={props.productName}
-          canUndo={history.canUndo}
-          canRedo={history.canRedo}
+          canUndo={history.canUndo && !listLocked}
+          canRedo={history.canRedo && !listLocked}
           undoTitle={`${wording.frame.undo}: ${changeWords(wording, history.undoLabel)} (Ctrl+Z)`}
           redoTitle={`${wording.frame.redo}: ${changeWords(wording, history.redoLabel)} (Ctrl+Shift+Z)`}
           onUndo={undo}
