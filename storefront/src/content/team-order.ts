@@ -154,11 +154,6 @@ export const teamOrderContent = {
       rushChosen: "Rush delivery is chosen. It is a paid option; payment is not open yet.",
       rushNote: "Rush delivery is a paid option. Payment is not open yet.",
     },
-    next: {
-      // DRAFT WORDING. No id: what comes next, in one line, and no button for it.
-      draft: "Next is the proof: a one-page list you check and sign. It is not open yet.",
-      later: "",
-    },
     actions: {
       // DRAFT WORDING. No id: the button into the designer.
       edit: "Edit design and team list",

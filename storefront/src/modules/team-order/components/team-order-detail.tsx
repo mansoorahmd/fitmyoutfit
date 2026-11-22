@@ -2,13 +2,14 @@ import Image from "next/image"
 
 import { teamOrderContent } from "@content/team-order"
 import { designOrderPath } from "@lib/editor/designer-context"
-import type { TeamOrderView } from "@lib/team-order/types"
+import type { ProofView, TeamOrderView } from "@lib/team-order/types"
 import { isDraft, scheduleSentence, statusWords } from "@lib/team-order/words"
 import { ButtonLink } from "@modules/common/components/button"
 
 import DeleteOrder from "./delete-order"
 import ListSummary from "./list-summary"
 import NeedByForm from "./need-by-form"
+import ProofSection from "./proof-section"
 import RenameForm from "./rename-form"
 import TeamOrderStatusChip from "./team-order-status"
 
@@ -25,10 +26,22 @@ export type DetailProduct = {
 /**
  * One team order (account/team-orders/[id]): the team name (rename while a draft), the product with its
  * picture, the status in plain words, the team list's state, the need-by date with what the backend says
- * about it, the button back into the designer, "Delete" for a draft, and in one line what comes next. The
- * proof is the next step and is not open: there is no button for it, so no dead button.
+ * about it, the proof (the button that makes it when the backend would accept it, else one sentence on what is
+ * missing; the link to the proof that is out or signed; every proof with its state), the button back into the
+ * designer and "Delete" for a draft.
  */
-export default function TeamOrderDetail({ order, product }: { order: TeamOrderView; product: DetailProduct }) {
+export default function TeamOrderDetail({
+  order,
+  product,
+  proofs,
+  countryCode,
+}: {
+  order: TeamOrderView
+  product: DetailProduct
+  /** Every proof of the order, newest first; null when they could not be read. */
+  proofs: ProofView[] | null
+  countryCode: string
+}) {
   const draft = isDraft(order.status)
   const schedule = scheduleSentence(order.schedule)
   // the date changes while a draft or while the proof is out (contract section 2); fixed from the signature
@@ -79,12 +92,9 @@ export default function TeamOrderDetail({ order, product }: { order: TeamOrderVi
         />
       </section>
 
+      <ProofSection order={order} proofs={proofs} countryCode={countryCode} designerHandle={product.designerHandle} />
+
       <section className="flex flex-col gap-4" aria-label={words.actions.edit}>
-        {draft && (
-          <p className="type-body" data-testid="team-order-next">
-            {words.next.draft}
-          </p>
-        )}
         {product.designerHandle && (
           <ButtonLink
             href={designOrderPath(product.designerHandle, order.id)}

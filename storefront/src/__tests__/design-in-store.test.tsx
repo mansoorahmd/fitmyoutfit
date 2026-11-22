@@ -28,6 +28,8 @@ vi.mock("@lib/data/team-orders", () => ({
   createTeamOrder: vi.fn(),
   saveTeamOrderList: vi.fn(),
   setTeamOrderDesignVersion: vi.fn(),
+  makeProof: vi.fn(),
+  reopenTeamOrder: vi.fn(),
 }))
 // next/font only runs inside the Next.js compiler.
 vi.mock("@lib/editor/fonts", () => ({ editorFontFamilies: { Oswald: "__Oswald_x" } }))

@@ -5,7 +5,7 @@ import { cache } from "react"
 import { teamOrderContent } from "@content/team-order"
 import { customerState } from "@lib/data/customer"
 import { listProducts } from "@lib/data/products"
-import { retrieveTeamOrder } from "@lib/data/team-orders"
+import { listProofs, retrieveTeamOrder } from "@lib/data/team-orders"
 import { editorProductFor } from "@lib/editor/products"
 import { authHref } from "@lib/util/account-auth"
 import { fill } from "@lib/util/wording"
@@ -59,6 +59,9 @@ export default async function TeamOrderPage(props: Props) {
     .then(({ response }) => response.products[0])
     .catch(() => undefined)
 
+  // The proofs ever made, for the list on the page; the page works without it when they cannot be read.
+  const proofs = await listProofs(id)
+
   return (
     <AccountFrame
       page="team-orders"
@@ -67,6 +70,8 @@ export default async function TeamOrderPage(props: Props) {
     >
       <TeamOrderDetail
         order={order}
+        proofs={proofs.ok ? proofs.value : null}
+        countryCode={countryCode}
         product={{
           name: product?.title ?? "",
           thumbnail: product?.thumbnail ?? null,
