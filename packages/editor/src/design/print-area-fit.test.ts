@@ -20,11 +20,11 @@ import { placeAtPreset, setSizeStep, SIZE_STEPS, type SizeStep } from "./roles";
 import type { DesignDocument, Layer, ProductDefinition } from "./schema";
 import { applyTemplate, type Template } from "./template";
 import { validateDesign } from "./validate";
-import { loadPlaceholderFonts, loadStandInJerseyProduct, loadStandInProduct } from "../test/fixtures";
+import { loadMatchJerseyProduct, loadPlaceholderFonts, loadStandInJerseyProduct, loadStandInProduct } from "../test/fixtures";
 
 const root = resolve(import.meta.dirname, "../..");
 const fonts = loadPlaceholderFonts();
-const products = [loadStandInJerseyProduct(), loadStandInProduct()];
+const products = [loadStandInJerseyProduct(), loadStandInProduct(), loadMatchJerseyProduct()];
 const TURNS = [0, 30, 45, 60, 90, 135];
 const STEPS = Object.keys(SIZE_STEPS) as SizeStep[];
 const TOLERANCE = 0.01; // mm: positions are rounded to 0.001 mm
@@ -56,7 +56,7 @@ function kit(product: ProductDefinition): DesignDocument {
 
 const get = (d: DesignDocument, id: string) => d.layers.find((l) => l.id === id)!;
 
-describe("the print-area rule, over both stand-ins (B2)", () => {
+describe("the print-area rule, over both stand-ins and the match jersey (B2)", () => {
   for (const product of products) {
     const base = kit(product);
     const opts = { product };

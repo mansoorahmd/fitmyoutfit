@@ -1,7 +1,7 @@
 import { Document, NodeIO } from "@gltf-transform/core";
 import { describe, expect, it } from "vitest";
 import { readGlb } from "./glb";
-import { KHRMeshQuantization, quantizeNormals, quantizePositions, quantizeUvs } from "./quantize";
+import { KHRMeshQuantization, quantizationFrame, quantizeNormals, quantizePositions, quantizeUvs } from "./quantize";
 
 describe("quantizePositions", () => {
   const positions = new Float32Array([-0.27, 0, -0.14, 0.27, 0.69, 0.15, 0.1, 0.3, 0.02, 0.1, 0.3, 0.02]);
@@ -29,6 +29,35 @@ describe("quantizePositions", () => {
 
   it("refuses nothing to quantize", () => {
     expect(() => quantizePositions([])).toThrow(RangeError);
+  });
+});
+
+describe("quantizationFrame: one grid for several meshes (G3, a garment in nine meshes)", () => {
+  // Two pieces that share a welded seam vertex (0.1, 0.3, 0.02), each with a box of its own.
+  const a = [-0.27, 0, -0.14, 0.1, 0.3, 0.02, 0.05, 0.2, 0.01];
+  const b = [0.1, 0.3, 0.02, 0.27, 0.69, 0.15, 0.2, 0.5, 0.1];
+
+  it("holds every set: the centre of their common box and half its longest side", () => {
+    const f = quantizationFrame([a, b]);
+    expect(f.translation[0]).toBeCloseTo(0, 9);
+    expect(f.translation[1]).toBeCloseTo(0.345, 9);
+    expect(f.scale).toBeCloseTo(0.345, 9);
+  });
+
+  it("puts a seam vertex shared by two meshes on the same integers (in frames of their own it would not be)", () => {
+    const frame = quantizationFrame([a, b]);
+    const qa = quantizePositions(a, frame);
+    const qb = quantizePositions(b, frame);
+    expect([...qa.values.slice(3, 6)]).toEqual([...qb.values.slice(0, 3)]);
+    const own = (q: ReturnType<typeof quantizePositions>, k: number) => [0, 1, 2].map((i) => (q.values[k * 3 + i]! / 32767) * q.scale + q.translation[i]!);
+    const sa = own(quantizePositions(a), 1);
+    const sb = own(quantizePositions(b), 0);
+    expect(sa.some((x, i) => x !== sb[i])).toBe(true);
+  });
+
+  it("refuses a position outside the frame, and no positions at all", () => {
+    expect(() => quantizePositions(b, quantizationFrame([a]))).toThrow(/outside the quantization frame/);
+    expect(() => quantizationFrame([[]])).toThrow(RangeError);
   });
 });
 

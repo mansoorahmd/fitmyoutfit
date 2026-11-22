@@ -95,7 +95,7 @@ async function runSize(size) {
   const m = size.match(/^(\d+)x(\d+)(m?)$/);
   if (!m) throw new Error(`bad size ${size}`);
   const [width, height, mobile] = [Number(m[1]), Number(m[2]), m[3] === "m"];
-  const record = { size, product: PRODUCT ?? "stand-in-jersey", states: {}, framing: {}, failures: [] };
+  const record = { size, product: PRODUCT ?? "match-jersey-vneck", states: {}, framing: {}, failures: [] };
   const browser = await launch({ port: PORT, profileDir: join(tmpdir(), `fmo-editor-audit-${PORT}`), gpu: !args["no-gpu"] });
   try {
     const page = await openPage(browser, { width, height, mobile });
@@ -240,7 +240,7 @@ async function runSize(size) {
   } finally {
     await browser.close();
   }
-  writeFileSync(join(OUT, `audit-${PRODUCT ?? "stand-in-jersey"}-${size}.json`), JSON.stringify(record, null, 2));
+  writeFileSync(join(OUT, `audit-${PRODUCT ?? "match-jersey-vneck"}-${size}.json`), JSON.stringify(record, null, 2));
   return record;
 }
 
