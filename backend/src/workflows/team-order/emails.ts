@@ -27,6 +27,7 @@ import {
 } from "../../lib/rules/team-order-emails"
 import type { Schedule } from "../../lib/rules/team-order-schedule"
 import { isKind, type TeamOrderKind } from "../../lib/rules/team-order-links"
+import { paymentEmailData } from "./payments"
 import { loadStoreSettings, scheduleOf, service, type TeamOrderRow } from "./team-orders"
 
 type Logger = { warn: (message: string) => void; error: (message: string) => void }
@@ -172,20 +173,22 @@ export async function sendProofReady(
   }
 }
 
-/** "Payment due: the deposit": when the proof is signed. */
+/** "Payment due: the deposit": when the proof is signed. With the payment link, and the amount as data (decision 016). */
 export async function sendDepositDue(container: MedusaContainer, order: TeamOrderRow, proofId: string, now: Date = new Date()) {
+  const payment = await paymentEmailData(container, order, "deposit")
   return sendTeamOrderEmail(
     container,
-    { order, kind: "deposit_due", key: dedupeKey("deposit_due", { orderId: order.id, proofId }), payload: payloadOf(order) },
+    { order, kind: "deposit_due", key: dedupeKey("deposit_due", { orderId: order.id, proofId }), payload: payloadOf(order, payment) },
     { now }
   )
 }
 
-/** "Payment due: the balance": when the order becomes `balance_due`. */
+/** "Payment due: the balance": when the order becomes `balance_due`. With the payment link, and the amount as data. */
 export async function sendBalanceDue(container: MedusaContainer, order: TeamOrderRow, now: Date = new Date()) {
+  const payment = await paymentEmailData(container, order, "balance")
   return sendTeamOrderEmail(
     container,
-    { order, kind: "balance_due", key: dedupeKey("balance_due", { orderId: order.id }), payload: payloadOf(order) },
+    { order, kind: "balance_due", key: dedupeKey("balance_due", { orderId: order.id }), payload: payloadOf(order, payment) },
     { now }
   )
 }

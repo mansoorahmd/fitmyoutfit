@@ -110,7 +110,29 @@ describe("reminderEmail", () => {
 })
 
 describe("paymentDueEmail", () => {
-  it("the deposit and the balance say what is due in words, with no amount, and that details follow", () => {
+  it("links to the order's payment page, in the text and as a link in the html, with no amount", () => {
+    const url = "http://localhost:8000/pk/account/team-orders/teamord_1/pay"
+    for (const which of ["deposit", "balance"] as const) {
+      const mail = paymentDueEmail({ firstName: null, teamName: "Lions", orderKind: "order", which, paymentUrl: url })
+      expect(mail.text).toContain(`You can pay it in your account: ${url}`)
+      expect(mail.html).toContain(`<a href="${url}">${url}</a>`)
+      expect(mail.text).not.toContain("We will send you the payment details separately.")
+      expect(mail.text).not.toMatch(/\d[\d,.]*\s?(PKR|GBP|AED|USD|Rs|£|\$|%)|[£$]\s?\d|50\s?%/)
+    }
+  })
+
+  it("escapes the link in the html", () => {
+    const mail = paymentDueEmail({ firstName: null, teamName: "L", orderKind: "order", which: "deposit", paymentUrl: 'http://x/"><b>' })
+    expect(mail.html).not.toContain('"><b>')
+  })
+
+  it("the amount is data for the template, never in the draft text", () => {
+    const mail = emailFor("deposit_due", { teamName: "Lions", orderKind: "order", paymentUrl: "http://x/pay", amount: { value: 35742, currency_code: "pkr" } }, null)
+    expect(mail.text).not.toMatch(/35742|35,742|PKR|pkr/)
+    expect(mail.text).toContain("http://x/pay")
+  })
+
+  it("without a link: the deposit and the balance say what is due in words, with no amount, and that details follow", () => {
     const deposit = paymentDueEmail({ firstName: null, teamName: "Lions", orderKind: "order", which: "deposit" })
     const balance = paymentDueEmail({ firstName: null, teamName: "Lions", orderKind: "order", which: "balance" })
     expect(deposit.subject).toBe("Deposit due for Lions")
