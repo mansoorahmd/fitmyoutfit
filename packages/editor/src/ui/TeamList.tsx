@@ -242,6 +242,8 @@ export function TeamListView({ initialDetailsOpen }: { initialDetailsOpen?: bool
         return;
       case "limit":
         api.announce(fill(w.limitReached, { max: t.limits.maxLines }));
+        // Enter in the last allowed line ends typing (G4): the keys that follow are not appended to the Size field.
+        (document.activeElement as HTMLElement | null)?.blur();
         return;
       case "remove-empty":
         t.remove(id, { silent: true });

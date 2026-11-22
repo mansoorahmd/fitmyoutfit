@@ -125,3 +125,23 @@ describe("by size (a design with neither a name nor a number)", () => {
     expect(out[0]).toBe(named[0]);
   });
 });
+
+describe("G4: one digit table, and a name order that does not depend on the browser's locale", () => {
+  it("converts every digit system of the package's rules (western, Arabic-Indic, Extended Arabic-Indic) both ways", () => {
+    const list = [line("a", "A", "٧٨"), line("b", "B", "۱۲"), line("c", "C", "07x")];
+    expect(convertAllDigits(list, "western").map((l) => l.number)).toEqual(["78", "12", "07x"]);
+    expect(convertAllDigits(list, "arabic-indic").map((l) => l.number)).toEqual(["٧٨", "١٢", "٠٧x"]);
+  });
+  it("sorts names without asking the runtime's own locale (String.prototype.localeCompare is not used)", () => {
+    const original = String.prototype.localeCompare;
+    String.prototype.localeCompare = () => {
+      throw new Error("the locale of the browser was asked");
+    };
+    try {
+      const out = sortLines([line("a", "Zain"), line("b", "ali"), line("c", "Émile"), line("d", "Bilal")], "name", { sizes: DEFAULT_TEAM_SIZES });
+      expect(ids(out)).toEqual(["b", "d", "c", "a"]);
+    } finally {
+      String.prototype.localeCompare = original;
+    }
+  });
+});

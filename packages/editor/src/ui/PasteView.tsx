@@ -80,13 +80,21 @@ export function PasteView() {
   useEffect(() => () => previewPlayer(null), [previewPlayer]);
   const pending = text !== readText;
 
+  // G4: text over the limit is cut, and the organizer is told (it was cut without a word before).
+  const [cutNote, setCutNote] = useState(false);
   const take = (next: string) => {
     setText(next.slice(0, PASTE_LIMITS.maxTextLength));
     setReadText(next.slice(0, PASTE_LIMITS.maxTextLength));
     setFileMessage(null);
+    setCutNote(next.length > PASTE_LIMITS.maxTextLength);
   };
 
   const onPaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
+    {
+      const area = event.currentTarget;
+      const incoming = event.clipboardData.getData("text").length;
+      if (area.value.length - (area.selectionEnd - area.selectionStart) + incoming > PASTE_LIMITS.maxTextLength) setCutNote(true);
+    }
     // On a phone a paste closes the keyboard so the result is in view; "Edit text" opens the box again (5.2).
     if (!wide) {
       const pasted = event.clipboardData.getData("text");
@@ -194,6 +202,7 @@ export function PasteView() {
               onChange={(e) => {
                 setText(e.target.value);
                 setFileMessage(null);
+                if (e.target.value.length < PASTE_LIMITS.maxTextLength) setCutNote(false);
               }}
               onPaste={onPaste}
               data-testid="paste-box"
@@ -217,6 +226,12 @@ export function PasteView() {
           <p className="fmo-pv-file-problem" role="alert" data-testid="paste-file-problem">
             <EditorIcon name="alert" size={16} />
             <span>{fileMessage}</span>
+          </p>
+        )}
+        {cutNote && (
+          <p className="fmo-pv-file-problem" role="status" data-testid="paste-cut">
+            <EditorIcon name="info" size={16} />
+            <span>{fill(p.cut, { max: PASTE_LIMITS.maxTextLength.toLocaleString("en") })}</span>
           </p>
         )}
         {dragging && <p className="fmo-pv-drop" aria-hidden="true">{p.dropHere}</p>}

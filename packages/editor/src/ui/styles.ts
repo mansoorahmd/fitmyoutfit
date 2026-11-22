@@ -617,7 +617,7 @@ export const EDITOR_CSS = /* css */ `
 .fmo-tl-menu-item[data-danger="true"] { color: var(--fmo-error); }
 .fmo-tl-check { display: inline-flex; width: 20px; justify-content: center; }
 /* The player chip (08-team-list.md 7.2): a pill, 44 tall, on the stage; ‹ and › are 44 x 44. */
-.fmo-chip { display: inline-flex; align-items: center; max-width: 224px; height: 44px; border: 1px solid var(--fmo-float-line); border-radius: 22px; background: var(--fmo-float-fill); box-shadow: var(--fmo-float-shadow); color: var(--fmo-ink); }
+.fmo-chip { display: inline-flex; align-items: center; max-width: min(272px, calc(100vw - 32px)); height: 44px; border: 1px solid var(--fmo-float-line); border-radius: 22px; background: var(--fmo-float-fill); box-shadow: var(--fmo-float-shadow); color: var(--fmo-ink); }
 .fmo-editor[data-layout="wide"] .fmo-chip { max-width: 320px; }
 .fmo-chip-step { flex: none; width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 22px; background: transparent; color: var(--fmo-ink); cursor: pointer; }
 .fmo-chip-step:hover:not([aria-disabled="true"]) { background: var(--fmo-surface-alt); }
@@ -653,7 +653,7 @@ export const EDITOR_CSS = /* css */ `
 .fmo-tl-locked p { margin: 0; flex: 1 1 160px; }
 .fmo-tl-locked svg { flex: none; }
 .fmo-tl[data-locked="true"] .fmo-tl-input { background: var(--fmo-surface-alt); border-color: transparent; }
-.fmo-tl-toolbar-start { display: inline-flex; align-items: center; gap: 4px; }
+.fmo-tl-toolbar-start { display: inline-flex; align-items: center; gap: 20px; } /* G4: "Paste a list" and "Sort" are two buttons, not one label (they were 4 px apart) */
 /* The paste view (5.2): a sub-view of the Players panel; the actions are stuck to the bottom. */
 .fmo-pv { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; position: relative; }
 .fmo-pv[data-dragging="true"] { outline: 2px dashed var(--fmo-focus); outline-offset: -2px; }

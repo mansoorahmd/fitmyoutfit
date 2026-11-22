@@ -144,3 +144,23 @@ describe("the host's taken numbers show beside the line (S3)", () => {
     expect(view.getByTestId("tl-msg-0").textContent).toContain("already taken");
   });
 });
+
+describe("the minor points of the review (G4)", () => {
+  it("Enter in the Size field of the last allowed line ends typing: the field is left, so more keys are not added to it", () => {
+    const view = mount({ initial: saved(["Ali", "Bilal"]), limits: { maxLines: 2 } });
+    const size = view.getByTestId("tl-size-1") as HTMLInputElement;
+    act(() => void size.focus());
+    expect(document.activeElement).toBe(size);
+    act(() => void fireEvent.keyDown(size, { key: "Enter" }));
+    expect(document.activeElement).not.toBe(size);
+    expect(names(view)).toEqual(["Ali", "Bilal"]);
+  });
+  it("pasted text over 200,000 characters is cut and the paste view says so", async () => {
+    const view = mount({ initial: saved(["Ali"]) });
+    act(() => void fireEvent.click(view.getByTestId("tl-paste")));
+    expect(view.queryByTestId("paste-cut")).toBeNull();
+    const box = view.getByTestId("paste-box");
+    act(() => void fireEvent.paste(box, { clipboardData: { getData: () => "x".repeat(200 * 1024 + 5) } }));
+    expect(view.getByTestId("paste-cut").textContent).toContain("204,800");
+  });
+});

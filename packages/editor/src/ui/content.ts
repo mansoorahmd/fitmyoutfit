@@ -323,6 +323,7 @@ export const EDITOR_WORDING = {
       fileNotText: "This file isn't a text file. Save the list as CSV UTF-8, or copy the cells and paste them here.", // NEW
       fileEmpty: "This file has nothing in it to read.", // NEW
       fileRead: "Read {file}", // NEW (status)
+      cut: "The text was longer than {max} characters, so only the first part was read. Add the rest in a second paste.", // NEW (G4): pasted or file text cut at the limit
       dropHere: "Drop a CSV file here", // NEW
       noSizeFound: "No size found. You can add it after.", // W-TL43
       noNumberFound: "No number found.", // W-TL43
