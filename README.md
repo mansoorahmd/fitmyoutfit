@@ -7,6 +7,7 @@ Custom apparel store where teams and clubs design jerseys, T-shirts and jackets 
 | `backend/` | Medusa v2 (`@fitmyoutfit/backend`) |
 | `storefront/` | Next.js storefront (`@fitmyoutfit/storefront`) |
 | `packages/editor/` | 3D editor (`@fitmyoutfit/editor`) |
+| `packages/team-rules/` | The roster rules of a team order, plain TypeScript with no runtime dependencies (`@fitmyoutfit/team-rules`); used by the backend now and by the editor later |
 | `scripts/` | Root setup and dev scripts (plain Node, work on Windows and Linux) |
 
 ## Prerequisites
@@ -190,20 +191,31 @@ Write each as an origin only: `http(s)://<host>[:<port>]`, with no path, query, 
 
 **Logs.** Our own code never writes a reset link or token to a log outside development and test. Medusa's request log records the address and the `Referer` of every request. The admin's link keeps its token out of both (the fragment and the referrer policy above; measured on a production start: no part of the token in the log after opening the link and setting the password), and a middleware (`backend/src/api/middlewares.ts`, rule in `backend/src/lib/rules/request-log-redaction.ts`) replaces the value of a `token` parameter in the logged address and `Referer` of every request that reaches the backend's routes with `[redacted]`. Medusa serves its admin pages ahead of our middlewares, so an admin link written the old way (`/app/reset-password?token=...`), or Medusa's own invite link (`/app/invite?token=...`), opened in a browser is still logged with its token. The customer's link is opened on the storefront, so the storefront's hosting logs record its address, token included, as any request log does.
 
+## Team orders, part one (M2-1)
+
+The organizer of a team designs the kit, enters every player's name, number and size in one team list, and (in the next part) signs a roster proof. This part holds the foundations. The routes' exact shapes are in the contract as built (`docs/contracts/`, kept by the coordinator).
+
+- **The roster rules** are `packages/team-rules` (`@fitmyoutfit/team-rules`, see its README): the checks (every problem is a code with its line and field, never a sentence), the summary, the clean-up for storage, the reader for pasted lists and CSV text, and the jersey number rule (its one home; the editor still has its own copy, kept in step by a parity test until it imports the package). Limits are data: 100 lines, 1 to 10 of a shirt and 18 characters in a name are the defaults of decision 012, and the Store's metadata keys `roster_max_lines`, `roster_max_count` and `roster_max_name_length` change them (a key that is not set means the default; the seed does not set them). The region's minimum is the region's `min_garment_quantity` metadata, as for checkout.
+- **Saved designs** are the Medusa module `backend/src/modules/design` (`design`, `design_version`): a design belongs to a customer, every save adds a version, nothing is overwritten, and a version holds the design JSON as the editor made it (a JSON object with a whole-number `schemaVersion`, at most 1,000,000 bytes). The editor's full schema is **not** checked on the server yet. Routes: `POST` and `GET /store/designs`, `GET /store/designs/:id`, `POST /store/designs/:id/versions`, `GET /store/designs/:id/versions/:version`.
+- **Team orders** are the module `backend/src/modules/team-order` (`team_order`, `roster_entry`), status `draft` only in this part. The team list is saved as a whole with `PUT /store/team-orders/:id/roster`; a list with problems is saved and the answer carries the problems, and a save from a stale `version` is refused with 409 (the version moves in one SQL statement, so two tabs cannot both win). Which fields the design prints comes from the design version, the product's sizes from the product's Size option, the minimum from the region. Routes: `POST` and `GET /store/team-orders`, `GET`, `POST` (rename) and `DELETE /store/team-orders/:id`, `PUT /store/team-orders/:id/roster`.
+- All of these routes need a signed-in customer (401 without) and show only the customer's own data; someone else's is 404.
+
+**How the backend gets the package.** The backend is not a workspace, so it depends on the package with `"@fitmyoutfit/team-rules": "file:../packages/team-rules"` in `backend/package.json` (npm links the folder into `backend/node_modules`). The package ships a built `dist/` (ES module for the editor, CommonJS for the backend, `tsc` only); `dist/` is not committed. The backend's `build`, `dev`, `typecheck` and test scripts build it first (`npm run build:rules --prefix backend`), so a plain `npm run typecheck` or `npm test` works after an install. A start from `backend/.medusa/server` finds the package through `backend/node_modules` (Node looks upward from the build output). **For a production deployment** the folder `packages/team-rules` must be built (`npm run build -w @fitmyoutfit/team-rules`) and present next to `backend/` when the image is built and `npm install` runs in `backend/`, because the `file:` path is relative to `backend/`; a Docker build copies `packages/team-rules` and `backend/` together. Note that `medusa build` copies `package.json` into `backend/.medusa/server`, whose own `npm install` would resolve `file:../packages/team-rules` from the wrong folder: deploy by running the server from `backend/` with its `node_modules`, or install in `.medusa/server` after rewriting that path (for example to a tarball made with `npm pack` in `packages/team-rules`).
+
 ## Commands
 
 | Command | What it does |
 | --- | --- |
 | `npm run setup` | Env files, migrations, seed, publishable key (idempotent) |
 | `npm run dev` | Backend and storefront together (a missing part is skipped). If either one exits by itself, with any exit code, dev stops the other and exits non-zero, naming the one that ended; Ctrl+C stops both and exits 0 |
-| `npm run lint` | ESLint in the backend, storefront and editor, and in `scripts/` |
-| `npm run typecheck` | `tsc --noEmit` in the backend, storefront and editor |
-| `npm run test` | Tests in the backend, storefront and editor, plus `scripts/` tests |
-| `npm run build` | Production build of the backend, storefront and editor (needs `npm run setup` and a running backend, see below) |
+| `npm run lint` | ESLint in the backend, storefront, editor and team-rules, and in `scripts/` |
+| `npm run typecheck` | `tsc --noEmit` in the backend, storefront, editor and team-rules (the backend's typecheck builds team-rules first) |
+| `npm run test` | Tests in the backend, storefront, editor and team-rules, plus `scripts/` tests |
+| `npm run build` | Production build of the team-rules package (first, through the backend's build), the backend, storefront and editor (needs `npm run setup` and a running backend, see below) |
 
 **`npm run build` needs a set-up store and a running backend.** The storefront build stops at once without `NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY` in `storefront/.env.local`, which `npm run setup` writes, and while it builds it reads the regions and products from the backend at `MEDUSA_BACKEND_URL` to pre-render their pages. So run `npm run setup` once, start the backend (`npm run dev`, or `npm run dev --prefix backend` for the backend alone) and leave it running, then run `npm run build` in a second terminal. The backend and editor builds alone need neither: `npm run build --prefix backend`, `npm run build -w packages/editor`.
 
-Backend only: `npm run <script> --prefix backend` (`dev`, `build`, `migrate`, `seed`, `test:unit`, `test:integration:http`). Storefront or editor only: `npm run <script> -w storefront` or `-w packages/editor`.
+Backend only: `npm run <script> --prefix backend` (`dev`, `build`, `migrate`, `seed`, `test:unit`, `test:integration:http`). Storefront, editor or team-rules only: `npm run <script> -w storefront`, `-w packages/editor` or `-w @fitmyoutfit/team-rules`.
 
 ## Installing and adding dependencies
 
@@ -211,8 +223,8 @@ The backend is **not** an npm workspace. Medusa's admin runs on React 18 and the
 
 | Folder | Lockfile | Contains |
 | --- | --- | --- |
-| repo root | `package-lock.json` | the workspaces `storefront` and `packages/editor` |
-| `backend/` | `backend/package-lock.json` | the backend only |
+| repo root | `package-lock.json` | the workspaces `storefront`, `packages/editor` and `packages/team-rules` |
+| `backend/` | `backend/package-lock.json` | the backend only, and a link to `packages/team-rules` (`file:../packages/team-rules`) |
 
 A root `npm install` (or `npm ci`) does both: when the root install finishes, its `postinstall` script (`scripts/install-backend.mjs`) runs `npm install` (or `npm ci`) in `backend/`. `npm run install:backend` runs only the backend part.
 
