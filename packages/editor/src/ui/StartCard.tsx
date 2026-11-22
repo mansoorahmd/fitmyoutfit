@@ -59,7 +59,7 @@ export function StartCard({ onClose, garment }: { onClose: (seeDesigns: boolean)
           {garment && (
             <div className="fmo-start-garment" data-testid="start-garment">
               <span className="fmo-start-garment-name">
-                {wording.garment.startLine}: <strong>{garment.name}</strong>
+                {wording.garment.startLine}: <span className="fmo-start-garment-value">{garment.name}</span>
               </span>
               <button type="button" className="fmo-btn fmo-btn-text" aria-label={fill(wording.garment.buttonName, { name: garment.name })} onClick={garment.onOpen} data-testid="start-garment-change">
                 {wording.garment.change}

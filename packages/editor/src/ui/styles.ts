@@ -241,8 +241,9 @@ button.fmo-gm-card:hover { background: var(--fmo-surface-alt); }
 .fmo-gm-picture img { width: 64px; height: 64px; object-fit: contain; display: block; }
 .fmo-gm-name { flex: 1 1 auto; min-width: 0; font-weight: 700; }
 .fmo-gm-chips { flex: 0 1 auto; display: inline-flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
-.fmo-topbar-garment { display: inline-flex; align-items: baseline; gap: 4px; min-height: 44px; padding: 0 4px; border: 0; background: transparent; color: var(--fmo-on-inverse-muted); font: 500 14px/1 var(--fmo-font-body); cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.fmo-topbar-garment { display: inline-flex; align-items: baseline; gap: 4px; min-height: 44px; padding: 0 4px; border: 0; background: transparent; color: var(--fmo-on-inverse-muted); font: var(--fmo-type-label); cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
 .fmo-start-garment { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px; }
+.fmo-start-garment-value { font: var(--fmo-type-section); }
 .fmo-start-garment-name { font: var(--fmo-type-label); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fmo-done-inner { height: 100%; overflow: hidden; padding: 8px var(--fmo-panel-pad) 24px; box-sizing: border-box; display: flex; flex-direction: column; }
 .fmo-done-inner > * { flex: none; }
