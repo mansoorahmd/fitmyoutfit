@@ -32,6 +32,7 @@ import { traceSvgPath } from "../design/svg-path.js";
 import { physicalAlign, resolveTextDirection, type PhysicalAlign, type ResolvedDirection } from "../design/text.js";
 import { logoPrintSize } from "../design/upload-checks.js";
 import { MIN_OUTLINE_MM } from "../design/roles.js";
+import { drawnText } from "../design/letter-case.js";
 import { layerFont } from "./fonts.js";
 
 type TextLike = Extract<Layer, { kind: "text" | "number" }>;
@@ -244,20 +245,22 @@ function drawTextLine(ctx: LayerCanvasContext, design: DesignDocument, layer: Te
   ctx.font = layerFont(design, layer);
   ctx.direction = layerDirection(layer);
   ctx.textBaseline = "middle";
-  const measured = ctx.measureText(layer.value).width;
+  // Names print in capitals by default (decision 012): only what is drawn changes, never the stored value.
+  const value = drawnText(layer);
+  const measured = ctx.measureText(value).width;
   const layout = textLayout(layer, measured);
   ctx.textAlign = layout.textAlign;
   ctx.scale(layout.scale, layout.scale);
-  if (layer.outline && layer.value.length > 0) {
+  if (layer.outline && value.length > 0) {
     // A stroke is centred on the glyph edge: twice the width, so the outline's width shows outside the
     // letters once the fill covers the inner half. It shrinks with a shrunk line (layout.outlineWidth mm).
     ctx.lineJoin = "round";
     ctx.miterLimit = 2;
     ctx.strokeStyle = layer.outline.color.hex;
     ctx.lineWidth = (2 * layout.outlineWidth) / layout.scale;
-    ctx.strokeText(layer.value, layout.x, 0);
+    ctx.strokeText(value, layout.x, 0);
   }
   ctx.fillStyle = layer.fill.hex;
-  ctx.fillText(layer.value, layout.x, 0);
+  ctx.fillText(value, layout.x, 0);
   return { layerId: layer.id, role: layer.role, scale: layout.scale, shrunk: layout.scale < 1 };
 }

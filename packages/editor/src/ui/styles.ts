@@ -616,6 +616,25 @@ export const EDITOR_CSS = /* css */ `
 .fmo-tl-menu-item[aria-disabled="true"] { color: var(--fmo-ink-muted); opacity: 0.5; cursor: default; }
 .fmo-tl-menu-item[data-danger="true"] { color: var(--fmo-error); }
 .fmo-tl-check { display: inline-flex; width: 20px; justify-content: center; }
+/* The player chip (08-team-list.md 7.2): a pill, 44 tall, on the stage; ‹ and › are 44 x 44. */
+.fmo-chip { display: inline-flex; align-items: center; max-width: 224px; height: 44px; border: 1px solid var(--fmo-float-line); border-radius: 22px; background: var(--fmo-float-fill); box-shadow: var(--fmo-float-shadow); color: var(--fmo-ink); }
+.fmo-editor[data-layout="wide"] .fmo-chip { max-width: 320px; }
+.fmo-chip-step { flex: none; width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 22px; background: transparent; color: var(--fmo-ink); cursor: pointer; }
+.fmo-chip-step:hover:not([aria-disabled="true"]) { background: var(--fmo-surface-alt); }
+.fmo-chip-step[aria-disabled="true"] { color: var(--fmo-ink-muted); opacity: 0.5; cursor: default; }
+.fmo-chip-main { flex: 1 1 auto; min-width: 0; height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 2px; border: 0; background: transparent; color: var(--fmo-ink); cursor: pointer; font: var(--fmo-type-label); }
+.fmo-chip-main:hover { background: var(--fmo-surface-alt); }
+.fmo-chip-number { font-variant-numeric: tabular-nums; flex: none; }
+.fmo-chip-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fmo-chip-name[data-missing="true"], .fmo-chip-number[data-missing="true"] { color: var(--fmo-ink-muted); font-weight: 400; }
+.fmo-chip-tag { flex: none; padding: 0 6px; border: 1px solid var(--fmo-border-strong); border-radius: 10px; font: var(--fmo-type-small); color: var(--fmo-ink-muted); }
+.fmo-chip-count { flex: none; min-width: 20px; height: 20px; padding: 0 4px; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; border-radius: 10px; background: var(--fmo-ink); color: #fff; font: var(--fmo-type-label); }
+.fmo-chip-problem { flex: none; display: inline-flex; color: var(--fmo-error); }
+.fmo-chip-top { display: flex; justify-content: center; }
+.fmo-view-list { justify-content: center; position: absolute; }
+.fmo-view-list .fmo-whole { position: absolute; inset-inline-end: 12px; bottom: 0; }
+.fmo-whole { width: 44px; height: 44px; }
+.fmo-whole[aria-pressed="true"] { background: var(--fmo-ink); color: #fff; border-color: var(--fmo-ink); }
 .fmo-tl-toolbar-start { display: inline-flex; align-items: center; gap: 4px; }
 /* The paste view (5.2): a sub-view of the Players panel; the actions are stuck to the bottom. */
 .fmo-pv { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; position: relative; }

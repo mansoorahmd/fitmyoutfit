@@ -333,6 +333,8 @@ export const EDITOR_WORDING = {
       group: "Player on the shirt", // W-TL27
       previous: "Previous player: {name}", // W-TL27, W-ED170
       next: "Next player: {name}", // W-TL27, W-ED170
+      previousNone: "Previous player", // NEW: the first line has none before it (inactive)
+      nextNone: "Next player", // NEW: the last line has none after it (inactive)
       show: "{name}, number {number}, size {size}. Show in the team list.", // 7.2
       showSample: "Sample player: {name}, number {number}. Show the name and number style.", // NEW
       stepped: "Player {i} of {n}: {name}", // W-ED171 (status, polite)

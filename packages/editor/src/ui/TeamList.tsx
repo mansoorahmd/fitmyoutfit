@@ -94,6 +94,15 @@ export function TeamListView({ initialDetailsOpen }: { initialDetailsOpen?: bool
     li.scrollIntoView?.({ block: "nearest", behavior: "auto" });
   });
 
+  // The chip's step and its middle (7.2) bring the chosen line into view; a tap on a line never moves the list.
+  const firstTick = useRef(t.revealTick);
+  useEffect(() => {
+    if (t.revealTick === firstTick.current) return;
+    firstTick.current = t.revealTick;
+    const li = rows.current?.querySelector<HTMLElement>('li[data-chosen="true"]');
+    li?.scrollIntoView?.({ block: "nearest", behavior: api.reducedMotion ? "auto" : "smooth" });
+  }, [t.revealTick, t.chosenId, api.reducedMotion]);
+
   // The scroll position of the visit is kept for the next time the list opens (3.5).
   useLayoutEffect(() => {
     const el = rows.current;

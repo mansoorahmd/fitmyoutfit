@@ -30,6 +30,7 @@ import { createHandOver } from "../team-list/hand-over.js";
 import { readSavedList } from "../team-list/saved.js";
 import { DEFAULT_TEAM_NOUN, DEFAULT_TEAM_SIZES, type EditorLine, type SavedTeamList, type TeamListHost, type TeamListReport } from "../team-list/types.js";
 import { applyPaste, type PasteMode } from "../team-list/paste.js";
+import { PlayerChip, WholeShirtToggle } from "./PlayerChip.js";
 import { TeamListContext, type TeamListApi } from "./team-list-context.js";
 import { PlayersTool } from "./PlayersTool.js";
 import type { CameraInfo, CanvasHover, DesignCanvasHandle, LayerDragEvent, PieceGuide, TextureDrawInfo, ZoneTap } from "../react/DesignCanvas.js";
@@ -529,6 +530,29 @@ export function EditorShell(props: EditorShellProps) {
   const setPlayerFlag = useCallback((id: string, flag: "noName" | "noNumber", on: boolean) => history.commitLines((ls) => setLineFlag(ls as EditorLine[], id, flag, on), `list-flag|${nameOfLine(id)}`), [history, nameOfLine]);
   const convertDigits = useCallback((to: "western" | "arabic-indic") => history.commitLines((ls) => convertAllDigits(ls as EditorLine[], to), "list-digits"), [history]);
   const setSizeCount = useCallback((code: string, count: number) => history.commitLines((ls) => setSizeCountLines(ls as EditorLine[], code, count, { table: sizeTable, maxCount }), `list-count|${code}`), [history, sizeTable, maxCount]);
+  // The player chip (7.2): previous and next in list order; its words are said politely (a hidden live region), never in the status line, which would take the chip's place.
+  const [stepNote, setStepNote] = useState("");
+  const [revealTick, setRevealTick] = useState(0);
+  const chosenIdRef = useRef(chosenId);
+  useEffect(() => {
+    chosenIdRef.current = chosenId;
+  });
+  const step = useCallback(
+    (direction: -1 | 1) => {
+      const current = linesRef.current;
+      const at = Math.max(0, current.findIndex((l) => l.id === chosenIdRef.current));
+      const next = current[at + direction];
+      if (!next) return;
+      setChosen(next.id);
+      setStepNote(fill(wording.teamList.chip.stepped, { i: at + direction + 1, n: current.length, name: next.name || fill(wording.teamList.chip.unnamed, { i: at + direction + 1 }) }));
+      setRevealTick((n) => n + 1);
+    },
+    [wording],
+  );
+  const reveal = useCallback(() => setRevealTick((n) => n + 1), []);
+  // The phone's list view frames the close-up of the name and number; the toggle goes back to the whole shirt and again (3.2).
+  const [wholeShirt, setWholeShirt] = useState(false);
+
   // Pasting (5.2): the lines are added in ONE undo step, the first added line is chosen, and the checks show on them like on typed lines.
   const addPasted = useCallback(
     (added: readonly EditorLine[], mode: PasteMode) => {
@@ -576,6 +600,10 @@ export function EditorShell(props: EditorShellProps) {
       openSizeChart,
       chosenId,
       choose: setChosen,
+      step,
+      stepNote,
+      reveal,
+      revealTick,
       seen,
       revealAll,
       view: playersView,
@@ -604,7 +632,7 @@ export function EditorShell(props: EditorShellProps) {
       nameShrunk,
       closeUpLayerId,
     }),
-    [lines, analysis, prints, listSizes, sizeTable, teamNoun, teamMinimum, listLimitsView, openSizeChart, chosenId, seen, revealAll, playersView, pasteText, openPaste, addPasted, listMemory, keyboard, beginField, typeField, leaveField, leaveLine, endTyping, addPlayer, removePlayer, movePlayer, sortPlayers, setPlayerCount, setPlayerFlag, convertDigits, setSizeCount, revealAllProblems, setKeyboard, nameShrunk, closeUpLayerId],
+    [lines, analysis, prints, listSizes, sizeTable, teamNoun, teamMinimum, listLimitsView, openSizeChart, chosenId, step, stepNote, reveal, revealTick, seen, revealAll, playersView, pasteText, openPaste, addPasted, listMemory, keyboard, beginField, typeField, leaveField, leaveLine, endTyping, addPlayer, removePlayer, movePlayer, sortPlayers, setPlayerCount, setPlayerFlag, convertDigits, setSizeCount, revealAllProblems, setKeyboard, nameShrunk, closeUpLayerId],
   );
   // What the editor hands to its host (12.2, 11.1): the list and its report, after a second without changes.
   const [hostBridge] = useState(() => {
@@ -682,7 +710,7 @@ export function EditorShell(props: EditorShellProps) {
   const listView = activeTool === "players" && (playersView === "list" || playersView === "paste") && !startCard;
   const listTyping = typing && layout === "compact" && listView;
   const closeUpLayer = closeUpLayerId;
-  const listCloseUp = layout === "compact" && listView && !doneOpen && toolsReady && closeUpLayer !== null;
+  const listCloseUp = layout === "compact" && listView && !doneOpen && toolsReady && closeUpLayer !== null && !wholeShirt;
   const wasCloseUp = useRef(false);
   // The close-up is aimed at the free stage, so it is aimed again once the panel's height has settled (the keyboard
   // opening or closing changes it).
@@ -708,7 +736,10 @@ export function EditorShell(props: EditorShellProps) {
       setDetent(nextDetent);
       setStartCard(false);
       setKitOpen(false);
-      if (next === "players") setPlayersView("list");
+      if (next === "players") {
+        setPlayersView("list");
+        setWholeShirt(false);
+      }
       // The camera turns to the side the tool works on (6.3), unless the coach tapped an item on the model
       // (they are already looking at it).
       if (options.turn === false) return;
@@ -1236,6 +1267,11 @@ export function EditorShell(props: EditorShellProps) {
       canvas.current?.turnBy(turn);
     } else if (event.key === "+" || event.key === "=") canvas.current?.zoomIn();
     else if (event.key === "-") canvas.current?.zoomOut();
+    // Page Up and Page Down choose the previous and next player (7.2), with nothing selected.
+    else if ((event.key === "PageUp" || event.key === "PageDown") && !selectedId) {
+      event.preventDefault();
+      step(event.key === "PageUp" ? -1 : 1);
+    }
   };
 
   const toolBody = (t: ToolId) => {
@@ -1501,6 +1537,8 @@ export function EditorShell(props: EditorShellProps) {
                 </div>
               ) : null
             }
+            chip={startCard || doneOpen || (layout === "compact" && typing) ? null : <PlayerChip inList={listView && panelOpen} />}
+            wholeToggle={layout === "compact" && listView && panelOpen ? <WholeShirtToggle pressed={wholeShirt} onToggle={() => setWholeShirt((w) => !w)} /> : null}
             viewControls={viewControlsFor({ layout, typing, panelOpen, detent, startCard, listView, stageHeight: (size.height || 844) - LAYOUT_SIZES.compact.topBar - (startCard ? panelSize.height : 0) })}
           />
           {layout !== "wide" && (start ?? panel)}

@@ -26,6 +26,12 @@ export interface TeamListApi {
   /** The chosen line: the one the shirt shows. Null only when the list is empty. */
   chosenId: string | null;
   choose(id: string | null): void;
+  /** The player chip's step (7.2): previous (-1) or next (1) line in list order; the polite words for it in `stepNote`. */
+  step(direction: -1 | 1): void;
+  stepNote: string;
+  /** Scroll the list to the chosen line (the chip's middle, in list view); `revealTick` counts the requests. */
+  reveal(): void;
+  revealTick: number;
   /** What has been left, per line (6.2), and whether every missing value shows ("Next to fix", Done). */
   seen: SeenMap;
   revealAll: boolean;

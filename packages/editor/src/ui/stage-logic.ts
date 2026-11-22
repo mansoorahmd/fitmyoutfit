@@ -4,6 +4,7 @@
  * description in words for screen readers (11.2, W-ED122).
  */
 import { relativeLuminance } from "../design/colour.js";
+import { drawnText, upperLatin } from "../design/letter-case.js";
 import type { Palette } from "../design/palette.js";
 import type { ColorValue, DesignDocument, ProductDefinition } from "../design/schema.js";
 import { fill, presetWords, type EditorWording } from "./content.js";
@@ -86,12 +87,14 @@ export function describeStage(
     let item: string | null = null;
     if (layer.role === "team-name" && layer.kind === "text" && layer.value) item = fill(v.teamNameItem, { value: layer.value });
     else if (layer.role === "player-number" && layer.kind === "number") {
-      const name = design.layers.some((l) => l.role === "player-name" && l.pieceId === layer.pieceId) ? design.samplePlayer.name : "";
+      const nameItem = design.layers.find((l) => l.role === "player-name" && l.pieceId === layer.pieceId);
+      // Said as it is drawn: the Latin letters of a name in capitals unless the coach chose "As typed".
+      const name = nameItem ? (nameItem.kind === "text" && nameItem.letterCase !== "as-typed" ? upperLatin(design.samplePlayer.name) : design.samplePlayer.name) : "";
       item = name ? fill(v.playerItem, { name, number: layer.value }) : `${wording.lettering.number} ${layer.value}`;
     } else if (layer.role === "player-name") {
       // Said with the number when both are on one piece.
       if (design.layers.some((l) => l.role === "player-number" && l.pieceId === layer.pieceId)) continue;
-      if (layer.kind === "text" && layer.value) item = `${wording.lettering.playerName} ${layer.value}`;
+      if (layer.kind === "text" && layer.value) item = `${wording.lettering.playerName} ${drawnText(layer)}`;
     } else if (layer.kind === "logo" || layer.kind === "clipart") item = v.logoItem;
     else if (layer.kind === "text" && layer.value) item = fill(v.textItem, { value: layer.value });
     else if (layer.kind === "number") item = fill(v.textItem, { value: layer.value });
