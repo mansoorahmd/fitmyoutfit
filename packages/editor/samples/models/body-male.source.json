@@ -1,0 +1,30 @@
+{
+  "about": "Where samples/models/body-male.glb comes from. Read by scripts/process-body-model.ts (it picks this record by the source file's SHA-256). The body under the match jerseys: Style3D Studio's male avatar (a man in A-pose with a head, face, hair, neck, grey shorts and shoes), the one the jerseys were simulated on, so in the same frame as them. DEVELOPMENT STAND-IN ONLY: the terms for showing Style3D's avatar publicly are NOT CHECKED. Clear them or replace the avatar before any public deployment (see body-male.LICENSE.txt).",
+  "source": {
+    "title": "Style3D Studio male avatar (as exported with the match jersey, S3D-2)",
+    "author": "Style3D",
+    "url": "build/style3d-preview/match-jersey/avatar.glb in the main checkout (git-ignored; exported from Style3D Studio, not downloaded)",
+    "licence": "NOT CHECKED. Style3D's terms for showing this avatar in a public product are not known. Development stand-in only.",
+    "bytes": 1452800,
+    "sha256": "b182fffdede829940526e3a59c53cf8754924d61d53a1a68dda4e084569b4ca1"
+  },
+  "output": {
+    "model": "samples/models/body-male.glb",
+    "modelUrl": "/models/body-male.glb",
+    "copyright": "Style3D Studio male avatar. DEVELOPMENT STAND-IN ONLY: terms for public display not checked. Processed by packages/editor/scripts/process-body-model.ts: base-colour textures only, plain materials, vertex data as integers.",
+    "generator": "FitMyOutfit packages/editor/scripts/process-body-model.ts (glTF-Transform)"
+  },
+  "dropMaterials": ["Mark_Tongue", "Mark_Tears", "Mark_Cornea"],
+  "cutoutMaterials": ["Mark_Hair01", "Mark_Scalp"],
+  "roughness": {
+    "Mark_Derbys01": 0.7,
+    "Mark_Hair01": 0.55,
+    "Mark_Scalp": 0.6,
+    "Mark_Body": 0.62,
+    "Mark_Face": 0.6,
+    "Mark_Teeth": 0.4,
+    "Mark_Lashs": 0.6,
+    "Mark_Eyes": 0.3,
+    "Mark_Cornea": 0.05
+  }
+}

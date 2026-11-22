@@ -6,11 +6,12 @@ import { chooseProduct, DEMO_PRODUCTS } from "./products";
 const root = resolve(import.meta.dirname, "..");
 
 describe("the demo's products", () => {
-  it("opens on the stand-in football jersey, and keeps the T-shirt and the placeholder reachable by address", () => {
-    expect(chooseProduct("").id).toBe("stand-in-jersey");
+  it("opens on our match jersey (G3), and keeps the stand-in jersey, the T-shirt and the placeholder reachable by address", () => {
+    expect(chooseProduct("").id).toBe("match-jersey-vneck");
+    expect(chooseProduct("?product=stand-in-jersey").id).toBe("stand-in-jersey");
     expect(chooseProduct("?product=stand-in-tshirt").id).toBe("stand-in-tshirt");
     expect(chooseProduct("?product=placeholder-jersey").id).toBe("placeholder-jersey");
-    expect(chooseProduct("?product=nothing-like-it").id).toBe("stand-in-jersey");
+    expect(chooseProduct("?product=nothing-like-it").id).toBe("match-jersey-vneck");
   });
 
   it("names only products whose definition and model are in samples/", () => {
@@ -35,6 +36,8 @@ describe("the demo's products", () => {
       expect(p.credit.changed).toBe(true);
     }
     expect(DEMO_PRODUCTS.find((p) => p.id === "stand-in-jersey")!.credit!.licence).toBe("CC BY 4.0");
+    // Our own garment carries no credit line: the stand-in's shows only with the stand-in.
+    expect(DEMO_PRODUCTS.find((p) => p.id === "match-jersey-vneck")!.credit).toBeNull();
   });
 
   it("has print positions for the jersey's front, back and sleeves, now as placement presets in the generated product", () => {

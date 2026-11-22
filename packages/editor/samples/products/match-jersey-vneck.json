@@ -1,0 +1,484 @@
+{
+  "schemaVersion": 2,
+  "id": "match-jersey-vneck",
+  "name": "Match jersey, V-neck",
+  "model": {
+    "url": "/models/match-jersey-vneck.glb",
+    "format": "glb"
+  },
+  "body": {
+    "url": "/models/body-male.glb",
+    "format": "glb",
+    "frameAbove": 0.32,
+    "frameBelow": 0.1
+  },
+  "palette": {
+    "id": "placeholder-palette",
+    "version": 1
+  },
+  "teamColors": {
+    "main": {
+      "id": "placeholder-white",
+      "hex": "#FFFFFF"
+    },
+    "second": {
+      "id": "placeholder-navy",
+      "hex": "#1B2A5C"
+    }
+  },
+  "views": {
+    "front": "front",
+    "back": "back"
+  },
+  "pieces": [
+    {
+      "id": "front",
+      "name": "Front",
+      "mesh": "front",
+      "width": 470.53,
+      "height": 645.73,
+      "uv": {
+        "x": 0.446047664,
+        "y": 0.0078125,
+        "width": 0.422610163755,
+        "height": 0.579967400679
+      },
+      "outline": "M 32.52 621.67 L 30.03 645.73 L 440.5 645.73 L 436.29 605.64 L 431.54 549.41 L 429.95 525.27 L 428.64 501.13 L 427.29 468.91 L 426.57 444.73 L 426.12 420.55 L 425.95 388.31 L 426.12 364.12 L 426.56 339.94 L 428.63 283.55 L 431.49 235.26 L 425.64 232.11 L 424.02 225.38 L 424.38 218.4 L 425.5 211.5 L 427.03 204.68 L 428.79 197.91 L 430.71 191.18 L 434.85 177.83 L 448.03 137.99 L 454.46 118.02 L 458.51 104.63 L 462.29 91.16 L 465.66 77.59 L 467.14 70.75 L 468.48 63.89 L 469.62 56.99 L 470.53 50.06 L 337.88 0 L 235.26 135.15 L 132.65 0 L 0 50.06 L 0.91 56.99 L 2.05 63.89 L 3.38 70.75 L 6.5 84.39 L 10.09 97.91 L 16.07 118.02 L 33.52 171.18 L 39.82 191.19 L 43.51 204.68 L 45.03 211.5 L 46.15 218.41 L 46.51 225.38 L 44.91 232.12 L 39.04 235.26 L 41.06 267.45 L 43.27 315.77 L 43.51 323.82 L 44.13 348 L 44.48 372.18 L 44.58 396.37 L 44.41 420.55 L 43.49 460.85 L 42.61 485.02 L 39.54 541.36 L 35.72 589.58 Z",
+      "printArea": {
+        "x": 55.26,
+        "y": 145,
+        "width": 360,
+        "height": 485
+      },
+      "zone": "body_front",
+      "regions": []
+    },
+    {
+      "id": "back",
+      "name": "Back",
+      "mesh": "back",
+      "width": 470.53,
+      "height": 663.75,
+      "uv": {
+        "x": 0.0078125,
+        "y": 0.0078125,
+        "width": 0.422610163755,
+        "height": 0.596152203244
+      },
+      "outline": "M 444.87 170.76 L 451.2 151.11 L 455.18 137.93 L 460.6 118 L 463.77 104.6 L 466.46 91.1 L 468.6 77.5 L 470.01 63.81 L 470.39 56.94 L 470.53 50.06 L 337.88 0 L 334.94 4.07 L 331.11 7.35 L 326.94 10.19 L 322.57 12.72 L 313.51 17.16 L 308.87 19.15 L 299.43 22.74 L 289.84 25.88 L 280.12 28.61 L 270.3 30.93 L 265.35 31.92 L 255.38 33.55 L 250.38 34.16 L 240.31 34.93 L 235.26 35.04 L 230.22 34.93 L 220.15 34.16 L 215.14 33.55 L 205.18 31.92 L 200.23 30.93 L 190.41 28.61 L 180.69 25.88 L 171.1 22.74 L 161.66 19.15 L 157.02 17.16 L 147.96 12.72 L 143.59 10.19 L 139.42 7.35 L 135.59 4.07 L 132.65 0 L 0 50.06 L 0.14 56.94 L 0.52 63.81 L 1.93 77.51 L 4.07 91.11 L 6.76 104.61 L 8.29 111.33 L 11.66 124.68 L 17.32 144.54 L 21.41 157.69 L 34.32 196.93 L 38.46 210.06 L 40.31 216.69 L 41.85 223.41 L 42.55 230.24 L 39.04 235.26 L 41.06 267.45 L 43.27 315.77 L 44.13 348 L 44.48 372.18 L 44.58 396.37 L 44.41 420.55 L 43.49 460.85 L 42.26 493.07 L 39.54 541.36 L 35 597.61 L 30.03 645.73 L 47.86 647.66 L 65.66 649.89 L 118.94 657.41 L 136.75 659.53 L 145.68 660.39 L 163.56 661.77 L 190.43 663.06 L 208.36 663.51 L 235.26 663.75 L 262.17 663.51 L 280.1 663.07 L 306.97 661.77 L 324.85 660.39 L 342.69 658.53 L 351.59 657.41 L 404.87 649.89 L 422.66 647.67 L 440.5 645.73 L 436.29 605.64 L 432.19 557.44 L 429.95 525.27 L 428.64 501.13 L 427.29 468.91 L 426.57 444.73 L 426.12 420.55 L 425.95 388.31 L 426.12 364.12 L 426.56 339.94 L 428.26 291.6 L 431.48 235.26 L 427.99 230.21 L 428.69 223.37 L 430.23 216.66 L 432.08 210.04 L 436.23 196.91 Z",
+      "printArea": {
+        "x": 55.26,
+        "y": 50,
+        "width": 360,
+        "height": 595
+      },
+      "zone": "body_back",
+      "regions": []
+    },
+    {
+      "id": "sleeve_left",
+      "name": "Left sleeve",
+      "mesh": "sleeve_left",
+      "width": 444.88,
+      "height": 210.24,
+      "uv": {
+        "x": 0.446047664,
+        "y": 0.603404901,
+        "width": 0.399572417596,
+        "height": 0.188828684309
+      },
+      "outline": "M 392.4 210.24 L 397.63 210.24 L 444.87 115.13 L 438.04 114.9 L 431.24 114.2 L 424.51 113.02 L 417.87 111.36 L 411.37 109.24 L 405.02 106.7 L 398.85 103.77 L 392.84 100.5 L 387.01 96.93 L 381.22 93.01 L 375.58 88.87 L 370.08 84.55 L 359.4 75.52 L 333.52 52 L 323.04 42.73 L 312.23 33.85 L 306.66 29.62 L 300.97 25.56 L 295.13 21.71 L 289.14 18.1 L 283 14.75 L 276.71 11.69 L 270.27 8.96 L 263.7 6.57 L 257.01 4.54 L 250.21 2.88 L 243.34 1.61 L 236.4 0.71 L 229.43 0.17 L 222.44 0 L 215.33 0.13 L 208.24 0.51 L 201.17 1.18 L 194.13 2.15 L 187.15 3.45 L 180.24 5.1 L 173.43 7.13 L 166.75 9.53 L 160.22 12.33 L 153.87 15.52 L 147.72 19.07 L 141.79 22.98 L 136.08 27.2 L 130.59 31.71 L 125.3 36.45 L 120.19 41.39 L 115.24 46.48 L 91.34 72.76 L 86.42 77.89 L 81.35 82.86 L 76.09 87.64 L 70.61 92.15 L 64.89 96.36 L 58.91 100.2 L 52.92 103.5 L 46.73 106.39 L 40.35 108.85 L 33.82 110.88 L 27.18 112.49 L 20.44 113.69 L 13.66 114.51 L 6.84 114.98 L 0 115.13 L 47.24 210.24 Z",
+      "printArea": {
+        "x": 152.44,
+        "y": 40,
+        "width": 140,
+        "height": 135
+      },
+      "zone": "sleeves",
+      "regions": []
+    },
+    {
+      "id": "sleeve_right",
+      "name": "Right sleeve",
+      "mesh": "sleeve_right",
+      "width": 444.88,
+      "height": 210.24,
+      "uv": {
+        "x": 0.0078125,
+        "y": 0.619589703,
+        "width": 0.399572417596,
+        "height": 0.188828684309
+      },
+      "outline": "M 47.24 210.24 L 397.63 210.24 L 444.87 115.13 L 438.04 114.98 L 431.22 114.51 L 424.43 113.69 L 417.7 112.49 L 411.05 110.88 L 404.52 108.85 L 398.14 106.39 L 391.95 103.5 L 385.96 100.2 L 379.99 96.36 L 374.26 92.15 L 368.78 87.64 L 363.52 82.86 L 358.45 77.89 L 353.53 72.76 L 329.63 46.48 L 324.68 41.39 L 319.58 36.45 L 314.29 31.71 L 308.8 27.2 L 303.09 22.98 L 297.15 19.07 L 291 15.52 L 284.65 12.33 L 278.12 9.53 L 271.44 7.13 L 264.63 5.1 L 257.72 3.45 L 250.74 2.15 L 243.7 1.18 L 236.63 0.51 L 229.54 0.13 L 222.44 0 L 215.44 0.17 L 208.47 0.71 L 201.54 1.61 L 194.66 2.88 L 187.86 4.54 L 181.17 6.57 L 174.6 8.96 L 168.16 11.69 L 161.87 14.75 L 155.73 18.1 L 149.74 21.71 L 143.91 25.56 L 138.21 29.62 L 132.64 33.85 L 121.83 42.73 L 111.36 52 L 85.47 75.52 L 74.79 84.55 L 69.29 88.87 L 63.65 93.01 L 57.86 96.93 L 52.03 100.5 L 46.03 103.77 L 39.85 106.7 L 33.5 109.24 L 27 111.36 L 20.37 113.02 L 13.63 114.2 L 6.83 114.9 L 0 115.13 Z",
+      "printArea": {
+        "x": 152.44,
+        "y": 40,
+        "width": 140,
+        "height": 135
+      },
+      "zone": "sleeves",
+      "regions": []
+    },
+    {
+      "id": "side_panel_left",
+      "name": "Left side panel",
+      "mesh": "side_panel_left",
+      "width": 120.14,
+      "height": 410.47,
+      "uv": {
+        "x": 0.884282828,
+        "y": 0.0078125,
+        "width": 0.107904671484,
+        "height": 0.36866680959
+      },
+      "outline": "M 12.02 394.37 L 12.51 410.46 L 107.62 410.46 L 120.14 0 L 113.68 1.89 L 107.07 3.13 L 100.39 4.02 L 93.69 4.69 L 80.26 5.56 L 66.8 5.96 L 60.07 6.01 L 46.61 5.81 L 39.88 5.56 L 26.44 4.69 L 19.74 4.02 L 13.07 3.13 L 6.45 1.89 L 0 0 Z",
+      "zone": "side_panels",
+      "regions": []
+    },
+    {
+      "id": "side_panel_right",
+      "name": "Right side panel",
+      "mesh": "side_panel_right",
+      "width": 120.14,
+      "height": 410.47,
+      "uv": {
+        "x": 0.884282828,
+        "y": 0.39210431,
+        "width": 0.107904671484,
+        "height": 0.36866680959
+      },
+      "outline": "M 11.78 386.32 L 12.51 410.46 L 107.62 410.46 L 120.14 0 L 113.68 1.89 L 107.07 3.13 L 100.39 4.02 L 93.69 4.69 L 80.26 5.56 L 73.53 5.81 L 60.07 6.01 L 53.34 5.96 L 39.88 5.56 L 26.44 4.69 L 19.74 4.02 L 13.07 3.13 L 6.45 1.89 L 0 0 Z",
+      "zone": "side_panels",
+      "regions": []
+    },
+    {
+      "id": "collar",
+      "name": "Collar",
+      "mesh": "collar",
+      "width": 544.66,
+      "height": 22.03,
+      "uv": {
+        "x": 0.423009918,
+        "y": 0.807858585,
+        "width": 0.489190597392,
+        "height": 0.019786415122
+      },
+      "outline": "M 0 22.02 L 544.65 22.02 L 515.65 0 L 29.01 0 Z",
+      "zone": "collar",
+      "regions": []
+    },
+    {
+      "id": "cuff_left",
+      "name": "Left cuff",
+      "mesh": "cuff_left",
+      "width": 332.88,
+      "height": 20.03,
+      "uv": {
+        "x": 0.0078125,
+        "y": 0.824043388,
+        "width": 0.298978750156,
+        "height": 0.017990099632
+      },
+      "outline": "M 327.91 20.02 L 332.88 20.02 L 332.88 0 L 0 0 L 0 20.02 Z",
+      "zone": "cuffs",
+      "regions": []
+    },
+    {
+      "id": "cuff_right",
+      "name": "Right cuff",
+      "mesh": "cuff_right",
+      "width": 332.88,
+      "height": 20.03,
+      "uv": {
+        "x": 0.32241625,
+        "y": 0.84327,
+        "width": 0.298978750156,
+        "height": 0.017990099632
+      },
+      "outline": "M 0 20.02 L 332.88 20.02 L 332.88 0 L 0 0 Z",
+      "zone": "cuffs",
+      "regions": []
+    }
+  ],
+  "zones": [
+    {
+      "id": "body_front",
+      "name": "Body front",
+      "defaultColor": {
+        "id": "placeholder-white",
+        "hex": "#FFFFFF"
+      }
+    },
+    {
+      "id": "body_back",
+      "name": "Body back",
+      "defaultColor": {
+        "id": "placeholder-white",
+        "hex": "#FFFFFF"
+      }
+    },
+    {
+      "id": "sleeves",
+      "name": "Sleeves",
+      "defaultColor": {
+        "id": "placeholder-white",
+        "hex": "#FFFFFF"
+      }
+    },
+    {
+      "id": "side_panels",
+      "name": "Side panels",
+      "defaultColor": {
+        "id": "placeholder-navy",
+        "hex": "#1B2A5C"
+      }
+    },
+    {
+      "id": "collar",
+      "name": "Collar",
+      "defaultColor": {
+        "id": "placeholder-navy",
+        "hex": "#1B2A5C"
+      }
+    },
+    {
+      "id": "cuffs",
+      "name": "Cuffs",
+      "defaultColor": {
+        "id": "placeholder-navy",
+        "hex": "#1B2A5C"
+      }
+    }
+  ],
+  "placements": [
+    {
+      "id": "chest-centre",
+      "name": "Centre chest",
+      "pieceId": "front",
+      "centre": {
+        "x": 235.26,
+        "y": 285
+      },
+      "maxSize": {
+        "width": 300,
+        "height": 80
+      },
+      "roles": [
+        "team-name",
+        "sponsor",
+        "text",
+        "crest",
+        "graphic"
+      ],
+      "side": "front",
+      "fontSize": 52
+    },
+    {
+      "id": "left-chest",
+      "name": "Left chest (wearer's left)",
+      "pieceId": "front",
+      "centre": {
+        "x": 340,
+        "y": 190
+      },
+      "maxSize": {
+        "width": 90,
+        "height": 90
+      },
+      "roles": [
+        "crest",
+        "sponsor",
+        "graphic",
+        "text"
+      ],
+      "side": "front",
+      "fontSize": 28
+    },
+    {
+      "id": "right-chest",
+      "name": "Right chest (wearer's right)",
+      "pieceId": "front",
+      "centre": {
+        "x": 130.5,
+        "y": 190
+      },
+      "maxSize": {
+        "width": 90,
+        "height": 90
+      },
+      "roles": [
+        "crest",
+        "sponsor",
+        "graphic",
+        "text"
+      ],
+      "side": "front",
+      "fontSize": 28
+    },
+    {
+      "id": "front-number",
+      "name": "Front number",
+      "pieceId": "front",
+      "centre": {
+        "x": 235.26,
+        "y": 410
+      },
+      "maxSize": {
+        "width": 170,
+        "height": 125
+      },
+      "roles": [
+        "player-number"
+      ],
+      "side": "front",
+      "fontSize": 105
+    },
+    {
+      "id": "upper-back",
+      "name": "Upper back",
+      "pieceId": "back",
+      "centre": {
+        "x": 235.26,
+        "y": 90
+      },
+      "maxSize": {
+        "width": 260,
+        "height": 50
+      },
+      "roles": [
+        "team-name",
+        "sponsor",
+        "text",
+        "crest",
+        "graphic"
+      ],
+      "side": "back",
+      "fontSize": 34
+    },
+    {
+      "id": "back-name",
+      "name": "Name on back",
+      "pieceId": "back",
+      "centre": {
+        "x": 235.26,
+        "y": 155
+      },
+      "maxSize": {
+        "width": 318,
+        "height": 75
+      },
+      "roles": [
+        "player-name",
+        "team-name",
+        "text"
+      ],
+      "side": "back",
+      "fontSize": 52
+    },
+    {
+      "id": "back-number",
+      "name": "Number on back",
+      "pieceId": "back",
+      "centre": {
+        "x": 235.26,
+        "y": 335
+      },
+      "maxSize": {
+        "width": 300,
+        "height": 250
+      },
+      "roles": [
+        "player-number"
+      ],
+      "side": "back",
+      "fontSize": 215
+    },
+    {
+      "id": "lower-back",
+      "name": "Lower back",
+      "pieceId": "back",
+      "centre": {
+        "x": 235.26,
+        "y": 570
+      },
+      "maxSize": {
+        "width": 300,
+        "height": 70
+      },
+      "roles": [
+        "sponsor",
+        "text",
+        "team-name",
+        "crest",
+        "graphic"
+      ],
+      "side": "back",
+      "fontSize": 40
+    },
+    {
+      "id": "sleeve-left",
+      "name": "Left sleeve",
+      "pieceId": "sleeve_left",
+      "centre": {
+        "x": 222.44,
+        "y": 95
+      },
+      "maxSize": {
+        "width": 80,
+        "height": 80
+      },
+      "roles": [
+        "crest",
+        "sponsor",
+        "graphic",
+        "player-number",
+        "text"
+      ],
+      "side": "left",
+      "fontSize": 60
+    },
+    {
+      "id": "sleeve-right",
+      "name": "Right sleeve",
+      "pieceId": "sleeve_right",
+      "centre": {
+        "x": 222.44,
+        "y": 95
+      },
+      "maxSize": {
+        "width": 80,
+        "height": 80
+      },
+      "roles": [
+        "crest",
+        "sponsor",
+        "graphic",
+        "player-number",
+        "text"
+      ],
+      "side": "right",
+      "fontSize": 60
+    }
+  ],
+  "minItemSize": {
+    "text": 10,
+    "number": 25,
+    "logo": 15,
+    "clipart": 15
+  },
+  "placementOrder": {
+    "logo": [
+      "left-chest",
+      "chest-centre",
+      "upper-back",
+      "right-chest",
+      "lower-back",
+      "sleeve-left",
+      "sleeve-right"
+    ],
+    "text": [
+      "lower-back",
+      "upper-back"
+    ]
+  }
+}

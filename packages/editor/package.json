@@ -54,6 +54,8 @@
     "generate:model": "tsx scripts/generate-placeholder-jersey.ts",
     "generate:templates": "tsx scripts/make-sample-templates.ts",
     "process:stand-in": "tsx scripts/process-stand-in-model.ts",
+    "process:model": "tsx scripts/process-stand-in-model.ts",
+    "process:body": "tsx scripts/process-body-model.ts",
     "dev:lan": "vite --config vite.demo.config.ts --host"
   },
   "dependencies": {

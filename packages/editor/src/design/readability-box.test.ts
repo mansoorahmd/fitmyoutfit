@@ -13,12 +13,13 @@ import type { DesignDocument, ProductDefinition, TeamColors } from "./schema";
 import { teamColourValue } from "./team-colours";
 import { applyTemplate, type Template } from "./template";
 import { updateLayer } from "./edit";
-import { loadPlaceholderFonts, loadPlaceholderPalette, loadStandInJerseyProduct, loadStandInProduct } from "../test/fixtures";
+import { loadMatchJerseyProduct, loadPlaceholderFonts, loadPlaceholderPalette, loadStandInJerseyProduct, loadStandInProduct } from "../test/fixtures";
 
 const root = resolve(import.meta.dirname, "../..");
 const fonts = loadPlaceholderFonts();
 const jersey = loadStandInJerseyProduct();
 const tshirt = loadStandInProduct();
+const match = loadMatchJerseyProduct();
 const RED = { id: "placeholder-red", hex: "#C8102E" };
 const WHITE = { id: "placeholder-white", hex: "#FFFFFF" };
 const GOLD = { id: "placeholder-gold", hex: "#F2B705" };
@@ -123,7 +124,7 @@ describe("a name across a sash (fault 2)", () => {
 });
 
 describe("every sample template is readable in both sample colour sets", () => {
-  for (const [product, id] of [[jersey, "stand-in-jersey"], [tshirt, "stand-in-tshirt"]] as const) {
+  for (const [product, id] of [[jersey, "stand-in-jersey"], [tshirt, "stand-in-tshirt"], [match, "match-jersey-vneck"]] as const) {
     for (const t of templatesOf(id)) {
       for (const [setName, colours] of SETS) {
         it(`${id} / ${t.id} in ${setName}`, () => {

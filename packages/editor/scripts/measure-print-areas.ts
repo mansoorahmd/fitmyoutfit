@@ -1,8 +1,8 @@
-// Measures, on the committed stand-in models, the part of each printable piece that is VISIBLE on the model
+// Measures, on the committed models (the stand-ins and the match jersey), the part of each printable piece that is VISIBLE on the model
 // (E3c), and prints the print area it suggests. Read-only: it writes nothing; the areas are copied by hand
 // into the source records (samples/models/*.source.json, `printAreas`) and the product definitions.
 //
-// Usage (from packages/editor): npx tsx scripts/measure-print-areas.ts [stand-in-jersey|stand-in-tshirt]
+// Usage (from packages/editor): npx tsx scripts/measure-print-areas.ts [stand-in-jersey|stand-in-tshirt|match-jersey-vneck|match-jersey-round]
 //
 // A 5 mm cell of a piece counts as visible when its corners and centre are inside the piece's cut outline
 // (so never under a neighbouring piece, such as the jersey's side panels) and the cloth there, its normals
@@ -30,6 +30,8 @@ const MAX_ANGLE = 75;
 const CENTRES: Record<string, Record<string, number>> = {
   "stand-in-jersey": { front: 335.5, back: 244, sleeve_left: 186, sleeve_right: 186 },
   "stand-in-tshirt": { front: 260, back: 261, sleeve_left: 209, sleeve_right: 209 },
+  "match-jersey-vneck": { front: 235.26, back: 235.26, sleeve_left: 222.44, sleeve_right: 222.44 },
+  "match-jersey-round": { front: 235.26, back: 235.26, sleeve_left: 222.44, sleeve_right: 222.44 },
 };
 const VIEWS: Record<string, [number, number, number]> = { front: [0, 0, 1], back: [0, 0, -1], left: [1, 0, 0], right: [-1, 0, 0] };
 

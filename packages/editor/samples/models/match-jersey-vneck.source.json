@@ -1,0 +1,433 @@
+{
+  "about": "Where samples/models/match-jersey-vneck.glb and samples/products/match-jersey-vneck.json come from, and how they are made. Read by scripts/process-stand-in-model.ts (it picks this record by the source file's SHA-256). Our own match jersey, made in Style3D Studio (S3D-3): 9 sewn pattern pieces simulated on Style3D's male avatar, exported as GLB in metres, Y up, front +Z, the wearer's left +X, one surface per piece (no thickness), the flat pattern as one 0 to 1 UV layout at one scale. Each piece is a whole source mesh (sourceMesh); the UV scale is measured against the 3D surface. The garment keeps the avatar's frame (output.keepPosition) so the body model (body-male.source.json) lines up under it.",
+  "source": {
+    "title": "FitMyOutfit match jersey, V-neck (Style3D export, S3D-3)",
+    "author": "FitMyOutfit",
+    "url": "build/style3d-preview/match-jersey-v2/vneck/jersey.glb in the main checkout (git-ignored; made by the 3D developer in Style3D, not downloaded)",
+    "file": "jersey.glb",
+    "generator": "Style3D Studio",
+    "licence": "FitMyOutfit's own work (pattern and simulation). The avatar it was simulated on is Style3D's and is not in this file.",
+    "bytes": 1179880,
+    "sha256": "016774d6fd34cc5e0d3053670a34a9ff81593fffe87e961c6b3b3d13eedf3448"
+  },
+  "input": {
+    "uv": "normalised",
+    "scaleTolerance": 0.04
+  },
+  "output": {
+    "model": "samples/models/match-jersey-vneck.glb",
+    "modelUrl": "/models/match-jersey-vneck.glb",
+    "product": "samples/products/match-jersey-vneck.json",
+    "quantize": true,
+    "keepPosition": true,
+    "copyright": "FitMyOutfit match jersey (V-neck), our own pattern simulated in Style3D Studio. Processed by packages/editor/scripts/process-stand-in-model.ts: one surface per pattern piece, the baked texture and materials removed, UVs re-laid in millimetres at one scale, seams welded, normals and ambient occlusion recomputed.",
+    "generator": "FitMyOutfit packages/editor/scripts/process-stand-in-model.ts (glTF-Transform)"
+  },
+  "product": {
+    "id": "match-jersey-vneck",
+    "name": "Match jersey, V-neck",
+    "palette": {
+      "id": "placeholder-palette",
+      "version": 1
+    }
+  },
+  "body": {
+    "url": "/models/body-male.glb",
+    "format": "glb",
+    "frameAbove": 0.32,
+    "frameBelow": 0.1
+  },
+  "teamColors": {
+    "main": {
+      "id": "placeholder-white",
+      "hex": "#FFFFFF"
+    },
+    "second": {
+      "id": "placeholder-navy",
+      "hex": "#1B2A5C"
+    }
+  },
+  "views": {
+    "front": "front",
+    "back": "back"
+  },
+  "placementsAbout": "Placement presets in the generated pieces' millimetres (origin top-left, Y down, seen from outside). The front is 470.5 mm wide, centred on x = 235.26, its V-neck's point 135 mm down; the side panels are their own pieces, so the front's sides are its seams with them (x about 40 and 430 at the underarm). The back is 470.5 mm wide, centred on x = 235.26, its neckline 35 mm down; the sleeves 444.9 x 210.2 mm with the top of the shoulder at x = 222.44. 'Left' is the wearer's left: on the front it is the right of the piece seen from outside. PLACEHOLDERS, set for this cut.",
+  "placements": [
+    {
+      "id": "chest-centre",
+      "name": "Centre chest",
+      "pieceId": "front",
+      "centre": {
+        "x": 235.26,
+        "y": 285
+      },
+      "maxSize": {
+        "width": 300,
+        "height": 80
+      },
+      "roles": [
+        "team-name",
+        "sponsor",
+        "text",
+        "crest",
+        "graphic"
+      ],
+      "side": "front",
+      "fontSize": 52
+    },
+    {
+      "id": "left-chest",
+      "name": "Left chest (wearer's left)",
+      "pieceId": "front",
+      "centre": {
+        "x": 340,
+        "y": 190
+      },
+      "maxSize": {
+        "width": 90,
+        "height": 90
+      },
+      "roles": [
+        "crest",
+        "sponsor",
+        "graphic",
+        "text"
+      ],
+      "side": "front",
+      "fontSize": 28
+    },
+    {
+      "id": "right-chest",
+      "name": "Right chest (wearer's right)",
+      "pieceId": "front",
+      "centre": {
+        "x": 130.5,
+        "y": 190
+      },
+      "maxSize": {
+        "width": 90,
+        "height": 90
+      },
+      "roles": [
+        "crest",
+        "sponsor",
+        "graphic",
+        "text"
+      ],
+      "side": "front",
+      "fontSize": 28
+    },
+    {
+      "id": "front-number",
+      "name": "Front number",
+      "pieceId": "front",
+      "centre": {
+        "x": 235.26,
+        "y": 410
+      },
+      "maxSize": {
+        "width": 170,
+        "height": 125
+      },
+      "roles": [
+        "player-number"
+      ],
+      "side": "front",
+      "fontSize": 105
+    },
+    {
+      "id": "upper-back",
+      "name": "Upper back",
+      "pieceId": "back",
+      "centre": {
+        "x": 235.26,
+        "y": 90
+      },
+      "maxSize": {
+        "width": 260,
+        "height": 50
+      },
+      "roles": [
+        "team-name",
+        "sponsor",
+        "text",
+        "crest",
+        "graphic"
+      ],
+      "side": "back",
+      "fontSize": 34
+    },
+    {
+      "id": "back-name",
+      "name": "Name on back",
+      "pieceId": "back",
+      "centre": {
+        "x": 235.26,
+        "y": 155
+      },
+      "maxSize": {
+        "width": 318,
+        "height": 75
+      },
+      "roles": [
+        "player-name",
+        "team-name",
+        "text"
+      ],
+      "side": "back",
+      "fontSize": 52
+    },
+    {
+      "id": "back-number",
+      "name": "Number on back",
+      "pieceId": "back",
+      "centre": {
+        "x": 235.26,
+        "y": 335
+      },
+      "maxSize": {
+        "width": 300,
+        "height": 250
+      },
+      "roles": [
+        "player-number"
+      ],
+      "side": "back",
+      "fontSize": 215
+    },
+    {
+      "id": "lower-back",
+      "name": "Lower back",
+      "pieceId": "back",
+      "centre": {
+        "x": 235.26,
+        "y": 570
+      },
+      "maxSize": {
+        "width": 300,
+        "height": 70
+      },
+      "roles": [
+        "sponsor",
+        "text",
+        "team-name",
+        "crest",
+        "graphic"
+      ],
+      "side": "back",
+      "fontSize": 40
+    },
+    {
+      "id": "sleeve-left",
+      "name": "Left sleeve",
+      "pieceId": "sleeve_left",
+      "centre": {
+        "x": 222.44,
+        "y": 95
+      },
+      "maxSize": {
+        "width": 80,
+        "height": 80
+      },
+      "roles": [
+        "crest",
+        "sponsor",
+        "graphic",
+        "player-number",
+        "text"
+      ],
+      "side": "left",
+      "fontSize": 60
+    },
+    {
+      "id": "sleeve-right",
+      "name": "Right sleeve",
+      "pieceId": "sleeve_right",
+      "centre": {
+        "x": 222.44,
+        "y": 95
+      },
+      "maxSize": {
+        "width": 80,
+        "height": 80
+      },
+      "roles": [
+        "crest",
+        "sponsor",
+        "graphic",
+        "player-number",
+        "text"
+      ],
+      "side": "right",
+      "fontSize": 60
+    }
+  ],
+  "printAreasAbout": "Print areas (N6): where items may be printed on each piece, a rectangle in the piece's millimetres; an item's whole box stays inside. PLACEHOLDERS until the factories give their real print areas. As for the stand-ins (E3c): only cloth visible from the piece's side, measured on the committed model by scripts/measure-print-areas.ts, symmetric about the centre line. The front's area ends at the side panels' seams and starts 10 mm below the point of the V.",
+  "printAreas": {
+    "front": {
+      "x": 55.26,
+      "y": 145,
+      "width": 360,
+      "height": 485
+    },
+    "back": {
+      "x": 55.26,
+      "y": 50,
+      "width": 360,
+      "height": 595
+    },
+    "sleeve_left": {
+      "x": 152.44,
+      "y": 40,
+      "width": 140,
+      "height": 135
+    },
+    "sleeve_right": {
+      "x": 152.44,
+      "y": 40,
+      "width": 140,
+      "height": 135
+    }
+  },
+  "minItemSizeAbout": "The smallest an item may be, the shorter side of its box in mm, per kind of item (E3c). PLACEHOLDERS until the factories give their smallest printable sizes.",
+  "minItemSize": {
+    "text": 10,
+    "number": 25,
+    "logo": 15,
+    "clipart": 15
+  },
+  "placementOrderAbout": "Where new items go first (E3c): logos take the first free place in this order (the crest on the left chest, a sponsor in the centre of the chest, a third on the upper back), free text the lower back, then the upper back.",
+  "placementOrder": {
+    "logo": [
+      "left-chest",
+      "chest-centre",
+      "upper-back",
+      "right-chest",
+      "lower-back",
+      "sleeve-left",
+      "sleeve-right"
+    ],
+    "text": [
+      "lower-back",
+      "upper-back"
+    ]
+  },
+  "outlineToleranceMm": 0.1,
+  "packing": "best",
+  "weldToleranceMm": 0.8,
+  "pieces": [
+    {
+      "id": "front",
+      "name": "Front",
+      "sourceMesh": "front_front",
+      "zone": "body_front",
+      "bands": []
+    },
+    {
+      "id": "back",
+      "name": "Back",
+      "sourceMesh": "back_front",
+      "zone": "body_back",
+      "bands": []
+    },
+    {
+      "id": "sleeve_left",
+      "name": "Left sleeve",
+      "sourceMesh": "sleeve_left_front",
+      "zone": "sleeves",
+      "bands": []
+    },
+    {
+      "id": "sleeve_right",
+      "name": "Right sleeve",
+      "sourceMesh": "sleeve_right_front",
+      "zone": "sleeves",
+      "bands": []
+    },
+    {
+      "id": "side_panel_left",
+      "name": "Left side panel",
+      "sourceMesh": "side_left_front",
+      "zone": "side_panels",
+      "bands": []
+    },
+    {
+      "id": "side_panel_right",
+      "name": "Right side panel",
+      "sourceMesh": "side_right_front",
+      "zone": "side_panels",
+      "bands": []
+    },
+    {
+      "id": "collar",
+      "name": "Collar",
+      "sourceMesh": "collar_front",
+      "zone": "collar",
+      "bands": []
+    },
+    {
+      "id": "cuff_left",
+      "name": "Left cuff",
+      "sourceMesh": "cuff_left_front",
+      "zone": "cuffs",
+      "bands": []
+    },
+    {
+      "id": "cuff_right",
+      "name": "Right cuff",
+      "sourceMesh": "cuff_right_front",
+      "zone": "cuffs",
+      "bands": []
+    }
+  ],
+  "zones": [
+    {
+      "id": "body_front",
+      "name": "Body front",
+      "defaultColor": {
+        "id": "placeholder-white",
+        "hex": "#FFFFFF"
+      }
+    },
+    {
+      "id": "body_back",
+      "name": "Body back",
+      "defaultColor": {
+        "id": "placeholder-white",
+        "hex": "#FFFFFF"
+      }
+    },
+    {
+      "id": "sleeves",
+      "name": "Sleeves",
+      "defaultColor": {
+        "id": "placeholder-white",
+        "hex": "#FFFFFF"
+      }
+    },
+    {
+      "id": "side_panels",
+      "name": "Side panels",
+      "defaultColor": {
+        "id": "placeholder-navy",
+        "hex": "#1B2A5C"
+      }
+    },
+    {
+      "id": "collar",
+      "name": "Collar",
+      "defaultColor": {
+        "id": "placeholder-navy",
+        "hex": "#1B2A5C"
+      }
+    },
+    {
+      "id": "cuffs",
+      "name": "Cuffs",
+      "defaultColor": {
+        "id": "placeholder-navy",
+        "hex": "#1B2A5C"
+      }
+    }
+  ]
+}

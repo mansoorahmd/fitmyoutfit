@@ -53,8 +53,9 @@ interface DemoData {
   templates: Template[];
 }
 
-// The stand-in football jersey (see samples/models/stand-in-jersey.LICENSE.txt) by default; the stand-in
-// T-shirt and the old script-generated placeholder by address: ?product=stand-in-tshirt, ?product=placeholder-jersey.
+// Our match jersey (G3) by default; the stand-in football jersey (see samples/models/stand-in-jersey.LICENSE.txt), the
+// stand-in T-shirt and the old script-generated placeholder by address: ?product=stand-in-jersey, ?product=stand-in-tshirt,
+// ?product=placeholder-jersey.
 // The developer page (the engine's plain controls, the design JSON, the texture) only with ?dev=1.
 const PARAMS = new URLSearchParams(window.location.search);
 const DEV = PARAMS.get("dev") === "1";

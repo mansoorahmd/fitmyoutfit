@@ -28,6 +28,10 @@ export interface DemoProduct {
 }
 
 export const DEMO_PRODUCTS: readonly DemoProduct[] = [
+  // G3: our own match jersey (made in Style3D), the default. Ours: no credit line. The body under it is a
+  // development stand-in (samples/models/body-male.LICENSE.txt) and shows no credit on the canvas either.
+  { id: "match-jersey-vneck", label: "Match jersey, V-neck", shortName: "Jersey", credit: null },
+  { id: "match-jersey-round", label: "Match jersey, round neck", shortName: "Jersey", credit: null },
   {
     id: "stand-in-jersey",
     label: "Football jersey (stand-in)",
