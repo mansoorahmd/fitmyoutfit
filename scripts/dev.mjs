@@ -75,6 +75,29 @@ function prefixLines(name, stream, write) {
   });
 }
 
+/**
+ * The shared packages both servers use, built once, in order, before either server starts: the roster rules,
+ * then the editor (whose build needs the rules). Each script builds only what is out of date, so on a second
+ * start nothing is rebuilt, and the servers' own `predev` steps then find everything current. Without this,
+ * the backend's predev and the storefront's predev built packages/team-rules at the same moment and one of
+ * them failed on a fresh clone (each build first deletes dist/).
+ */
+const sharedBuilds = [
+  { name: "team-rules", script: path.join("packages", "team-rules", "scripts", "ensure-built.mjs") },
+  { name: "editor", script: path.join("storefront", "scripts", "ensure-editor.mjs"), when: "storefront" },
+];
+for (const build of sharedBuilds) {
+  if (build.when && !hasDevScript(build.when)) continue;
+  if (!existsSync(path.join(root, build.script))) continue;
+  say(`checking ${build.name} (built only when out of date)`);
+  // The build prints its own output; it holds no secret (nothing here reads backend/.env).
+  const result = spawnSync(process.execPath, [build.script], { cwd: root, stdio: "inherit" });
+  if (result.status !== 0) {
+    warn(`building ${build.name} failed (exit ${result.status ?? "none"}); not starting the servers`);
+    process.exit(1);
+  }
+}
+
 const started = [];
 for (const target of targets) {
   if (!hasDevScript(target.dir)) {

@@ -10,6 +10,12 @@ import { fileURLToPath } from "node:url"
 const packages = resolve(dirname(fileURLToPath(import.meta.url)), "../../packages")
 const editor = resolve(packages, "editor")
 const rules = resolve(packages, "team-rules")
+
+// The roster rules first, through their own guarded script: it builds them only when they are out of date and
+// never at the same moment as another process (the backend's predev builds them too). The editor's build then
+// finds them current and leaves them alone.
+const rulesBuild = spawnSync(process.execPath, [resolve(rules, "scripts/ensure-built.mjs")], { stdio: "inherit" })
+if (rulesBuild.status !== 0) process.exit(rulesBuild.status ?? 1)
 // What the storefront imports, per the editor's package.json "exports".
 const built = [
   ...["dist/index.js", "dist/types/index.d.ts", "dist/design.js", "dist/types/design/index.d.ts"].map((f) => resolve(editor, f)),
