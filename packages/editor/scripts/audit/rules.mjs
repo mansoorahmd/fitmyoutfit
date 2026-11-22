@@ -262,11 +262,12 @@ export function teamListAudit() {
   if (rows && rows.scrollWidth > rows.clientWidth + TOL) fail("cut off", `the list scrolls sideways (${rows.scrollWidth} > ${rows.clientWidth})`);
   const canvas = document.createElement("canvas").getContext("2d");
   for (const el of root.querySelectorAll(".fmo-tl-msg span, .fmo-tl-minimum span")) {
-    if (shown(el) && el.scrollWidth > el.clientWidth + TOL) fail("cut off", `a message is clipped: ${el.textContent.trim().slice(0, 40)}`);
+    if (!el.classList.contains("fmo-sr-only") && shown(el) && el.scrollWidth > el.clientWidth + TOL) fail("cut off", `a message is clipped: ${el.textContent.trim().slice(0, 40)}`);
   }
   for (const el of [...root.querySelectorAll("input")].filter((e) => shown(e) && inRows(e))) {
     const cs = getComputedStyle(el);
-    const inner = el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    // The room for the words: the box without its borders and padding (an input's own clientWidth is not reliable for this).
+    const inner = R(el).width - parseFloat(cs.borderLeftWidth) - parseFloat(cs.borderRightWidth) - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
     if (el.value) {
       if (el.scrollWidth > el.clientWidth + TOL && el.value.length < 10) fail("cut off", `the value of ${label(el)} is clipped`);
     } else if (el.placeholder) {

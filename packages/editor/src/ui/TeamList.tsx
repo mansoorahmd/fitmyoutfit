@@ -354,6 +354,21 @@ export function TeamListView({ initialDetailsOpen }: { initialDetailsOpen?: bool
 
   const summary = analysis.report.summary;
   const typingShort = api.layout === "compact" && t.keyboard;
+  // The phone's normal height (3.2) is the header, the summary bar and the chosen line: the toolbar waits for "Show all".
+  const collapsed = api.layout === "compact" && api.detent !== "expanded" && !typingShort;
+  // In a small panel the chosen line is kept in view: with the keyboard open it sits at the foot of the rows, directly
+  // above the keyboard (or the size strip), the lines typed before it above it, like a chat (3.3).
+  const chosenForView = t.chosenId;
+  const sizeStripOpen = sizeFocus !== null;
+  useEffect(() => {
+    if (!collapsed && !typingShort) return;
+    const place = () => rows.current?.querySelector<HTMLElement>('li[data-chosen="true"]')?.scrollIntoView?.({ block: typingShort ? "end" : "nearest" });
+    place();
+    // Again once the panel has settled at its new height.
+    const timer = setTimeout(place, 300);
+    return () => clearTimeout(timer);
+  }, [chosenForView, collapsed, typingShort, sizeStripOpen]);
+
   const minimumNote = t.minimum && summary.minimum && !summary.minimum.met && lines.length > 0 ? fill(w.minimum, { region: t.minimum.region, minimum: t.minimum.pieces, noun: t.minimum.pieces === 1 ? t.noun.one : t.noun.many, pieces: summary.pieces, missing: summary.minimum.missing }) : null;
   const countLine = lines.length === 0 ? "" : countText;
   const shortLine = lines.length === 0 ? "" : analysis.toFix.length > 0 ? fill(w.shortBar, { i: Math.max(1, chosenIndex + 1), n: lines.length, k: analysis.toFix.length }) : fill(w.shortBarReady, { i: Math.max(1, chosenIndex + 1), n: lines.length });
@@ -375,6 +390,19 @@ export function TeamListView({ initialDetailsOpen }: { initialDetailsOpen?: bool
   void activeSize;
 
   const empty = lines.length === 0;
+  // A short desktop panel (the summary closed) keeps Sort and Style on the summary bar's row, so more lines show (3.4).
+  const inBar = wide && !detailsOpen;
+  const sortButton = (
+    <button type="button" className="fmo-btn fmo-btn-text" aria-haspopup="menu" aria-expanded={menu?.kind === "sort"} onClick={(e) => { menuButton.current = e.currentTarget; setAnchor(e.currentTarget); setMenu((m) => (m?.kind === "sort" ? null : { kind: "sort" })); }} data-testid="tl-sort">
+      {w.sort}
+      <EditorIcon name="chevronDown" size={16} />
+    </button>
+  );
+  const styleButton = (
+    <button type="button" className="fmo-btn fmo-btn-text fmo-tl-style" onClick={() => t.setView("style")} data-testid="tl-style">
+      {w.style} ›
+    </button>
+  );
   return (
     <div className="fmo-tl" ref={root} data-keep-typing data-testid="team-list" data-keyboard={typingShort ? "true" : undefined} onFocus={onFocusIn} onBlur={onFocusOut}>
       <div className="sr-only fmo-sr-only" role="status" aria-live="polite" data-testid="tl-live">{spoken}</div>
@@ -391,6 +419,12 @@ export function TeamListView({ initialDetailsOpen }: { initialDetailsOpen?: bool
             <button type="button" className="fmo-btn fmo-btn-text fmo-tl-next" aria-label={fill(w.nextToFixName, { k: analysis.toFix.length })} onClick={() => goToFix(1)} data-testid="tl-next-to-fix">
               {w.nextToFix} ›
             </button>
+          )}
+          {inBar && !typingShort && (
+            <>
+              {sortButton}
+              {styleButton}
+            </>
           )}
           <button type="button" className="fmo-icon-btn fmo-tl-plus" aria-label={w.addPlayer} aria-disabled={atLimit} onClick={() => !atLimit && addAndFocus()} data-testid="tl-add-top">
             <EditorIcon name="plus" />
@@ -439,18 +473,13 @@ export function TeamListView({ initialDetailsOpen }: { initialDetailsOpen?: bool
           <span>{minimumNote}</span>
         </p>
       )}
-      {!empty && !typingShort && (
+      {!empty && !typingShort && !collapsed && !inBar && (
         <div className="fmo-tl-toolbar">
-          <button type="button" className="fmo-btn fmo-btn-text" aria-haspopup="menu" aria-expanded={menu?.kind === "sort"} onClick={(e) => { menuButton.current = e.currentTarget; setAnchor(e.currentTarget); setMenu((m) => (m?.kind === "sort" ? null : { kind: "sort" })); }} data-testid="tl-sort">
-            {w.sort}
-            <EditorIcon name="chevronDown" size={16} />
-          </button>
-          <button type="button" className="fmo-btn fmo-btn-text fmo-tl-style" onClick={() => t.setView("style")} data-testid="tl-style">
-            {w.style} ›
-          </button>
+          {sortButton}
+          {styleButton}
         </div>
       )}
-      {hasHiddenNumbers && !typingShort && (
+      {hasHiddenNumbers && !typingShort && !collapsed && (
         <Alert kind="info" testId="tl-numbers-off">
           <p>{w.numbersOff}</p>
         </Alert>

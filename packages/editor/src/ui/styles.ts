@@ -528,7 +528,7 @@ export const EDITOR_CSS = /* css */ `
 .fmo-panel-inner:has(.fmo-tl) { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; max-width: none; width: 100%; margin: 0; }
 .fmo-tl { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; position: relative; }
 .fmo-tl > * + * { margin-top: 0; }
-.fmo-tl-bar { flex: none; display: flex; align-items: center; gap: 4px; min-height: 48px; }
+.fmo-tl-bar { flex: none; display: flex; align-items: center; gap: 8px; min-height: 48px; }
 .fmo-tl-count { flex: 1 1 auto; min-width: 0; min-height: 44px; display: flex; align-items: center; gap: 4px; padding: 0; border: 0; background: none; color: var(--fmo-ink); cursor: pointer; font: var(--fmo-type-button); text-align: start; }
 .fmo-tl-count > span { display: inline-flex; align-items: center; gap: 6px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fmo-tl-ok { color: var(--fmo-success); flex: none; }
@@ -572,9 +572,11 @@ export const EDITOR_CSS = /* css */ `
 .fmo-tl-input[data-state="missing"]::placeholder { font: var(--fmo-type-small); }
 .fmo-tl-number[data-state="missing"] { width: 120px; text-align: start; }
 .fmo-tl-size[data-state="missing"] { width: 112px; text-align: start; }
+.fmo-tl-fields[data-wide="true"] .fmo-tl-number[data-state="missing"] { width: 128px; }
+.fmo-tl-fields[data-wide="true"] .fmo-tl-size[data-state="missing"] { width: 112px; }
 .fmo-tl-input[data-state="wrong"] { border: 2px solid var(--fmo-error); }
 .fmo-tl-sizebox { position: relative; display: inline-block; }
-.fmo-tl-badge { position: absolute; inset-block-start: -8px; inset-inline-end: -6px; min-width: 20px; height: 20px; padding: 0 4px; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; border-radius: 10px; background: var(--fmo-ink); color: #fff; font: var(--fmo-type-small); font-weight: 600; }
+.fmo-tl-badge { position: absolute; inset-block-start: -8px; inset-inline-end: -6px; min-width: 20px; height: 20px; padding: 0 4px; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; border-radius: 10px; background: var(--fmo-ink); color: #fff; font: var(--fmo-type-label); }
 .fmo-tl-tag { min-height: 44px; padding: 0 12px; border: 1px dashed var(--fmo-border-strong); border-radius: var(--fmo-radius-control); background: transparent; color: var(--fmo-ink-muted); font: var(--fmo-type-small); text-align: start; cursor: pointer; }
 .fmo-tl-fields[data-wide="true"] .fmo-tl-tag { min-height: 44px; }
 .fmo-tl-messages { padding: 4px 0 4px 0; }
