@@ -357,11 +357,17 @@ export const EDITOR_WORDING = {
       none: "No players yet", // W-TL80
       addPlayers: "Add players", // W-TL80
       show: "Show", // W-TL80
+      showName: "Show the team list", // NEW: the button's accessible name
       players: "{players} · {pieces} · {state}", // 11.2: "18 players · 19 jerseys · 2 to fix"
       playersSame: "{players} · {state}", // when the pieces are the players
-      note: "Ordering opens later. Your design and team list are saved on this device.", // W-TL82 P, copy from founders: no date, no price
-      noteEmpty: "Ordering opens later. Your design is saved on this device.", // W-ED164 P, copy from founders: no date, no price
-      listName: "Team list", // NEW: the section's accessible name
+      note: "You can't order from here yet. Your design and team list are saved on this device.", // NEW, replaces W-TL82 and W-ED164: no date, no price (P, copy from founders)
+      noteEmpty: "You can't order from here yet. Your design is saved on this device.", // NEW, replaces W-ED164 (P, copy from founders)
+      addYourPlayers: "Add your players", // W-TL83 (the main button when the host needs a list to continue)
+      fixLines: "Fix {k} lines", // W-TL84
+      fixOne: "Fix 1 line", // W-TL84
+      finishLater: "Save and finish later", // W-TL85
+      addMore: "Add {missing} more players", // W-TL86
+      addMoreOne: "Add 1 more player", // W-TL86
     },
   },
   /** Logos (`logos`). The simple panel of E3a; the full flow is E3b. */
@@ -509,7 +515,7 @@ export const EDITOR_WORDING = {
   done: {
     title: "Your kit", // W-ED160
     saveAndGoBack: "Save and go back", // W-ED163
-    teamOrdersSoon: "Team orders open soon. Your design is saved on this device.", // W-ED164 P (copy from founders)
+    teamOrdersSoon: "You can't order from here yet. Your design is saved on this device.", // W-ED164 P (copy from founders); NEW wording (E4b): no "soon", no date, no price
     keepDesigning: "Keep designing", // W-ED166
     close: "Close", // NEW: the Done panel's close button (accessible name)
     checksMany: "{count} things to check", // W-ED161

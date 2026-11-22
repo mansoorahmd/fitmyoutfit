@@ -32,6 +32,7 @@ export function fakeTeamApi(lines: readonly EditorLine[] = [], overrides: Partia
     keyboard: false,
     view: "list",
     setView: noop,
+    consumeReveal: () => false,
     pasteText: "",
     setPasteText: noop,
     openPaste: noop,

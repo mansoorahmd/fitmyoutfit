@@ -103,6 +103,15 @@ export function TeamListView({ initialDetailsOpen }: { initialDetailsOpen?: bool
     li?.scrollIntoView?.({ block: "nearest", behavior: api.reducedMotion ? "auto" : "smooth" });
   }, [t.revealTick, t.chosenId, api.reducedMotion]);
 
+  // Opened by the Done panel's "Show" (11.2): the chosen line is scrolled into view, as "Next to fix" does.
+  useLayoutEffect(() => {
+    if (!t.consumeReveal()) return;
+    const li = rows.current?.querySelector<HTMLElement>('li[data-chosen="true"]');
+    if (li && rows.current) rows.current.scrollTop = Math.max(0, li.offsetTop - rows.current.clientHeight / 3);
+    // Once per visit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // The scroll position of the visit is kept for the next time the list opens (3.5).
   useLayoutEffect(() => {
     const el = rows.current;

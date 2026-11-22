@@ -635,6 +635,11 @@ export const EDITOR_CSS = /* css */ `
 .fmo-view-list .fmo-whole { position: absolute; inset-inline-end: 12px; bottom: 0; }
 .fmo-whole { width: 44px; height: 44px; }
 .fmo-whole[aria-pressed="true"] { background: var(--fmo-ink); color: #fff; border-color: var(--fmo-ink); }
+.fmo-done-team { display: flex; flex-direction: column; gap: 8px; }
+.fmo-done-team .fmo-done-checks-title { margin: 0; }
+.fmo-done-team-line { margin: 0; display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px; font: var(--fmo-type-body); }
+.fmo-done-team-line > span { min-width: 0; }
+.fmo-done-team[data-state="fix"] .fmo-done-team-line > span { font-weight: 600; }
 .fmo-tl-toolbar-start { display: inline-flex; align-items: center; gap: 4px; }
 /* The paste view (5.2): a sub-view of the Players panel; the actions are stuck to the bottom. */
 .fmo-pv { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; position: relative; }

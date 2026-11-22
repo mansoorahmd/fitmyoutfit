@@ -42,6 +42,8 @@ export interface TeamListApi {
   /** The Players tab shows the list, the style view (3.1) or the paste view (5.2). */
   view: "list" | "style" | "paste";
   setView(view: "list" | "style" | "paste"): void;
+  /** The Done panel's "Show" opened the list: the list scrolls to the chosen line once, as it mounts (read once). */
+  consumeReveal(): boolean;
   /** The pasted text, kept for the visit so going back is not a loss (5.2). */
   pasteText: string;
   setPasteText(text: string): void;

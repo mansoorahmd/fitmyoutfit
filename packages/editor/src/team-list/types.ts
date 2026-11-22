@@ -61,6 +61,12 @@ export interface TeamListHost {
   onChange?: (list: SavedTeamList, report: TeamListReport) => void;
   /** Default 1000 ms (11.1). */
   debounceMs?: number;
+  /**
+   * After team orders exist (11.2): the Done panel's main button is always the next thing to do (add your players, fix
+   * n lines, add n more players) until the list is ready, then the host's main action. Before that (and by default)
+   * it is off: an unfinished list is fine to save.
+   */
+  listRequiredToContinue?: boolean;
 }
 
 /** The sizes used when the host gives none: the store's (backend seed data): youth YS to YXL, adult XS to 3XL. */

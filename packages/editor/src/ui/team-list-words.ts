@@ -3,10 +3,10 @@
  * returns a sentence, so every code has its wording in `content.ts` (`teamList.problems`), and this file chooses and
  * fills it. Plain functions, tested without React.
  */
-import type { NotAdded, ReadNote, RosterNote, RosterProblem } from "@fitmyoutfit/team-rules";
+import type { NotAdded, ReadNote, RosterNote, RosterProblem, RosterSummary } from "@fitmyoutfit/team-rules";
 import type { FileRefusal } from "../team-list/csv.js";
 import type { PasteRow } from "../team-list/paste.js";
-import type { EditorLine, TeamListNoun, TeamListSize } from "../team-list/types.js";
+import type { EditorLine, TeamListMinimum, TeamListNoun, TeamListSize } from "../team-list/types.js";
 import { fill, type EditorWording } from "./content.js";
 
 /** The missing values are said inside the empty field; every other problem is a sentence under the line (6.3). */
@@ -149,4 +149,32 @@ export function fileRefusalText(reason: FileRefusal, wording: EditorWording, val
     case "encoding":
       return p.fileUnreadable;
   }
+}
+
+/** What the Done panel's team section says (11.2), from the list's own summary: nothing is worked out twice. */
+export interface DoneTeamSection {
+  kind: "empty" | "list";
+  /** "18 players · 19 jerseys · 2 to fix", or "No players yet". */
+  text: string;
+  toFix: number;
+  ready: boolean;
+  /** The region's minimum note, only when below it (8.3). */
+  minimumNote: string | null;
+  /** How many more pieces the minimum needs. */
+  missing: number;
+}
+
+export function doneTeamSection(input: { wording: EditorWording; summary: Pick<RosterSummary, "players" | "pieces" | "linesToFix" | "minimum">; noun: TeamListNoun; minimum: TeamListMinimum | null }): DoneTeamSection {
+  const w = input.wording.teamList;
+  const { summary } = input;
+  if (summary.players === 0) return { kind: "empty", text: w.doneSection.none, toFix: 0, ready: false, minimumNote: null, missing: 0 };
+  const players = summary.players === 1 ? w.onePlayer : fill(w.players, { n: summary.players });
+  const state = summary.linesToFix > 0 ? fill(w.toFix, { k: summary.linesToFix }) : w.allReady;
+  const text =
+    summary.pieces !== summary.players
+      ? fill(w.doneSection.players, { players, pieces: piecesText(input.wording, summary.pieces, input.noun), state })
+      : fill(w.doneSection.playersSame, { players, state });
+  const below = input.minimum && summary.minimum && !summary.minimum.met ? summary.minimum : null;
+  const minimumNote = below && input.minimum ? fill(w.minimum, { region: input.minimum.region, minimum: input.minimum.pieces, noun: input.minimum.pieces === 1 ? input.noun.one : input.noun.many, pieces: summary.pieces, missing: below.missing }) : null;
+  return { kind: "list", text, toFix: summary.linesToFix, ready: summary.linesToFix === 0, minimumNote, missing: below?.missing ?? 0 };
 }

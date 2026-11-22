@@ -24,7 +24,7 @@ import { sameJson, type EditLabel } from "../state/history.js";
 import { useEditorHistory } from "../react/useEditorHistory.js";
 import { useTrailing } from "../react/useTrailing.js";
 import { buildSizeTable, resolveLimits } from "@fitmyoutfit/team-rules";
-import { analyseList, designWithPlayer, playerForShirt, toSavedList, type SeenMap } from "../team-list/checks.js";
+import { analyseList, designWithPlayer, nextToFix, playerForShirt, toSavedList, type SeenMap } from "../team-list/checks.js";
 import { addLine, cleanField, convertAllDigits, moveLine, newLine, removeLine, setCount as setLineCount, setField as setLineField, setFlag as setLineFlag, setSizeCountLines, sortLines, type SortBy } from "../team-list/lines.js";
 import { createHandOver } from "../team-list/hand-over.js";
 import { readSavedList } from "../team-list/saved.js";
@@ -550,6 +550,12 @@ export function EditorShell(props: EditorShellProps) {
     [wording],
   );
   const reveal = useCallback(() => setRevealTick((n) => n + 1), []);
+  const revealOnOpen = useRef(false);
+  const consumeReveal = useCallback(() => {
+    const was = revealOnOpen.current;
+    revealOnOpen.current = false;
+    return was;
+  }, []);
   // The phone's list view frames the close-up of the name and number; the toggle goes back to the whole shirt and again (3.2).
   const [wholeShirt, setWholeShirt] = useState(false);
 
@@ -608,6 +614,7 @@ export function EditorShell(props: EditorShellProps) {
       revealAll,
       view: playersView,
       setView: setPlayersView,
+      consumeReveal,
       pasteText,
       setPasteText,
       openPaste,
@@ -632,7 +639,7 @@ export function EditorShell(props: EditorShellProps) {
       nameShrunk,
       closeUpLayerId,
     }),
-    [lines, analysis, prints, listSizes, sizeTable, teamNoun, teamMinimum, listLimitsView, openSizeChart, chosenId, step, stepNote, reveal, revealTick, seen, revealAll, playersView, pasteText, openPaste, addPasted, listMemory, keyboard, beginField, typeField, leaveField, leaveLine, endTyping, addPlayer, removePlayer, movePlayer, sortPlayers, setPlayerCount, setPlayerFlag, convertDigits, setSizeCount, revealAllProblems, setKeyboard, nameShrunk, closeUpLayerId],
+    [lines, analysis, prints, listSizes, sizeTable, teamNoun, teamMinimum, listLimitsView, openSizeChart, chosenId, step, stepNote, reveal, revealTick, seen, revealAll, playersView, consumeReveal, pasteText, openPaste, addPasted, listMemory, keyboard, beginField, typeField, leaveField, leaveLine, endTyping, addPlayer, removePlayer, movePlayer, sortPlayers, setPlayerCount, setPlayerFlag, convertDigits, setSizeCount, revealAllProblems, setKeyboard, nameShrunk, closeUpLayerId],
   );
   // What the editor hands to its host (12.2, 11.1): the list and its report, after a second without changes.
   const [hostBridge] = useState(() => {
@@ -750,6 +757,21 @@ export function EditorShell(props: EditorShellProps) {
       } else if (next === "logos") showSide("front");
     },
     [showSide, product],
+  );
+  // The Done panel's team section (11.2): "Show", "Add players" and the fix and add buttons close the panel and open the list, at the first line to fix.
+  const showTeamList = useCallback(
+    (target: "fix" | "players" | "add") => {
+      setDoneOpen(false);
+      beforeDone.current = null;
+      revealOnOpen.current = true;
+      openTool("players", layout === "compact" ? "expanded" : "normal", { turn: true });
+      if (target === "fix") {
+        setRevealAll(true);
+        const first = nextToFix(linesRef.current, analysis.toFix, null, 1);
+        if (first) setChosen(first);
+      } else if (target === "add") addPlayer();
+    },
+    [analysis.toFix, openTool, layout, addPlayer],
   );
   const onTab = (next: ToolId) => {
     if (!toolsReady) {
@@ -1565,6 +1587,8 @@ export function EditorShell(props: EditorShellProps) {
             flushList();
             props.onDone?.(designRef.current);
           }}
+          listRequired={Boolean(teamHost?.listRequiredToContinue)}
+          onShowList={showTeamList}
           onShow={(check) => {
             setDoneOpen(false);
             api.select(check.layerId, { turn: true, openTool: true });
