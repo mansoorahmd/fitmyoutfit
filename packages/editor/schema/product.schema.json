@@ -273,6 +273,13 @@
               ],
               "additionalProperties": false
             }
+          },
+          "surface": {
+            "type": "string",
+            "enum": [
+              "interlock",
+              "mesh"
+            ]
           }
         },
         "required": [

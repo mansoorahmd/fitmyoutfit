@@ -515,6 +515,12 @@ export const pieceSchema = z.strictObject({
   zone: zoneId,
   /** Areas of other colour zones on this piece, bottom to top. */
   regions: z.array(pieceRegionSchema).max(100),
+  /**
+   * G3: the cloth's fine structure, seen only at the closest zooms of the 3D view: "interlock" (the default, the
+   * smooth double knit of match jerseys) or "mesh" (a fine pinhole mesh, for side panels). Look only: it changes
+   * nothing printed. Pieces that share one mesh in the model show the first piece's.
+   */
+  surface: z.enum(["interlock", "mesh"]).optional(),
 });
 
 export const zoneSchema = z.strictObject({

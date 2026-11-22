@@ -14,14 +14,17 @@
  *   seen mirrored through the neck looks like a fault, and most decoration
  *   methods (screen print, DTF, embroidery) do not show on the inside.
  *
- * - E3g, the look of sports polyester, by material and light only: a rougher
- *   material (a broad soft highlight, not plastic, not chalk), a fine knit as
- *   a small generated normal map (fabric-weave.ts) that fades out by itself
- *   when it is smaller than about eight pixels, and a soft sheen at grazing
- *   angles, tinted by the cloth's own colour. None of it changes the colour
- *   seen square-on, where the colour the customer picked must show true.
+ * - G3, smooth sports polyester, by material and light only (it replaces E3g's
+ *   12 mm knit, which read as a sweater): a smoother material than cotton
+ *   (a soft highlight that follows the folds, neither plastic nor wet), a soft
+ *   sheen at grazing angles tinted by the cloth's own colour, and, only at the
+ *   closest zooms, a very fine, shallow micro-structure at about its real
+ *   scale (fabric-weave.ts: an interlock knit, or a pinhole mesh where the
+ *   product says so), which fades out by itself where it would be only a few
+ *   pixels. None of it changes the colour seen square-on, where the colour the
+ *   customer picked must show true.
  *
- * Only the weave texture and the sheen's maths need Three.js; the patch
+ * Only the micro-structure's texture needs Three.js; the patch
  * itself only edits shader text and geometry attributes.
  */
 import {
@@ -38,7 +41,7 @@ import {
   type Texture,
   type WebGLProgramParametersWithUniforms,
 } from "three";
-import { WEAVE_SIZE, makeWeaveNormals } from "./fabric-weave.js";
+import { MICRO_SIZE, makeMicroNormals, type MicroSurface } from "./fabric-weave.js";
 
 /** The glTF attribute `_OCCLUSION`, as GLTFLoader names it, and the name the shader reads it under. */
 export const OCCLUSION_ATTRIBUTE_GLTF = "_occlusion";
@@ -52,13 +55,15 @@ export interface FabricShading {
   insideFloor: number;
   /** Brightness of fully open cloth on the inside: the inside of a garment is a little darker than the outside. */
   insideOpen: number;
-  /** E3g: strength of the soft sheen at grazing angles (0 none). */
+  /** Strength of the soft sheen at grazing angles (0 none). */
   sheen?: number;
-  /** E3g: the material's roughness: polyester is smooth but not glossy. */
+  /** The material's roughness: polyester is smooth, a little shinier than cotton, but not glossy. */
   roughness?: number;
+  /** G3: how deep the micro-structure looks where it shows fully (the normal map's scale). */
+  microDepth?: number;
 }
 
-export const DEFAULT_FABRIC_SHADING: FabricShading = { outsideFloor: 0.38, insideFloor: 0.3, insideOpen: 0.62, sheen: 0.35, roughness: 0.64 };
+export const DEFAULT_FABRIC_SHADING: FabricShading = { outsideFloor: 0.38, insideFloor: 0.3, insideOpen: 0.62, sheen: 0.3, roughness: 0.5, microDepth: 0.6 };
 
 const number = (x: number) => (Number.isInteger(x) ? `${x}.0` : String(x));
 
@@ -67,7 +72,7 @@ export function patchFabricShader(
   shader: { vertexShader: string; fragmentShader: string },
   hasOcclusion: boolean,
   shading: FabricShading = DEFAULT_FABRIC_SHADING,
-  weave = false,
+  micro = false,
 ): { vertexShader: string; fragmentShader: string } {
   const define = hasOcclusion ? "#define FMO_OCCLUSION\n" : "";
   const vertexShader = shader.vertexShader
@@ -113,13 +118,13 @@ export function patchFabricShader(
       ].join("\n"),
     );
   }
-  // E3g: the knit fades out where one tile is smaller than about eight pixels (no shimmer when it turns or recedes).
-  if (weave) {
-    // The chunk is expanded here (the shader still says `#include <normal_fragment_maps>` when this runs).
-    // The amount is one uniform for the whole garment, set from the zoom in CSS pixels (knitAmount); the per-pixel
-    // fade stays only as a guard against shimmer where a tile is under about three device pixels (very grazing).
-    const fade = "vec2 fmoPx = fwidth( vNormalMapUv ); mapN.xy *= normalScale * fmoKnit * ( 1.0 - smoothstep( 0.3, 0.5, max( fmoPx.x, fmoPx.y ) ) );";
-    fragmentShader = fragmentShader.replace("uniform float fmoInsideMix;", "uniform float fmoInsideMix;\nuniform float fmoKnit;");
+  // G3: the micro-structure. The chunk is expanded here (the shader still says `#include <normal_fragment_maps>`
+  // when this runs). Its amount is one uniform for the whole garment, set from the zoom in CSS pixels (microAmount);
+  // per pixel it also fades out where a tile (2.5 mm) is under five device pixels, gone under three: no shimmer or
+  // crawl when the garment turns, at a grazing angle or on a desktop's coarser pixels.
+  if (micro) {
+    const fade = "vec2 fmoPx = fwidth( vNormalMapUv ); mapN.xy *= normalScale * fmoMicro * ( 1.0 - smoothstep( 0.2, 0.33, max( fmoPx.x, fmoPx.y ) ) );";
+    fragmentShader = fragmentShader.replace("uniform float fmoInsideMix;", "uniform float fmoInsideMix;\nuniform float fmoMicro;");
     fragmentShader = fragmentShader.replace("#include <normal_fragment_maps>", ShaderChunk.normal_fragment_maps.replace("mapN.xy *= normalScale;", fade));
   }
   if (vertexShader === shader.vertexShader || fragmentShader === shader.fragmentShader) {
@@ -132,8 +137,8 @@ export function patchFabricShader(
 export interface Fabric {
   /** The texture the inside shows (the colour zones without prints), or null to show the outside's texture. */
   setInsideMap(texture: Texture | null): void;
-  /** How much of the knit shows, 0 to 1 (fabric-weave.ts `knitAmount`); no effect on a fabric without a knit. */
-  setKnit(amount: number): void;
+  /** How much of the micro-structure shows, 0 to 1 (fabric-weave.ts `microAmount`); no effect on a fabric without one. */
+  setMicro(amount: number): void;
 }
 
 /**
@@ -146,28 +151,32 @@ export function makeFabric(
   material: Material,
   geometry: BufferGeometry,
   shading: FabricShading = DEFAULT_FABRIC_SHADING,
-  /** E3g: knit tiles per UV unit (the model's UV in millimetres over the tile's size); 0 or left out: no knit. */
-  weaveRepeat = 0,
+  /** G3: the micro-structure and its tiles per UV unit (the model's millimetres per UV unit over the tile's size); null: none. */
+  micro: { surface: MicroSurface; repeat: number } | null = null,
 ): Fabric {
   const source = geometry.getAttribute(OCCLUSION_ATTRIBUTE_GLTF);
   if (source && !geometry.getAttribute(OCCLUSION_ATTRIBUTE)) geometry.setAttribute(OCCLUSION_ATTRIBUTE, source);
   const hasOcclusion = Boolean(geometry.getAttribute(OCCLUSION_ATTRIBUTE));
   const standard = material as MeshStandardMaterial;
   if (typeof shading.roughness === "number" && "roughness" in material) standard.roughness = shading.roughness;
-  const weave = weaveRepeat > 0 && "normalMap" in material;
-  if (weave) standard.normalMap = weaveTexture(weaveRepeat);
+  const withMicro = micro !== null && micro.repeat > 0 && "normalMap" in material;
+  if (withMicro) {
+    standard.normalMap = microTexture(micro.surface, micro.repeat);
+    const depth = shading.microDepth ?? 1;
+    standard.normalScale.set(depth, depth);
+  }
   const insideMap: { value: Texture | null } = { value: null };
   const insideMix = { value: 0 };
-  const knit = { value: 0 };
+  const microUniform = { value: 0 };
   material.onBeforeCompile = (parameters: WebGLProgramParametersWithUniforms) => {
-    const patched = patchFabricShader(parameters, hasOcclusion, shading, weave);
+    const patched = patchFabricShader(parameters, hasOcclusion, shading, withMicro);
     parameters.vertexShader = patched.vertexShader;
     parameters.fragmentShader = patched.fragmentShader;
     parameters.uniforms.fmoInsideMap = insideMap;
     parameters.uniforms.fmoInsideMix = insideMix;
-    parameters.uniforms.fmoKnit = knit;
+    parameters.uniforms.fmoMicro = microUniform;
   };
-  const key = `fmo-fabric:${hasOcclusion ? 1 : 0}:${shading.outsideFloor}:${shading.insideFloor}:${shading.insideOpen}:${shading.sheen ?? 0}:${weave ? 1 : 0}`;
+  const key = `fmo-fabric:${hasOcclusion ? 1 : 0}:${shading.outsideFloor}:${shading.insideFloor}:${shading.insideOpen}:${shading.sheen ?? 0}:${withMicro ? 1 : 0}`;
   material.customProgramCacheKey = () => key;
   material.needsUpdate = true;
   return {
@@ -175,23 +184,23 @@ export function makeFabric(
       insideMap.value = texture;
       insideMix.value = texture ? 1 : 0;
     },
-    setKnit(amount) {
-      knit.value = amount;
+    setMicro(amount) {
+      microUniform.value = amount;
     },
   };
 }
 
-const weaveTextures = new Map<number, DataTexture>();
+const microTextures = new Map<string, DataTexture>();
 
 /**
- * The knit's normal map for a model whose UV unit is `repeat` tiles wide. One 16 KB texture per repeat, shared
- * by every material (and never disposed: it is small and a model comes back).
+ * The micro-structure's normal map for a model whose UV unit is `repeat` tiles wide. One 4 KB texture per surface
+ * and repeat, shared by every material (and never disposed: it is small and a model comes back).
  */
-export function weaveTexture(repeat: number): DataTexture {
-  const key = Math.round(repeat * 100);
-  let texture = weaveTextures.get(key);
+export function microTexture(surface: MicroSurface, repeat: number): DataTexture {
+  const key = `${surface}:${Math.round(repeat * 100)}`;
+  let texture = microTextures.get(key);
   if (!texture) {
-    texture = new DataTexture(makeWeaveNormals(), WEAVE_SIZE, WEAVE_SIZE, RGBAFormat, UnsignedByteType);
+    texture = new DataTexture(makeMicroNormals(surface), MICRO_SIZE, MICRO_SIZE, RGBAFormat, UnsignedByteType);
     texture.wrapS = texture.wrapT = RepeatWrapping;
     texture.repeat.set(repeat, repeat);
     texture.magFilter = LinearFilter;
@@ -199,7 +208,7 @@ export function weaveTexture(repeat: number): DataTexture {
     texture.generateMipmaps = true;
     texture.anisotropy = 4;
     texture.needsUpdate = true;
-    weaveTextures.set(key, texture);
+    microTextures.set(key, texture);
   }
   return texture;
 }
