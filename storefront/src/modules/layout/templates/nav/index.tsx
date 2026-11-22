@@ -84,7 +84,7 @@ export default async function Nav({ countryCode }: { countryCode: string }) {
             />
             <LocalizedClientLink
               href={navigationContent.designLink.href}
-              className={`${navLink} hidden underline xl:inline-flex`}
+              className={`${navLink} hidden xl:inline-flex`}
               data-testid="nav-design-link"
             >
               {navigationContent.designLink.label}

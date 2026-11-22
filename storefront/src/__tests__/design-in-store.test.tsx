@@ -20,7 +20,15 @@ vi.mock("@lib/data/products", () => ({ listProducts }))
 vi.mock("@lib/data/regions", () => ({ getRegion, listRegions: async () => [] }))
 // The page asks who is signed in; these tests are about the product, so: nobody.
 vi.mock("@lib/data/customer", () => ({ customerState: async () => ({ kind: "signed_out" }) }))
-vi.mock("@lib/data/team-orders", () => ({ retrieveTeamOrder: vi.fn(), loadSavedDesign: vi.fn() }))
+vi.mock("@lib/data/team-orders", () => ({
+  retrieveTeamOrder: vi.fn(),
+  loadSavedDesign: vi.fn(),
+  addSavedDesignVersion: vi.fn(),
+  createSavedDesign: vi.fn(),
+  createTeamOrder: vi.fn(),
+  saveTeamOrderList: vi.fn(),
+  setTeamOrderDesignVersion: vi.fn(),
+}))
 // next/font only runs inside the Next.js compiler.
 vi.mock("@lib/editor/fonts", () => ({ editorFontFamilies: { Oswald: "__Oswald_x" } }))
 vi.mock("@modules/design/components/design-loader", () => ({

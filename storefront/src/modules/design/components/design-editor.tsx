@@ -36,14 +36,8 @@ import {
 
 import { designContent } from "@content/design"
 import { teamOrderContent } from "@content/team-order"
-import {
-  addSavedDesignVersion,
-  createSavedDesign,
-  createTeamOrder,
-  retrieveTeamOrder,
-  saveTeamOrderList,
-  setTeamOrderDesignVersion,
-} from "@lib/data/team-orders"
+import * as teamOrderCalls from "@lib/data/team-orders"
+import { guarded } from "@lib/team-order/guarded"
 import { designStartPath, teamOrderPath } from "@lib/editor/designer-context"
 import { editorAssetUrl } from "@lib/editor/asset-path"
 import { deleteOrderDraft, readOrderDraft, writeOrderDraft } from "@lib/editor/order-draft"
@@ -195,6 +189,14 @@ function useLockedPage() {
     }
   }, [])
 }
+
+// The server actions as the designer calls them: a call that throws (the phone lost its signal) is a failure, not a hang.
+const addSavedDesignVersion = guarded(teamOrderCalls.addSavedDesignVersion)
+const createSavedDesign = guarded(teamOrderCalls.createSavedDesign)
+const createTeamOrder = guarded(teamOrderCalls.createTeamOrder)
+const retrieveTeamOrder = guarded(teamOrderCalls.retrieveTeamOrder)
+const saveTeamOrderList = guarded(teamOrderCalls.saveTeamOrderList)
+const setTeamOrderDesignVersion = guarded(teamOrderCalls.setTeamOrderDesignVersion)
 
 const designJson = (design: DesignDocument): string => JSON.stringify(design)
 
