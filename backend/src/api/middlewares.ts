@@ -310,6 +310,11 @@ const customerOnly = authenticate("customer", ["session", "bearer"])
 export default defineMiddlewares({
   routes: [
     {
+      // No method: a global middleware, ahead of the routes.
+      matcher: "/",
+      middlewares: [redactCredentialsInRequestLog],
+    },
+    {
       matcher: "/store/designs",
       method: ["POST"],
       bodyParser: { sizeLimit: DESIGN_BODY_LIMIT },
@@ -350,11 +355,6 @@ export default defineMiddlewares({
       matcher: "/store/team-orders/:id/roster",
       method: ["PUT"],
       middlewares: [customerOnly],
-    },
-    {
-      // No method: a global middleware, ahead of the routes.
-      matcher: "/",
-      middlewares: [redactCredentialsInRequestLog],
     },
     {
       matcher: "/auth/:actor_type/emailpass/update",
