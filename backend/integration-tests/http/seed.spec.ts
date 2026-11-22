@@ -314,7 +314,18 @@ medusaIntegrationTestRunner({
           "cod_max_total",
           "delivery_days_standard",
           "delivery_days_rush",
+          "roster_max_lines",
+          "roster_max_count",
+          "roster_max_name_length",
+          "schedule_time_zone",
         ])
+        const [seeded] = await getContainer().resolve(Modules.STORE).listStores({})
+        expect(seeded.metadata).toMatchObject({
+          roster_max_lines: 100,
+          roster_max_count: 10,
+          roster_max_name_length: 18,
+          schedule_time_zone: "Asia/Karachi",
+        })
         const storeModule = getContainer().resolve(Modules.STORE)
         const [store] = await storeModule.listStores({})
         expect(store.metadata).toMatchObject({ rush_percentage: 20 })
@@ -989,7 +1000,15 @@ medusaIntegrationTestRunner({
 
         const rerun = await seedStore(container, adminOptions)
         expect(rerun.created).toMatchObject({
-          settings: ["cod_max_total", "delivery_days_standard", "delivery_days_rush"],
+          settings: [
+            "cod_max_total",
+            "delivery_days_standard",
+            "delivery_days_rush",
+            "roster_max_lines",
+            "roster_max_count",
+            "roster_max_name_length",
+            "schedule_time_zone",
+          ],
           regionSettings: [
             "Pakistan: min_garment_quantity",
             "United Kingdom: min_garment_quantity",
