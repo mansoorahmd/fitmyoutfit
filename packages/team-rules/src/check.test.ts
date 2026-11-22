@@ -449,3 +449,28 @@ describe("numbers already taken in the first order and its other add-ons (late j
     expect(analysis.summary.indexesToFix).toEqual([0]);
   });
 });
+
+describe("a name needs at least one letter", () => {
+  it.each([["-"], ["."], ["'"], ["\u2019"], ["\u0301"], ["\u200C"], ["- . '"], ["-\u200C-"], ["\u064E\u0650"], ["..."]])(
+    "%j is name-missing, and nothing else is said about the name",
+    (name) => {
+      expect(codes([line({ name })])).toEqual(["0:name:name-missing"]);
+    },
+  );
+
+  it("is still a character problem when the name holds a digit or a symbol, as before", () => {
+    expect(codes([line({ name: "7" })])).toEqual(["0:name:name-character"]);
+    expect(codes([line({ name: "-!" })])).toEqual(["0:name:name-character"]);
+  });
+
+  it("is not asked of a line that has no name, or of a design that does not print names", () => {
+    expect(codes([line({ name: "-", noName: true })])).toEqual([]);
+    expect(codes([line({ name: "-" })], { ...BOTH, prints: { name: false, number: true } })).toEqual([]);
+  });
+
+  it("passes names with a letter of the Latin alphabet, Urdu or Arabic, with punctuation and marks around it", () => {
+    for (const name of ["Ali", "A", "J.", "-x", "O'Brien", "O\u2019Brien", "Zöe", "علی", "ع", "خان", "بِلال", "نور\u200Cالدین", "e\u0301"]) {
+      expect(codes([line({ name })]), name).toEqual([]);
+    }
+  });
+});
