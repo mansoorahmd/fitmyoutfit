@@ -6,6 +6,7 @@ import { TeamOrder } from "./models/team-order"
 import { TeamOrderEmail } from "./models/team-order-email"
 import { TeamOrderStep } from "./models/team-order-step"
 import { buildStepRecord, balanceNoteRecord, type StepRecord } from "../../lib/rules/team-order-steps"
+import { protectStatementValues } from "../../lib/rules/statement-privacy"
 import { isKind, whyNoAddOn } from "../../lib/rules/team-order-links"
 import { isStatus, type Actor, type TeamOrderStatus } from "../../lib/rules/team-order-status"
 
@@ -517,5 +518,9 @@ class TeamOrderModuleService extends MedusaService({ TeamOrder, RosterEntry, Pro
     }
   }
 }
+
+// A failed statement's error carries no values (names, numbers) outside development and tests
+// (lib/rules/statement-privacy.ts).
+protectStatementValues(TeamOrderModuleService)
 
 export default TeamOrderModuleService

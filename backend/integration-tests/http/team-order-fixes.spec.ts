@@ -4,6 +4,7 @@
  */
 import { medusaIntegrationTestRunner } from "@medusajs/test-utils"
 import { MAX_DESIGN_DEPTH } from "../../src/lib/rules/design-input"
+import { DESIGN_MODULE } from "../../src/modules/design/constants"
 import { TEAM_ORDER_MODULE } from "../../src/modules/team-order/constants"
 import { line, makeWorld, team, type World } from "./support/team-order-world"
 
@@ -67,6 +68,64 @@ medusaIntegrationTestRunner({
             "2:quantity-range",
           ])
           expect(saved.data.roster.summary.ready_for_proof).toBe(false)
+        })
+      })
+
+      // ------------------------------------------------------------------------------------
+      describe("D5.4: a failed statement does not carry its values out of the module", () => {
+        const inProduction = async <T>(run: () => Promise<T>): Promise<T> => {
+          const before = process.env.NODE_ENV
+          process.env.NODE_ENV = "production"
+          try {
+            return await run()
+          } finally {
+            process.env.NODE_ENV = before
+          }
+        }
+        const failureOf = async (run: () => Promise<unknown>): Promise<Error> => {
+          try {
+            await run()
+          } catch (error) {
+            return error as Error
+          }
+          throw new Error("the statement should have failed")
+        }
+        const badEntry = (name: string) => ({
+          team_order_id: "teamord_x",
+          line_id: "l1",
+          position: 0,
+          product_id: "prod_x",
+          name,
+          number: "7",
+          size: "M",
+          count: 3_000_000_000, // beyond the 32-bit column: the insert fails
+        })
+
+        it("the team-order service rethrows a failed insert without the player's name, outside development and tests", async () => {
+          const teams = getContainer().resolve(TEAM_ORDER_MODULE) as any
+          // under test the values are kept (what Medusa logs by default): this is the leak
+          const kept = await failureOf(() => teams.createRosterEntries([badEntry("Secret Player")]))
+          expect(kept.message).toContain("Secret Player")
+          const cleaned = await inProduction(() => failureOf(() => teams.createRosterEntries([badEntry("Secret Player")])))
+          expect(cleaned.message).not.toContain("Secret Player")
+          expect(cleaned.message).toContain('insert into "roster_entry" (values not logged)')
+          expect(cleaned.message).toContain("out of range")
+          expect(String(cleaned.stack)).not.toContain("Secret Player")
+          // the statements of the service's own methods too (a raw update inside a transaction)
+          const raw = await inProduction(() =>
+            failureOf(() =>
+              teams.updateWhileDraft({ teamOrderId: "teamord_x", teamName: "Secret Club", design: { designVersionId: "d", printsName: "not-a-boolean" as any, printsNumber: true } })
+            )
+          )
+          expect(raw.message).not.toContain("Secret Club")
+        })
+
+        it("the design service does the same", async () => {
+          const designs = getContainer().resolve(DESIGN_MODULE) as any
+          const input = { design_id: "desg_x", version: 3_000_000_000, product_id: "prod_x", schema_version: 1, data: { note: "Secret Design" } }
+          const cleaned = await inProduction(() => failureOf(() => designs.createDesignVersions(input)))
+          expect(cleaned.message).not.toContain("Secret Design")
+          expect(cleaned.message).toContain('insert into "design_version" (values not logged)')
         })
       })
 
