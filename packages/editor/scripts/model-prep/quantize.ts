@@ -37,22 +37,44 @@ export interface QuantizedPositions {
   translation: [number, number, number];
 }
 
+/** The grid positions are stored on: a uniform scale and a translation (the node's). */
+export type QuantizationFrame = Pick<QuantizedPositions, "scale" | "translation">;
+
+/**
+ * The frame that holds every given set of positions: the centre of their common box, and half its longest side.
+ * Several meshes quantized in ONE frame put equal points on equal integers, so a seam welded between two meshes
+ * stays closed after quantization (each mesh in a frame of its own would round its seam vertices differently).
+ */
+export function quantizationFrame(sets: ReadonlyArray<ArrayLike<number>>): QuantizationFrame {
+  const lo = [Infinity, Infinity, Infinity];
+  const hi = [-Infinity, -Infinity, -Infinity];
+  for (const positions of sets) {
+    const count = Math.floor(positions.length / 3);
+    for (let k = 0; k < count * 3; k++) {
+      lo[k % 3] = Math.min(lo[k % 3]!, positions[k]!);
+      hi[k % 3] = Math.max(hi[k % 3]!, positions[k]!);
+    }
+  }
+  if (!Number.isFinite(lo[0]!)) throw new RangeError("no positions to quantize");
+  const translation = [0, 1, 2].map((a) => (lo[a]! + hi[a]!) / 2) as [number, number, number];
+  const scale = Math.max(...[0, 1, 2].map((a) => (hi[a]! - lo[a]!) / 2)) || 1;
+  return { scale, translation };
+}
+
 /**
  * Positions (x, y, z per vertex) as normalised 16-bit integers about the
  * box's centre, with one scale for all axes (so normals need no correction).
- * Equal inputs give equal outputs, so welded seams stay closed.
+ * Equal inputs give equal outputs, so welded seams stay closed. `frame`: a
+ * frame shared with other meshes (`quantizationFrame`); by default the
+ * positions' own box. Throws when a position lies outside the frame.
  */
-export function quantizePositions(positions: ArrayLike<number>): QuantizedPositions {
+export function quantizePositions(positions: ArrayLike<number>, frame?: QuantizationFrame): QuantizedPositions {
   const count = Math.floor(positions.length / 3);
   if (count === 0) throw new RangeError("no positions to quantize");
-  const lo = [Infinity, Infinity, Infinity];
-  const hi = [-Infinity, -Infinity, -Infinity];
+  const { scale, translation } = frame ?? quantizationFrame([positions]);
   for (let k = 0; k < count * 3; k++) {
-    lo[k % 3] = Math.min(lo[k % 3]!, positions[k]!);
-    hi[k % 3] = Math.max(hi[k % 3]!, positions[k]!);
+    if (Math.abs(positions[k]! - translation[k % 3]!) > scale * (1 + 1e-9)) throw new RangeError("a position lies outside the quantization frame");
   }
-  const translation = [0, 1, 2].map((a) => (lo[a]! + hi[a]!) / 2) as [number, number, number];
-  const scale = Math.max(...[0, 1, 2].map((a) => (hi[a]! - lo[a]!) / 2)) || 1;
   const values = new Int16Array(count * 3);
   for (let k = 0; k < count * 3; k++) values[k] = Math.round(((positions[k]! - translation[k % 3]!) / scale) * 32767);
   return { values, scale, translation };

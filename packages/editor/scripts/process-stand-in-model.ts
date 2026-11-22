@@ -68,7 +68,7 @@ import {
 import { boundaryLoops, bounds, polygonToSvgPath, roundTo, simplifyClosed } from "./model-prep/outline.js";
 import { DEFAULT_PACK_OPTIONS, packPieces } from "./model-prep/packing.js";
 import { edgeBandPath, type BandEdge } from "./model-prep/regions.js";
-import { KHRMeshQuantization, quantizeNormals, quantizePositions, quantizeUvs } from "./model-prep/quantize.js";
+import { KHRMeshQuantization, quantizationFrame, quantizeNormals, quantizePositions, quantizeUvs } from "./model-prep/quantize.js";
 import { decideUvScale, medianEdgeRatio } from "./model-prep/scale.js";
 import { isEdgeStrip, shellHoldsUv, splitShells, uvBoxesOverlap, type ShellStats } from "./model-prep/shells.js";
 
@@ -102,6 +102,11 @@ interface Config {
     mesh?: string;
     /** Integer vertex data (KHR_mesh_quantization, model-prep/quantize.ts): about 40% smaller. */
     quantize?: boolean;
+    /**
+     * Keep the source's positions (metres, Y up) instead of centring the garment and standing it on Y = 0: a
+     * garment simulated on an avatar keeps the avatar's frame, so a body model made from the same avatar lines up.
+     */
+    keepPosition?: boolean;
     copyright: string;
     generator: string;
   };
@@ -451,7 +456,7 @@ for (const p of pieces3d) {
     }
   }
 }
-const offset = [-(lo[0]! + hi[0]!) / 2, -lo[1]!, -(lo[2]! + hi[2]!) / 2];
+const offset = config.output.keepPosition ? [0, 0, 0] : [-(lo[0]! + hi[0]!) / 2, -lo[1]!, -(lo[2]! + hi[2]!) / 2];
 const meshes: MeshData[] = pieces3d.map((p) => {
   const positions = new Float32Array(p.positions.length);
   for (let k = 0; k < positions.length; k++) positions[k] = p.positions[k]! + offset[k % 3]!;
@@ -515,6 +520,8 @@ const outputs: Array<{ name: string; part: MeshPart }> = config.output.mesh
   ? [{ name: config.output.mesh, part: mergeParts(parts) }]
   : pieces3d.map((p, k) => ({ name: p.config.id, part: parts[k]! }));
 if (config.output.quantize) doc.createExtension(KHRMeshQuantization).setRequired(true);
+// One quantization frame for every mesh: the welded seams between pieces stay closed in the integers.
+const sharedFrame = config.output.quantize ? quantizationFrame(outputs.map((o) => o.part.positions)) : null;
 for (const { name, part } of outputs) {
   if (!(part.indices instanceof Uint16Array)) throw new Error(`mesh "${name}" has more than 65535 vertices; 16-bit indices are not enough`);
   const accessor = (type: "VEC2" | "VEC3" | "SCALAR", array: Float32Array | Uint16Array | Int16Array | Int8Array, semantic: string) =>
@@ -523,7 +530,7 @@ for (const { name, part } of outputs) {
   const prim = doc.createPrimitive();
   if (config.output.quantize) {
     // Integers, turned back into metres by the node's scale and translation (see model-prep/quantize.ts).
-    const q = quantizePositions(part.positions);
+    const q = quantizePositions(part.positions, sharedFrame ?? undefined);
     node.setScale([q.scale, q.scale, q.scale]).setTranslation(q.translation);
     prim
       .setAttribute("POSITION", accessor("VEC3", q.values, "position").setNormalized(true))

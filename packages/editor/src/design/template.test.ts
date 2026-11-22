@@ -11,13 +11,14 @@ import { setTeamColor, swapTeamColors, teamColourValue } from "./team-colours";
 import { applyTemplate, validateTemplate, type Template } from "./template";
 import { validateDesign } from "./validate";
 import { commit, createHistory, sameJson, undo } from "../state/history";
-import { loadPlaceholderFonts, loadPlaceholderPalette, loadStandInJerseyProduct, loadStandInProduct } from "../test/fixtures";
+import { loadMatchJerseyProduct, loadPlaceholderFonts, loadPlaceholderPalette, loadStandInJerseyProduct, loadStandInProduct } from "../test/fixtures";
 
 const root = resolve(import.meta.dirname, "../..");
 const fonts = loadPlaceholderFonts();
 const palette = loadPlaceholderPalette();
 const jersey = loadStandInJerseyProduct();
 const tshirt = loadStandInProduct();
+const match = loadMatchJerseyProduct();
 
 function templatesOf(productId: string): Template[] {
   const dir = resolve(root, "samples/templates", productId);
@@ -27,6 +28,8 @@ function templatesOf(productId: string): Template[] {
 }
 const jerseyTemplates = templatesOf("stand-in-jersey");
 const tshirtTemplates = templatesOf("stand-in-tshirt");
+/** G3: the match jersey's own versions of the jersey's five (its zones and its cut). */
+const matchTemplates = templatesOf("match-jersey-vneck");
 const byId = (list: Template[], id: string) => list.find((t) => t.id === id)!;
 /**
  * The sample hoops, with the medium Main outline on the number that it set until E3a-2 (its number now
@@ -56,7 +59,8 @@ describe("the sample templates", () => {
   it("five for the jersey, three for the T-shirt, each a valid template for its product and fonts", () => {
     expect(jerseyTemplates.map((t) => t.id)).toEqual(["classic", "hoops", "stripes", "sash", "chevron"]);
     expect(tshirtTemplates.map((t) => t.id)).toEqual(["plain", "contrast", "band"]);
-    for (const [product, list] of [[jersey, jerseyTemplates], [tshirt, tshirtTemplates]] as const) {
+    expect(matchTemplates.map((t) => t.id)).toEqual(["classic", "hoops", "stripes", "sash", "chevron"]);
+    for (const [product, list] of [[jersey, jerseyTemplates], [tshirt, tshirtTemplates], [match, matchTemplates]] as const) {
       for (const t of list) {
         const r = validateTemplate(t, { product, fonts });
         expect(r.ok, `${t.id}: ${r.ok ? "" : r.errors.map((e) => e.message).join("; ")}`).toBe(true);
@@ -65,6 +69,7 @@ describe("the sample templates", () => {
     }
     // Every file in the folders is listed.
     expect(readdirSync(resolve(root, "samples/templates/stand-in-jersey")).length).toBe(jerseyTemplates.length + 1);
+    expect(readdirSync(resolve(root, "samples/templates/match-jersey-vneck")).length).toBe(matchTemplates.length + 1);
   });
 
   it("the hoops, stripes, sash and chevron carry shapes; hoops run round the front, back and both side panels", () => {
@@ -76,7 +81,14 @@ describe("the sample templates", () => {
     expect(byId(jerseyTemplates, "classic").shapes).toEqual([]);
   });
 
-  for (const [product, list] of [[jersey, jerseyTemplates], [tshirt, tshirtTemplates]] as const) {
+  it("the match jersey's hoops also run round the front, back and both side panels, its sash and chevron on the front", () => {
+    const shapesOn = (id: string) => new Set(byId(matchTemplates, id).shapes.map((s) => s.pieceId));
+    expect([...shapesOn("hoops")].sort()).toEqual(["back", "front", "side_panel_left", "side_panel_right"]);
+    expect([...shapesOn("sash")]).toEqual(["front"]);
+    expect([...shapesOn("chevron")]).toEqual(["front"]);
+  });
+
+  for (const [product, list] of [[jersey, jerseyTemplates], [tshirt, tshirtTemplates], [match, matchTemplates]] as const) {
     for (const t of list) {
       for (const [setName, teamColors] of SETS) {
         it(`${product.id} / ${t.id} in ${setName}: applies, valid, on the palette, colours follow the team, names and number at their presets`, () => {
