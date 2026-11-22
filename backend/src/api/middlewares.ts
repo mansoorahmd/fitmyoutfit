@@ -27,6 +27,9 @@
  * Saved designs and team orders (/store/designs*, /store/team-orders*): the signed-in customer only
  * (`authenticate`, 401 without); a design's JSON may be larger than Medusa's default body limit,
  * so the two routes that take one allow a body of up to DESIGN_BODY_LIMIT.
+ *
+ * Team orders for staff (/admin/team-orders*) need no middleware of ours: Medusa puts every
+ * /admin route behind the admin user's sign-in, and a customer's token is refused there (401).
  */
 import {
   authenticate,
