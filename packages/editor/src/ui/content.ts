@@ -478,6 +478,8 @@ export const EDITOR_WORDING = {
     zoomIn: "Zoom in", // W-ED121
     zoomOut: "Zoom out", // W-ED121
     reset: "Reset view", // W-ED121
+    hidePerson: "Hide the person", // NEW (G4): the view controls' button, while the person is shown
+    showPerson: "Show the person", // NEW (G4): while the person is hidden
     description: "{product}, {side} view. {summary}", // W-ED122
     sideWords: { front: "front", back: "back", left: "left side", right: "right side", turned: "turned" }, // NEW, for W-ED122
     zonesSummary: "{zones}.", // NEW, for W-ED122: "Body navy; sleeves and collar white."

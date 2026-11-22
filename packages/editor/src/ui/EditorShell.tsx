@@ -193,6 +193,15 @@ function useReducedMotion(): boolean {
 }
 
 const RECENT_KEY = "fmo-editor-recent";
+/** G4: whether the person under the garment is shown, remembered for the browser session (not saved with the design). */
+const BODY_KEY = "fmo-editor-show-body";
+function readShowBody(): boolean {
+  try {
+    return typeof sessionStorage === "undefined" || sessionStorage.getItem(BODY_KEY) !== "off";
+  } catch {
+    return true;
+  }
+}
 /** The landscape phone's side panel in list view (08-team-list.md 3.3: widened from 320 so a name has room; the stage keeps 380 px). */
 const LIST_PANEL_SHORT = 400;
 
@@ -331,6 +340,17 @@ export function EditorShell(props: EditorShellProps) {
   const [snapOn, setSnapOn] = useState(true);
   // "On this kit" is open (4.8): on phones in the panel's place, on desktop as a popover.
   const [kitOpen, setKitOpen] = useState(false);
+  const [showBody, setShowBody] = useState(readShowBody);
+  const toggleBody = useCallback(() => {
+    setShowBody((on) => {
+      try {
+        sessionStorage.setItem(BODY_KEY, on ? "off" : "on");
+      } catch {
+        // Storage refused: the choice lasts until the page is closed.
+      }
+      return !on;
+    });
+  }, []);
   // The Done panel (9.2).
   const [doneOpen, setDoneOpen] = useState(false);
   /** R38: the tool panel open when the Done panel opened on a phone (it comes back when the Done panel closes). */
@@ -1521,7 +1541,11 @@ export function EditorShell(props: EditorShellProps) {
             description={description}
             assetUrl={assets.url}
             canvasRef={canvas}
+            hasBody={Boolean(product.body)}
+            showBody={showBody}
+            onToggleBody={toggleBody}
             canvasProps={{
+              showBody,
               textureSize: props.textureSize,
               fonts: props.fontSet,
               reducedMotion,
