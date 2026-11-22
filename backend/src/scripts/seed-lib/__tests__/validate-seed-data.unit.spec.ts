@@ -236,6 +236,10 @@ describe("validateSeedData", () => {
       seedData.regions.data.map((r) => [r.country_codes[0], r])
     )
     expect(byCountry.pk.metadata.min_garment_quantity).toBe(1)
+    // The add-on minimum of M2-3 (placeholder): one late player is enough, in every region.
+    for (const country of ["pk", "gb", "ae", "us"]) {
+      expect(byCountry[country].metadata.addon_min_garment_quantity).toBe(1)
+    }
     expect(byCountry.pk.payment_providers).toEqual(["pp_system_default", "pp_cod_cod"])
     for (const country of ["gb", "ae", "us"]) {
       expect(byCountry[country].metadata.min_garment_quantity).toBe(10)
@@ -248,6 +252,7 @@ describe("validateSeedData", () => {
     ;(seed.settings.data as Record<string, unknown>).cod_max_total = "lots"
     delete (seed.settings.data as Partial<typeof seed.settings.data>).delivery_days_rush
     seed.regions.data[1].metadata.min_garment_quantity = 0
+    seed.regions.data[2].metadata.addon_min_garment_quantity = 0
     seed.regions.data[2].payment_providers = []
     seed.regions.data[3].payment_providers = ["stripe", "pp_system_default", "pp_system_default"]
     const problems = validateSeedData(seed)
@@ -257,6 +262,9 @@ describe("validateSeedData", () => {
     expect(problems.some((p) => p.startsWith("settings: delivery_days_rush is not set"))).toBe(true)
     expect(problems).toContain(
       'regions: min_garment_quantity in the metadata of the region "United Kingdom" must not be below 1, got 0.'
+    )
+    expect(problems).toContain(
+      'regions: addon_min_garment_quantity in the metadata of the region "United Arab Emirates" must not be below 1, got 0.'
     )
     expect(problems).toContain('regions: "United Arab Emirates" needs at least one payment provider')
     expect(problems).toContain(

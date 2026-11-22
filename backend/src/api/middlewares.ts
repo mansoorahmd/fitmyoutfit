@@ -372,6 +372,16 @@ export default defineMiddlewares({
       middlewares: [customerOnly],
     },
     {
+      matcher: "/store/team-orders/:id/add-ons",
+      method: ["GET", "POST"],
+      middlewares: [customerOnly],
+    },
+    {
+      matcher: "/store/team-orders/:id/reorders",
+      method: ["POST"],
+      middlewares: [customerOnly],
+    },
+    {
       matcher: "/store/team-orders/:id/reopen",
       method: ["POST"],
       middlewares: [customerOnly],

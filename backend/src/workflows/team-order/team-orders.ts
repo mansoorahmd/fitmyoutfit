@@ -20,6 +20,7 @@ import {
   resolveLimits,
   type RosterInputError,
   type RosterLimits,
+  type TakenNumber,
 } from "@fitmyoutfit/team-rules"
 import { badRequest, conflict, notAllowed, notFound } from "../../lib/http/refusal"
 import { printedFieldsOf } from "../../lib/rules/design-input"
@@ -27,6 +28,16 @@ import { calendarDateIn } from "../../lib/rules/delivery-promise"
 import { currentProofOf, proofToApi, type StoredProof } from "../../lib/rules/team-order-proof"
 import { isInThePast, scheduleFor } from "../../lib/rules/team-order-schedule"
 import { allowedIn, isStatus } from "../../lib/rules/team-order-status"
+import {
+  hasProofOut,
+  isKind,
+  isSigned,
+  minimumFor,
+  takenNumbers,
+  type TakenSourceOrder,
+  type TeamOrderKind,
+} from "../../lib/rules/team-order-links"
+import { readAddOnMinGarmentQuantity } from "../../lib/settings/addon-min-garment-quantity"
 import { readDeliveryDays, type DeliveryDays } from "../../lib/settings/delivery-days"
 import { readScheduleTimeZone } from "../../lib/settings/schedule-time-zone"
 import {
@@ -58,11 +69,15 @@ export type TeamOrderRow = {
   prints_number: boolean
   list_version: number
   rush_requested: boolean
+  kind: string
+  linked_order_id: string | null
   created_at: Date | string
   updated_at: Date | string
 }
 
 type Metadata = Record<string, unknown> | null | undefined
+
+export const kindOf = (order: Pick<TeamOrderRow, "kind">): TeamOrderKind => (isKind(order.kind) ? order.kind : "order")
 
 export const service = (container: MedusaContainer) => container.resolve<TeamOrderModuleService>(TEAM_ORDER_MODULE)
 
@@ -79,6 +94,8 @@ export function teamOrderToApi(order: TeamOrderRow) {
     prints: { name: order.prints_name, number: order.prints_number },
     list_version: order.list_version,
     rush_requested: order.rush_requested === true,
+    kind: kindOf(order),
+    linked_order_id: order.linked_order_id ?? null,
     created_at: order.created_at,
     updated_at: order.updated_at,
   }
@@ -133,6 +150,22 @@ export function regionMinimum(region: { name?: string | null; metadata?: Metadat
   return minimum.value
 }
 
+/** The add-on minimum of a region, in pieces. A setting that is missing or wrong is a server error naming it. */
+export function regionAddOnMinimum(region: { name?: string | null; metadata?: Metadata }): number {
+  const minimum = readAddOnMinGarmentQuantity(region.metadata, region.name)
+  if (!minimum.ok) {
+    throw new MedusaError(MedusaError.Types.UNEXPECTED_STATE, `The store's region settings are incomplete: ${minimum.error}`)
+  }
+  return minimum.value
+}
+
+/** The minimum the order's team list must reach: its region's, or the add-on's own for an add-on. */
+export function minimumOfOrder(order: Pick<TeamOrderRow, "kind">, region: { name?: string | null; metadata?: Metadata }): number {
+  return kindOf(order) === "add_on"
+    ? minimumFor("add_on", { region: 0, addOn: regionAddOnMinimum(region) })
+    : regionMinimum(region)
+}
+
 /** The store settings a team order reads at every answer: roster limits, delivery days, the store's day. */
 export type StoreSettings = { limits: Partial<RosterLimits>; deliveryDays: DeliveryDays; timeZone: string }
 
@@ -163,6 +196,41 @@ export async function loadProofs(container: MedusaContainer, teamOrderId: string
   )) as unknown as StoredProof[]
 }
 
+/** The lines and printed fields of the proof an order currently holds (`sent` or `signed`), if any. */
+async function currentSnapshotOf(container: MedusaContainer, orderId: string) {
+  const current = currentProofOf(await loadProofs(container, orderId))
+  if (!current) return null
+  return JSON.parse(current.snapshot_text) as {
+    prints: { number: boolean }
+    lines: { name: string; number: string; no_number: boolean }[]
+  }
+}
+
+/**
+ * The numbers an add-on may not use (lib/rules/team-order-links.ts): the first order's signed
+ * list, and the lists of the first order's other add-ons that have a proof out or signed. Empty for
+ * any other kind of order.
+ */
+export async function loadTakenNumbers(container: MedusaContainer, order: TeamOrderRow): Promise<TakenNumber[]> {
+  if (kindOf(order) !== "add_on" || !order.linked_order_id) return []
+  const teams = service(container)
+  const [first] = (await teams.listTeamOrders({ id: order.linked_order_id })) as TeamOrderRow[]
+  if (!first) return []
+  const sources: TakenSourceOrder[] = []
+  const firstStatus = isStatus(first.status) ? first.status : "draft"
+  if (isSigned(firstStatus)) {
+    const snapshot = await currentSnapshotOf(container, first.id)
+    if (snapshot) sources.push({ id: first.id, source: "first-order", printsNumber: snapshot.prints.number, lines: snapshot.lines })
+  }
+  const siblings = (await teams.listTeamOrders({ linked_order_id: first.id, kind: "add_on" })) as TeamOrderRow[]
+  for (const sibling of siblings) {
+    if (sibling.id === order.id || !isStatus(sibling.status) || !hasProofOut(sibling.status)) continue
+    const snapshot = await currentSnapshotOf(container, sibling.id)
+    if (snapshot) sources.push({ id: sibling.id, source: "add-on", printsNumber: snapshot.prints.number, lines: snapshot.lines })
+  }
+  return takenNumbers(sources)
+}
+
 /** The store's calendar day (YYYY-MM-DD) in its time zone. */
 export const todayIn = (settings: StoreSettings, now: Date): string => calendarDateIn(now, settings.timeZone)
 
@@ -182,12 +250,14 @@ export function limitsToApi(limits: Partial<RosterLimits>) {
  * the checks used, the need-by schedule as of `now`, and the proof it currently holds.
  */
 export async function describeTeamOrder(container: MedusaContainer, order: TeamOrderRow, now: Date = new Date()) {
-  const [entries, sizes, region, settings, proofs] = await Promise.all([
+  const [entries, sizes, region, settings, proofs, taken, links] = await Promise.all([
     loadEntries(container, order.id),
     loadProductSizes(container, order.product_id),
     loadRegion(container, order.region_id),
     loadStoreSettings(container),
     loadProofs(container, order.id),
+    loadTakenNumbers(container, order),
+    loadLinks(container, order),
   ])
   const productSizes = sizes ?? []
   const view = buildRosterView({
@@ -195,7 +265,8 @@ export async function describeTeamOrder(container: MedusaContainer, order: TeamO
     prints: { name: order.prints_name, number: order.prints_number },
     sizes: productSizes,
     limits: settings.limits,
-    minimum: regionMinimum(region),
+    minimum: minimumOfOrder(order, region),
+    taken,
   })
   const current = currentProofOf(proofs)
   return {
@@ -205,10 +276,46 @@ export async function describeTeamOrder(container: MedusaContainer, order: TeamO
     limits: limitsToApi(settings.limits),
     schedule: scheduleOf(order, settings, now),
     current_proof: current ? proofToApi(current) : null,
+    links,
   }
 }
 
 const describe = describeTeamOrder
+
+type LinkedItem = { id: string; status: string; players: number; pieces: number }
+
+async function linkedItems(container: MedusaContainer, orders: TeamOrderRow[]): Promise<LinkedItem[]> {
+  const entries =
+    orders.length === 0
+      ? []
+      : ((await service(container).listRosterEntries(
+          { team_order_id: orders.map((o) => o.id) },
+          { select: ["team_order_id", "count"] }
+        )) as { team_order_id: string; count: number }[])
+  return orders.map((o) => {
+    const mine = entries.filter((e) => e.team_order_id === o.id)
+    return { id: o.id, status: o.status, players: mine.length, pieces: mine.reduce((sum, e) => sum + piecesOf(e), 0) }
+  })
+}
+
+/**
+ * The links of an order: what it belongs to (`source`: the first order of an add-on, the order a
+ * reorder was made from), its add-ons (how many, and each one's status, players and pieces) and
+ * its reorders. Shown on both ends of a link.
+ */
+export async function loadLinks(container: MedusaContainer, order: TeamOrderRow) {
+  const teams = service(container)
+  const [source] = order.linked_order_id ? ((await teams.listTeamOrders({ id: order.linked_order_id })) as TeamOrderRow[]) : []
+  const children = (await teams.listTeamOrders({ linked_order_id: order.id }, { order: { created_at: "ASC" } })) as TeamOrderRow[]
+  const addOns = await linkedItems(container, children.filter((c) => kindOf(c) === "add_on"))
+  const reorders = await linkedItems(container, children.filter((c) => kindOf(c) === "reorder"))
+  return {
+    kind: kindOf(order),
+    source: source ? { id: source.id, team_name: source.team_name, status: source.status, kind: kindOf(source) } : null,
+    add_ons: { count: addOns.length, items: addOns },
+    reorders: { count: reorders.length, items: reorders },
+  }
+}
 
 /** The refusal for a change to a team order that is no longer a draft (or, for the schedule, no longer open). */
 export function notEditable(order: Pick<TeamOrderRow, "status">, what: string) {
@@ -271,6 +378,11 @@ export async function listOwnTeamOrders(container: MedusaContainer, customerId: 
     { customer_id: customerId },
     { order: { created_at: "DESC" } }
   )) as TeamOrderRow[]
+  return listOrderSummaries(container, orders)
+}
+
+/** Each order as in the list answer: the order, its players and pieces, and its current proof. */
+export async function listOrderSummaries(container: MedusaContainer, orders: TeamOrderRow[]) {
   const entries =
     orders.length === 0
       ? []
@@ -322,6 +434,10 @@ export async function deleteTeamOrder(container: MedusaContainer, customerId: st
   const order = await loadOwnTeamOrder(container, customerId, id)
   if (order.status !== "draft") {
     throw notAllowed("team_order_not_draft", "Only a draft team order can be deleted.")
+  }
+  const linked = (await service(container).listTeamOrders({ linked_order_id: order.id }, { select: ["id"] })) as { id: string }[]
+  if (linked.length > 0) {
+    throw notAllowed("team_order_has_linked_orders", "A team order with add-ons or reorders cannot be deleted.")
   }
   await service(container).deleteRosterEntries({ team_order_id: order.id })
   await service(container).deleteTeamOrders(order.id)

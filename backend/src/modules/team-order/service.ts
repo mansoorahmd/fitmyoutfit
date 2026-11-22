@@ -3,6 +3,10 @@ import { InjectTransactionManager, MedusaContext, MedusaService } from "@medusaj
 import { ProofApproval } from "./models/proof-approval"
 import { RosterEntry } from "./models/roster-entry"
 import { TeamOrder } from "./models/team-order"
+import { TeamOrderEmail } from "./models/team-order-email"
+import { TeamOrderStep } from "./models/team-order-step"
+import { buildStepRecord, balanceNoteRecord, type StepRecord } from "../../lib/rules/team-order-steps"
+import type { Actor, TeamOrderStatus } from "../../lib/rules/team-order-status"
 
 /**
  * Thrown by `replaceRoster` when the list is no longer at the version the save was made from, or
@@ -14,6 +18,17 @@ export class RosterVersionStale extends Error {
     this.name = "RosterVersionStale"
   }
 }
+
+/** Thrown by `noteBalance` when the balance was already marked as received. */
+export class BalanceAlreadyNoted extends Error {
+  constructor(readonly teamOrderId: string) {
+    super(`The balance of ${teamOrderId} was already marked as received.`)
+    this.name = "BalanceAlreadyNoted"
+  }
+}
+
+/** Who makes a step, for the record of steps. */
+export type StepBy = { actor: Actor; actorId: string | null }
 
 /**
  * Thrown by the writes below when the team order is no longer in the state the request was made
@@ -30,6 +45,8 @@ export class TeamOrderChanged extends Error {
 
 type Rows = { id: string }[]
 type Connection = { execute: (sql: string, params: unknown[]) => Promise<Rows> }
+type RawConnection = { execute: (sql: string, params: unknown[], method: "all", ctx: unknown) => Promise<Rows> }
+type TransactionManager = { getConnection: () => RawConnection; getTransactionContext?: () => unknown }
 
 /**
  * The transaction's connection, for the writes that must check a state and change it in one
@@ -38,7 +55,12 @@ type Connection = { execute: (sql: string, params: unknown[]) => Promise<Rows> }
  * the state in the same step; a second request waits for the first to commit, then matches no row.
  */
 function connectionOf(sharedContext: Context): Connection {
-  return (sharedContext.transactionManager as unknown as { getConnection: () => Connection }).getConnection()
+  const manager = sharedContext.transactionManager as unknown as TransactionManager
+  const connection = manager.getConnection()
+  // The transaction is passed on, so these statements run inside it: with the generated writes of
+  // the same method they commit or roll back together, and the row locks they take last until then.
+  const transaction = manager.getTransactionContext?.()
+  return { execute: (sql, params) => connection.execute(sql, params, "all", transaction) }
 }
 
 /** One line to store: already cleaned, never judged. */
@@ -56,7 +78,32 @@ export type RosterEntryInput = {
  * Medusa's generated data service for team orders, roster entries and proofs, and the writes that
  * must be atomic: saving a team list as a whole, and the steps of the status flow.
  */
-class TeamOrderModuleService extends MedusaService({ TeamOrder, RosterEntry, ProofApproval }) {
+class TeamOrderModuleService extends MedusaService({ TeamOrder, RosterEntry, ProofApproval, TeamOrderStep, TeamOrderEmail }) {
+  /** Stores the record of a step, in the transaction that made the step. */
+  private async recordStep(teamOrderId: string, record: StepRecord, sharedContext: Context): Promise<void> {
+    await this.createTeamOrderSteps(
+      {
+        team_order_id: teamOrderId,
+        step_name: record.stepName,
+        from_status: record.from,
+        to_status: record.to,
+        actor: record.actor,
+        actor_id: record.actorId,
+        by_hand: record.byHand,
+      },
+      sharedContext
+    )
+  }
+
+  /** The record of a flow step by `by`; a record the flow does not allow is a programming error. */
+  private stepRecordFor(from: TeamOrderStatus, to: TeamOrderStatus, by: StepBy, byHand = false): StepRecord {
+    const built = buildStepRecord({ from, to, actor: by.actor, actorId: by.actorId, byHand })
+    if (!built.ok) {
+      throw new Error(`Not a recorded step: ${from} -> ${to} by ${by.actor} (${built.problem}).`)
+    }
+    return built.record
+  }
+
   /**
    * Replaces all the lines of a team order and moves its `list_version` from `expectedVersion` to
    * the next number, in one database transaction. The version moves first, with a condition on
@@ -107,6 +154,7 @@ class TeamOrderModuleService extends MedusaService({ TeamOrder, RosterEntry, Pro
       from: { listVersion: number; teamName: string; designVersionId: string }
       snapshotText: string
       snapshotHash: string
+      by: StepBy
     },
     @MedusaContext() sharedContext: Context = {}
   ): Promise<{ id: string; proof_number: number }> {
@@ -137,6 +185,7 @@ class TeamOrderModuleService extends MedusaService({ TeamOrder, RosterEntry, Pro
       },
       sharedContext
     )) as { id: string }
+    await this.recordStep(teamOrderId, this.stepRecordFor("draft", "proof_sent", input.by), sharedContext)
     return { id: created.id, proof_number: proofNumber }
   }
 
@@ -147,7 +196,7 @@ class TeamOrderModuleService extends MedusaService({ TeamOrder, RosterEntry, Pro
    */
   @InjectTransactionManager()
   async backToDraft(
-    input: { teamOrderId: string; from: "proof_sent" | "approved" },
+    input: { teamOrderId: string; from: "proof_sent" | "approved"; by: StepBy },
     @MedusaContext() sharedContext: Context = {}
   ): Promise<void> {
     const { teamOrderId, from } = input
@@ -164,6 +213,7 @@ class TeamOrderModuleService extends MedusaService({ TeamOrder, RosterEntry, Pro
       "update proof_approval set status = ?, closed_at = now(), updated_at = now() where team_order_id = ? and status = ? returning id",
       [closed, teamOrderId, was]
     )
+    await this.recordStep(teamOrderId, this.stepRecordFor(from, "draft", input.by), sharedContext)
   }
 
   /**
@@ -186,6 +236,7 @@ class TeamOrderModuleService extends MedusaService({ TeamOrder, RosterEntry, Pro
       needByDate: string | null
       rush: boolean
       promisedDeliveryDate: string
+      by: StepBy
     },
     @MedusaContext() sharedContext: Context = {}
   ): Promise<void> {
@@ -214,6 +265,89 @@ class TeamOrderModuleService extends MedusaService({ TeamOrder, RosterEntry, Pro
     )
     if (signed.length === 0) {
       throw new TeamOrderChanged(input.teamOrderId, "the proof was signed")
+    }
+    await this.recordStep(input.teamOrderId, this.stepRecordFor("proof_sent", "approved", input.by), sharedContext)
+  }
+
+  /**
+   * A step of the admin: `from -> to` only if the order is still in `from` (one conditional
+   * statement), recorded in the same transaction. `byHand` marks the deposit as received by hand.
+   * Throws `TeamOrderChanged` when the order is no longer in `from`.
+   */
+  @InjectTransactionManager()
+  async adminStep(
+    input: { teamOrderId: string; from: TeamOrderStatus; to: TeamOrderStatus; adminId: string; byHand: boolean },
+    @MedusaContext() sharedContext: Context = {}
+  ): Promise<void> {
+    const record = this.stepRecordFor(input.from, input.to, { actor: "admin", actorId: input.adminId }, input.byHand)
+    const moved = await connectionOf(sharedContext).execute(
+      "update team_order set status = ?, updated_at = now() where id = ? and status = ? and deleted_at is null returning id",
+      [input.to, input.teamOrderId, input.from]
+    )
+    if (moved.length === 0) {
+      throw new TeamOrderChanged(input.teamOrderId, `it moved to ${input.to}`)
+    }
+    await this.recordStep(input.teamOrderId, record, sharedContext)
+  }
+
+  /**
+   * The admin marks the balance as received by hand: a record on an order that is `balance_due`,
+   * once. The status does not change. Throws `TeamOrderChanged` when the order is not `balance_due`
+   * and `BalanceAlreadyNoted` when it was marked already (the order's row is locked meanwhile, so two
+   * presses make one record).
+   */
+  @InjectTransactionManager()
+  async noteBalance(
+    input: { teamOrderId: string; adminId: string },
+    @MedusaContext() sharedContext: Context = {}
+  ): Promise<void> {
+    const connection = connectionOf(sharedContext)
+    const locked = await connection.execute(
+      "select id from team_order where id = ? and status = 'balance_due' and deleted_at is null for update",
+      [input.teamOrderId]
+    )
+    if (locked.length === 0) {
+      throw new TeamOrderChanged(input.teamOrderId, "the balance was marked")
+    }
+    const record = balanceNoteRecord(input.adminId)
+    const existing = await connection.execute(
+      "select id from team_order_step where team_order_id = ? and step_name = ? and deleted_at is null limit 1",
+      [input.teamOrderId, record.stepName]
+    )
+    if (existing.length > 0) {
+      throw new BalanceAlreadyNoted(input.teamOrderId)
+    }
+    await this.recordStep(input.teamOrderId, record, sharedContext)
+  }
+
+  /**
+   * Claims an email: stores its row (status `pending`) unless a row with this `dedupe_key` exists
+   * already. Returns the new row's id, or null when the key was taken (another request, or an
+   * earlier run of the job, has it). The unique index makes two claims at the same moment give one row.
+   */
+  async claimEmail(input: {
+    teamOrderId: string
+    kind: string
+    dedupeKey: string
+    payload: Record<string, unknown>
+  }): Promise<string | null> {
+    const taken = async () =>
+      ((await this.listTeamOrderEmails({ dedupe_key: input.dedupeKey }, { select: ["id"] })) as Rows).length > 0
+    if (await taken()) return null
+    try {
+      const created = (await this.createTeamOrderEmails({
+        team_order_id: input.teamOrderId,
+        kind: input.kind as never,
+        dedupe_key: input.dedupeKey,
+        payload: input.payload,
+        status: "pending",
+        attempts: 0,
+      })) as { id: string }
+      return created.id
+    } catch (error) {
+      // Lost the race on the unique index: the other claim owns the email.
+      if (await taken()) return null
+      throw error
     }
   }
 

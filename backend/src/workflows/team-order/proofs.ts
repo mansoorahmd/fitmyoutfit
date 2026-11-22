@@ -28,16 +28,19 @@ import { allowedIn, isStatus, mayStep, type TeamOrderStatus } from "../../lib/ru
 import { readNeedByDate, buildRosterView, entriesToLines } from "../../lib/rules/team-order"
 import { TeamOrderChanged } from "../../modules/team-order/service"
 import { loadOwnVersionById } from "../design/designs"
+import { sendDepositDue, sendProofReady } from "./emails"
 import {
   describeTeamOrder,
+  kindOf,
   loadEntries,
   loadOwnTeamOrder,
   loadProductSizes,
   loadProofs,
   loadRegion,
   loadStoreSettings,
+  loadTakenNumbers,
+  minimumOfOrder,
   notEditable,
-  regionMinimum,
   scheduleOf,
   service,
   todayIn,
@@ -65,18 +68,20 @@ export async function makeProof(container: MedusaContainer, customerId: string, 
   if (!mayStep("organizer", statusOf(order), "proof_sent")) {
     throw notAllowed("team_order_not_draft", "A proof can only be made from a draft team order.", { status: order.status })
   }
-  const [entries, sizes, region, settings] = await Promise.all([
+  const [entries, sizes, region, settings, taken] = await Promise.all([
     loadEntries(container, order.id),
     loadProductSizes(container, order.product_id),
     loadRegion(container, order.region_id),
     loadStoreSettings(container),
+    loadTakenNumbers(container, order),
   ])
   const view = buildRosterView({
     lines: entriesToLines(entries),
     prints: { name: order.prints_name, number: order.prints_number },
     sizes: sizes ?? [],
     limits: settings.limits,
-    minimum: regionMinimum(region),
+    minimum: minimumOfOrder(order, region),
+    taken,
   })
   const why = whyNotReady(view.summary, view.problems.length)
   if (why) {
@@ -88,12 +93,14 @@ export async function makeProof(container: MedusaContainer, customerId: string, 
     throw notAllowed(why.code, messages[why.code], why.extra)
   }
   const { text, hash } = hashSnapshot(snapshotOf(order, view.lines))
+  let made: { id: string; proof_number: number }
   try {
-    await service(container).makeProof({
+    made = await service(container).makeProof({
       teamOrderId: order.id,
       from: { listVersion: order.list_version, teamName: order.team_name, designVersionId: order.design_version_id },
       snapshotText: text,
       snapshotHash: hash,
+      by: { actor: "organizer", actorId: customerId },
     })
   } catch (error) {
     if (error instanceof TeamOrderChanged) {
@@ -105,7 +112,10 @@ export async function makeProof(container: MedusaContainer, customerId: string, 
     }
     throw error
   }
-  return describeTeamOrder(container, await loadOwnTeamOrder(container, customerId, id), now)
+  const after = await loadOwnTeamOrder(container, customerId, id)
+  // "The proof is ready" to the organizer; a failed send is recorded and never fails this request.
+  await sendProofReady(container, after, made, now)
+  return describeTeamOrder(container, after, now)
 }
 
 /** The proofs of a team order, newest first, without their snapshots. */
@@ -189,6 +199,7 @@ export async function signProof(
       needByDate: order.need_by_date,
       rush,
       promisedDeliveryDate: promised.date,
+      by: { actor: "organizer", actorId: customerId },
     })
   } catch (error) {
     if (!(error instanceof TeamOrderChanged)) throw error
@@ -203,7 +214,10 @@ export async function signProof(
     }
     throw conflict("proof_not_current", `Proof ${proof.proof_number} can no longer be signed.`, { status: again.status })
   }
-  return describeTeamOrder(container, await loadOwnTeamOrder(container, customerId, id), now)
+  const after = await loadOwnTeamOrder(container, customerId, id)
+  // "Payment due: the deposit", once for this proof; a failed send never fails the signature.
+  await sendDepositDue(container, after, proof.id, now)
+  return describeTeamOrder(container, after, now)
 }
 
 /**
@@ -224,8 +238,18 @@ export async function reopenTeamOrder(container: MedusaContainer, customerId: st
       { status: order.status }
     )
   }
+  if (kindOf(order) !== "add_on") {
+    const addOns = (await service(container).listTeamOrders({ linked_order_id: order.id, kind: "add_on" }, { select: ["id"] })) as { id: string }[]
+    if (addOns.length > 0) {
+      throw notAllowed(
+        "team_order_has_add_ons",
+        "A team order with add-ons cannot go back to draft: the add-ons depend on its signed list.",
+        { status: order.status, add_ons: addOns.length }
+      )
+    }
+  }
   try {
-    await service(container).backToDraft({ teamOrderId: order.id, from: status })
+    await service(container).backToDraft({ teamOrderId: order.id, from: status, by: { actor: "organizer", actorId: customerId } })
   } catch (error) {
     if (error instanceof TeamOrderChanged) {
       const current = await loadOwnTeamOrder(container, customerId, id)

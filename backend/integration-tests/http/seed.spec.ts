@@ -905,9 +905,9 @@ medusaIntegrationTestRunner({
         const byCountry = Object.fromEntries(
           regions.regions.map((r: any) => [r.countries[0].iso_2, r])
         )
-        expect(byCountry.pk.metadata).toEqual({ tax_final: false, min_garment_quantity: 1 })
+        expect(byCountry.pk.metadata).toEqual({ tax_final: false, min_garment_quantity: 1, addon_min_garment_quantity: 1 })
         for (const country of ["gb", "ae", "us"]) {
-          expect(byCountry[country].metadata).toEqual({ tax_final: false, min_garment_quantity: 10 })
+          expect(byCountry[country].metadata).toEqual({ tax_final: false, min_garment_quantity: 10, addon_min_garment_quantity: 1 })
         }
         for (const [country, expected] of [
           ["pk", ["pp_cod_cod", "pp_system_default"]],
@@ -977,7 +977,7 @@ medusaIntegrationTestRunner({
             input: {
               selector: { id: region.id },
               update: {
-                metadata: { min_garment_quantity: "" },
+                metadata: { min_garment_quantity: "", addon_min_garment_quantity: "" },
                 payment_providers: ["pp_system_default"],
               },
             },
@@ -1011,9 +1011,13 @@ medusaIntegrationTestRunner({
           ],
           regionSettings: [
             "Pakistan: min_garment_quantity",
+            "Pakistan: addon_min_garment_quantity",
             "United Kingdom: min_garment_quantity",
+            "United Kingdom: addon_min_garment_quantity",
             "United Arab Emirates: min_garment_quantity",
+            "United Arab Emirates: addon_min_garment_quantity",
             "United States: min_garment_quantity",
+            "United States: addon_min_garment_quantity",
           ],
           sizeCharts: ["jersey", "t-shirt", "jacket", "fit-kit"],
           stockLocation: true,

@@ -12,6 +12,8 @@ import {
   type RosterNote,
   type RosterProblem,
   type RosterSummary,
+  type TakenNumber,
+  type TakenRef,
 } from "@fitmyoutfit/team-rules"
 
 export const MAX_TEAM_NAME_LENGTH = 100
@@ -137,6 +139,19 @@ export function lineToApi(line: RosterLine): ApiLine {
   }
 }
 
+/** A place a number is taken, in the API's names (`first_order` or `add_on`, `order_id`). */
+function takenRefToApi(ref: TakenRef) {
+  return {
+    source: ref.source === "first-order" ? "first_order" : "add_on",
+    ...(ref.orderId !== undefined ? { order_id: ref.orderId } : {}),
+    ...(ref.name !== undefined ? { name: ref.name } : {}),
+  }
+}
+
+function detailKeyToApi(key: string): string {
+  return key === "hasDigit" ? "has_digit" : key === "takenIn" ? "taken_in" : key
+}
+
 function problemToApi(problem: RosterProblem): ApiProblem {
   const { detail } = problem
   return {
@@ -146,7 +161,10 @@ function problemToApi(problem: RosterProblem): ApiProblem {
     field: problem.field,
     detail: detail
       ? Object.fromEntries(
-          Object.entries(detail).map(([key, value]) => [key === "hasDigit" ? "has_digit" : key, value])
+          Object.entries(detail).map(([key, value]) => [
+            detailKeyToApi(key),
+            key === "takenIn" ? (value as TakenRef[]).map(takenRefToApi) : value,
+          ])
         )
       : null,
   }
@@ -175,10 +193,12 @@ export function buildRosterView(input: {
   sizes: readonly string[]
   limits?: Partial<RosterLimits>
   minimum: number | null
+  /** Numbers taken in the first order and the other add-ons (an add-on's list only). */
+  taken?: readonly TakenNumber[]
 }): RosterView {
   const analysis = analyzeRoster(
     input.lines,
-    { prints: input.prints, sizes: input.sizes, limits: input.limits },
+    { prints: input.prints, sizes: input.sizes, limits: input.limits, taken: input.taken },
     { minimum: input.minimum }
   )
   return {
