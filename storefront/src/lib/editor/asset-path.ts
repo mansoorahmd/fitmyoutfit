@@ -4,12 +4,12 @@
 // a short list of shapes, so no other file of the repository can be read
 // through the route.
 
-const NAME = "[a-z0-9][a-z0-9-]*"
-
+// A name is lowercase letters, digits and hyphens, starting with a letter or digit.
+// Regex literals, so "\." is a real escaped dot (in a template string it lost its backslash).
 const SHAPES: { pattern: RegExp; type: string }[] = [
-  { pattern: new RegExp(`^models/${NAME}\.glb$`), type: "model/gltf-binary" },
-  { pattern: new RegExp(`^(products|palettes|fonts)/${NAME}\.json$`), type: "application/json" },
-  { pattern: new RegExp(`^templates/${NAME}/${NAME}\.json$`), type: "application/json" },
+  { pattern: /^models\/[a-z0-9][a-z0-9-]*\.glb$/, type: "model/gltf-binary" },
+  { pattern: /^(products|palettes|fonts)\/[a-z0-9][a-z0-9-]*\.json$/, type: "application/json" },
+  { pattern: /^templates\/[a-z0-9][a-z0-9-]*\/[a-z0-9][a-z0-9-]*\.json$/, type: "application/json" },
 ]
 
 /** The address the browser fetches a sample file from ("models/x.glb" gives "/api/editor-assets/models/x.glb"). */
