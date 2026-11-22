@@ -202,7 +202,7 @@ function LineRowView(props: LineRowProps) {
               <EditorIcon name={s.kind === "error" ? "alert" : "info"} size={16} />
               <span>
                 {s.kind === "error" && <span className="fmo-sr-only">{w.problemPrefix} </span>}
-                <bdi>{s.text}</bdi>
+                {s.text}
               </span>
             </p>
           ))}

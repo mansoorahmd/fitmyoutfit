@@ -569,7 +569,8 @@ export const EDITOR_CSS = /* css */ `
 .fmo-tl-input:hover:not(:focus) { border-color: var(--fmo-ink); }
 .fmo-tl-input:focus { outline: 2px solid var(--fmo-focus); outline-offset: 0; }
 .fmo-tl-input[data-state="missing"] { border: 1.5px dashed var(--fmo-border-strong); }
-.fmo-tl-number[data-state="missing"] { width: 108px; text-align: start; }
+.fmo-tl-input[data-state="missing"]::placeholder { font: var(--fmo-type-small); }
+.fmo-tl-number[data-state="missing"] { width: 120px; text-align: start; }
 .fmo-tl-size[data-state="missing"] { width: 112px; text-align: start; }
 .fmo-tl-input[data-state="wrong"] { border: 2px solid var(--fmo-error); }
 .fmo-tl-sizebox { position: relative; display: inline-block; }

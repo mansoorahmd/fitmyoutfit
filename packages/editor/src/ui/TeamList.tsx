@@ -22,7 +22,7 @@ import { noteText, piecesText, playerCalled, problemText, saysInField } from "./
 
 type MenuState = { kind: "line"; id: string; stepper?: boolean } | { kind: "sort" } | null;
 
-export function TeamListView() {
+export function TeamListView({ initialDetailsOpen }: { initialDetailsOpen?: boolean } = {}) {
   const t = useTeamList();
   const api = useEditor();
   const { wording } = api;
@@ -33,7 +33,8 @@ export function TeamListView() {
   const bySize = !prints.name && !prints.number;
   const root = useRef<HTMLDivElement>(null);
   const rows = useRef<HTMLDivElement>(null);
-  const [detailsOpen, setDetailsOpen] = useState(api.layout === "wide");
+  // Open by default on a desktop when the panel is at least 640 px tall, else a 48 px bar (8.1).
+  const [detailsOpen, setDetailsOpen] = useState(() => initialDetailsOpen ?? (api.layout === "wide" && typeof window !== "undefined" && window.innerHeight - 64 >= 640));
   const [onlyFix, setOnlyFix] = useState(false);
   const [pinned, setPinned] = useState<readonly string[]>([]);
   const [menu, setMenu] = useState<MenuState>(null);
@@ -108,7 +109,9 @@ export function TeamListView() {
   // The keyboard probably open: a field of the list has focus (focus in and out is settled over a moment, so moving
   // from one field to the next never shows the panel growing and shrinking).
   const keyboardTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const onFocusIn = () => {
+  const onFocusIn = (event: React.FocusEvent<HTMLElement>) => {
+    // Only a text field brings up the keyboard (a button or a line taking focus does not).
+    if (!(event.target instanceof HTMLInputElement)) return;
     if (keyboardTimer.current) clearTimeout(keyboardTimer.current);
     t.setKeyboard(true);
   };

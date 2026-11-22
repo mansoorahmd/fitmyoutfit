@@ -22,6 +22,7 @@ import { createItemGestures, forwardGestures, type GestureEndReason, type Gestur
 import { layerSide } from "../design/roles.js";
 import { sameJson, type EditLabel } from "../state/history.js";
 import { useEditorHistory } from "../react/useEditorHistory.js";
+import { useTrailing } from "../react/useTrailing.js";
 import { buildSizeTable, resolveLimits } from "@fitmyoutfit/team-rules";
 import { analyseList, designWithPlayer, playerForShirt, toSavedList, type SeenMap } from "../team-list/checks.js";
 import { addLine, cleanField, convertAllDigits, moveLine, newLine, removeLine, setCount as setLineCount, setField as setLineField, setFlag as setLineFlag, setSizeCountLines, sortLines, type SortBy } from "../team-list/lines.js";
@@ -455,8 +456,11 @@ export function EditorShell(props: EditorShellProps) {
   // The shirt shows the chosen line (7.1): its name and number as they would print, never written into the design.
   const chosenLine = lines.length > 0 ? lines.find((l) => l.id === chosenId) : undefined;
   const shirt = chosenLine ? playerForShirt(chosenLine, prints) : null;
-  const shirtName = shirt?.name ?? null;
-  const shirtNumber = shirt?.number ?? null;
+  // Typing never waits for the shirt (13.5): the shirt follows the keys a moment after they pause; choosing another line shows its shirt at once.
+  const shirtKey = shirt ? `${shirt.name} ${shirt.number}` : null;
+  const shirtShown = useTrailing(shirtKey, 120, chosenId);
+  const shirtName = shirtShown === null ? null : shirtShown.split(" ")[0]!;
+  const shirtNumber = shirtShown === null ? null : (shirtShown.split(" ")[1] ?? "");
   const withPlayer = useCallback((d: DesignDocument): DesignDocument => (shirtName === null || shirtNumber === null ? d : designWithPlayer(d, { name: shirtName, number: shirtNumber })), [shirtName, shirtNumber]);
   const withPlayerRef = useRef(withPlayer);
   useEffect(() => {
@@ -1263,6 +1267,7 @@ export function EditorShell(props: EditorShellProps) {
         tool={activeTool}
         wording={wording}
         detent={listTyping ? "expanded" : detent}
+        holdExpanded={listView}
         heights={heights}
         growRoom={growRoom}
         typing={typing}

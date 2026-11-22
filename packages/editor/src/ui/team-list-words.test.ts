@@ -6,7 +6,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { EDITOR_WORDING } from "./content.js";
-import { initialsExample, noteText, piecesText, playerCalled, problemText, saysInField, type WordsContext } from "./team-list-words.js";
+import { initialsExample, noteText, piecesText, playerCalled, problemText, saysInField, withoutIsolates, type WordsContext } from "./team-list-words.js";
 import { analyseList } from "../team-list/checks.js";
 import { DEFAULT_TEAM_NOUN, DEFAULT_TEAM_SIZES, type EditorLine } from "../team-list/types.js";
 
@@ -54,17 +54,19 @@ describe("the sentences", () => {
   const analysis = analyseList(lines, { prints: { name: true, number: true }, sizes: DEFAULT_TEAM_SIZES });
   const text = (id: string, code: string) => {
     const p = analysis.byLine.get(id)!.find((x) => x.code === code)!;
-    return problemText(p, lines.find((l) => l.id === id), ctx);
+    return withoutIsolates(problemText(p, lines.find((l) => l.id === id), ctx));
   };
   it("names the other player, 'and 1 other' with three on one number, 'and 2 others' with four, showing this line's number as typed", () => {
     expect(text("b", "number-duplicate")).toBe("Same number as Ali Raza and 1 other (٧).");
     const four = [line("a", "A", "7", "M"), line("b", "B", "7", "M"), line("c", "C", "7", "M"), line("d", "D", "07", "M")];
     const a4 = analyseList(four, { prints: { name: true, number: true }, sizes: DEFAULT_TEAM_SIZES });
-    expect(problemText(a4.byLine.get("a")![0]!, four[0], { ...ctx, lines: four })).toBe("Same number as B and 2 others (7).");
+    expect(withoutIsolates(problemText(a4.byLine.get("a")![0]!, four[0], { ...ctx, lines: four }))).toBe("Same number as B and 2 others (7).");
   });
   it("calls a player with no name by position", () => {
     expect(playerCalled(W, lines[2], 2)).toBe("player 3");
-    expect(playerCalled(W, lines[0], 0)).toBe("Ali Raza");
+    expect(withoutIsolates(playerCalled(W, lines[0], 0))).toBe("Ali Raza");
+    // The name is isolated, so a right-to-left name keeps "(7)" after it.
+    expect(playerCalled(W, line("u", "محمد علی"), 0)).toBe("⁨محمد علی⁩");
   });
   it("says how long a name is, and gives initials as the hint", () => {
     expect(text("d", "name-too-long")).toBe("Too long for the back: about 11 letters too many. Initials help: M. A. R. Qureshi.");

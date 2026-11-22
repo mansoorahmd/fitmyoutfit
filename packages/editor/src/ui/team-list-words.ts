@@ -27,9 +27,18 @@ export interface WordsContext {
   noun: TeamListNoun;
 }
 
-/** What a player is called in a sentence about another player: the name, or "player 3" when it has none. */
+/** First-strong isolate and pop: a name that reads right to left stays in its own run, so "(7)" after it is not drawn before it (13.9). */
+const ISOLATE_START = "⁨";
+const ISOLATE_END = "⁩";
+
+/** What a player is called in a sentence about another player: the name (isolated, so an Urdu name never reorders the words round it), or "player 3" when it has none. */
 export function playerCalled(wording: EditorWording, line: Pick<EditorLine, "name"> | undefined, index: number): string {
-  return line && line.name !== "" ? line.name : fill(wording.teamList.unnamedPlayer, { i: index + 1 });
+  return line && line.name !== "" ? `${ISOLATE_START}${line.name}${ISOLATE_END}` : fill(wording.teamList.unnamedPlayer, { i: index + 1 });
+}
+
+/** The words with the invisible direction isolates taken out (for comparing, and for a place that does not need them). */
+export function withoutIsolates(text: string): string {
+  return text.replaceAll(ISOLATE_START, "").replaceAll(ISOLATE_END, "");
 }
 
 /** The words for one problem. `line` is the line it belongs to (a list problem has none). */

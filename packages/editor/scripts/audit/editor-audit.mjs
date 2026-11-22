@@ -7,8 +7,9 @@
 //        [--sizes 360x640m,390x844m,820x1180m,844x390m,1366x768,1920x1000] [--product stand-in-tshirt]
 //        [--port 9399] [--no-gpu] [--shots]
 //
-// Per size it walks: the start card, the rest framing, every tool, an item selected (number, team name) and the
-// Done panel, and checks in each state the panel grid (4.1), the spacing scale (4.2), the type tokens (4.3), the
+// Per size it walks: the start card, the rest framing, every tool, the Players tab as a typed team list (E4a: a
+// clash, a missing size, a spare shirt, two of one shirt; touch targets, contrast and nothing cut off), an item
+// selected (number, team name) and the Done panel, and checks in each state the panel grid (4.1), the spacing scale (4.2), the type tokens (4.3), the
 // selection box (4.5), the stage's framing (4.6: magenta method), what sits on the stage (4.7) and native
 // controls (4.8). Writes <out>/audit-<product>-<size>.json and prints one line per broken rule. Exit code 1 when
 // any rule is broken, 2 when the page could not be audited.
@@ -16,7 +17,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { launch, openPage, readPng, sleep } from "./cdp.mjs";
-import { pageAudit } from "./rules.mjs";
+import { pageAudit, teamListAudit } from "./rules.mjs";
 
 const args = Object.fromEntries(
   process.argv.slice(2).map((a) => {
@@ -135,6 +136,56 @@ async function runSize(size) {
         await audit(page, "tool-colours-expanded", size, record);
         await page.click('[data-testid="panel-expand"]');
         await sleep(600);
+      }
+    }
+    // The team list (E4a): five typed lines (a clash, a missing size, a spare shirt, two of one shirt), the keyboard open
+    // and then closed; the page rules and the list's own (touch targets, contrast, nothing cut off) in each state.
+    if (tools.includes("players")) {
+      await page.click('[data-testid="tab-players"]');
+      await sleep(1000);
+      if (await page.exists('[data-testid="tl-empty-add"]')) {
+        await page.click('[data-testid="tl-empty-add"]');
+        await sleep(300);
+        const type = async (text) => { await page.send("Input.insertText", { text }); await sleep(60); };
+        const enter = () => page.key("Enter", "Enter", 13);
+        for (const [name, number, size] of [["Ali Raza", "10", "M"], ["Bilal Ahmed", "7", "L"], ["محمد علی", "٧", "XL"], ["Usman Tariq", "23", ""]]) {
+          await type(name); await enter(); await type(number); await enter();
+          if (size) await type(size);
+          await enter();
+        }
+        // The fifth, a spare shirt with two of it: the line's menu (4.6), by the buttons.
+        await type("Hamza"); await enter(); await type("4"); await enter(); await type("S"); await enter();
+        await page.eval(`document.querySelector('[data-testid="tl-more-4"]')?.click()`);
+        await sleep(300);
+        await page.eval(`document.querySelector('[data-testid="tl-menu-count"]')?.click()`);
+        await sleep(250);
+        await page.eval(`document.querySelector('[data-testid="tl-count-more"]')?.click()`);
+        await sleep(200);
+        record.states["players-list-menu"] = await audit(page, "players-list-menu", size, record);
+        await page.key("Escape", "Escape", 27);
+        await sleep(300);
+        await page.eval(`document.activeElement?.blur(); document.querySelector('[data-testid="tl-name-5"]')?.closest('li') && document.querySelector('[data-testid="tl-name-5"]').focus()`);
+        await sleep(900);
+        const typing = await audit(page, "players-list-typing", size, record);
+        const typingList = await page.eval(`(${teamListAudit.toString()})()`);
+        typing.teamList = typingList;
+        for (const f of typingList.failures) record.failures.push(`${size} players-list-typing: ${f}`);
+        await page.eval(`document.activeElement?.blur()`);
+        await sleep(600);
+        const next = await page.exists('[data-testid="tl-next-to-fix"]');
+        if (next) await page.click('[data-testid="tl-next-to-fix"]');
+        await sleep(700);
+        const idle = await audit(page, "players-list", size, record);
+        const list = await page.eval(`(${teamListAudit.toString()})()`);
+        idle.teamList = list;
+        for (const f of list.failures) record.failures.push(`${size} players-list: ${f}`);
+      }
+      if (await page.exists('[data-testid="tl-style"]')) {
+        await page.click('[data-testid="tl-style"]');
+        await sleep(700);
+        await audit(page, "players-style", size, record);
+        await page.click('[data-testid="back-to-list"]');
+        await sleep(500);
       }
     }
     // Items selected: 4.5 and R22 (the box at least 120 px on a phone, 160 on a desktop, unless the zoom limit).

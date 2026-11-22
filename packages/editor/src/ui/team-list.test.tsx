@@ -32,13 +32,13 @@ function editorApi(layout: "compact" | "wide" = "compact"): EditorApi {
     setTyping: noop, openTool: noop, nudge: noop, reducedMotion: false, markTiming: noop, snapping: true, setSnapping: noop, selectedId: null, select: noop, logoNotes: {}, setLogoNote: noop,
   };
 }
-const text = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, "&").replace(/\s+/g, " ");
+const text = (html: string) => html.replaceAll("⁨", "").replaceAll("⁩", "").replace(/<[^>]+>/g, " ").replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, "&").replace(/\s+/g, " ");
 function list(lines: EditorLine[], overrides: Partial<TeamListApi> = {}, options: { layout?: "compact" | "wide"; prints?: { name: boolean; number: boolean }; seen?: TeamListApi["seen"] } = {}) {
   const t = fakeTeamApi(lines, overrides, options);
   return renderToStaticMarkup(
     <EditorContext.Provider value={editorApi(options.layout)}>
       <TeamListContext.Provider value={t}>
-        <TeamListView />
+        <TeamListView initialDetailsOpen={options.layout === "wide" || undefined} />
       </TeamListContext.Provider>
     </EditorContext.Provider>,
   );
@@ -94,8 +94,8 @@ describe("a line", () => {
     const clash = [line("a", "Ali", "7", "M"), line("b", "محمد علی", "٧", "L")];
     const out = list(clash, {}, { seen: { a: { left: true, number: true }, b: { left: true, number: true } } });
     expect(out).toContain('data-code="number-duplicate"');
-    expect(text(out)).toContain("Problem: Same number as Ali (٧).");
-    expect(out).toContain("<bdi>");
+    expect(text(out).replaceAll("⁨", "").replaceAll("⁩", "")).toContain("Problem: Same number as Ali (٧).");
+    expect(out).toContain("⁨محمد علی⁩");
     expect(out.match(/aria-invalid="true"/g)).toHaveLength(2);
     expect(out).toMatch(/aria-describedby="[^"]+-msg"/);
   });
