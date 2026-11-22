@@ -1208,7 +1208,9 @@ export default function DesignEditor({ product: entry, countryCode, fontFamilies
       {orderContext && locked && (
         <div
           role="status"
-          className="fixed inset-x-3 top-16 z-10 mx-auto max-w-xl rounded-card border border-brand-border bg-brand-surface-alt p-3 type-small text-brand-ink"
+          // On a desktop (the editor's wide layout: a rail and a panel on the left) the top of the stage holds the player
+          // chip, so the note sits at the stage's lower left, above the view buttons and clear of the zoom column.
+          className="fixed inset-x-3 top-16 z-10 mx-auto max-w-xl rounded-card border border-brand-border bg-brand-surface-alt p-3 type-small text-brand-ink min-[1024px]:inset-x-auto min-[1024px]:bottom-[76px] min-[1024px]:left-[584px] min-[1024px]:top-auto min-[1024px]:mx-0 min-[1024px]:w-[min(380px,calc(100vw-584px-88px))]"
           data-testid="design-locked-note"
         >
           {view && isDraft(view.status)
