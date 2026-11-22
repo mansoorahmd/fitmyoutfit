@@ -5,7 +5,7 @@
   "description": "Medusa v2 backend for the FitMyOutfit custom apparel store.",
   "license": "UNLICENSED",
   "scripts": {
-    "build:rules": "npm run build --prefix ../packages/team-rules",
+    "build:rules": "node ../packages/team-rules/scripts/ensure-built.mjs",
     "prebuild": "npm run build:rules",
     "build": "medusa build",
     "predev": "npm run build:rules",

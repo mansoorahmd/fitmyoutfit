@@ -6,12 +6,15 @@
  * database stamps the time). `buildStepRecord` refuses a record the flow does not allow, so a wrong
  * record cannot be made from code by mistake.
  *
- * The admin's buttons (`adminActions`) are the steps the admin may make from a status and, because
- * payments do not exist yet, two by-hand steps clearly labelled as such: the deposit marked as
- * received (`approved -> deposit_paid`) and the balance marked as received (a note on an order in
- * `balance_due`: there is no status between `balance_due` and `shipped`, so it changes no status).
- * A step the rules refuse is not offered.
+ * The admin's buttons (`adminActions`) are the steps the admin may make from a status and, until
+ * real gateways exist, two by-hand payment steps clearly labelled as such (decision 016): the deposit
+ * received by hand (it captures the placeholder payment of the deposit in the admin's name, and the
+ * order moves `approved -> deposit_paid`) and the balance received by hand (it captures the
+ * balance's placeholder payment; a record on an order in `balance_due`, no status change). Each is
+ * offered only while its part is not paid. **"Mark as shipped" is offered only once the balance is
+ * paid** (lib/rules/team-order-payments.ts, `mayShip`). A step the rules refuse is not offered.
  */
+import { BALANCE_PAID } from "./team-order-payments"
 import { mayStep, mayStepByHand, stepBetween, type Actor, type TeamOrderStatus } from "./team-order-status"
 
 /** The step name of the balance note (not a flow step: the status stays `balance_due`). */
@@ -64,6 +67,11 @@ export function balanceNoteRecord(adminId: string): StepRecord {
   return { stepName: BALANCE_BY_HAND, from: "balance_due", to: "balance_due", actor: "admin", actorId: adminId, byHand: true }
 }
 
+/** The record that the organizer's balance payment arrived: the system, on an order in `balance_due`, no status change. */
+export function balancePaidRecord(): StepRecord {
+  return { stepName: BALANCE_PAID, from: "balance_due", to: "balance_due", actor: "system", actorId: null, byHand: false }
+}
+
 export const ADMIN_ACTION_IDS = ["deposit_by_hand", "start_production", "ask_balance", "balance_by_hand", "ship"] as const
 export type AdminActionId = (typeof ADMIN_ACTION_IDS)[number]
 
@@ -90,7 +98,7 @@ const DEFS: readonly ActionDef[] = [
     to: "deposit_paid",
     label: "Mark the deposit as received by hand",
     confirm:
-      "Mark the deposit as received? Payments are not built yet, so nothing is checked: this records that you confirmed the deposit arrived outside the store.",
+      "Mark the deposit as received? This records a payment of the deposit's amount in your name (the placeholder payment, until a real gateway exists) and moves the order to deposit paid. Only do this when the deposit arrived outside the store.",
     byHand: true,
   },
   {
@@ -115,7 +123,7 @@ const DEFS: readonly ActionDef[] = [
     to: "balance_due",
     label: "Mark the balance as received by hand",
     confirm:
-      "Mark the balance as received? Payments are not built yet, so nothing is checked: this records that you confirmed the balance arrived outside the store. The status stays balance due.",
+      "Mark the balance as received? This records a payment of the balance's amount in your name (the placeholder payment, until a real gateway exists). The status stays balance due, and the order can then be shipped. Only do this when the balance arrived outside the store.",
     byHand: true,
   },
   {
@@ -128,15 +136,21 @@ const DEFS: readonly ActionDef[] = [
   },
 ]
 
-function isOffered(def: ActionDef, status: TeamOrderStatus, balanceNoted: boolean): boolean {
+/** What the order's money says, for the buttons: whether the deposit and the balance are paid. */
+export type MoneyFacts = { depositPaid?: boolean; balancePaid?: boolean }
+
+function isOffered(def: ActionDef, status: TeamOrderStatus, money: MoneyFacts): boolean {
   if (def.from !== status) return false
-  if (def.id === "balance_by_hand") return !balanceNoted
+  if (def.id === "deposit_by_hand" && money.depositPaid) return false
+  if (def.id === "balance_by_hand") return money.balancePaid !== true
+  // The balance must be paid before the order ships (decision 016).
+  if (def.id === "ship" && money.balancePaid !== true) return false
   return def.byHand ? mayStepByHand("admin", def.from, def.to) : mayStep("admin", def.from, def.to)
 }
 
-/** The buttons to show an admin for an order in `status`. `balanceNoted`: the balance was already marked. */
-export function adminActions(status: TeamOrderStatus, balanceNoted = false): AdminAction[] {
-  return DEFS.filter((def) => isOffered(def, status, balanceNoted)).map((def) => ({
+/** The buttons to show an admin for an order in `status`, given what is paid. */
+export function adminActions(status: TeamOrderStatus, money: MoneyFacts = {}): AdminAction[] {
+  return DEFS.filter((def) => isOffered(def, status, money)).map((def) => ({
     id: def.id,
     to: def.to,
     label: def.label,
@@ -146,8 +160,8 @@ export function adminActions(status: TeamOrderStatus, balanceNoted = false): Adm
 }
 
 /** The action for an id, if the rules offer it for `status` now; else undefined. */
-export function actionFor(id: AdminActionId, status: TeamOrderStatus, balanceNoted = false): AdminAction | undefined {
-  return adminActions(status, balanceNoted).find((a) => a.id === id)
+export function actionFor(id: AdminActionId, status: TeamOrderStatus, money: MoneyFacts = {}): AdminAction | undefined {
+  return adminActions(status, money).find((a) => a.id === id)
 }
 
 /** A short name for who made a step, for the admin page. */

@@ -6,10 +6,12 @@
  * read from a request or the database; the caller passes the data (lib/rules/team-order-emails.ts
  * says which email goes when).
  *
- * What the wording promises: only what the plan does. No prices and no amounts (payments are not
- * built: the payment emails say what is due in words and that payment details follow from us), no
- * date other than the ones the need-by schedule computes (the latest day to sign). Delivery
- * promises (15 days, 10 with rush) are not repeated here.
+ * What the wording promises: only what the plan does. No prices and no amounts in the text: the
+ * payment emails say what is due in words and link to the order's payment page in the account
+ * (decision 016). The amount and its currency are in the email's data (`EmailPayload.amount`) for
+ * the founders to decide whether the text states it; this draft does not. No date other than the
+ * ones the need-by schedule computes (the latest day to sign). Delivery promises (15 days, 10 with
+ * rush) are not repeated here.
  *
  * An add-on (a late joiner's order) and a reorder have a sentence of their own that says which
  * order the email is about; the rest is the same.
@@ -54,12 +56,21 @@ export function escapeHtml(value: string): string {
     .replace(/'/gu, "&#39;")
 }
 
+/** A paragraph that ends with a link: the text, then the address (a link in the html). */
+type LinkParagraph = { text: string; url: string }
+
 /** The email as plain text paragraphs, and the same as simple html. */
-function compose(subject: string, paragraphs: readonly string[]): EmailContent {
+function compose(subject: string, paragraphs: readonly (string | LinkParagraph)[]): EmailContent {
   return {
     subject,
-    text: paragraphs.join("\n\n") + "\n",
-    html: paragraphs.map((p) => `<p>${escapeHtml(p)}</p>`).join("\n"),
+    text: paragraphs.map((p) => (typeof p === "string" ? p : `${p.text} ${p.url}`)).join("\n\n") + "\n",
+    html: paragraphs
+      .map((p) =>
+        typeof p === "string"
+          ? `<p>${escapeHtml(p)}</p>`
+          : `<p>${escapeHtml(p.text)} <a href="${escapeHtml(p.url)}">${escapeHtml(p.url)}</a></p>`
+      )
+      .join("\n"),
   }
 }
 
@@ -154,9 +165,19 @@ export type PaymentDueData = {
   teamName: string
   orderKind: TeamOrderKind
   which: "deposit" | "balance"
+  /** The order's payment page in the account (STOREFRONT_URL + the setting `team_order_payment_path`); null when unknown. */
+  paymentUrl?: string | null
 }
 
-/** Payment due: the deposit (the proof is signed) or the balance (the order is ready). No amounts. */
+/** How to pay: the link to the order's payment page, or (no link) that details follow from us. */
+function howToPay(paymentUrl: string | null | undefined): string | LinkParagraph {
+  return paymentUrl ? { text: "You can pay it in your account:", url: paymentUrl } : "We will send you the payment details separately."
+}
+
+/**
+ * Payment due: the deposit (the proof is signed) or the balance (the order is ready), with the link
+ * to the order's payment page. No amount in the text (the amount is in the email's data).
+ */
 export function paymentDueEmail(data: PaymentDueData): EmailContent {
   const order = orderPhrase(data.orderKind)
   if (data.which === "deposit") {
@@ -164,7 +185,7 @@ export function paymentDueEmail(data: PaymentDueData): EmailContent {
       greeting(data.firstName),
       `Thank you for signing the proof for "${data.teamName}". The deposit for ${order} is now due.`,
       ...orderSentence(data.orderKind, data.teamName),
-      "We will send you the payment details separately.",
+      howToPay(data.paymentUrl),
       CLOSING,
     ])
   }
@@ -172,7 +193,7 @@ export function paymentDueEmail(data: PaymentDueData): EmailContent {
     greeting(data.firstName),
     `The balance for ${order} for "${data.teamName}" is now due, before the order is shipped.`,
     ...orderSentence(data.orderKind, data.teamName),
-    "We will send you the payment details separately.",
+    howToPay(data.paymentUrl),
     CLOSING,
   ])
 }
@@ -184,6 +205,10 @@ export type EmailPayload = {
   proofNumber?: number
   deadline?: SignDeadline
   daysLeft?: number
+  /** Payment emails: the link to the order's payment page (null when it could not be made). */
+  paymentUrl?: string | null
+  /** Payment emails: the part's amount and currency, for the template (the draft text does not state it). */
+  amount?: { value: number; currency_code: string } | null
 }
 
 /** The email of a kind from its stored payload and the organizer's first name. */
@@ -208,8 +233,8 @@ export function emailFor(kind: TeamOrderEmailKind, payload: EmailPayload, firstN
         deadline,
       })
     case "deposit_due":
-      return paymentDueEmail({ firstName, teamName: payload.teamName, orderKind: payload.orderKind, which: "deposit" })
+      return paymentDueEmail({ firstName, teamName: payload.teamName, orderKind: payload.orderKind, which: "deposit", paymentUrl: payload.paymentUrl ?? null })
     case "balance_due":
-      return paymentDueEmail({ firstName, teamName: payload.teamName, orderKind: payload.orderKind, which: "balance" })
+      return paymentDueEmail({ firstName, teamName: payload.teamName, orderKind: payload.orderKind, which: "balance", paymentUrl: payload.paymentUrl ?? null })
   }
 }

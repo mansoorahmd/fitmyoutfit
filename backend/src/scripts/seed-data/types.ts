@@ -124,6 +124,10 @@ export type StoreSettingsSeed = {
   roster_max_name_length: number
   /** IANA time zone of the store's day, for the need-by date of a team order. */
   schedule_time_zone: string
+  /** A team order's deposit, in percent of its total (above 0, at most 100); the balance is the rest. */
+  team_order_deposit_percentage: number
+  /** The storefront path of a team order's payment page, with [countryCode] and [id]; the payment emails link to it. */
+  team_order_payment_path: string
 }
 
 /**

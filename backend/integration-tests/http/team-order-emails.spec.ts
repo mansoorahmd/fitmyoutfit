@@ -134,7 +134,9 @@ medusaIntegrationTestRunner({
           expect(deposit.to).toBe(as.__email)
           expect(deposit.data.subject).toBe("Deposit due for Lahore Lions")
           expect(deposit.data.text).toContain("The deposit for the team order is now due.")
-          expect(deposit.data.text).toContain("We will send you the payment details separately.")
+          // the payment link (M3-3): the account's payment page of this order; no amount in the text
+          expect(deposit.data.text).toContain(`You can pay it in your account: `)
+          expect(deposit.data.text).toContain(`/account/team-orders/${id}/pay`)
           expect(deposit.data.text).not.toMatch(/\d+\s?%|PKR|GBP|£|\$/)
 
           // the admin's earlier steps send nothing
@@ -146,7 +148,7 @@ medusaIntegrationTestRunner({
           expect(await templates(id)).toEqual(["team-order-proof-ready", "team-order-deposit-due", "team-order-balance-due"])
           const balance = (await sentFor(id))[2]
           expect(balance.data.subject).toBe("Balance due for Lahore Lions")
-          expect(balance.data.text).toContain("We will send you the payment details separately.")
+          expect(balance.data.text).toContain(`/account/team-orders/${id}/pay`)
           // the by-hand note and shipping send nothing
           await adminStep(id, "balance_by_hand")
           await adminStep(id, "ship")

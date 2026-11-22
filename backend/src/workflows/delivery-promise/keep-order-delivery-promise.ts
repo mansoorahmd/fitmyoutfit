@@ -35,6 +35,7 @@ import {
 } from "../../lib/rules/order-metadata"
 import { readDeliveryDays } from "../../lib/settings/delivery-days"
 import { replaceOrderMetadataKey } from "../order-metadata/write-order-metadata"
+import { isTeamOrderOrder } from "../../lib/rules/team-order-payments"
 import { productKinds } from "../rush/rush-cart"
 
 type OrderRow = {
@@ -88,7 +89,8 @@ async function readStoreSettings(container: MedusaContainer) {
  * cart's), else the server's answer is written and returned, so the read route never returns
  * anything else, also before the order-placed subscriber has run.
  *
- * Throws NOT_FOUND for an unknown order or a draft order (a draft is not placed yet), and
+ * Throws NOT_FOUND for an unknown order, a draft order (a draft is not placed yet) or a team order's
+ * order (its promise is the signed proof's), and
  * UNEXPECTED_STATE (HTTP 500, naming the key) when no valid promise is kept and the delivery-days
  * settings are missing or invalid: it never invents a date.
  */
@@ -99,7 +101,9 @@ export async function keepOrderDeliveryPromise(
 ): Promise<PromisedDelivery> {
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     const order = await readOrder(container, orderId)
-    if (!order || order.is_draft_order) {
+    // A team order's Medusa order keeps no promise of its own: the team order's is its signed
+    // proof's `promised_delivery_date` (decision 016).
+    if (!order || order.is_draft_order || isTeamOrderOrder(order.metadata)) {
       throw new MedusaError(MedusaError.Types.NOT_FOUND, `Order id not found: ${orderId}`)
     }
     const kept = order.metadata?.[DELIVERY_PROMISE_KEY]

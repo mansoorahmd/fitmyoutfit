@@ -496,6 +496,21 @@ export default defineMiddlewares({
       middlewares: customerOnly,
     },
     {
+      matcher: "/store/team-orders/:id/payments",
+      method: ["GET"],
+      middlewares: customerOnly,
+    },
+    {
+      matcher: "/store/team-orders/:id/payments/:part",
+      method: ["POST"],
+      middlewares: customerOnly,
+    },
+    {
+      matcher: "/store/team-orders/:id/payments/:part/complete",
+      method: ["POST"],
+      middlewares: customerOnly,
+    },
+    {
       matcher: "/auth/:actor_type/emailpass/update",
       method: ["POST"],
       middlewares: [holdResetTokenLockDuringUpdate],

@@ -10,7 +10,7 @@ import type { PlaceholderData, StoreSettingsSeed } from "./types"
  */
 export const settings: PlaceholderData<StoreSettingsSeed> = {
   placeholder: true,
-  note: "Placeholder rush percentage, cash-on-delivery limit, delivery days, roster limits and time zone until the founders confirm them.",
+  note: "Placeholder rush percentage, cash-on-delivery limit, delivery days, roster limits, time zone and the team order payment page until the founders confirm them. The 50% deposit is the founders' decision (CLAUDE.md).",
   data: {
     rush_percentage: 20,
     // Largest cart total, in PKR (major units: 20000 = Rs 20,000), payable by cash on delivery.
@@ -24,5 +24,7 @@ export const settings: PlaceholderData<StoreSettingsSeed> = {
     roster_max_name_length: 18,
     // The time zone of the store's day: "today" for a team order's need-by arithmetic.
     schedule_time_zone: "Asia/Karachi",
+    team_order_deposit_percentage: 50,
+    team_order_payment_path: "/[countryCode]/account/team-orders/[id]/pay",
   },
 }

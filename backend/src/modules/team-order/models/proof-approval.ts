@@ -37,5 +37,17 @@ export const ProofApproval = model
     rush: model.boolean().nullable(),
     promised_delivery_date: model.text().nullable(),
     closed_at: model.dateTime().nullable(),
+    // The money of the proof (decision 016): the Medusa order priced for it (a draft order while the
+    // proof is out, an order from signing on), the two payment collections made at signing, and the
+    // deposit share they were split with. Set once each; never changed after.
+    order_id: model.text().nullable(),
+    deposit_collection_id: model.text().nullable(),
+    balance_collection_id: model.text().nullable(),
+    deposit_percentage: model.float().nullable(),
   })
-  .indexes([{ on: ["team_order_id", "proof_number"], unique: true }])
+  .indexes([
+    { on: ["team_order_id", "proof_number"], unique: true },
+    { on: ["order_id"] },
+    { on: ["deposit_collection_id"] },
+    { on: ["balance_collection_id"] },
+  ])

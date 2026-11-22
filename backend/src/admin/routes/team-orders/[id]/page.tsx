@@ -6,6 +6,11 @@
  * step the rules refuse is not in the list); each asks for a confirmation first; the two by-hand
  * payment steps say so in their labels. All data comes from GET /admin/team-orders/:id, steps go to
  * POST /admin/team-orders/:id/steps.
+ *
+ * The payments (decision 016): what the order costs (lines per size, delivery, rush, tax, total), the
+ * deposit and the balance with what is paid and outstanding, in the region's currency, and a link to
+ * the Medusa order, whose own page shows the placeholder payments. "Mark as shipped" is offered only
+ * once the balance is paid.
  */
 import { Badge, Button, Container, Heading, Table, Text, usePrompt } from "@medusajs/ui"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
@@ -29,8 +34,14 @@ import {
   statusColor,
   statusLabel,
   stepText,
+  formatMoney,
+  isMoney,
+  partStateColor,
+  partStateLabel,
   type Action,
   type Detail,
+  type Money,
+  type MoneyPart,
 } from "../../../lib/team-orders"
 
 async function call(url: string, init?: RequestInit): Promise<Detail> {
@@ -166,8 +177,13 @@ const TeamOrderPage = () => {
           </div>
           {data.actions.some((a) => a.by_hand) && (
             <Text size="small" className="text-ui-fg-subtle">
-              Payments are not built yet. The buttons marked "by hand" only record that you confirmed the money arrived
-              outside the store; nothing is checked.
+              The buttons marked "by hand" record a payment of that part's amount in your name (the placeholder payment,
+              until a real gateway exists). Use them only when the money arrived outside the store.
+            </Text>
+          )}
+          {order.status === "balance_due" && !data.actions.some((a) => a.id === "ship") && (
+            <Text size="small" className="text-ui-fg-subtle">
+              The order can be shipped once the balance is paid.
             </Text>
           )}
           {step.error && (
@@ -239,6 +255,8 @@ const TeamOrderPage = () => {
           </div>
         </Row>
       </Container>
+
+      <PaymentsSection money={data.money} />
 
       <Container className="divide-y p-0">
         <div className="px-6 py-4">
@@ -392,6 +410,95 @@ const TeamOrderPage = () => {
         )}
       </Container>
     </div>
+  )
+}
+
+function PartRow({ label, part, currency }: { label: string; part: MoneyPart; currency: string }) {
+  return (
+    <Row label={label}>
+      <div className="flex flex-wrap items-center gap-x-2">
+        <span>{formatMoney(part.amount, currency)}</span>
+        <Badge size="2xsmall" color={partStateColor(part.state)}>
+          {partStateLabel(part.state)}
+        </Badge>
+        {part.due && <span className="text-ui-fg-subtle">due now</span>}
+        {part.paid_at && (
+          <span className="text-ui-fg-subtle">
+            {formatTime(part.paid_at)}
+            {part.by_hand ? ", marked by hand" : ""}
+          </span>
+        )}
+      </div>
+    </Row>
+  )
+}
+
+function PaymentsSection({ money }: { money: Detail["money"] }) {
+  if (money === null) {
+    return (
+      <Container className="px-6 py-4">
+        <Heading level="h2">Payments</Heading>
+        <Text size="small" className="text-ui-fg-subtle">
+          Priced once a proof is made.
+        </Text>
+      </Container>
+    )
+  }
+  if (!isMoney(money)) {
+    return (
+      <Container className="px-6 py-4">
+        <Heading level="h2">Payments</Heading>
+        <Text size="small" className="text-ui-fg-error">
+          The payments could not be read: {money.error}
+        </Text>
+      </Container>
+    )
+  }
+  const m: Money = money
+  const currency = m.cost.currency_code
+  return (
+    <Container className="divide-y p-0">
+      <div className="flex items-center justify-between px-6 py-4">
+        <div>
+          <Heading level="h2">Payments</Heading>
+          <Text size="small" className="text-ui-fg-subtle">
+            {m.cost.state === "quote"
+              ? "The price of the proof that is out (a draft order until it is signed)."
+              : `Deposit ${m.cost.deposit_percentage}% at approval, the balance before shipping.`}
+          </Text>
+        </div>
+        {m.order && (
+          <Link to={`/orders/${m.order.id}`} className="text-ui-fg-interactive hover:underline txt-small">
+            Medusa order #{m.order.display_id ?? m.order.id}
+          </Link>
+        )}
+      </div>
+      <Row label="Garments">
+        <div className="flex flex-col">
+          {m.cost.lines.map((l) => (
+            <span key={l.size}>
+              {l.size}: {l.quantity} x {formatMoney(l.unit_price, currency)} = {formatMoney(l.total, currency)}
+            </span>
+          ))}
+        </div>
+      </Row>
+      <Row label="Delivery">{m.cost.delivery ? `${m.cost.delivery.name}: ${formatMoney(m.cost.delivery.amount, currency)}` : "None"}</Row>
+      <Row label="Rush">{m.cost.rush ? `${formatMoney(m.cost.rush.amount, currency)} (${m.cost.rush.percentage}% of the garments)` : "No rush"}</Row>
+      <Row label="Tax">
+        {formatMoney(m.cost.tax_total, currency)}
+        {m.cost.tax_final ? "" : " (tax not final)"}
+      </Row>
+      <Row label="Total">
+        <Text size="small" weight="plus">
+          {formatMoney(m.cost.total, currency)}
+        </Text>
+      </Row>
+      <PartRow label="Deposit" part={m.payments.deposit} currency={currency} />
+      <PartRow label="Balance" part={m.payments.balance} currency={currency} />
+      <Row label="Paid">{formatMoney(m.payments.paid_total, currency)}</Row>
+      <Row label="Outstanding">{formatMoney(m.payments.outstanding, currency)}</Row>
+      {m.payments.payment_status && <Row label="Medusa payment status">{m.payments.payment_status.replace(/_/gu, " ")}</Row>}
+    </Container>
   )
 }
 
