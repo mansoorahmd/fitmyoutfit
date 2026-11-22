@@ -630,7 +630,7 @@ export const EDITOR_CSS = /* css */ `
 .fmo-chip-tag { flex: none; padding: 0 6px; border: 1px solid var(--fmo-border-strong); border-radius: 10px; font: var(--fmo-type-small); color: var(--fmo-ink-muted); }
 .fmo-chip-count { flex: none; min-width: 20px; height: 20px; padding: 0 4px; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; border-radius: 10px; background: var(--fmo-ink); color: #fff; font: var(--fmo-type-label); }
 .fmo-chip-problem { flex: none; display: inline-flex; color: var(--fmo-error); }
-.fmo-view-list .fmo-chip { max-width: calc(100% - 136px); }
+.fmo-view-list .fmo-chip { max-width: calc(100% - 110px); }
 .fmo-chip-top { display: flex; justify-content: center; }
 .fmo-view-list { justify-content: center; position: absolute; }
 .fmo-view-list .fmo-whole { position: absolute; inset-inline-end: 12px; bottom: 0; }
