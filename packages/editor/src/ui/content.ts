@@ -187,7 +187,7 @@ export const EDITOR_WORDING = {
     fieldName: "Name, player {i}", // 13.8
     fieldNumber: "Number, player {i}", // 13.8
     fieldSize: "Size, player {i}", // 13.8
-    empty: { title: "No players yet", body: "Add each player's name, number and size.", add: "Add a player" }, // W-TL4, W-TL5 (the paste half of the sentence waits for the paste view), W-TL6
+    empty: { title: "No players yet", body: "Add each player's name, number and size, or paste the list you already have.", add: "Add a player" }, // W-TL4, W-TL5, W-TL6
     addPlayer: "Add a player", // W-TL6
     style: "Style", // W-TL2
     styleLong: "Name and number style", // W-TL7
@@ -268,6 +268,99 @@ export const EDITOR_WORDING = {
     numbersOff: "Numbers are off on this design. The numbers you typed are kept and come back if you turn numbers on.", // W-TL72
     bySize: { addNames: "Add names for the bag labels", hideNames: "Hide the names", total: "Total {n}", sizeCount: "{size}: {count}", less: "One less {size}", more: "One more {size}", title: "How many of each size" }, // W-TL74
     skipEmpty: "An empty line was removed", // NEW (status)
+    /** Pasting a list and a CSV file (section 5, W-TL30 to W-TL44). DRAFT WORDING. */
+    paste: {
+      button: "Paste a list", // W-TL2
+      back: "Back", // NEW: the paste view's way back
+      title: "Paste your team list", // W-TL30
+      body: "One player per line: name, number and size, in any order. From WhatsApp, Excel or Google Sheets.", // W-TL31
+      examples: ["Ali Raza 10 M", "7, Bilal Ahmed, L", "محمد علی ٧ XL"], // W-TL31 (the placeholder's three example lines)
+      boxName: "Your team list, one player per line", // NEW: the box's accessible name
+      paste: "Paste", // W-TL32
+      chooseFile: "Choose a file", // W-TL32
+      editText: "Edit text", // W-TL32
+      yourText: "Your text: {n} lines", // W-TL32
+      yourTextOne: "Your text: 1 line", // W-TL32
+      hold: "Press and hold in the box, then Paste.", // W-TL33
+      read: "We read {n} players", // W-TL34
+      readOne: "We read 1 player", // W-TL34
+      readNone: "We couldn't read any players", // NEW
+      needLook: "{k} need a look", // W-TL34
+      needLookOne: "1 needs a look", // W-TL34
+      notAdded: "Not added ({n})", // W-TL35
+      add: "Add", // W-TL35
+      addAsLine: "Add “{text}” as a line", // NEW: the accessible name of "Add" on a line that is not a player
+      columns: "Used as column names: {names}", // W-TL35
+      columnNames: { name: "Name", number: "No.", size: "Size", count: "Qty" }, // W-TL35 (Qty: NEW)
+      addTo: "Add to the {n} players in the list", // W-TL36
+      replace: "Replace the list", // W-TL36
+      addN: "Add {n} players", // W-TL36
+      addOne: "Add 1 player", // W-TL36
+      replaceN: "Replace with {n} players", // W-TL36
+      replaceOne: "Replace with 1 player", // W-TL36
+      cancel: "Cancel", // W-TL36
+      modeName: "What to do with the players", // NEW: the radio group's name
+      twoNumbers: "Two numbers here: {a} and {b}. Type the shirt number.", // W-TL37
+      twoSizes: "Two sizes here: {a} and {b}. Choose one.", // NEW: the reader's note
+      twoCounts: "Two quantities here: {a} and {b}. Set how many in the line's menu.", // NEW
+      countUnclear: "Couldn't read “{value}” as a quantity. It's set to 1.", // NEW
+      notAPlayer: "Doesn't look like a player.", // W-TL38
+      nothingToRead: "Nothing to read.", // W-TL39
+      overLimit: "Only {fit} more players fit in the list. We'll add the first {fit}.", // W-TL40
+      overLimitNone: "The list is full: no more players fit.", // NEW (W-TL40 with room for none)
+      excelHint: "Excel file? Select the cells in Excel, copy, and paste them here.", // W-TL41
+      fileUnreadable: "We can't read this file. In Excel choose Save As › CSV UTF-8, or copy the cells and paste them here.", // W-TL42
+      fileTooBig: "This file is too big ({size}). The largest we read is {max}. Copy the cells and paste them here instead.", // NEW
+      fileNotText: "This file isn't a text file. Save the list as CSV UTF-8, or copy the cells and paste them here.", // NEW
+      fileEmpty: "This file has nothing in it to read.", // NEW
+      fileRead: "Read {file}", // NEW (status)
+      dropHere: "Drop a CSV file here", // NEW
+      noSizeFound: "No size found. You can add it after.", // W-TL43
+      noNumberFound: "No number found.", // W-TL43
+      noNameFound: "No name found.", // W-TL43
+      added: "Added {n} players", // W-TL44 (status)
+      addedOne: "Added 1 player", // W-TL44
+      empty: "—", // the sign for an empty field in a row
+      noSizeRow: "no size", // NEW: what a screen reader says for an empty size
+      noNumberRow: "no number", // NEW
+      noNameRow: "no name", // NEW
+      rowName: "{name}, {number}, {size}", // NEW: a row's accessible name
+      listName: "Players we read", // NEW
+      notAddedName: "Lines that are not players", // NEW
+    },
+    /** The player chip on the stage (7.2, W-TL27, W-ED170, W-ED171). DRAFT WORDING. */
+    chip: {
+      group: "Player on the shirt", // W-TL27
+      previous: "Previous player: {name}", // W-TL27, W-ED170
+      next: "Next player: {name}", // W-TL27, W-ED170
+      show: "{name}, number {number}, size {size}. Show in the team list.", // 7.2
+      showSample: "Sample player: {name}, number {number}. Show the name and number style.", // NEW
+      stepped: "Player {i} of {n}: {name}", // W-ED171 (status, polite)
+      sample: "Sample", // W-ED72c
+      samplePlayer: "PLAYER", // W-ED72b (the default sample name)
+      noName: "No name", // W-TL23
+      noNumber: "No number", // W-TL23
+      noNumberName: "no number", // NEW (accessible name)
+      noSizeName: "no size yet", // W-TL28
+      unnamed: "Player {i}", // NEW (a line with no name yet)
+      whole: "Show the whole shirt", // W-TL26
+      closeUp: "Zoom to name and number", // W-TL26
+      problem: "Has a problem to fix", // NEW (the chip's mark for a line with a problem, in words)
+      spare: "Spare shirt", // NEW
+      pageKeys: "Page Up and Page Down choose the previous and next player.", // 7.2 (the "?" help)
+    },
+    /** The Done panel's team section (11.2, W-TL80 to W-TL86). DRAFT WORDING. */
+    doneSection: {
+      title: "Team list", // W-TL80
+      none: "No players yet", // W-TL80
+      addPlayers: "Add players", // W-TL80
+      show: "Show", // W-TL80
+      players: "{players} · {pieces} · {state}", // 11.2: "18 players · 19 jerseys · 2 to fix"
+      playersSame: "{players} · {state}", // when the pieces are the players
+      note: "Ordering opens later. Your design and team list are saved on this device.", // W-TL82 P, copy from founders: no date, no price
+      noteEmpty: "Ordering opens later. Your design is saved on this device.", // W-ED164 P, copy from founders: no date, no price
+      listName: "Team list", // NEW: the section's accessible name
+    },
   },
   /** Logos (`logos`). The simple panel of E3a; the full flow is E3b. */
   logos: {
@@ -496,6 +589,7 @@ export const EDITOR_WORDING = {
     "list-move": "Moved {item}",
     "list-count": "Shirts for {item}",
     "list-flag": "Name or number of {item}",
+    "list-paste": "Pasted {item}", // W-TL44 ("Undone: Pasted 18 players")
   } as Record<string, string>,
   /**
    * The "Where" chips: words for the products' placement presets, by preset id.

@@ -4,11 +4,13 @@
  */
 import { memo } from "react";
 import { PlayersStyle } from "./LetteringTools.js";
+import { PasteView } from "./PasteView.js";
 import { TeamListView } from "./TeamList.js";
 import { useTeamList } from "./team-list-context.js";
 
 function PlayersToolView() {
   const t = useTeamList();
+  if (t.view === "paste") return <PasteView />;
   if (t.view === "style") return <PlayersStyle onBack={() => t.setView("list")} showPreviewAs={t.analysis.filled.length === 0} />;
   return <TeamListView />;
 }

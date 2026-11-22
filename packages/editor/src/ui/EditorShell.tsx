@@ -29,6 +29,7 @@ import { addLine, cleanField, convertAllDigits, moveLine, newLine, removeLine, s
 import { createHandOver } from "../team-list/hand-over.js";
 import { readSavedList } from "../team-list/saved.js";
 import { DEFAULT_TEAM_NOUN, DEFAULT_TEAM_SIZES, type EditorLine, type SavedTeamList, type TeamListHost, type TeamListReport } from "../team-list/types.js";
+import { applyPaste, type PasteMode } from "../team-list/paste.js";
 import { TeamListContext, type TeamListApi } from "./team-list-context.js";
 import { PlayersTool } from "./PlayersTool.js";
 import type { CameraInfo, CanvasHover, DesignCanvasHandle, LayerDragEvent, PieceGuide, TextureDrawInfo, ZoneTap } from "../react/DesignCanvas.js";
@@ -446,7 +447,8 @@ export function EditorShell(props: EditorShellProps) {
   const chosenId = chosen !== null && lines.some((l) => l.id === chosen) ? chosen : (lines[0]?.id ?? null);
   const [seen, setSeen] = useState<SeenMap>({});
   const [revealAll, setRevealAll] = useState(false);
-  const [playersView, setPlayersView] = useState<"list" | "style">("list");
+  const [playersView, setPlayersView] = useState<"list" | "style" | "paste">("list");
+  const [pasteText, setPasteText] = useState("");
   const [listMemory] = useState(() => {
     let scrollTop = 0;
     return { get: () => scrollTop, set: (value: number) => void (scrollTop = value) };
@@ -527,6 +529,25 @@ export function EditorShell(props: EditorShellProps) {
   const setPlayerFlag = useCallback((id: string, flag: "noName" | "noNumber", on: boolean) => history.commitLines((ls) => setLineFlag(ls as EditorLine[], id, flag, on), `list-flag|${nameOfLine(id)}`), [history, nameOfLine]);
   const convertDigits = useCallback((to: "western" | "arabic-indic") => history.commitLines((ls) => convertAllDigits(ls as EditorLine[], to), "list-digits"), [history]);
   const setSizeCount = useCallback((code: string, count: number) => history.commitLines((ls) => setSizeCountLines(ls as EditorLine[], code, count, { table: sizeTable, maxCount }), `list-count|${code}`), [history, sizeTable, maxCount]);
+  // Pasting (5.2): the lines are added in ONE undo step, the first added line is chosen, and the checks show on them like on typed lines.
+  const addPasted = useCallback(
+    (added: readonly EditorLine[], mode: PasteMode) => {
+      if (added.length === 0) return;
+      const n = added.length;
+      const words = n === 1 ? wording.teamList.onePlayer : fill(wording.teamList.players, { n });
+      history.commitLines((ls) => applyPaste(ls as EditorLine[], added, mode, maxLines), `list-paste|${words}`);
+      setSeen((s) => ({ ...s, ...Object.fromEntries(added.map((l) => [l.id, { left: true, name: true, number: true, size: true }])) }));
+      setChosen(added[0]!.id);
+      setPasteText("");
+      setPlayersView("list");
+      announce(n === 1 ? wording.teamList.paste.addedOne : fill(wording.teamList.paste.added, { n }));
+    },
+    [history, maxLines, announce, wording],
+  );
+  const openPaste = useCallback((text?: string) => {
+    if (text !== undefined) setPasteText(text);
+    setPlayersView("paste");
+  }, []);
   const revealAllProblems = useCallback(() => setRevealAll(true), []);
   const compactLayout = layout === "compact";
   const setKeyboard = useCallback(
@@ -559,6 +580,10 @@ export function EditorShell(props: EditorShellProps) {
       revealAll,
       view: playersView,
       setView: setPlayersView,
+      pasteText,
+      setPasteText,
+      openPaste,
+      addPasted,
       memory: listMemory,
       keyboard,
       beginField,
@@ -579,7 +604,7 @@ export function EditorShell(props: EditorShellProps) {
       nameShrunk,
       closeUpLayerId,
     }),
-    [lines, analysis, prints, listSizes, sizeTable, teamNoun, teamMinimum, listLimitsView, openSizeChart, chosenId, seen, revealAll, playersView, listMemory, keyboard, beginField, typeField, leaveField, leaveLine, endTyping, addPlayer, removePlayer, movePlayer, sortPlayers, setPlayerCount, setPlayerFlag, convertDigits, setSizeCount, revealAllProblems, setKeyboard, nameShrunk, closeUpLayerId],
+    [lines, analysis, prints, listSizes, sizeTable, teamNoun, teamMinimum, listLimitsView, openSizeChart, chosenId, seen, revealAll, playersView, pasteText, openPaste, addPasted, listMemory, keyboard, beginField, typeField, leaveField, leaveLine, endTyping, addPlayer, removePlayer, movePlayer, sortPlayers, setPlayerCount, setPlayerFlag, convertDigits, setSizeCount, revealAllProblems, setKeyboard, nameShrunk, closeUpLayerId],
   );
   // What the editor hands to its host (12.2, 11.1): the list and its report, after a second without changes.
   const [hostBridge] = useState(() => {
@@ -654,7 +679,7 @@ export function EditorShell(props: EditorShellProps) {
   const toolsReady = mode === "flat" || (load.ready && fontsReadyOnce);
   // The team list on a phone frames the back close-up: the name and number fill the free stage (3.2). The camera
   // moves only when the list opens (an action of the coach's), never while lines are chosen; it goes back when the list closes.
-  const listView = activeTool === "players" && playersView === "list" && !startCard;
+  const listView = activeTool === "players" && (playersView === "list" || playersView === "paste") && !startCard;
   const listTyping = typing && layout === "compact" && listView;
   const closeUpLayer = closeUpLayerId;
   const listCloseUp = layout === "compact" && listView && !doneOpen && toolsReady && closeUpLayer !== null;

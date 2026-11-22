@@ -3,7 +3,9 @@
  * returns a sentence, so every code has its wording in `content.ts` (`teamList.problems`), and this file chooses and
  * fills it. Plain functions, tested without React.
  */
-import type { RosterNote, RosterProblem } from "@fitmyoutfit/team-rules";
+import type { NotAdded, ReadNote, RosterNote, RosterProblem } from "@fitmyoutfit/team-rules";
+import type { FileRefusal } from "../team-list/csv.js";
+import type { PasteRow } from "../team-list/paste.js";
 import type { EditorLine, TeamListNoun, TeamListSize } from "../team-list/types.js";
 import { fill, type EditorWording } from "./content.js";
 
@@ -79,4 +81,72 @@ export function noteText(note: Pick<RosterNote, "code">, wording: EditorWording)
 /** "21 jerseys" for the summary (8.1): the product's noun in the plural, or the singular for one. */
 export function piecesText(wording: EditorWording, pieces: number, noun: TeamListNoun): string {
   return fill(wording.teamList.pieces, { pieces, noun: pieces === 1 ? noun.one : noun.many });
+}
+
+/** The words for something the reader was unsure of in a pasted line (5.3, step 6). */
+export function readNoteText(note: ReadNote, wording: EditorWording): string {
+  const p = wording.teamList.paste;
+  switch (note.code) {
+    case "two-numbers":
+      return fill(p.twoNumbers, { a: note.values[0] ?? "", b: note.values[1] ?? "" });
+    case "two-sizes":
+      return fill(p.twoSizes, { a: note.values[0] ?? "", b: note.values[1] ?? "" });
+    case "two-counts":
+      return fill(p.twoCounts, { a: note.values[0] ?? "", b: note.values[1] ?? "" });
+    case "count-unclear":
+      return fill(p.countUnclear, { value: note.value });
+  }
+}
+
+/** One message under a row of the paste view. */
+export interface PreviewMessage {
+  key: string;
+  text: string;
+  kind: "problem" | "note";
+}
+
+/**
+ * What the paste view says under one row (5.4): the reader's remarks first (they say WHY a field is empty), then a
+ * value the design needs and the text lacks (W-TL43), then every other check of the list, worded exactly as the list
+ * words it (GOV.UK: the same message in both places), then the notes that are not problems.
+ */
+export function previewMessages(row: Pick<PasteRow, "line" | "readNotes" | "problems" | "notes">, ctx: WordsContext): PreviewMessage[] {
+  const p = ctx.wording.teamList.paste;
+  const out: PreviewMessage[] = [];
+  const explained = new Set<string>();
+  for (const n of row.readNotes) {
+    out.push({ key: `read:${n.code}`, text: readNoteText(n, ctx.wording), kind: "problem" });
+    if (n.code === "two-numbers") explained.add("number-missing");
+    if (n.code === "two-sizes") explained.add("size-missing");
+  }
+  for (const problem of row.problems) {
+    if (explained.has(problem.code)) continue;
+    const text =
+      problem.code === "name-missing" ? p.noNameFound : problem.code === "number-missing" ? p.noNumberFound : problem.code === "size-missing" ? p.noSizeFound : problemText(problem, row.line, ctx);
+    out.push({ key: `${problem.code}:${text}`, text, kind: "problem" });
+  }
+  for (const note of row.notes) out.push({ key: `note:${note.code}`, text: noteText(note, ctx.wording), kind: "note" });
+  return out;
+}
+
+/** Why a line is listed under "Not added" (5.3, step 7). */
+export function notAddedReason(reason: NotAdded["reason"], wording: EditorWording): string {
+  return reason === "not-a-player" ? wording.teamList.paste.notAPlayer : wording.teamList.paste.nothingToRead;
+}
+
+/** The words for a file the paste view refuses (5.6). */
+export function fileRefusalText(reason: FileRefusal, wording: EditorWording, values: { size?: string; max?: string } = {}): string {
+  const p = wording.teamList.paste;
+  switch (reason) {
+    case "too-big":
+      return fill(p.fileTooBig, { size: values.size ?? "", max: values.max ?? "" });
+    case "spreadsheet":
+      return p.excelHint;
+    case "not-text":
+      return p.fileNotText;
+    case "empty":
+      return p.fileEmpty;
+    case "encoding":
+      return p.fileUnreadable;
+  }
 }

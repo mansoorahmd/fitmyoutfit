@@ -8,6 +8,7 @@ import type { PrintedFields } from "@fitmyoutfit/team-rules";
 import type { SizeTable } from "@fitmyoutfit/team-rules";
 import type { ListAnalysis, SeenMap } from "../team-list/checks.js";
 import type { SortBy, TextField } from "../team-list/lines.js";
+import type { PasteMode } from "../team-list/paste.js";
 import type { EditorLine, TeamListMinimum, TeamListNoun, TeamListSize } from "../team-list/types.js";
 
 export interface TeamListApi {
@@ -32,9 +33,16 @@ export interface TeamListApi {
   memory: { get(): number; set(scrollTop: number): void };
   /** The keyboard is probably open on a phone (a list field has focus). */
   keyboard: boolean;
-  /** The Players tab shows the list or the style view (3.1). */
-  view: "list" | "style";
-  setView(view: "list" | "style"): void;
+  /** The Players tab shows the list, the style view (3.1) or the paste view (5.2). */
+  view: "list" | "style" | "paste";
+  setView(view: "list" | "style" | "paste"): void;
+  /** The pasted text, kept for the visit so going back is not a loss (5.2). */
+  pasteText: string;
+  setPasteText(text: string): void;
+  /** Opens the paste view, with `text` in the box when given (a paste of several lines into a field, 5.1). */
+  openPaste(text?: string): void;
+  /** Adds the read lines in one undo step ("Pasted 18 players"), chooses the first, returns to the list (5.2). */
+  addPasted(lines: readonly EditorLine[], mode: PasteMode): void;
   /** Typing in a field: one undo step per field, left when the field is. */
   beginField(id: string, field: TextField): void;
   typeField(id: string, field: TextField, value: string): void;

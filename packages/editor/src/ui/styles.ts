@@ -616,6 +616,46 @@ export const EDITOR_CSS = /* css */ `
 .fmo-tl-menu-item[aria-disabled="true"] { color: var(--fmo-ink-muted); opacity: 0.5; cursor: default; }
 .fmo-tl-menu-item[data-danger="true"] { color: var(--fmo-error); }
 .fmo-tl-check { display: inline-flex; width: 20px; justify-content: center; }
+.fmo-tl-toolbar-start { display: inline-flex; align-items: center; gap: 4px; }
+/* The paste view (5.2): a sub-view of the Players panel; the actions are stuck to the bottom. */
+.fmo-pv { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; position: relative; }
+.fmo-pv[data-dragging="true"] { outline: 2px dashed var(--fmo-focus); outline-offset: -2px; }
+.fmo-pv-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 12px; padding-bottom: 12px; }
+.fmo-pv-back { align-self: flex-start; min-height: 44px; gap: 4px; padding-inline-start: 0; }
+.fmo-pv-title { margin: 0; }
+.fmo-pv-body, .fmo-pv-hint { margin: 0; }
+.fmo-pv-box { width: 100%; box-sizing: border-box; height: auto; min-height: 150px; padding: 12px; resize: vertical; line-height: 24px; }
+.fmo-editor[data-layout="wide"] .fmo-pv-box { min-height: 200px; }
+.fmo-pv-box::placeholder { color: var(--fmo-ink-muted); opacity: 1; }
+.fmo-pv-tools { display: flex; flex-wrap: wrap; gap: 8px; }
+.fmo-pv-file { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.fmo-pv-file-problem, .fmo-pv-over { margin: 0; display: flex; gap: 8px; align-items: flex-start; font: var(--fmo-type-small); }
+.fmo-pv-file-problem { color: var(--fmo-error); }
+.fmo-pv-file-problem svg, .fmo-pv-over svg { flex: none; }
+.fmo-pv-drop { margin: 0; text-align: center; font: var(--fmo-type-label); color: var(--fmo-ink-muted); }
+.fmo-pv-folded { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px; font: var(--fmo-type-body); }
+.fmo-pv-result { display: flex; flex-direction: column; gap: 8px; }
+.fmo-pv-result h3 { margin: 0; }
+.fmo-pv-rows { list-style: none; margin: 0; padding: 0; }
+.fmo-pv-row { padding: 4px 0; border-bottom: 1px solid var(--fmo-border); }
+.fmo-pv-fields { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 12px; align-items: center; min-height: 40px; font: var(--fmo-type-body); }
+.fmo-pv-fields[data-wide="true"] { grid-template-columns: 28px minmax(0, 1fr) 56px 64px; min-height: 36px; gap: 8px; }
+.fmo-pv-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fmo-pv-number, .fmo-pv-size { text-align: center; min-width: 40px; font-variant-numeric: tabular-nums; }
+.fmo-pv-msg { padding: 0 0 4px; }
+.fmo-pv-fields[data-wide="true"] ~ .fmo-pv-msg { padding-inline-start: 36px; }
+.fmo-pv-notrow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-height: 40px; }
+.fmo-pv-quote { flex: 1 1 auto; min-width: 0; font: var(--fmo-type-body); }
+.fmo-pv-reason { font: var(--fmo-type-small); }
+.fmo-pv-actions { flex: none; display: flex; flex-direction: column; gap: 8px; padding: 12px 0 8px; border-top: 1px solid var(--fmo-border); background: var(--fmo-surface); }
+.fmo-pv-modes { display: flex; flex-direction: column; }
+.fmo-pv-mode { display: flex; align-items: center; gap: 12px; min-height: 44px; font: var(--fmo-type-body); cursor: pointer; }
+.fmo-pv-mode input { width: 20px; height: 20px; margin: 0; accent-color: var(--fmo-ink); }
+.fmo-pv-buttons { display: flex; align-items: center; gap: 8px; }
+.fmo-pv-accept { flex: 1 1 auto; min-height: 48px; }
+.fmo-pv-accept[aria-disabled="true"] { opacity: 0.5; cursor: default; }
+.fmo-panel-body:has(.fmo-pv) { overflow: hidden; display: flex; flex-direction: column; padding-bottom: 0; }
+.fmo-panel-inner:has(.fmo-pv) { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; width: 100%; }
 .fmo-tl-stepper { display: flex; flex-direction: column; gap: 8px; padding: 8px; }
 .fmo-tl-stepper .fmo-row { justify-content: center; gap: 8px; }
 .fmo-editor[data-layout="compact"] .fmo-panel[data-typing="true"] .fmo-tl-bar { min-height: 40px; }

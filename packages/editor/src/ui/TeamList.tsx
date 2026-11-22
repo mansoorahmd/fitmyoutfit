@@ -4,7 +4,7 @@
  * without leaving the keyboard. The lines are the editor's own state (kept in its one undo history by the shell);
  * the checks are the rules package's, worded from the codes (`team-list-words.ts`).
  *
- * Not here (the second part): pasting a list, the CSV file, the player chip, the Done panel's team section.
+ * Pasting a list is `PasteView`; the player chip is on the stage; the Done panel has its own team section.
  */
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 import { readSize } from "@fitmyoutfit/team-rules";
@@ -326,6 +326,20 @@ export function TeamListView({ initialDetailsOpen }: { initialDetailsOpen?: bool
     if (!next || next.closest<HTMLElement>("li[data-id]")?.dataset.id !== id) t.leaveLine(id);
   };
 
+  // Pasting text that holds a line break or a tab into a field opens the paste view with it (5.1); a single line pastes as usual.
+  const onPasteInto = (event: React.ClipboardEvent<HTMLElement>) => {
+    const target = event.target as HTMLElement;
+    if (!(target instanceof HTMLInputElement) || !target.dataset.field) return;
+    const pasted = event.clipboardData.getData("text");
+    if (!/[\r\n\t\u2028\u2029]/u.test(pasted.replace(/[\r\n]+$/u, ""))) return;
+    event.preventDefault();
+    if (atLimit) {
+      api.announce(fill(w.limitReached, { max: t.limits.maxLines }));
+      return;
+    }
+    t.openPaste(pasted);
+  };
+
   const onClick = (event: React.MouseEvent<HTMLElement>) => {
     const target = event.target as HTMLElement;
     const opener = target.closest<HTMLElement>("[data-open-menu]");
@@ -403,6 +417,11 @@ export function TeamListView({ initialDetailsOpen }: { initialDetailsOpen?: bool
       <EditorIcon name="chevronDown" size={16} />
     </button>
   );
+  const pasteButton = (
+    <button type="button" className="fmo-btn fmo-btn-text" aria-disabled={atLimit} onClick={() => (atLimit ? api.announce(fill(w.limitReached, { max: t.limits.maxLines })) : t.openPaste())} data-testid="tl-paste">
+      {w.paste.button}
+    </button>
+  );
   const styleButton = (
     <button type="button" className="fmo-btn fmo-btn-text fmo-tl-style" onClick={() => t.setView("style")} data-testid="tl-style">
       {w.style} ›
@@ -456,7 +475,10 @@ export function TeamListView({ initialDetailsOpen }: { initialDetailsOpen?: bool
       )}
       {!empty && !typingShort && !collapsed && !inBar && (
         <div className="fmo-tl-toolbar">
-          {sortButton}
+          <span className="fmo-tl-toolbar-start">
+            {pasteButton}
+            {sortButton}
+          </span>
           {styleButton}
         </div>
       )}
@@ -492,6 +514,7 @@ export function TeamListView({ initialDetailsOpen }: { initialDetailsOpen?: bool
           )}
           {inBar && !typingShort && (
             <>
+              {pasteButton}
               {sortButton}
               {styleButton}
             </>
@@ -520,6 +543,9 @@ export function TeamListView({ initialDetailsOpen }: { initialDetailsOpen?: bool
               <EditorIcon name="plus" size={20} />
               {w.empty.add}
             </button>
+            <button type="button" className="fmo-btn fmo-btn-block" onClick={() => t.openPaste()} data-testid="tl-empty-paste">
+              {w.paste.button}
+            </button>
             <button type="button" className="fmo-btn fmo-btn-text" onClick={() => t.setView("style")} data-testid="tl-style-empty">
               {w.styleLong} ›
             </button>
@@ -528,7 +554,7 @@ export function TeamListView({ initialDetailsOpen }: { initialDetailsOpen?: bool
           <BySizeList onNames={() => setNamesForBags(true)} />
         ) : (
           <>
-            <ol className="fmo-tl-list" aria-label={fill(w.listName, { n: summary.players })} onKeyDown={onKeyDown} onInput={onChange} onChange={onChange} onFocus={onFocus} onBlur={onBlur} onClick={onClick} data-testid="tl-list">
+            <ol className="fmo-tl-list" aria-label={fill(w.listName, { n: summary.players })} onKeyDown={onKeyDown} onInput={onChange} onChange={onChange} onFocus={onFocus} onBlur={onBlur} onClick={onClick} onPaste={onPasteInto} data-testid="tl-list">
               {shownLines.map((line) => {
                 const index = lines.indexOf(line);
                 return (
