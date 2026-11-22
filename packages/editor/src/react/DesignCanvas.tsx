@@ -45,7 +45,7 @@ import { AssetImageCache, type AssetUrlResolver } from "./asset-images.js";
 import { NO_INSETS, frameInFreeArea, type Framing, type ViewInsets } from "./camera.js";
 import { CameraRig } from "./camera-rig.js";
 import { makeFabric, DEFAULT_FABRIC_SHADING, type Fabric } from "./fabric.js";
-import { WEAVE_TILE_MM } from "./fabric-weave.js";
+import { WEAVE_TILE_MM, knitAmount, tileCssPixels } from "./fabric-weave.js";
 import { loadModel, type LoadedModel, type ModelLoadProgress } from "./model-loader.js";
 import { STUDIO_BACKGROUND, STUDIO_LIGHTS, studioLightPosition } from "./studio.js";
 
@@ -611,6 +611,11 @@ function ModelView({
     });
   });
   useFrame(() => rig.frame());
+  // The knit shows by the zoom in CSS pixels, one amount for the whole garment (fabric-weave.ts).
+  useFrame(() => {
+    const amount = knitAmount(tileCssPixels(rig.distance(), FOV, viewSize.height));
+    for (const fabric of prepared.fabrics) fabric.setKnit(amount);
+  });
   // Frame times while a gesture runs (the draft policy watches them).
   useFrame(() => draft.frame(performance.now()));
 
