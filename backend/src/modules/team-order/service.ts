@@ -5,7 +5,8 @@ import { RosterEntry } from "./models/roster-entry"
 import { TeamOrder } from "./models/team-order"
 import { TeamOrderEmail } from "./models/team-order-email"
 import { TeamOrderStep } from "./models/team-order-step"
-import { buildStepRecord, balanceNoteRecord, type StepRecord } from "../../lib/rules/team-order-steps"
+import { buildStepRecord, BALANCE_BY_HAND, type StepRecord } from "../../lib/rules/team-order-steps"
+import { BALANCE_PAID } from "../../lib/rules/team-order-payments"
 import { protectStatementValues } from "../../lib/rules/statement-privacy"
 import { isKind, whyNoAddOn } from "../../lib/rules/team-order-links"
 import { isStatus, type Actor, type TeamOrderStatus } from "../../lib/rules/team-order-status"
@@ -18,14 +19,6 @@ export class RosterVersionStale extends Error {
   constructor(readonly teamOrderId: string, readonly expectedVersion: number) {
     super(`The team list of ${teamOrderId} is no longer at version ${expectedVersion}, or is no longer a draft.`)
     this.name = "RosterVersionStale"
-  }
-}
-
-/** Thrown by `noteBalance` when the balance was already marked as received. */
-export class BalanceAlreadyNoted extends Error {
-  constructor(readonly teamOrderId: string) {
-    super(`The balance of ${teamOrderId} was already marked as received.`)
-    this.name = "BalanceAlreadyNoted"
   }
 }
 
@@ -376,7 +369,7 @@ class TeamOrderModuleService extends MedusaService({ TeamOrder, RosterEntry, Pro
 
   /**
    * A step of the admin: `from -> to` only if the order is still in `from` (one conditional
-   * statement), recorded in the same transaction. `byHand` marks the deposit as received by hand.
+   * statement), recorded in the same transaction.
    * Throws `TeamOrderChanged` when the order is no longer in `from`.
    */
   @InjectTransactionManager()
@@ -396,33 +389,97 @@ class TeamOrderModuleService extends MedusaService({ TeamOrder, RosterEntry, Pro
   }
 
   /**
-   * The admin marks the balance as received by hand: a record on an order that is `balance_due`,
-   * once. The status does not change. Throws `TeamOrderChanged` when the order is not `balance_due`
-   * and `BalanceAlreadyNoted` when it was marked already (the order's row is locked meanwhile, so two
-   * presses make one record).
+   * A status step that a payment causes (decision 016): `from -> to` only if the order is still in
+   * `from` (one conditional statement), recorded in the same transaction with who made it: the
+   * system (the organizer's payment, a gateway) or an admin by hand. Throws `TeamOrderChanged` when
+   * the order is no longer in `from` (another request made the step first).
    */
   @InjectTransactionManager()
-  async noteBalance(
-    input: { teamOrderId: string; adminId: string },
+  async paymentStep(
+    input: { teamOrderId: string; from: TeamOrderStatus; to: TeamOrderStatus; by: StepBy; byHand: boolean },
     @MedusaContext() sharedContext: Context = {}
   ): Promise<void> {
+    const record = this.stepRecordFor(input.from, input.to, input.by, input.byHand)
+    const moved = await connectionOf(sharedContext).execute(
+      "update team_order set status = ?, updated_at = now() where id = ? and status = ? and deleted_at is null returning id",
+      [input.to, input.teamOrderId, input.from]
+    )
+    if (moved.length === 0) {
+      throw new TeamOrderChanged(input.teamOrderId, `it moved to ${input.to}`)
+    }
+    await this.recordStep(input.teamOrderId, record, sharedContext)
+  }
+
+  /**
+   * Records once that the balance was received (no status change): by the system
+   * (`balance_paid`) or by an admin by hand (`balance_received_by_hand`), on an order that is
+   * `balance_due`. The order's row is locked and the records counted under the lock, so two calls
+   * at once make one record. Returns false when the order is not `balance_due` or a balance record
+   * exists already.
+   */
+  @InjectTransactionManager()
+  async recordBalanceReceived(
+    input: { teamOrderId: string; record: StepRecord },
+    @MedusaContext() sharedContext: Context = {}
+  ): Promise<boolean> {
     const connection = connectionOf(sharedContext)
     const locked = await connection.execute(
       "select id from team_order where id = ? and status = 'balance_due' and deleted_at is null for update",
       [input.teamOrderId]
     )
-    if (locked.length === 0) {
-      throw new TeamOrderChanged(input.teamOrderId, "the balance was marked")
-    }
-    const record = balanceNoteRecord(input.adminId)
+    if (locked.length === 0) return false
     const existing = await connection.execute(
-      "select id from team_order_step where team_order_id = ? and step_name = ? and deleted_at is null limit 1",
-      [input.teamOrderId, record.stepName]
+      "select id from team_order_step where team_order_id = ? and step_name in (?, ?) and deleted_at is null limit 1",
+      [input.teamOrderId, BALANCE_BY_HAND, BALANCE_PAID]
     )
-    if (existing.length > 0) {
-      throw new BalanceAlreadyNoted(input.teamOrderId)
-    }
-    await this.recordStep(input.teamOrderId, record, sharedContext)
+    if (existing.length > 0) return false
+    await this.recordStep(input.teamOrderId, input.record, sharedContext)
+    return true
+  }
+
+  /**
+   * Keeps the Medusa order priced for a proof, once: true when it was stored, false when the proof
+   * already names an order (another request priced it first) or is gone.
+   */
+  @InjectTransactionManager()
+  async setProofOrder(
+    input: { proofId: string; orderId: string },
+    @MedusaContext() sharedContext: Context = {}
+  ): Promise<boolean> {
+    const set = await connectionOf(sharedContext).execute(
+      "update proof_approval set order_id = ?, updated_at = now() where id = ? and order_id is null and deleted_at is null returning id",
+      [input.orderId, input.proofId]
+    )
+    return set.length > 0
+  }
+
+  /**
+   * Forgets the draft order priced for a proof that is still out (its rush choice changed, so it is
+   * priced again), only while it names `orderId` and has no payment collections. True when cleared.
+   */
+  @InjectTransactionManager()
+  async clearProofOrder(
+    input: { proofId: string; orderId: string },
+    @MedusaContext() sharedContext: Context = {}
+  ): Promise<boolean> {
+    const cleared = await connectionOf(sharedContext).execute(
+      "update proof_approval set order_id = null, updated_at = now() where id = ? and order_id = ? and deposit_collection_id is null and deleted_at is null returning id",
+      [input.proofId, input.orderId]
+    )
+    return cleared.length > 0
+  }
+
+  /** Keeps the two payment collections of a signed proof and the share they were split with, once. */
+  @InjectTransactionManager()
+  async setProofCollections(
+    input: { proofId: string; depositCollectionId: string; balanceCollectionId: string; depositPercentage: number },
+    @MedusaContext() sharedContext: Context = {}
+  ): Promise<boolean> {
+    const set = await connectionOf(sharedContext).execute(
+      "update proof_approval set deposit_collection_id = ?, balance_collection_id = ?, deposit_percentage = ?, updated_at = now() where id = ? and deposit_collection_id is null and deleted_at is null returning id",
+      [input.depositCollectionId, input.balanceCollectionId, input.depositPercentage, input.proofId]
+    )
+    return set.length > 0
   }
 
   /**

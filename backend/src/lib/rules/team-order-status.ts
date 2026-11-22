@@ -9,8 +9,9 @@
  *
  * The organizer's steps have store routes (M2-2). The admin's steps have admin routes (M2-3,
  * lib/rules/team-order-steps.ts lists the buttons); the store routes refuse them (they ask
- * `mayStep("organizer", ...)`). The payment system's step is made by hand by an admin until the
- * payments milestone (M3) makes it.
+ * `mayStep("organizer", ...)`). The payment system's step (`approved -> deposit_paid`) is made
+ * when the deposit is captured (decision 016, lib/rules/team-order-payments.ts), or by hand by an
+ * admin, whose by-hand button now captures the placeholder payment.
  */
 
 export const TEAM_ORDER_STATUSES = [
@@ -37,9 +38,9 @@ export type Step = {
   name: "make_proof" | "withdraw_proof" | "sign_proof" | "reopen" | "pay_deposit" | "start_production" | "ask_balance" | "ship"
   by: readonly Actor[]
   /**
-   * Who may make the step by hand while payments do not exist (the admin marks a payment as received
-   * on the admin pages, and the record says so). Only the deposit step has one; when the payments
-   * milestone arrives the system makes that step and this can be removed.
+   * Who may make the step by hand (an admin confirms that the money arrived outside the store; the
+   * button captures the placeholder payment in their name, and the record says "by hand"). Only the
+   * deposit step has one; it stays until real gateways replace the placeholder payment.
    */
   byHand?: readonly Actor[]
 }
@@ -53,7 +54,7 @@ export const STEPS: readonly Step[] = [
   { from: "approved", to: "deposit_paid", name: "pay_deposit", by: ["system"], byHand: ["admin"] },
   { from: "deposit_paid", to: "in_production", name: "start_production", by: ["admin"] },
   { from: "in_production", to: "balance_due", name: "ask_balance", by: ["admin"] },
-  // The balance must be paid first; the payments milestone adds that check where the step is made.
+  // The balance must be paid first: lib/rules/team-order-payments.ts (`mayShip`) gates it where the step is made.
   { from: "balance_due", to: "shipped", name: "ship", by: ["admin"] },
 ]
 

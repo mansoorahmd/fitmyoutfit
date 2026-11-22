@@ -7,17 +7,23 @@
  *
  * An admin may see the address a proof was signed from (it is personal data: never logged, and
  * never in a store route's answer).
+ *
+ * The money (decision 016): the order page carries `money` (what the order costs, the deposit and
+ * the balance, what is paid and outstanding, in the region's currency; workflows/team-order/
+ * payments.ts). The by-hand buttons capture the placeholder payment of their part in the admin's
+ * name; "Mark as shipped" needs the balance paid (`balance_not_paid` otherwise).
  */
 import type { MedusaContainer } from "@medusajs/framework/types"
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils"
 import { badRequest, conflict, notAllowed, notFound } from "../../lib/http/refusal"
-import { actionFor, adminActions, actorLabel, BALANCE_BY_HAND, isAdminActionId } from "../../lib/rules/team-order-steps"
+import { actionFor, adminActions, actorLabel, isAdminActionId } from "../../lib/rules/team-order-steps"
 import { proofWithSnapshot, type StoredProof } from "../../lib/rules/team-order-proof"
 import { isStatus, TEAM_ORDER_STATUSES, type TeamOrderStatus } from "../../lib/rules/team-order-status"
 import { DESIGN_MODULE } from "../../modules/design/constants"
 import type DesignModuleService from "../../modules/design/service"
-import { BalanceAlreadyNoted, TeamOrderChanged } from "../../modules/team-order/service"
+import { TeamOrderChanged } from "../../modules/team-order/service"
 import { sendBalanceDue } from "./emails"
+import { moneyFactsForAdmin, payPartByHand, readMoneyForAdmin, shipWithMoney } from "./payments"
 import {
   describeTeamOrder,
   listOrderSummaries,
@@ -135,11 +141,15 @@ type StepRow = {
 /** Everything staff look at for one team order. 404 for an unknown id. */
 export async function readForAdmin(container: MedusaContainer, id: string, now: Date = new Date()) {
   const teams = service(container)
-  const [order] = (await teams.listTeamOrders({ id })) as TeamOrderRow[]
-  if (!order) {
+  const [first] = (await teams.listTeamOrders({ id })) as TeamOrderRow[]
+  if (!first) {
     throw notFound("team_order_not_found", `Team order ${id} was not found.`)
   }
-  const [described, proofs, steps, emails, regions] = await Promise.all([
+  // The money first: it prices the order and makes the step a payment caused (decision 016), so the
+  // status and the buttons below are as of after it.
+  const money = await readMoneyForAdmin(container, first)
+  const [order = first] = (await teams.listTeamOrders({ id })) as TeamOrderRow[]
+  const [described, proofs, steps, emails, regions, facts] = await Promise.all([
     describeTeamOrder(container, order, now),
     loadProofs(container, order.id),
     teams.listTeamOrderSteps({ team_order_id: order.id }, { order: { created_at: "ASC", id: "ASC" } }) as Promise<StepRow[]>,
@@ -147,6 +157,7 @@ export async function readForAdmin(container: MedusaContainer, id: string, now: 
       { kind: string; status: string; attempts: number; sent_at: Date | string | null; created_at: Date | string }[]
     >,
     regionsOf(container, [order.region_id]),
+    moneyFactsForAdmin(container, order),
   ])
   const customerIds = [order.customer_id, ...proofs.map((p) => (p as unknown as { signed_by_customer_id?: string | null }).signed_by_customer_id ?? "")]
   const customers = await peopleOf(container, "customer", [
@@ -166,7 +177,6 @@ export async function readForAdmin(container: MedusaContainer, id: string, now: 
   }[]
   const [design] = (await designs.listDesigns({ id: order.design_id }, { select: ["id", "name"] })) as { id: string; name: string }[]
 
-  const balanceNoted = steps.some((s) => s.step_name === BALANCE_BY_HAND)
   const status = isStatus(order.status) ? order.status : "draft"
   const personFor = (step: StepRow): Person | null => {
     if (!step.actor_id) return null
@@ -203,7 +213,8 @@ export async function readForAdmin(container: MedusaContainer, id: string, now: 
       created_at: s.created_at,
     })),
     emails: emails.map((e) => ({ kind: e.kind, status: e.status, attempts: e.attempts, sent_at: e.sent_at, created_at: e.created_at })),
-    actions: adminActions(status, balanceNoted).map((a) => ({ id: a.id, to: a.to, label: a.label, confirm: a.confirm, by_hand: a.byHand })),
+    money,
+    actions: adminActions(status, facts).map((a) => ({ id: a.id, to: a.to, label: a.label, confirm: a.confirm, by_hand: a.byHand })),
   }
 }
 
@@ -230,9 +241,12 @@ export async function stepForAdmin(
     throw badRequest("action_invalid", "`action` must be one of the steps staff may make: deposit_by_hand, start_production, ask_balance, balance_by_hand, ship.")
   }
   const status = isStatus(order.status) ? order.status : "draft"
-  const noted =
-    ((await teams.listTeamOrderSteps({ team_order_id: order.id, step_name: BALANCE_BY_HAND }, { select: ["id"] })) as { id: string }[]).length > 0
-  const action = actionFor(body.action, status, noted)
+  const facts = await moneyFactsForAdmin(container, order)
+  if (body.action === "ship" && status === "balance_due" && !facts.balancePaid) {
+    // The balance must be paid before shipping (decision 016); the button is not offered either.
+    throw notAllowed("balance_not_paid", "The balance is not paid: the order cannot be shipped yet.", { status: order.status, action: body.action })
+  }
+  const action = actionFor(body.action, status, facts)
   if (!action) {
     throw notAllowed("step_not_allowed", `The step "${body.action}" is not allowed for an order that is ${order.status}.`, {
       status: order.status,
@@ -240,15 +254,17 @@ export async function stepForAdmin(
     })
   }
   try {
-    if (action.id === "balance_by_hand") {
-      await teams.noteBalance({ teamOrderId: order.id, adminId })
+    if (action.id === "deposit_by_hand") {
+      // Captures the deposit's placeholder payment in the admin's name; the step follows from it.
+      await payPartByHand(container, adminId, order, "deposit")
+    } else if (action.id === "balance_by_hand") {
+      await payPartByHand(container, adminId, order, "balance")
+    } else if (action.id === "ship") {
+      await shipWithMoney(container, order, () => teams.adminStep({ teamOrderId: order.id, from: status, to: action.to, adminId, byHand: false }))
     } else {
       await teams.adminStep({ teamOrderId: order.id, from: status, to: action.to, adminId, byHand: action.byHand })
     }
   } catch (error) {
-    if (error instanceof BalanceAlreadyNoted) {
-      throw notAllowed("step_not_allowed", "The balance was already marked as received.", { status: order.status, action: action.id })
-    }
     if (error instanceof TeamOrderChanged) {
       const [current] = (await teams.listTeamOrders({ id })) as TeamOrderRow[]
       throw conflict("team_order_changed", "The order changed at the same moment. Read it again.", { status: current?.status ?? null })

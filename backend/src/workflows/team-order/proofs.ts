@@ -29,6 +29,7 @@ import { readNeedByDate, buildRosterView, entriesToLines } from "../../lib/rules
 import { TeamOrderChanged, TeamOrderHasAddOns } from "../../modules/team-order/service"
 import { loadOwnVersionById } from "../design/designs"
 import { sendDepositDue, sendProofReady } from "./emails"
+import { placeAfterSigningQuietly, priceBeforeSigning, priceProofQuietly, reopenWithMoney } from "./payments"
 import {
   describeTeamOrder,
   kindOf,
@@ -134,6 +135,9 @@ export async function makeProof(container: MedusaContainer, customerId: string, 
     }
     throw error
   }
+  // The proof's price: a Medusa draft order made from its snapshot (decision 016). A failure is
+  // logged and never fails the proof; reading the cost or signing prices it again.
+  await priceProofQuietly(container, order.id)
   const after = await loadOwnTeamOrder(container, customerId, id)
   // "The proof is ready" to the organizer; a failed send is recorded and never fails this request.
   await sendProofReady(container, after, made, now)
@@ -208,6 +212,9 @@ export async function signProof(
   }
   const rush = order.rush_requested === true
   const promised = promisedDelivery(deliveryPromise(schedule.today, settings.deliveryDays, rush ? "rush" : "standard"))
+  // The organizer signs a priced order: the proof's draft order must exist (decision 016). A price
+  // or setting that is missing is a server error naming it, and nothing is signed.
+  await priceBeforeSigning(container, order.id)
 
   try {
     await service(container).signProof({
@@ -236,8 +243,12 @@ export async function signProof(
     }
     throw conflict("proof_not_current", `Proof ${proof.proof_number} can no longer be signed.`, { status: again.status })
   }
+  // The order is placed and its deposit and balance are made (a failure is logged; the next read
+  // of the cost does it).
+  await placeAfterSigningQuietly(container, order.id)
   const after = await loadOwnTeamOrder(container, customerId, id)
-  // "Payment due: the deposit", once for this proof; a failed send never fails the signature.
+  // "Payment due: the deposit", once for this proof, with the payment link; a failed send never
+  // fails the signature.
   await sendDepositDue(container, after, proof.id, now)
   return describeTeamOrder(container, after, now)
 }
@@ -252,7 +263,9 @@ const hasAddOns = (status: string, addOns: number) =>
 /**
  * Back to draft, to change something: from `proof_sent` (the proof becomes withdrawn) or from
  * `approved` (the signed proof becomes replaced; nothing is paid yet). A new proof must be made
- * and signed afterwards. Refused after the deposit.
+ * and signed afterwards. Refused after the deposit, and while a payment of the deposit is made or
+ * under way (`payment_in_progress`, decision 016). A deposit payment that was only started is
+ * dropped: the proof's Medusa order is cancelled (a draft one deleted), so completing it is refused.
  */
 export async function reopenTeamOrder(container: MedusaContainer, customerId: string, id: string, now: Date = new Date()) {
   const order = await loadOwnTeamOrder(container, customerId, id)
@@ -276,7 +289,11 @@ export async function reopenTeamOrder(container: MedusaContainer, customerId: st
     }
   }
   try {
-    await service(container).backToDraft({ teamOrderId: order.id, from: status, by: { actor: "organizer", actorId: customerId } })
+    // Under the team order's money lock: from `approved`, refused while money of the deposit is
+    // held or on its way (`payment_in_progress`); the proof's Medusa order is let go after the step.
+    await reopenWithMoney(container, order.id, () =>
+      service(container).backToDraft({ teamOrderId: order.id, from: status, by: { actor: "organizer", actorId: customerId } })
+    )
   } catch (error) {
     if (error instanceof TeamOrderHasAddOns) {
       throw hasAddOns(order.status, error.addOns)
@@ -285,6 +302,15 @@ export async function reopenTeamOrder(container: MedusaContainer, customerId: st
       const current = await loadOwnTeamOrder(container, customerId, id)
       if (current.status === "draft") {
         throw notAllowed("team_order_already_draft", "The team order is a draft already.", { status: current.status })
+      }
+      const now = statusOf(current)
+      if (now !== "proof_sent" && now !== "approved") {
+        // The deposit was paid at the same moment (decision 016): the order can no longer go back.
+        throw notAllowed(
+          "team_order_not_reopenable",
+          "After the deposit is paid the team order can no longer go back to draft by the organizer.",
+          { status: current.status }
+        )
       }
       throw conflict("team_order_changed", "The team order was changed at the same moment. Read it again.", { status: current.status })
     }
@@ -346,6 +372,10 @@ export async function setSchedule(
       )
     }
     throw error
+  }
+  if (hasRush && order.status === "proof_sent") {
+    // The rush choice changes the price of the proof that is out: it is priced again (decision 016).
+    await priceProofQuietly(container, order.id)
   }
   return describeTeamOrder(container, await loadOwnTeamOrder(container, customerId, id), now)
 }

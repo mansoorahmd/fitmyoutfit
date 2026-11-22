@@ -82,7 +82,8 @@ describe("the balance note", () => {
 })
 
 describe("adminActions: only the steps the rules allow are offered", () => {
-  const ids = (status: (typeof TEAM_ORDER_STATUSES)[number], noted = false) => adminActions(status, noted).map((a) => a.id)
+  const ids = (status: (typeof TEAM_ORDER_STATUSES)[number], money: { depositPaid?: boolean; balancePaid?: boolean } = {}) =>
+    adminActions(status, money).map((a) => a.id)
 
   it("offers nothing before the proof is signed, and nothing after shipping", () => {
     expect(ids("draft")).toEqual([])
@@ -94,11 +95,18 @@ describe("adminActions: only the steps the rules allow are offered", () => {
     expect(ids("approved")).toEqual(["deposit_by_hand"])
     expect(ids("deposit_paid")).toEqual(["start_production"])
     expect(ids("in_production")).toEqual(["ask_balance"])
-    expect(ids("balance_due")).toEqual(["balance_by_hand", "ship"])
+    expect(ids("balance_due")).toEqual(["balance_by_hand"])
   })
 
-  it("the balance note is offered once", () => {
-    expect(ids("balance_due", true)).toEqual(["ship"])
+  it("shipping is offered only once the balance is paid, and the by-hand balance only while it is not", () => {
+    expect(ids("balance_due", { balancePaid: false })).toEqual(["balance_by_hand"])
+    expect(ids("balance_due", { balancePaid: true })).toEqual(["ship"])
+    expect(actionFor("ship", "balance_due")).toBeUndefined()
+    expect(actionFor("ship", "balance_due", { balancePaid: true })?.to).toBe("shipped")
+  })
+
+  it("the deposit by hand is not offered once the deposit is paid (the system step follows)", () => {
+    expect(ids("approved", { depositPaid: true })).toEqual([])
   })
 
   it("the by-hand buttons say so in their labels", () => {
@@ -112,12 +120,12 @@ describe("adminActions: only the steps the rules allow are offered", () => {
       to: "balance_due",
       byHand: true,
     })
-    expect(actionFor("ship", "balance_due")?.byHand).toBe(false)
+    expect(actionFor("ship", "balance_due", { balancePaid: true })?.byHand).toBe(false)
   })
 
   it("every button asks for a confirmation, and every offered step is one the flow allows the admin", () => {
     for (const status of TEAM_ORDER_STATUSES) {
-      for (const action of adminActions(status)) {
+      for (const action of [...adminActions(status), ...adminActions(status, { balancePaid: true })]) {
         expect(action.confirm.length).toBeGreaterThan(10)
         if (action.id === "balance_by_hand") {
           expect(action.to).toBe(status)
@@ -134,7 +142,7 @@ describe("adminActions: only the steps the rules allow are offered", () => {
   it("a step that is not offered for the status gives no action", () => {
     expect(actionFor("ship", "in_production")).toBeUndefined()
     expect(actionFor("start_production", "approved")).toBeUndefined()
-    expect(actionFor("balance_by_hand", "balance_due", true)).toBeUndefined()
+    expect(actionFor("balance_by_hand", "balance_due", { balancePaid: true })).toBeUndefined()
   })
 })
 

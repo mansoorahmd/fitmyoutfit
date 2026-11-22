@@ -241,7 +241,7 @@ medusaIntegrationTestRunner({
           expect(await actionIds()).toEqual(["deposit_by_hand"])
           const labels = (await adminGet(`/admin/team-orders/${id}`)).data.actions
           expect(labels[0]).toMatchObject({ label: "Mark the deposit as received by hand", to: "deposit_paid", by_hand: true })
-          expect(labels[0].confirm).toEqual(expect.stringContaining("Payments are not built yet"))
+          expect(labels[0].confirm).toEqual(expect.stringContaining("records a payment of the deposit's amount in your name"))
 
           const deposit = await adminStep(id, { action: "deposit_by_hand" })
           expect(deposit.status).toBe(200)
@@ -254,11 +254,13 @@ medusaIntegrationTestRunner({
           expect((await adminStep(id, { action: "start_production" })).data.team_order.status).toBe("in_production")
           expect(await actionIds()).toEqual(["ask_balance"])
           expect((await adminStep(id, { action: "ask_balance" })).data.team_order.status).toBe("balance_due")
-          expect(await actionIds()).toEqual(["balance_by_hand", "ship"])
+          // shipping is not offered until the balance is paid (M3-3, decision 016)
+          expect(await actionIds()).toEqual(["balance_by_hand"])
+          expect((await adminStep(id, { action: "ship" })).data.code).toBe("balance_not_paid")
 
           const note = await adminStep(id, { action: "balance_by_hand" })
           expect(note.status).toBe(200)
-          expect(note.data.team_order.status).toBe("balance_due") // a note: no status change
+          expect(note.data.team_order.status).toBe("balance_due") // the balance is paid by hand: no status change
           expect(await actionIds()).toEqual(["ship"])
 
           const shipped = await adminStep(id, { action: "ship" })

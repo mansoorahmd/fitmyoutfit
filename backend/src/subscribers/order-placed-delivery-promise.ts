@@ -17,7 +17,7 @@
  * hideStaffOnlyOrderKeys).
  */
 import type { SubscriberArgs, SubscriberConfig } from "@medusajs/framework"
-import { ContainerRegistrationKeys, OrderWorkflowEvents } from "@medusajs/framework/utils"
+import { ContainerRegistrationKeys, MedusaError, OrderWorkflowEvents } from "@medusajs/framework/utils"
 import { keepOrderDeliveryPromise } from "../workflows/delivery-promise/keep-order-delivery-promise"
 import { removeStaffOnlyOrderKeys } from "../workflows/order-metadata/write-order-metadata"
 
@@ -35,6 +35,8 @@ export default async function keepDeliveryPromiseOnPlacedOrder({
   try {
     await keepOrderDeliveryPromise(container, data.id, "server_answer_only")
   } catch (error) {
+    // A team order's order keeps no promise of its own (its signed proof holds it): nothing to log.
+    if (MedusaError.isMedusaError(error) && (error as MedusaError).type === MedusaError.Types.NOT_FOUND) return
     container
       .resolve(ContainerRegistrationKeys.LOGGER)
       .error(
