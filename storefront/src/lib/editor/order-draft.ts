@@ -48,6 +48,17 @@ export async function readOrderDraft(kv: KeyValueStore, orderId: string, product
   }
 }
 
+/** The draft's product and whether it has changes the server does not, without checking it against a product (which neck is it for?). */
+export async function readRawOrderDraft(kv: KeyValueStore, orderId: string): Promise<{ productId: string; designDirty: boolean } | null> {
+  try {
+    const raw = (await kv.get("designs", key(orderId))) as Partial<OrderDraft> | undefined
+    if (!raw || raw.version !== 1 || raw.orderId !== orderId || typeof raw.productId !== "string") return null
+    return { productId: raw.productId, designDirty: raw.designDirty === true }
+  } catch {
+    return null
+  }
+}
+
 export async function writeOrderDraft(kv: KeyValueStore, draft: OrderDraft): Promise<void> {
   // The editor's own device records have `started` and `design`: the same shape, so its pruning of
   // logo files sees the design's layers.

@@ -14,6 +14,7 @@ import {
   createMemoryKeyValueStore,
   designAssetIds,
   openIndexedDbStore,
+  readSavedListWithNotes,
   upgradeDesign,
   validateFontCatalog,
   validatePalette,
@@ -24,10 +25,13 @@ import {
   type DesignDocument,
   type DeviceAssetStore,
   type FontCatalog,
+  type GarmentChange,
+  type GarmentChoice,
   type KeyValueStore,
   type Palette,
   type ProductDefinition,
   type SaveState,
+  type SavedListReadNote,
   type SavedTeamList,
   type Template,
   type TeamListHost,
@@ -41,15 +45,19 @@ import * as teamOrderCalls from "@lib/data/team-orders"
 import { guarded } from "@lib/team-order/guarded"
 import { designStartPath, teamOrderPath } from "@lib/editor/designer-context"
 import { editorAssetUrl } from "@lib/editor/asset-path"
-import { deleteOrderDraft, readOrderDraft, writeOrderDraft } from "@lib/editor/order-draft"
-import { productReturnPath } from "@lib/editor/paths"
-import { earlierModelIds, isEarlierModelDesign, type EditorProduct } from "@lib/editor/products"
+import { deleteOrderDraft, readOrderDraft, readRawOrderDraft, writeOrderDraft } from "@lib/editor/order-draft"
+import { designPath, productReturnPath } from "@lib/editor/paths"
+import { garmentIds, garmentMove, openingGarment, readDeviceRecords } from "@lib/editor/garment-choice"
+import { rememberGarmentNotice, takeGarmentNotice } from "@lib/editor/garment-handoff"
+import { designProductId, earlierModelIds, garmentList, isEarlierModelDesign, type EditorGarment, type EditorProduct } from "@lib/editor/products"
+import { readNotesMessage, type ReadNotesMessage } from "@lib/editor/read-notes"
+import { stableFamilies } from "@lib/editor/stable-fonts"
 import { setSavedDesignFlag } from "@lib/editor/saved-design"
 import { lockedListPlan } from "@lib/editor/locked-list"
 import { listLimits, listMinimum } from "@lib/editor/team-list-host"
 import { authHref } from "@lib/util/account-auth"
 import { createListSaver, type ListSaveState, type ListSaver } from "@lib/team-order/list-saver"
-import { editorAcceptsList, savedListFromView } from "@lib/team-order/map"
+import { savedListFromView } from "@lib/team-order/map"
 import { designerReturnPath, leaveLinks } from "@lib/editor/leave-links"
 import { STORE_NAME } from "@lib/store-config"
 import DesignerMenu from "./designer-menu"
@@ -73,7 +81,14 @@ import TeamOrderDialog, { type StartStatus } from "./team-order-dialog"
 const PALETTE_FILE = "palettes/placeholder-palette.json"
 const FONTS_FILE = "fonts/placeholder-fonts.json"
 
-type Data = { product: ProductDefinition; palette: Palette; fonts: FontCatalog; templates: Template[] }
+type Data = {
+  product: ProductDefinition
+  palette: Palette
+  fonts: FontCatalog
+  templates: Template[]
+  /** The chooser's garments with their definitions; empty when the designer offers no garment change here. */
+  garments: GarmentChoice[]
+}
 
 async function fetchJson(relative: string): Promise<unknown> {
   const response = await fetch(editorAssetUrl(relative))
@@ -85,19 +100,33 @@ function problems(errors: { message: string }[]): string {
   return errors.map((e) => e.message).join("; ")
 }
 
+/** The garments the chooser offers, each with its product definition (data the store holds too), or none when nothing is to be chosen. */
+async function loadGarments(entry: EditorProduct, inOrder: boolean): Promise<GarmentChoice[]> {
+  const list = garmentList(entry, { inOrder })
+  if (list.length < 2) return []
+  return Promise.all(
+    list.map(async ({ handle: _handle, picture, ...choice }) => {
+      const checked = validateProductDefinition(await fetchJson(`products/${choice.id}.json`))
+      if (!checked.ok) throw new Error(`${choice.id}: ${problems(checked.errors)}`)
+      return { ...choice, ...(picture ? { picture: editorAssetUrl(picture) } : {}), product: checked.value }
+    }),
+  )
+}
+
 /** The product definition, colours, fonts and templates: data, fetched and validated. The model's address is the storefront's. */
-async function loadData(entry: EditorProduct, fontFamilies: Record<string, string>): Promise<Data> {
-  const base = `templates/${entry.definition}`
-  const [productJson, paletteJson, fontsJson] = await Promise.all([
-    fetchJson(`products/${entry.definition}.json`),
+async function loadData(entry: EditorProduct, garment: EditorGarment, fontFamilies: Record<string, string>, inOrder: boolean): Promise<Data> {
+  const base = `templates/${garment.definition}`
+  const [productJson, paletteJson, fontsJson, garments] = await Promise.all([
+    fetchJson(`products/${garment.definition}.json`),
     fetchJson(PALETTE_FILE),
     fetchJson(FONTS_FILE),
+    loadGarments(entry, inOrder),
   ])
   const checkedProduct = validateProductDefinition(productJson)
   if (!checkedProduct.ok) throw new Error(problems(checkedProduct.errors))
   const product: ProductDefinition = {
     ...checkedProduct.value,
-    model: { ...checkedProduct.value.model, url: editorAssetUrl(`models/${entry.modelFile}`) },
+    model: { ...checkedProduct.value.model, url: editorAssetUrl(`models/${garment.modelFile}`) },
     // the body under the garment, when the product has one: its file is the storefront's too
     ...(checkedProduct.value.body && entry.bodyFile
       ? { body: { ...checkedProduct.value.body, url: editorAssetUrl(`models/${entry.bodyFile}`) } }
@@ -129,7 +158,7 @@ async function loadData(entry: EditorProduct, fontFamilies: Record<string, strin
         }),
       )
     : []
-  return { product, palette: checkedPalette.value, fonts, templates }
+  return { product, palette: checkedPalette.value, fonts, templates, garments }
 }
 
 /** A new design: the product's first template applied (a helpful default), no team name yet, a sample player. */
@@ -179,6 +208,15 @@ async function hasEarlierDeviceDesign(kv: KeyValueStore, handle: string): Promis
   return false
 }
 
+/**
+ * Whether the editor cannot open the order's list at all (it is not a list of this product): then the list is read-only
+ * here, as it was. A list the editor can open in part is opened (it keeps every line it can) and the organizer is told
+ * what was cut or left out (`teamList.onReadNotes`).
+ */
+function listUnusable(list: SavedTeamList, productId: string, limits: Parameters<typeof readSavedListWithNotes>[1]["limits"]): boolean {
+  return readSavedListWithNotes(list, { productId, ...(limits ? { limits } : {}) }).notes.some((n) => n.code === "not-usable")
+}
+
 type Session = {
   key: number
   design: DesignDocument
@@ -190,7 +228,11 @@ type Session = {
   locked: boolean
   /** A design for an earlier model of this garment exists (on this device, or as the order's design): it is not opened here. */
   earlierModel: "none" | "device" | "order"
+  /** What the editor opens saying (after a change of garment): its own sentence about the change. */
+  notice?: string
 }
+/** The device's store, open before anything is chosen: which neck a saved design belongs to is read from it. */
+type Device = { kv: KeyValueStore; designs: DeviceDesignStore; assets: DeviceAssetStore; persistent: boolean }
 type Store = { kv: KeyValueStore; designs: DeviceDesignStore; assets: DeviceAssetStore; persistent: boolean; missing: string[] }
 type Leaving =
   | { kind: "idle" }
@@ -261,6 +303,9 @@ export default function DesignEditor({ product: entry, countryCode, fontFamilies
   const [data, setData] = useState<Data | null>(null)
   const [error, setError] = useState(false)
   const [attempt, setAttempt] = useState(0)
+  const [device, setDevice] = useState<Device | null>(null)
+  /** The garment (the neck) being designed: chosen once the device has been read, changed by the chooser. */
+  const [garment, setGarment] = useState<EditorGarment | null>(null)
   const [store, setStore] = useState<Store | null>(null)
   const [session, setSession] = useState<Session | null>(null)
   const [deviceState, setDeviceState] = useState<SaveState | null>(null)
@@ -283,6 +328,9 @@ export default function DesignEditor({ product: entry, countryCode, fontFamilies
   const [chartSize, setChartSize] = useState<string | undefined>(undefined)
 
   const started = useRef(true)
+  /** The garment chosen in the editor's chooser, until the new editor has opened with it. */
+  const handoff = useRef<GarmentChange | null>(null)
+  const keyCount = useRef(1)
   const autosave = useRef<Autosave | null>(null)
   const tabs = useRef<ReturnType<typeof watchOtherTabs>>(null)
   const saver = useRef<ListSaver<SavedTeamList> | null>(null)
@@ -295,11 +343,51 @@ export default function DesignEditor({ product: entry, countryCode, fontFamilies
   const leaveTarget = useRef<string | null>(null)
   const handle = entry.handle
 
-  // ---- the editor's data ---------------------------------------------------
+  // ---- the device store, and which garment (which neck) the designer opens on ------
   useEffect(() => {
     let alive = true
+    openIndexedDbStore()
+      .then((kv) => ({ kv, persistent: true }))
+      .catch(() => ({ kv: createMemoryKeyValueStore(), persistent: false }))
+      .then(({ kv, persistent }) => {
+        if (!alive) return
+        const designs = new DeviceDesignStore(kv)
+        setDevice({ kv, designs, assets: createDeviceAssetStore(designs), persistent })
+      })
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!device || garment) return
+    let alive = true
+    ;(async () => {
+      let opening: EditorGarment
+      if (orderContext) {
+        // the neck the order's design was saved with; a draft on this device the server has not seen yet is newer
+        const raw = device.persistent ? await readRawOrderDraft(device.kv, orderContext.view.id) : null
+        opening = openingGarment(entry, { order: { design: orderContext.design, draft: raw } })
+      } else {
+        const records = device.persistent ? await readDeviceRecords(device.kv, garmentIds(entry)) : []
+        opening = openingGarment(entry, { device: records })
+      }
+      if (alive) setGarment(opening)
+    })().catch(() => alive && setGarment(entry.garments[0]!))
+    return () => {
+      alive = false
+    }
+  }, [device, garment, entry, orderContext])
+
+  // ---- the editor's data ---------------------------------------------------
+  // The lettering faces under stable names (a saved design opens with its fonts after a new build).
+  const families = useMemo(() => stableFamilies(fontFamilies), [fontFamilies])
+
+  useEffect(() => {
+    if (!garment) return
+    let alive = true
     setError(false)
-    loadData(entry, fontFamilies).then(
+    loadData(entry, garment, families, !!orderContext).then(
       (loaded) => alive && setData(loaded),
       (e: unknown) => {
         console.error("The designer's data could not be loaded:", e)
@@ -309,99 +397,134 @@ export default function DesignEditor({ product: entry, countryCode, fontFamilies
     return () => {
       alive = false
     }
-  }, [entry, fontFamilies, attempt])
+  }, [entry, garment, families, attempt, orderContext])
 
-  // ---- the device store, and what the editor opens with --------------------
+  // ---- what the editor opens with --------------------------------------------
   useEffect(() => {
-    if (!data) return
+    if (!data || !device) return
     let alive = true
-    openIndexedDbStore()
-      .then((kv) => ({ kv, persistent: true }))
-      .catch(() => ({ kv: createMemoryKeyValueStore(), persistent: false }))
-      .then(async ({ kv, persistent }) => {
-        const designs = new DeviceDesignStore(kv)
-        const assets = createDeviceAssetStore(designs)
+    const { kv, persistent, designs, assets } = device
+    ;(async () => {
+      // the other neck was chosen in the editor: its carried design, the list as it stood, the editor's own sentence
+      const change = handoff.current
+      handoff.current = null
 
-        if (orderContext) {
-          // A team order: the server's design and list, or this device's unsent draft of them.
-          const view = orderContext.view
-          // A design made for an earlier model of the garment does not fit this one: the designer opens fresh on the
-          // current model, the list as the server has it, and says so. The earlier design stays with the order's versions.
-          const earlier = isEarlierModelDesign(orderContext.design, entry)
-          const server = earlier ? { ok: true as const, value: newDesign(data) } : upgradeDesign(orderContext.design, { product: data.product })
-          if (!server.ok) {
-            console.error("The order's design could not be read:", server.errors.map((e) => e.message).join("; "))
-            if (alive) setError(true)
-            return
-          }
-          const draft = persistent && !earlier ? await readOrderDraft(kv, view.id, data.product).catch(() => null) : null
-          const draftDesign = draft?.designDirty ? draft.design : null
-          const design = draftDesign ?? server.value
-          const teamList = draft?.listDirty && draft.teamList ? draft.teamList : savedListFromView(view, data.product.id)
-          if (!alive) return
+      if (orderContext) {
+        // A team order: the server's design and list, or this device's unsent draft of them.
+        const view = orderContext.view
+        if (change && orderRef.current) {
+          // Another neck, chosen here: the design is the carried one and counts as changed (the next save point makes a
+          // design version for it), the list is the one the editor handed over, with the new neck's id.
+          const design = change.design
+          const teamList = change.teamList
           const missing = await assets.restore(designAssetIds(design))
-          await designs.pruneAssets().catch(() => undefined)
-          // for an earlier model the base is the earlier design, so the fresh one counts as a change and is saved as a new version
-          orderRef.current = {
-            view,
-            baseJson: earlier ? designJson(orderContext.design as DesignDocument) : designJson(server.value),
-            pending: null,
-            resendList: draft?.listDirty === true && !!draft.teamList,
-          }
+          if (!alive) return
           latest.current = { design, teamList }
           setDesignUnsent(designJson(design) !== orderRef.current.baseJson)
           setStore({ kv, designs, assets, persistent, missing })
-          setSession({
-            key: 1,
-            design,
-            teamList,
-            startCard: false,
-            resume: false,
-            locked: !isDraft(view.status) || !editorAcceptsList(view),
-            earlierModel: earlier ? "order" : "none",
-          })
-          if (draft?.listDirty && draft.teamList) setTouched(true)
+          setSession({ key: ++keyCount.current, design, teamList, startCard: false, resume: false, locked: false, earlierModel: "none", notice: change.notice })
           return
         }
-
-        const saved = persistent ? await designs.loadDesign(data.product).catch(() => null) : null
+        // A design made for an earlier model of the garment does not fit this one: the designer opens fresh on the
+        // current model, the list as the server has it, and says so. The earlier design stays with the order's versions.
+        const earlier = isEarlierModelDesign(orderContext.design, entry)
+        // the order's design was saved with another neck than the one chosen (a draft on this device is for that one)
+        const otherNeck = !earlier && designProductId(orderContext.design) !== data.product.id
+        const server = earlier || otherNeck ? { ok: true as const, value: newDesign(data) } : upgradeDesign(orderContext.design, { product: data.product })
+        if (!server.ok) {
+          console.error("The order's design could not be read:", server.errors.map((e) => e.message).join("; "))
+          if (alive) setError(true)
+          return
+        }
+        const draft = persistent && !earlier ? await readOrderDraft(kv, view.id, data.product).catch(() => null) : null
+        const draftDesign = draft?.designDirty ? draft.design : null
+        const design = draftDesign ?? server.value
+        const teamList = draft?.listDirty && draft.teamList ? draft.teamList : savedListFromView(view, data.product.id)
         if (!alive) return
-        const missing = saved ? await assets.restore(designAssetIds(saved.design)) : []
-        if (saved) await designs.pruneAssets().catch(() => undefined)
-        // The product page's button reads this flag; the real store is the truth.
-        setSavedDesignFlag(handle, !!saved)
-        // a design this device holds for an earlier model of the garment is left where it is, and the visitor is told
-        const earlierOnDevice = saved ? false : await hasEarlierDeviceDesign(kv, handle)
-        latest.current = { design: saved?.design ?? null, teamList: saved?.teamList ?? null }
+        const missing = await assets.restore(designAssetIds(design))
+        await designs.pruneAssets().catch(() => undefined)
+        // for an earlier model (or another neck) the base is the order's own design, so the opened one counts as a change and is saved as a new version
+        orderRef.current = {
+          view,
+          baseJson: earlier || otherNeck ? designJson(orderContext.design as DesignDocument) : designJson(server.value),
+          pending: null,
+          resendList: draft?.listDirty === true && !!draft.teamList,
+        }
+        latest.current = { design, teamList }
+        setDesignUnsent(designJson(design) !== orderRef.current.baseJson)
         setStore({ kv, designs, assets, persistent, missing })
-        setSession(
-          saved
-            ? {
-                key: 1,
-                design: saved.design,
-                teamList: saved.teamList ?? null,
-                startCard: false,
-                // coming back from signing in to finish starting an order: no "Continue your last design?"
-                resume: !context.resumeStart,
-                locked: false,
-                earlierModel: "none",
-              }
-            : {
-                key: 1,
-                design: newDesign(data),
-                teamList: null,
-                startCard: true,
-                resume: false,
-                locked: false,
-                earlierModel: earlierOnDevice ? "device" : "none",
-              },
-        )
+        setSession({
+          key: 1,
+          design,
+          teamList,
+          startCard: false,
+          resume: false,
+          locked: !isDraft(view.status) || listUnusable(teamList, data.product.id, view.limits),
+          earlierModel: earlier ? "order" : "none",
+        })
+        if (draft?.listDirty && draft.teamList) setTouched(true)
+        return
+      }
+
+      if (change) {
+        // Another neck of the same product, chosen here: the carried design is what is saved for it from now on.
+        const design = change.design
+        const teamList = change.teamList
+        const missing = await assets.restore(designAssetIds(design))
+        if (persistent) await designs.saveDesign(data.product.id, design, { started: true, teamList }).catch(() => undefined)
+        if (!alive) return
+        setSavedDesignFlag(handle, true)
+        latest.current = { design, teamList }
+        setStore({ kv, designs, assets, persistent, missing })
+        setSession({ key: ++keyCount.current, design, teamList, startCard: false, resume: false, locked: false, earlierModel: "none", notice: change.notice })
         if (!persistent) setDeviceState("failed")
-      })
+        return
+      }
+
+      const saved = persistent ? await designs.loadDesign(data.product).catch(() => null) : null
+      if (!alive) return
+      const missing = saved ? await assets.restore(designAssetIds(saved.design)) : []
+      if (saved) await designs.pruneAssets().catch(() => undefined)
+      // The product page's button reads this flag; the real store is the truth.
+      setSavedDesignFlag(handle, !!saved)
+      // a design this device holds for an earlier model of the garment is left where it is, and the visitor is told
+      const earlierOnDevice = saved ? false : await hasEarlierDeviceDesign(kv, handle)
+      // arriving from another garment's designer: its sentence, once, and no "Continue your last design?"
+      const arrival = saved ? takeGarmentNotice(handle) : null
+      latest.current = { design: saved?.design ?? null, teamList: saved?.teamList ?? null }
+      setStore({ kv, designs, assets, persistent, missing })
+      setSession(
+        saved
+          ? {
+              key: 1,
+              design: saved.design,
+              teamList: saved.teamList ?? null,
+              startCard: false,
+              // coming back from signing in to finish starting an order, or from another garment: no "Continue your last design?"
+              resume: !context.resumeStart && !arrival,
+              locked: false,
+              earlierModel: "none",
+              ...(arrival ? { notice: arrival } : {}),
+            }
+          : {
+              key: 1,
+              design: newDesign(data),
+              teamList: null,
+              startCard: true,
+              resume: false,
+              locked: false,
+              earlierModel: earlierOnDevice ? "device" : "none",
+            },
+      )
+      if (!persistent) setDeviceState("failed")
+    })().catch((e: unknown) => {
+      console.error("The designer could not open:", e)
+      if (alive) setError(true)
+    })
     return () => {
       alive = false
     }
-  }, [data, handle, entry, orderContext, context.resumeStart])
+  }, [data, device, handle, entry, orderContext, context.resumeStart])
 
   useEffect(() => {
     lockedRef.current = session?.locked ?? false
@@ -700,11 +823,12 @@ export default function DesignEditor({ product: entry, countryCode, fontFamilies
         listDirty: false,
       }).catch(() => undefined)
       autosave.current?.dispose()
-      await store.designs.clearDesign(data.product.id).catch(() => undefined)
+      // the design is the order's now: whichever neck it was saved under on this device goes
+      for (const id of garmentIds(entry)) await store.designs.clearDesign(id).catch(() => undefined)
       setSavedDesignFlag(handle, false)
       router.push(`/${countryCode}${teamOrderPath(result.order.id)}`)
     },
-    [data, store, context.productId, context.region.id, handle, router, countryCode],
+    [data, store, entry, context.productId, context.region.id, handle, router, countryCode],
   )
 
   const onClose = useCallback(() => {
@@ -750,8 +874,66 @@ export default function DesignEditor({ product: entry, countryCode, fontFamilies
         signedIn: context.signedIn,
         orderId: orderContext?.view.id ?? null,
         returnTo: designerReturnPath(handle, orderContext?.view.id ?? null),
+        // the menu's "Change garment" opens the editor's own chooser where the editor offers one
+        garments: (data?.garments.length ?? 0) >= 2 && !session?.locked ? "editor" : "page",
       }),
-    [countryCode, handle, context.signedIn, orderContext],
+    [countryCode, handle, context.signedIn, orderContext, data?.garments.length, session?.locked],
+  )
+
+  /** The menu's "Change garment": the press the editor's own garment button would get (it has no way to be opened from outside). */
+  const openGarmentChooser = useCallback((): boolean => {
+    const button = document.querySelector<HTMLButtonElement>('[data-testid="garment-button"], [data-testid="start-garment-change"]')
+    if (!button) return false
+    button.click()
+    return true
+  }, [])
+
+  /**
+   * The customer chose a garment in the editor's chooser. The old garment's design and list are saved first (the design
+   * stays saved, so choosing the garment again brings it back). The other neck of the same product: this page starts the
+   * editor again on it, with the carried design. Another product: its designer opens with the design saved for it (the one
+   * the editor carried, or the garment's own when this device holds one), and the sizes, price and minimum follow. Inside
+   * a team order only the necks are offered; another product's garment is refused here too.
+   */
+  const onChooseGarment = useCallback(
+    (change: GarmentChange) => {
+      if (!data || !device || lockedRef.current) return
+      const move = garmentMove(entry, data.product.id, change.garmentId, { inOrder: !!orderContext })
+      if (move.kind === "none") return
+      void (async () => {
+        if (latest.current.design) autosave.current?.schedule(latest.current.design)
+        await (autosave.current?.flush() ?? Promise.resolve()).catch(() => undefined)
+        if (orderContext) {
+          // the list reaches the order before the editor starts again; if it cannot, it is sent when the new editor opens
+          const sent = (await saver.current?.flush()) ?? { kind: "saved" as const }
+          if (orderRef.current && sent.kind !== "saved") orderRef.current.resendList = true
+        }
+        if (move.kind === "neck") {
+          handoff.current = change
+          setSession(null)
+          setStore(null)
+          setData(null)
+          setGarment(move.garment)
+          return
+        }
+        const target = data.garments.find((g) => g.id === change.garmentId)?.product
+        const own = target ? await device.designs.loadDesign(target).catch(() => null) : null
+        const design = own?.design ?? change.design
+        const teamList = change.teamList ?? own?.teamList ?? null
+        if (device.persistent) await device.designs.saveDesign(change.garmentId, design, { started: true, teamList }).catch(() => undefined)
+        setSavedDesignFlag(move.entry.handle, true)
+        rememberGarmentNotice(move.entry.handle, own ? EDITOR_WORDING.garment.noticeBack.replaceAll("{name}", move.garment.name) : change.notice)
+        router.push(`/${countryCode}${designPath(move.entry.handle)}`)
+      })()
+    },
+    [data, device, entry, orderContext, router, countryCode],
+  )
+
+  /** What the editor said about the saved list it opened, until the organizer closes it. */
+  const [readNotes, setReadNotes] = useState<ReadNotesMessage | null>(null)
+  const onReadNotes = useCallback(
+    (notes: readonly SavedListReadNote[]) => setReadNotes(readNotesMessage(notes, orderContext ? "order" : "device")),
+    [orderContext],
   )
 
   // ---- the same order changed somewhere else -------------------------------
@@ -779,7 +961,7 @@ export default function DesignEditor({ product: entry, countryCode, fontFamilies
       latest.current.teamList = list
       lockedRef.current = false
       setChangeList({ kind: "closed" })
-      setSession((s) => s && { ...s, key: s.key + 1, design: latest.current.design ?? s.design, teamList: list, locked: !editorAcceptsList(view) })
+      setSession((s) => s && { ...s, key: s.key + 1, design: latest.current.design ?? s.design, teamList: list, locked: listUnusable(list, data.product.id, view.limits) })
     },
     [data]
   )
@@ -846,6 +1028,7 @@ export default function DesignEditor({ product: entry, countryCode, fontFamilies
           }
         : {}),
       onChange: onTeamListChange,
+      onReadNotes,
       // The save has its own waiting (the device copy one second, the order's list one second): the list is handed over at once.
       debounceMs: 0,
       listRequiredToContinue: true,
@@ -858,7 +1041,7 @@ export default function DesignEditor({ product: entry, countryCode, fontFamilies
           }
         : {}),
     }),
-    [session?.teamList, context.sizes, context.noun, context.region.minimum, context.region.phrase, context.sizeChart, view, locked, lockedPlan, onTeamListChange],
+    [session?.teamList, context.sizes, context.noun, context.region.minimum, context.region.phrase, context.sizeChart, view, locked, lockedPlan, onTeamListChange, onReadNotes],
   )
 
   const bar = topBarState({ list: listState, device: deviceState, designUnsent, touched })
@@ -868,9 +1051,11 @@ export default function DesignEditor({ product: entry, countryCode, fontFamilies
     if (orderContext && bar.savedWords === "server") overrides.frame = { saved: words.saved }
     // The editor's note for a signed list names a signature: only a signed proof has one. Otherwise the note says
     // where the order is (the proof is out, or its status), in the order's own words.
+    // Inside a team order the chooser offers only the necks of the order's garment, and says how to design another.
+    if (orderContext && (data?.garments.length ?? 0) >= 2) overrides.garment = { body: designContent.garments.inOrder } as WordingOverrides["garment"]
     if (locked && lockedPlan?.note === "plain") overrides.teamList = { locked: { note: "{date}" } } as WordingOverrides["teamList"]
     return Object.keys(overrides).length > 0 ? overrides : undefined
-  }, [orderContext, bar.savedWords, locked, lockedPlan, words.saved])
+  }, [orderContext, bar.savedWords, locked, lockedPlan, words.saved, data?.garments.length])
 
   if (error) {
     return (
@@ -916,6 +1101,10 @@ export default function DesignEditor({ product: entry, countryCode, fontFamilies
         initialDesign={session.design}
         showStartCard={session.startCard}
         productName={entry.shortName}
+        garments={locked ? undefined : data.garments}
+        garmentId={data.product.id}
+        onChooseGarment={locked ? undefined : onChooseGarment}
+        {...(session.notice ? { startNotice: session.notice } : {})}
         assets={assets}
         teamList={teamListHost}
         wording={wording}
@@ -939,7 +1128,7 @@ export default function DesignEditor({ product: entry, countryCode, fontFamilies
               {STORE_NAME}
             </a>
           ),
-          account: <DesignerMenu links={leaveLinkList} onLeave={leaveTo} />,
+          account: <DesignerMenu links={leaveLinkList} onLeave={leaveTo} onGarments={openGarmentChooser} />,
           // our own match jersey has no credit line; a model under CC BY (the T-shirt) must
           ...(entry.credit
             ? { credit: <Credit credit={entry.credit} short={false} />, creditShort: <Credit credit={entry.credit} short /> }
@@ -960,7 +1149,7 @@ export default function DesignEditor({ product: entry, countryCode, fontFamilies
           }}
           onStartAgain={() => {
             autosave.current?.dispose()
-            void store.designs.clearDesign(data.product.id).finally(() => {
+            void Promise.all(garmentIds(entry).map((id) => store.designs.clearDesign(id).catch(() => undefined))).finally(() => {
               setSavedDesignFlag(handle, false)
               setDeviceState(null)
               latest.current = { design: null, teamList: null }
@@ -986,6 +1175,23 @@ export default function DesignEditor({ product: entry, countryCode, fontFamilies
           onKeepMine={() => saver.current?.keepMine()}
           onUseSaved={() => void adoptSavedList()}
         />
+      )}
+      {readNotes && (
+        <div
+          role="status"
+          className="fixed inset-x-3 top-16 z-10 mx-auto flex max-w-xl items-start gap-3 rounded-card border border-brand-border bg-brand-surface-alt p-3 type-small text-brand-ink"
+          data-testid="design-read-notes"
+        >
+          <div className="flex flex-1 flex-col gap-1">
+            <p className="font-semibold">{readNotes.title}</p>
+            {readNotes.sentences.map((sentence) => (
+              <p key={sentence}>{sentence}</p>
+            ))}
+          </div>
+          <button type="button" className="min-h-11 px-3 font-semibold" onClick={() => setReadNotes(null)} data-testid="design-read-notes-dismiss">
+            {words.readNotes.close}
+          </button>
+        </div>
       )}
       {session.earlierModel !== "none" && !earlierDismissed && (
         <div

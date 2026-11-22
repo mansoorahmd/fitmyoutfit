@@ -6,7 +6,7 @@ import { listProducts } from "@lib/data/products"
 import { loadSavedDesign, retrieveProof, retrieveTeamOrder } from "@lib/data/team-orders"
 import { designOrderPath } from "@lib/editor/designer-context"
 import { editorFontFamilies } from "@lib/editor/fonts"
-import { editorProductFor, isEarlierModelDesign } from "@lib/editor/products"
+import { editorProductFor, garmentOfDesign, garmentTitle, isEarlierModelDesign } from "@lib/editor/products"
 import { buildProofDocument, nameLetterCase, snapshotMatchesHash } from "@lib/team-order/proof"
 import { signingSchedule } from "@lib/team-order/signing"
 import type { TeamOrderView } from "@lib/team-order/types"
@@ -81,11 +81,14 @@ export default async function ProofRoute({
   const saved = await loadSavedDesign({ designId: order.designId, versionId: proof.designVersionId })
   const design = saved.ok ? saved.value.design : null
   const chart = parseSizeChart(product?.metadata)
+  // The neck the proof's design was made for (the jersey has two): its pictures and its header show it, since the factory
+  // makes what the proof shows. A design that names none of the product's garments is the first one's.
+  const garment = entry ? garmentOfDesign(entry, design) : null
 
   const isCurrent = order.currentProof?.id === proof.id
   const document = buildProofDocument({
     proof,
-    productName: product?.title ?? "",
+    productName: garment ? garmentTitle(product?.title ?? "", garment) : (product?.title ?? ""),
     sizes: order.sizes,
     chart,
     letterCase: nameLetterCase(design),
@@ -105,7 +108,7 @@ export default async function ProofRoute({
       currentProofId={order.currentProof?.id ?? null}
       schedule={waiting ? signingSchedule(order.schedule, order.rushRequested) : { state: "none", sentences: [] }}
       pictures={{
-        entry: entry ? { definition: entry.definition, modelFile: entry.modelFile } : null,
+        entry: garment ? { definition: garment.definition, modelFile: garment.modelFile } : null,
         design,
         fontFamilies: editorFontFamilies,
         fallbackPicture: product?.thumbnail ?? null,
