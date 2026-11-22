@@ -13,7 +13,9 @@
 /** The pieces of the browser this needs, so a test can give it fakes. */
 export type FontEnvironment = {
   /** The page's style sheets (their rules are read; a sheet that cannot be read is skipped). */
-  styleSheets: ArrayLike<{ cssRules?: ArrayLike<unknown> }>
+  styleSheets: ArrayLike<{ cssRules?: ArrayLike<unknown>; href?: string | null }>
+  /** The page's own address (`document.baseURI`): the base for a sheet with no address of its own (an inline one). */
+  baseURI?: string
   /** `document.fonts`: where an alias is added. */
   fonts: { add(face: unknown): unknown }
   /** The FontFace constructor. */
@@ -28,6 +30,25 @@ const unquote = (name: string): string => name.trim().replace(/^['"]|['"]$/g, ""
 const isFontFaceRule = (rule: unknown): rule is FontFaceRuleLike => {
   const candidate = rule as { type?: number; style?: { getPropertyValue?: unknown } }
   return candidate?.type === 5 && typeof candidate.style?.getPropertyValue === "function"
+}
+
+const ADDRESS = new RegExp("url[(][ ]*(['\"]?)([^'\")]+)['\"]?[ ]*[)]", "g")
+
+/**
+ * A rule's `src` with every `url(...)` made absolute against the address of the style sheet the rule came from.
+ * In a style sheet a relative address is relative to the sheet (`../media/x.woff2` from `/_next/static/chunks/a.css`);
+ * a FontFace made by script resolves it against the page instead (`/pk/media/x.woff2`: not found, and the lettering
+ * falls back to another face). Without a base, or for an address that cannot be read, the text is kept.
+ */
+export function absoluteSource(source: string, base: string | null | undefined): string {
+  if (!base) return source
+  return source.replace(ADDRESS, (whole: string, _quote: string, address: string) => {
+    try {
+      return `url("${new URL(address, base).href}")`
+    } catch {
+      return whole
+    }
+  })
 }
 
 const DESCRIPTORS = [
@@ -56,9 +77,10 @@ export function registerStableFamilies(generated: Readonly<Record<string, string
           } catch {
             continue // a sheet from another origin cannot be read
           }
+          const base = sheet.href || env.baseURI || null
           for (const rule of rules) {
             if (!isFontFaceRule(rule) || unquote(rule.style.getPropertyValue("font-family")) !== generatedName) continue
-            const source = rule.style.getPropertyValue("src")
+            const source = absoluteSource(rule.style.getPropertyValue("src"), base)
             if (!source) continue
             const descriptors: Record<string, string> = {}
             for (const [property, key] of DESCRIPTORS) {
@@ -81,7 +103,7 @@ export function registerStableFamilies(generated: Readonly<Record<string, string
 /** The browser's pieces, or null where there is no document (the server, a test without one). */
 export function browserFontEnvironment(): FontEnvironment | null {
   if (typeof document === "undefined" || typeof FontFace === "undefined" || !document.fonts) return null
-  return { styleSheets: document.styleSheets, fonts: document.fonts, FontFace }
+  return { styleSheets: document.styleSheets, fonts: document.fonts, FontFace, baseURI: document.baseURI }
 }
 
 let once: { key: string; families: Record<string, string> } | null = null
