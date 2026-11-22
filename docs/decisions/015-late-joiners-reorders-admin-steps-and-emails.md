@@ -29,7 +29,7 @@ dev-plan.md (M2) asks for late joiners ("the addition becomes a linked add-on or
 
 ## Consequences
 
-- **Shipping does not yet require the balance.** The plan says the balance is paid before shipping; today the admin can ship from `balance_due` without the by-hand note. The payments milestone must close this.
+- **Shipping does not yet require the balance.** The plan says the balance is paid before shipping; today the admin can ship from `balance_due` without the by-hand note. The payments milestone must close this. **Closed in M3-3 (23 Nov, decision 016):** `balance_due → shipped` is refused until the balance's payment is captured, and the by-hand steps now record real payments.
 - **Closed in M2-4 (22 Nov):** two add-ons that made their proofs at the same moment with the same number could both pass (QA: 10 of 10 tries), and a first order could go back to draft while an add-on was being made. Going back to draft, making an add-on, making an add-on's proof and deleting a draft now take a lock on the first order's row and check under it; of two such requests exactly one wins.
 - Existing databases need `npm run migrate` and `npm run seed` after this change.
 - The admin pages were looked at under `medusa develop` only; a production-mode start of the admin is untried.
