@@ -25,6 +25,9 @@ import {
   statusLabel,
   STATUSES,
   stepText,
+  formatMoney,
+  partStateColor,
+  partStateLabel,
 } from "../lib/team-orders"
 
 describe("statuses, kinds, proofs and schedule states have words and colours", () => {
@@ -108,6 +111,14 @@ describe("formatting", () => {
   it("a record of a step says what happened", () => {
     expect(stepText({ step_name: "make_proof", from: "draft", to: "proof_sent" })).toBe("Draft to proof sent")
     expect(stepText({ step_name: "pay_deposit", from: "approved", to: "deposit_paid" })).toBe("Deposit marked as received")
+    expect(stepText({ step_name: "pay_deposit", from: "approved", to: "deposit_paid", by_hand: true })).toBe("Deposit marked as received")
+    expect(stepText({ step_name: "pay_deposit", from: "approved", to: "deposit_paid", by_hand: false })).toBe("Deposit paid")
+    expect(stepText({ step_name: "balance_paid", from: "balance_due", to: "balance_due" })).toBe("Balance paid")
+    expect(formatMoney(35742, "pkr")).toBe("PKR 35,742")
+    expect(formatMoney(220, "gbp")).toBe("GBP 220.00")
+    expect(formatMoney(11.5, "usd")).toBe("USD 11.50")
+    expect(partStateLabel("paid")).toBe("Paid")
+    expect(partStateColor("refunded")).toBe("red")
     expect(stepText({ step_name: "balance_received_by_hand", from: "balance_due", to: "balance_due" })).toBe("Balance marked as received")
   })
 

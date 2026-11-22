@@ -118,8 +118,69 @@ export type Detail = {
     created_at: string
   }[]
   emails: { kind: string; status: string; attempts: number; sent_at: string | null; created_at: string }[]
+  /** The money (decision 016): null for a draft; `{ error }` when it could not be read. */
+  money: Money | { error: string } | null
   actions: Action[]
 }
+
+export type PartState = "unpaid" | "started" | "awaiting" | "authorized" | "paid" | "refunded" | "canceled"
+
+export type MoneyPart = {
+  amount: number
+  state: PartState
+  due: boolean
+  paid_at: string | null
+  by_hand: boolean | null
+}
+
+/** What the team order costs and what is paid (GET /admin/team-orders/:id, `money`). */
+export type Money = {
+  cost: {
+    state: "quote" | "ordered"
+    currency_code: string
+    tax_final: boolean
+    lines: { size: string; quantity: number; unit_price: number; total: number }[]
+    pieces: number
+    delivery: { name: string; amount: number; duty_paid: boolean } | null
+    rush: { amount: number; percentage: number } | null
+    subtotal: number
+    tax_total: number
+    total: number
+    deposit_percentage: number
+  }
+  payments: { deposit: MoneyPart; balance: MoneyPart; paid_total: number; outstanding: number; payment_status: string | null }
+  order: { id: string; display_id: number | null; status: string } | null
+}
+
+export const isMoney = (value: Detail["money"]): value is Money => value !== null && typeof value === "object" && "cost" in value
+
+/** Money as decision 008 shows it everywhere: the currency code, then the amount ("PKR 35,742", "GBP 220.00"). */
+export function formatMoney(amount: number, currencyCode: string): string {
+  const digits = currencyCode.toLowerCase() === "pkr" ? 0 : 2
+  const text = amount.toLocaleString("en-GB", { minimumFractionDigits: digits, maximumFractionDigits: Math.max(digits, 2) })
+  return `${currencyCode.toUpperCase()} ${text}`
+}
+
+const PART_LABELS: Record<PartState, string> = {
+  unpaid: "Not paid",
+  started: "Payment started",
+  awaiting: "With the payment provider",
+  authorized: "Authorised, not captured",
+  paid: "Paid",
+  refunded: "Refunded",
+  canceled: "Canceled",
+}
+const PART_COLORS: Record<PartState, BadgeColor> = {
+  unpaid: "grey",
+  started: "blue",
+  awaiting: "orange",
+  authorized: "orange",
+  paid: "green",
+  refunded: "red",
+  canceled: "red",
+}
+export const partStateLabel = (state: string): string => PART_LABELS[state as PartState] ?? state
+export const partStateColor = (state: string): BadgeColor => PART_COLORS[state as PartState] ?? "grey"
 
 export type BadgeColor = "green" | "orange" | "red" | "grey" | "blue" | "purple"
 
@@ -224,10 +285,11 @@ export function shortHash(hash: string): string {
   return hash.length > 16 ? `${hash.slice(0, 8)}...${hash.slice(-8)}` : hash
 }
 
-/** What a record of a step says: "Draft to proof sent", and for the balance note, its own words. */
-export function stepText(step: { step_name: string; from: string; to: string }): string {
+/** What a record of a step says: "Draft to proof sent", and for the payments, their own words. */
+export function stepText(step: { step_name: string; from: string; to: string; by_hand?: boolean }): string {
   if (step.step_name === "balance_received_by_hand") return "Balance marked as received"
-  if (step.step_name === "pay_deposit") return "Deposit marked as received"
+  if (step.step_name === "balance_paid") return "Balance paid"
+  if (step.step_name === "pay_deposit") return step.by_hand === false ? "Deposit paid" : "Deposit marked as received"
   return `${statusLabel(step.from)} to ${statusLabel(step.to).toLowerCase()}`
 }
 
