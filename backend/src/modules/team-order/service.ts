@@ -6,7 +6,8 @@ import { TeamOrder } from "./models/team-order"
 import { TeamOrderEmail } from "./models/team-order-email"
 import { TeamOrderStep } from "./models/team-order-step"
 import { buildStepRecord, balanceNoteRecord, type StepRecord } from "../../lib/rules/team-order-steps"
-import type { Actor, TeamOrderStatus } from "../../lib/rules/team-order-status"
+import { isKind, whyNoAddOn } from "../../lib/rules/team-order-links"
+import { isStatus, type Actor, type TeamOrderStatus } from "../../lib/rules/team-order-status"
 
 /**
  * Thrown by `replaceRoster` when the list is no longer at the version the save was made from, or
@@ -24,6 +25,22 @@ export class BalanceAlreadyNoted extends Error {
   constructor(readonly teamOrderId: string) {
     super(`The balance of ${teamOrderId} was already marked as received.`)
     this.name = "BalanceAlreadyNoted"
+  }
+}
+
+/** Thrown by `backToDraft` when the order has add-ons (counted under the order's row lock). */
+export class TeamOrderHasAddOns extends Error {
+  constructor(readonly teamOrderId: string, readonly addOns: number) {
+    super(`Team order ${teamOrderId} has ${addOns} add-on(s): it cannot go back to draft.`)
+    this.name = "TeamOrderHasAddOns"
+  }
+}
+
+/** Thrown by `deleteDraft` when the order has add-ons or reorders (counted under the order's row lock). */
+export class TeamOrderHasLinkedOrders extends Error {
+  constructor(readonly teamOrderId: string) {
+    super(`Team order ${teamOrderId} has add-ons or reorders: it cannot be deleted.`)
+    this.name = "TeamOrderHasLinkedOrders"
   }
 }
 
@@ -61,6 +78,22 @@ function connectionOf(sharedContext: Context): Connection {
   // the same method they commit or roll back together, and the row locks they take last until then.
   const transaction = manager.getTransactionContext?.()
   return { execute: (sql, params) => connection.execute(sql, params, "all", transaction) }
+}
+
+type LockedOrder = { id: string; status: string; kind: string }
+
+/**
+ * Takes the row lock of a team order (`select ... for update`) and returns its status and kind as
+ * they are NOW, or null when it does not exist. Whoever holds the lock is the only one who changes
+ * the order or counts the orders linked to it, until the transaction ends. Every transaction that
+ * needs two such locks takes the FIRST order's before the add-on's own, so none waits in a circle.
+ */
+async function lockOrderRow(connection: Connection, teamOrderId: string): Promise<LockedOrder | null> {
+  const rows = (await connection.execute(
+    "select id, status, kind from team_order where id = ? and deleted_at is null for update",
+    [teamOrderId]
+  )) as unknown as LockedOrder[]
+  return rows[0] ?? null
 }
 
 /** One line to store: already cleaned, never judged. */
@@ -146,6 +179,11 @@ class TeamOrderModuleService extends MedusaService({ TeamOrder, RosterEntry, Pro
    * list version, team name and design version the snapshot was made from, and the proof is
    * stored with the next proof number, in one transaction. Throws `TeamOrderChanged` otherwise
    * (two requests at the same moment: one makes the proof, the other finds the order moved).
+   *
+   * An add-on's proof passes `firstOrderId`: the first order's row is locked before anything else,
+   * and `checkUnderLock` runs (it may throw, which rolls everything back) before the order moves,
+   * so the numbers other add-ons have taken are worked out while no other add-on of that first order
+   * makes its proof: of two add-ons with the same number exactly one gets a proof.
    */
   @InjectTransactionManager()
   async makeProof(
@@ -155,11 +193,19 @@ class TeamOrderModuleService extends MedusaService({ TeamOrder, RosterEntry, Pro
       snapshotText: string
       snapshotHash: string
       by: StepBy
+      firstOrderId?: string
+      checkUnderLock?: () => Promise<void>
     },
     @MedusaContext() sharedContext: Context = {}
   ): Promise<{ id: string; proof_number: number }> {
     const { teamOrderId, from } = input
     const connection = connectionOf(sharedContext)
+    if (input.firstOrderId) {
+      if (!(await lockOrderRow(connection, input.firstOrderId))) {
+        throw new TeamOrderChanged(teamOrderId, "the proof was made")
+      }
+      await input.checkUnderLock?.()
+    }
     const moved = await connection.execute(
       "update team_order set status = 'proof_sent', updated_at = now() where id = ? and status = 'draft' and list_version = ? and team_name = ? and design_version_id = ? and deleted_at is null returning id",
       [teamOrderId, from.listVersion, from.teamName, from.designVersionId]
@@ -192,7 +238,10 @@ class TeamOrderModuleService extends MedusaService({ TeamOrder, RosterEntry, Pro
   /**
    * Goes back to draft: `proof_sent -> draft` (the proof becomes `withdrawn`) or `approved ->
    * draft` (the signed proof becomes `replaced`). Throws `TeamOrderChanged` when the order is not
-   * in `from` any more. The proof is kept.
+   * in `from` any more, and `TeamOrderHasAddOns` when it is not an add-on and has add-ons: the
+   * order's row is locked first and the add-ons are counted under the lock, so an add-on being made
+   * at the same moment is either seen here or refused (it finds the order no longer signed). The
+   * proof is kept.
    */
   @InjectTransactionManager()
   async backToDraft(
@@ -201,6 +250,19 @@ class TeamOrderModuleService extends MedusaService({ TeamOrder, RosterEntry, Pro
   ): Promise<void> {
     const { teamOrderId, from } = input
     const connection = connectionOf(sharedContext)
+    const locked = await lockOrderRow(connection, teamOrderId)
+    if (!locked || locked.status !== from) {
+      throw new TeamOrderChanged(teamOrderId, "it was taken back to draft")
+    }
+    if (locked.kind !== "add_on") {
+      const addOns = (await connection.execute(
+        "select id from team_order where linked_order_id = ? and kind = 'add_on' and deleted_at is null",
+        [teamOrderId]
+      )) as Rows
+      if (addOns.length > 0) {
+        throw new TeamOrderHasAddOns(teamOrderId, addOns.length)
+      }
+    }
     const moved = await connection.execute(
       "update team_order set status = 'draft', updated_at = now() where id = ? and status = ? and deleted_at is null returning id",
       [teamOrderId, from]
@@ -214,6 +276,48 @@ class TeamOrderModuleService extends MedusaService({ TeamOrder, RosterEntry, Pro
       [closed, teamOrderId, was]
     )
     await this.recordStep(teamOrderId, this.stepRecordFor(from, "draft", input.by), sharedContext)
+  }
+
+  /**
+   * Makes an add-on of a first order: the first order's row is locked and its status read under the
+   * lock, and the add-on is stored in the same transaction only if the first order can still have
+   * one (`whyNoAddOn`: it is signed and is not an add-on itself). Otherwise `TeamOrderChanged`
+   * (the caller reads the order again and answers with the refusal that fits). Returns the new row.
+   */
+  @InjectTransactionManager()
+  async createAddOn(
+    input: { firstOrderId: string; data: Record<string, unknown> },
+    @MedusaContext() sharedContext: Context = {}
+  ): Promise<{ id: string }> {
+    const first = await lockOrderRow(connectionOf(sharedContext), input.firstOrderId)
+    if (!first || !isStatus(first.status) || !isKind(first.kind) || whyNoAddOn({ kind: first.kind, status: first.status })) {
+      throw new TeamOrderChanged(input.firstOrderId, "an add-on was made")
+    }
+    return (await this.createTeamOrders(input.data as never, sharedContext)) as unknown as { id: string }
+  }
+
+  /**
+   * Deletes a draft team order with its team list, in one transaction: the order's row is locked,
+   * and it is deleted only if it is still a draft (`TeamOrderChanged` otherwise: a proof was made
+   * at the same moment, or it is gone) and has no add-ons or reorders (`TeamOrderHasLinkedOrders`).
+   * A proof made at the same moment waits for the lock, then finds the order gone.
+   */
+  @InjectTransactionManager()
+  async deleteDraft(input: { teamOrderId: string }, @MedusaContext() sharedContext: Context = {}): Promise<void> {
+    const connection = connectionOf(sharedContext)
+    const locked = await lockOrderRow(connection, input.teamOrderId)
+    if (!locked || locked.status !== "draft") {
+      throw new TeamOrderChanged(input.teamOrderId, "it was deleted")
+    }
+    const linked = (await connection.execute(
+      "select id from team_order where linked_order_id = ? and deleted_at is null limit 1",
+      [input.teamOrderId]
+    )) as Rows
+    if (linked.length > 0) {
+      throw new TeamOrderHasLinkedOrders(input.teamOrderId)
+    }
+    await this.deleteRosterEntries({ team_order_id: input.teamOrderId }, sharedContext)
+    await this.deleteTeamOrders(input.teamOrderId, sharedContext)
   }
 
   /**

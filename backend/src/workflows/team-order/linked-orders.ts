@@ -12,6 +12,7 @@ import { randomUUID } from "node:crypto"
 import type { MedusaContainer } from "@medusajs/framework/types"
 import { normalizeLines, type RosterLine } from "@fitmyoutfit/team-rules"
 import { badRequest, notAllowed } from "../../lib/http/refusal"
+import { TeamOrderChanged } from "../../modules/team-order/service"
 import { currentProofOf } from "../../lib/rules/team-order-proof"
 import { isInThePast } from "../../lib/rules/team-order-schedule"
 import { isStatus, type TeamOrderStatus } from "../../lib/rules/team-order-status"
@@ -78,22 +79,38 @@ export async function createAddOn(container: MedusaContainer, customerId: string
   }
   // The add-on's minimum must be readable now, so a missing setting shows here and not later.
   regionAddOnMinimum(await loadRegion(container, source.region_id))
-  const created = (await service(container).createTeamOrders({
-    customer_id: customerId,
-    team_name: teamName,
-    design_id: source.design_id,
-    design_version_id: source.design_version_id,
-    product_id: source.product_id,
-    region_id: source.region_id,
-    need_by_date: needBy,
-    status: "draft",
-    prints_name: source.prints_name,
-    prints_number: source.prints_number,
-    list_version: 1,
-    rush_requested: body.rush_requested === true,
-    kind: "add_on",
-    linked_order_id: source.id,
-  })) as TeamOrderRow
+  // The first order's row is locked and its status read again in the same transaction that stores
+  // the add-on, so it cannot go back to draft (reopen) between the check above and the write.
+  let created: TeamOrderRow
+  try {
+    created = (await service(container).createAddOn({
+      firstOrderId: source.id,
+      data: {
+        customer_id: customerId,
+        team_name: teamName,
+        design_id: source.design_id,
+        design_version_id: source.design_version_id,
+        product_id: source.product_id,
+        region_id: source.region_id,
+        need_by_date: needBy,
+        status: "draft",
+        prints_name: source.prints_name,
+        prints_number: source.prints_number,
+        list_version: 1,
+        rush_requested: body.rush_requested === true,
+        kind: "add_on",
+        linked_order_id: source.id,
+      },
+    })) as TeamOrderRow
+  } catch (error) {
+    if (!(error instanceof TeamOrderChanged)) throw error
+    // The first order moved since it was read (it went back to draft): answer as for its state now.
+    const current = await loadOwnTeamOrder(container, customerId, id)
+    const refusal = whyNoAddOn({ kind: kindOf(current), status: statusOf(current) })
+    throw notAllowed(refusal?.code ?? "team_order_not_signed", refusal?.message ?? "The team order is no longer signed.", {
+      status: current.status,
+    })
+  }
   return describeTeamOrder(container, created)
 }
 

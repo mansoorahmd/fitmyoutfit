@@ -3,6 +3,7 @@
  * that fails without its fix. The races fire the competing requests together, twenty times each.
  */
 import { medusaIntegrationTestRunner } from "@medusajs/test-utils"
+import { TEAM_ORDER_MODULE } from "../../src/modules/team-order/constants"
 import { line, makeWorld, team, type World } from "./support/team-order-world"
 
 jest.setTimeout(900 * 1000)
@@ -65,6 +66,99 @@ medusaIntegrationTestRunner({
             "2:quantity-range",
           ])
           expect(saved.data.roster.summary.ready_for_proof).toBe(false)
+        })
+      })
+
+      // ------------------------------------------------------------------------------------
+      // ------------------------------------------------------------------------------------
+      describe("D1, D2, D5.1: one lock on the first order's row", () => {
+        const TRIES = 20
+        const teams = () => getContainer().resolve(TEAM_ORDER_MODULE) as any
+        /** A signed first order of 12 players numbered 21 to 32 (so 1 to 20 are free for add-ons). */
+        const aFirstOrder = async (as: any) => {
+          const order = await w.aTeamOrder(as)
+          return w.signed(as, order.team_order.id, Array.from({ length: 12 }, (_, i) => line(i + 1, { number: String(21 + i) })))
+        }
+
+        // Each race collects what went wrong in every try and expects the list to be empty at the end,
+        // so a failure shows how many of the twenty tries went wrong.
+
+        it("never lets the first order go back to draft while an add-on is made (add-on against reopen, 20 tries)", async () => {
+          const as = await w.signIn()
+          const wrong: string[] = []
+          for (let i = 0; i < TRIES; i += 1) {
+            const first = await aFirstOrder(as)
+            const id = first.team_order.id
+            const [addOn, back] = await Promise.all([w.startAddOn(as, id), w.reopen(as, id)])
+            const after = await w.read(as, id)
+            const status = after.data.team_order.status
+            const addOns = after.data.links.add_ons.count
+            const seen = `add-on ${addOn.status} ${addOn.data.code ?? ""}, reopen ${back.status} ${back.data.code ?? ""}, order ${status} with ${addOns} add-on(s)`
+            const addOnWon = addOn.status === 201 && back.status === 400 && back.data.code === "team_order_has_add_ons" && status === "approved" && addOns === 1
+            const reopenWon = back.status === 200 && addOn.status === 400 && addOn.data.code === "team_order_not_signed" && status === "draft" && addOns === 0
+            if (!addOnWon && !reopenWon) wrong.push(`try ${i}: ${seen}`)
+          }
+          expect(wrong).toEqual([])
+        })
+
+        it("lets exactly one of two add-ons with the same number make its proof, also as 7 and 07 or an Arabic digit (20 tries)", async () => {
+          const as = await w.signIn()
+          const variants: [string, string][] = [
+            ["7", "7"],
+            ["7", "07"],
+            ["7", "\u0667"], // Arabic-Indic seven
+            ["8", "\u06F8"], // Extended Arabic-Indic (Urdu) eight
+          ]
+          const wrong: string[] = []
+          for (let i = 0; i < TRIES; i += 1) {
+            const first = await aFirstOrder(as)
+            const id = first.team_order.id
+            const [x, y] = variants[i % variants.length]!
+            const a = (await w.startAddOn(as, id)).data.team_order.id
+            const b = (await w.startAddOn(as, id)).data.team_order.id
+            expect((await w.putRoster(as, a, 1, [line(1, { id: "a1", name: "Late A", number: x })])).data.roster.problems).toEqual([])
+            expect((await w.putRoster(as, b, 1, [line(1, { id: "b1", name: "Late B", number: y })])).data.roster.problems).toEqual([])
+            const [pa, pb] = await Promise.all([w.makeProof(as, a), w.makeProof(as, b)])
+            const winner = pa.status === 201 ? a : b
+            const loser = pa.status === 201 ? b : a
+            const refused = pa.status === 201 ? pb : pa
+            const proofs = {
+              winner: (await teams().listProofApprovals({ team_order_id: winner })).length,
+              loser: (await teams().listProofApprovals({ team_order_id: loser })).length,
+            }
+            const read = await w.read(as, loser)
+            const ok =
+              [pa.status, pb.status].sort().join() === "201,400" &&
+              refused.data.code === "roster_has_problems" &&
+              proofs.winner === 1 &&
+              proofs.loser === 0 &&
+              read.data.team_order.status === "draft" &&
+              read.data.current_proof === null &&
+              read.data.roster.problems.map((p: any) => p.code).join() === "number-taken-add-on"
+            if (!ok) wrong.push(`try ${i} (${x} / ${y}): proofs ${pa.status}, ${pb.status}; proofs stored ${JSON.stringify(proofs)}`)
+          }
+          expect(wrong).toEqual([])
+        })
+
+        it("lets exactly one of a proof and a delete of the same draft order win (20 tries), and the delete leaves nothing behind", async () => {
+          const as = await w.signIn()
+          const wrong: string[] = []
+          for (let i = 0; i < TRIES; i += 1) {
+            const order = await w.aTeamOrder(as)
+            const id = order.team_order.id
+            expect((await w.putRoster(as, id, 1, team(10))).status).toBe(200)
+            const [made, removed] = await Promise.all([w.makeProof(as, id), api.delete(`/store/team-orders/${id}`, w.h(as))])
+            const proofs = (await teams().listProofApprovals({ team_order_id: id })).length
+            const entries = (await teams().listRosterEntries({ team_order_id: id })).length
+            const emails = (await teams().listTeamOrderEmails({ team_order_id: id })).length
+            const status = (await w.read(as, id)).status
+            const deletedWon = removed.status === 200 && made.status === 404 && status === 404 && proofs === 0 && entries === 0 && emails === 0
+            const proofWon = made.status === 201 && removed.status === 400 && removed.data.code === "team_order_not_draft" && status === 200 && proofs === 1
+            if (!deletedWon && !proofWon) {
+              wrong.push(`try ${i}: proof ${made.status}, delete ${removed.status}, read ${status}, proofs ${proofs}, entries ${entries}, emails ${emails}`)
+            }
+          }
+          expect(wrong).toEqual([])
         })
       })
     })
