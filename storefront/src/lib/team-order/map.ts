@@ -20,6 +20,7 @@ import type {
   NoteCode,
   TakenRef,
 } from "@fitmyoutfit/team-rules"
+import { parseRosterInput } from "@fitmyoutfit/team-rules"
 import type { SavedTeamList } from "@fitmyoutfit/editor"
 
 import {
@@ -310,14 +311,28 @@ export function parseListItem(raw: unknown): TeamOrderListItem | null {
 
 // ---- to and from the editor's saved list -----------------------------------
 
-/** The list as the editor takes it in (`teamList.initial`): the server's lines, in order, for the order's product. */
-export function savedListFromView(view: Pick<TeamOrderView, "lines" | "prints" | "productId">): SavedTeamList {
+/**
+ * The list as the editor takes it in (`teamList.initial`): the server's lines, in order. The editor
+ * keeps a saved list only when its `productId` is the editor's own product definition id ("stand-in-jersey"),
+ * not the store's product id ("prod_..."): the caller passes the editor's.
+ */
+export function savedListFromView(view: Pick<TeamOrderView, "lines" | "prints">, editorProductId: string): SavedTeamList {
   return {
     version: 1,
-    productId: view.productId,
+    productId: editorProductId,
     prints: { name: view.prints.name, number: view.prints.number } satisfies PrintedFields,
     lines: view.lines.map((l) => ({ ...l })),
   }
+}
+
+/**
+ * Whether the editor will take these lines as they are. Its reader refuses the whole list when one
+ * line is malformed or there are more lines than its limits (it then opens an empty list); the server
+ * accepts lists the editor would refuse only when the limits differ. The designer tells the organizer
+ * instead of showing an empty list that would then be saved over theirs.
+ */
+export function editorAcceptsList(view: Pick<TeamOrderView, "lines" | "limits">): boolean {
+  return parseRosterInput(view.lines, view.limits).ok
 }
 
 /** What the editor hands over (`teamList.onChange`) as the body of the save. */

@@ -179,6 +179,11 @@ export const teamOrderContent = {
 
   // ---- the designer: starting a team order ---------------------------------
   designer: {
+    // DRAFT WORDING. No id: the saved list could not be opened in the designer (nothing is changed; the list stays as the server has it).
+    listUnreadable: {
+      note: "This list could not be opened here.",
+      text: "We could not open the saved team list in the designer, so it is read-only here. Nothing was changed: the list is saved as it was. Open the team order to see it.",
+    },
     // DRAFT WORDING. No id: the Done panel's main button when the list is ready, and the text button under the editor's.
     continue: "Continue",
     // DRAFT WORDING. No id: the same for an order that exists already, and for one that can not change any more.

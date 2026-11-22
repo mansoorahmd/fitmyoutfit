@@ -53,7 +53,7 @@ import { setSavedDesignFlag } from "@lib/editor/saved-design"
 import { listLimits, listMinimum } from "@lib/editor/team-list-host"
 import { authHref } from "@lib/util/account-auth"
 import { createListSaver, type ListSaveState, type ListSaver } from "@lib/team-order/list-saver"
-import { savedListFromView } from "@lib/team-order/map"
+import { editorAcceptsList, savedListFromView } from "@lib/team-order/map"
 import { topBarState } from "@lib/team-order/save-words"
 import { runStart, type StartProgress, type StartStep } from "@lib/team-order/start"
 import type { Failure, TeamOrderView } from "@lib/team-order/types"
@@ -292,7 +292,7 @@ export default function DesignEditor({ product: entry, countryCode, fontFamilies
           const draft = persistent ? await readOrderDraft(kv, view.id, data.product).catch(() => null) : null
           const draftDesign = draft?.designDirty ? draft.design : null
           const design = draftDesign ?? server.value
-          const teamList = draft?.listDirty && draft.teamList ? draft.teamList : savedListFromView(view)
+          const teamList = draft?.listDirty && draft.teamList ? draft.teamList : savedListFromView(view, data.product.id)
           if (!alive) return
           const missing = await assets.restore(designAssetIds(design))
           await designs.pruneAssets().catch(() => undefined)
@@ -300,7 +300,7 @@ export default function DesignEditor({ product: entry, countryCode, fontFamilies
           latest.current = { design, teamList }
           setDesignUnsent(designJson(design) !== designJson(server.value))
           setStore({ kv, designs, assets, persistent, missing })
-          setSession({ key: 1, design, teamList, startCard: false, resume: false, locked: !isDraft(view.status) })
+          setSession({ key: 1, design, teamList, startCard: false, resume: false, locked: !isDraft(view.status) || !editorAcceptsList(view) })
           if (draft?.listDirty && draft.teamList) setTouched(true)
           return
         }
@@ -595,10 +595,10 @@ export default function DesignEditor({ product: entry, countryCode, fontFamilies
     const view = read.value
     if (orderRef.current) orderRef.current.view = view
     saver.current.adopt(view.listVersion)
-    const list = savedListFromView(view)
+    const list = savedListFromView(view, data?.product.id ?? "")
     latest.current.teamList = list
     setSession((s) => s && { ...s, key: s.key + 1, design: latest.current.design ?? s.design, teamList: list })
-  }, [orderContext])
+  }, [orderContext, data])
 
   const assets = useMemo(
     () =>
@@ -639,7 +639,9 @@ export default function DesignEditor({ product: entry, countryCode, fontFamilies
       // The save has its own waiting (the device copy one second, the order's list one second): the list is handed over at once.
       debounceMs: 0,
       listRequiredToContinue: true,
-      ...(locked && view ? { locked: { signedOn: statusWords(view.status).text } } : {}),
+      ...(locked && view
+        ? { locked: { signedOn: isDraft(view.status) ? words.listUnreadable.note : statusWords(view.status).text } }
+        : {}),
     }),
     [session?.teamList, context.sizes, context.noun, context.region.minimum, context.region.phrase, context.sizeChart, view, locked, onTeamListChange],
   )
@@ -752,7 +754,7 @@ export default function DesignEditor({ product: entry, countryCode, fontFamilies
           className="fixed inset-x-3 top-16 z-10 mx-auto max-w-xl rounded-card border border-brand-border bg-brand-surface-alt p-3 type-small text-brand-ink"
           data-testid="design-locked-note"
         >
-          {words.locked.designNote}
+          {view && isDraft(view.status) ? words.listUnreadable.text : words.locked.designNote}
         </div>
       )}
       {leaving.kind !== "idle" && (

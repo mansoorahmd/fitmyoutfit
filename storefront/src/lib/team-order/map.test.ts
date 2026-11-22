@@ -12,6 +12,7 @@ import {
   problemFromApi,
   rosterBodyFromSaved,
   savedListFromView,
+  editorAcceptsList,
   scheduleFromApi,
   summaryFromApi,
 } from "./map"
@@ -268,12 +269,28 @@ describe("the whole answer", () => {
 describe("to and from the editor's saved list", () => {
   it("gives the editor the server's lines, what the design prints and the product", () => {
     const view = parseTeamOrderAnswer(apiAnswer())!
-    expect(savedListFromView(view)).toEqual({
+    // the editor's own product id, not the store's "prod_1": the editor drops a list kept under another id
+    expect(savedListFromView(view, "stand-in-jersey")).toEqual({
       version: 1,
-      productId: "prod_1",
+      productId: "stand-in-jersey",
       prints: { name: true, number: true },
       lines: view.lines,
     })
+  })
+
+  it("the editor's own reader keeps the list (the product id it was handed is the one it checks)", async () => {
+    const { readSavedList } = await import("@fitmyoutfit/editor")
+    const view = parseTeamOrderAnswer(apiAnswer())!
+    const list = savedListFromView(view, "stand-in-jersey")
+    expect(readSavedList(list, { productId: "stand-in-jersey" }).map((l) => l.id)).toEqual(view.lines.map((l) => l.id))
+  })
+
+  it("says when the editor would drop the list (too many lines for its limits), and when a count out of range is still fine", () => {
+    const view = parseTeamOrderAnswer(apiAnswer())!
+    const line = (i: number, count = 1) => ({ ...view.lines[0]!, id: `l${i}`, count })
+    expect(editorAcceptsList({ lines: [line(1, 0), line(2, 11)], limits: {} })).toBe(true)
+    expect(editorAcceptsList({ lines: [line(1), line(2), line(3)], limits: { maxLines: 2 } })).toBe(false)
+    expect(editorAcceptsList({ lines: [line(1), line(1)], limits: {} })).toBe(false)
   })
 
   it("makes the body of a save from what the editor hands over", () => {
