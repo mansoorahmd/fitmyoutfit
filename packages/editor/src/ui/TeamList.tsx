@@ -20,6 +20,8 @@ import { useTeamList } from "./team-list-context.js";
 import { Alert, SwitchRow } from "./parts.js";
 import { noteText, piecesText, playerCalled, problemText, saysInField } from "./team-list-words.js";
 
+const NO_SHOWN: readonly Shown[] = [];
+
 type MenuState = { kind: "line"; id: string; stepper?: boolean } | { kind: "sort" } | null;
 
 export function TeamListView({ initialDetailsOpen }: { initialDetailsOpen?: boolean } = {}) {
@@ -54,22 +56,33 @@ export function TeamListView({ initialDetailsOpen }: { initialDetailsOpen?: bool
   const { sizes: sizeList, noun: productNoun } = t;
   const wordsContext = useMemo(() => ({ wording, lines, sizes: sizeList, noun: productNoun }), [wording, lines, sizeList, productNoun]);
 
-  /** The problems and notes of one line, worded. */
-  const shownFor = (line: EditorLine): Shown[] => {
-    const problems = shownProblems(analysis, line, t.seen, t.revealAll);
-    const out: Shown[] = problems.map((p) => {
-      const text = problemText(p, line, wordsContext);
-      return { key: `${p.code}:${text}`, code: p.code, field: p.field, text, inField: saysInField(p), kind: "error" as const };
-    });
-    const seen = t.seen[line.id];
-    for (const n of analysis.notesByLine.get(line.id) ?? []) {
-      if (n.code === "name-mixed-scripts" && !(seen?.name || t.revealAll)) continue;
-      out.push({ key: `${n.code}`, code: n.code, field: "name", text: noteText(n, wording), inField: false, kind: "note" });
+  /**
+   * The problems and notes of every line, worded. Worked out when the lines, their checks, what has been left or the
+   * wording change, NOT when another line is chosen: choosing is the hot path (TL4, 100 ms), and 40 lines of sentences
+   * were being rebuilt for it. Only the chosen line's "Prints smaller to fit" note depends on the choice (`shownFor`).
+   */
+  const shownByLine = useMemo(() => {
+    const map = new Map<string, Shown[]>();
+    for (const line of lines) {
+      const problems = shownProblems(analysis, line, t.seen, t.revealAll);
+      const out: Shown[] = problems.map((p) => {
+        const text = problemText(p, line, wordsContext);
+        return { key: `${p.code}:${text}`, code: p.code, field: p.field, text, inField: saysInField(p), kind: "error" as const };
+      });
+      const seen = t.seen[line.id];
+      for (const n of analysis.notesByLine.get(line.id) ?? []) {
+        if (n.code === "name-mixed-scripts" && !(seen?.name || t.revealAll)) continue;
+        out.push({ key: `${n.code}`, code: n.code, field: "name", text: noteText(n, wording), inField: false, kind: "note" });
+      }
+      map.set(line.id, out);
     }
-    if (line.id === t.chosenId && t.nameShrunk && !line.noName && prints.name && !problems.some((p) => p.code === "name-too-long")) {
-      out.push({ key: "smaller", code: "smaller", field: "name", text: w.notes.smaller, inField: false, kind: "note" });
-    }
-    return out;
+    return map;
+  }, [lines, analysis, t.seen, t.revealAll, wordsContext, wording]);
+  const smallerNote = useMemo<Shown>(() => ({ key: "smaller", code: "smaller", field: "name", text: w.notes.smaller, inField: false, kind: "note" }), [w.notes.smaller]);
+  const shownFor = (line: EditorLine): readonly Shown[] => {
+    const base = shownByLine.get(line.id) ?? NO_SHOWN;
+    if (line.id === t.chosenId && t.nameShrunk && !line.noName && prints.name && !base.some((s) => s.code === "name-too-long")) return [...base, smallerNote];
+    return base;
   };
 
   // ---- Focus requests: after the render that makes the field exist.

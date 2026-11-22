@@ -485,22 +485,53 @@ export function EditorShell(props: EditorShellProps) {
   const maxLines = listLimits.maxLines;
   const maxCount = listLimits.maxCount;
   const minCount = listLimits.minCount;
-  const beginField = useCallback((id: string, field: "name" | "number" | "size") => history.beginLines(`list-${field}|${nameOfLine(id)}`), [history, nameOfLine]);
-  const typeField = useCallback((id: string, field: "name" | "number" | "size", value: string) => history.previewLines((ls) => setLineField(ls as EditorLine[], id, field, value)), [history]);
+  // A field's undo gesture opens on its FIRST change, not when it gets focus, and a field that was only looked at ends
+  // nothing: choosing a line (focus in, focus out) is not an edit, so it changes no history and renders the editor once
+  // (TL4: a line chosen within 100 ms; each history change is a render of the whole editor).
+  const fieldLabel = useRef<string | null>(null);
+  const gestureOpen = useRef(false);
+  const beginField = useCallback(
+    (id: string, field: "name" | "number" | "size") => {
+      fieldLabel.current = `list-${field}|${nameOfLine(id)}`;
+    },
+    [nameOfLine],
+  );
+  const typeField = useCallback(
+    (id: string, field: "name" | "number" | "size", value: string) => {
+      if (!gestureOpen.current && fieldLabel.current !== null) {
+        history.beginLines(fieldLabel.current);
+        gestureOpen.current = true;
+      }
+      history.previewLines((ls) => setLineField(ls as EditorLine[], id, field, value));
+    },
+    [history],
+  );
   const leaveField = useCallback(
     (id: string, field: "name" | "number" | "size") => {
       markSeen(id, field);
-      history.previewLines((ls) => cleanField(ls as EditorLine[], id, field, sizeTable));
-      history.endLines();
+      // The clean-up on leaving (4.1) is an edit only when it changes the value.
+      const needsCleaning = cleanField(linesRef.current as EditorLine[], id, field, sizeTable) !== linesRef.current;
+      if (gestureOpen.current || needsCleaning) {
+        if (!gestureOpen.current && fieldLabel.current !== null) history.beginLines(fieldLabel.current);
+        history.previewLines((ls) => cleanField(ls as EditorLine[], id, field, sizeTable));
+        history.endLines();
+        gestureOpen.current = false;
+      }
+      fieldLabel.current = null;
     },
     [history, markSeen, sizeTable],
   );
   const leaveLine = useCallback((id: string) => markSeen(id, "left"), [markSeen]);
-  const endTyping = useCallback(() => history.endLines(), [history]);
+  const endTyping = useCallback(() => {
+    if (!gestureOpen.current) return;
+    gestureOpen.current = false;
+    history.endLines();
+  }, [history]);
   const addPlayer = useCallback(() => {
     if (linesRef.current.length >= maxLines) return null;
     const line = newLine();
     history.beginLines("list-add");
+    gestureOpen.current = true;
     history.previewLines((ls) => addLine(ls as EditorLine[], line));
     setChosen(line.id);
     return line.id;
@@ -516,6 +547,7 @@ export function EditorShell(props: EditorShellProps) {
         history.beginLines("list-remove");
         history.previewLines((ls) => removeLine(ls as EditorLine[], id));
         history.endLines();
+        gestureOpen.current = false;
       } else {
         history.commitLines((ls) => removeLine(ls as EditorLine[], id), `list-remove|${name}`);
         announce(fill(wording.teamList.removed, { name }), { undo: true, ms: 6000 });
