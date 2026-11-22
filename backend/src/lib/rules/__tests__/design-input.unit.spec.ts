@@ -80,7 +80,7 @@ describe("checkDesignJson: depth and NUL characters", () => {
       ok: false,
       code: "design_contains_null_character",
     })
-    expect(checkDesignJson({ schemaVersion: 1, note: "\u0000" })).toEqual({ ok: true, schemaVersion: 1 })
+    expect(checkDesignJson({ schemaVersion: 1, note: "\\u0000" })).toEqual({ ok: true, schemaVersion: 1 })
   })
 
   it("the editor's sample designs (5 levels deep) are far from the limit", () => {
