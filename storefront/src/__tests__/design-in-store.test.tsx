@@ -17,7 +17,18 @@ vi.mock("next/navigation", () => ({
   useParams: () => ({ countryCode: "pk" }),
 }))
 vi.mock("@lib/data/products", () => ({ listProducts }))
-vi.mock("@lib/data/regions", () => ({ getRegion }))
+vi.mock("@lib/data/regions", () => ({ getRegion, listRegions: async () => [] }))
+// The page asks who is signed in; these tests are about the product, so: nobody.
+vi.mock("@lib/data/customer", () => ({ customerState: async () => ({ kind: "signed_out" }) }))
+vi.mock("@lib/data/team-orders", () => ({
+  retrieveTeamOrder: vi.fn(),
+  loadSavedDesign: vi.fn(),
+  addSavedDesignVersion: vi.fn(),
+  createSavedDesign: vi.fn(),
+  createTeamOrder: vi.fn(),
+  saveTeamOrderList: vi.fn(),
+  setTeamOrderDesignVersion: vi.fn(),
+}))
 // next/font only runs inside the Next.js compiler.
 vi.mock("@lib/editor/fonts", () => ({ editorFontFamilies: { Oswald: "__Oswald_x" } }))
 vi.mock("@modules/design/components/design-loader", () => ({
@@ -159,7 +170,7 @@ describe("the designer page: not found", () => {
   })
 
   const open = (handle: string, countryCode = "pk") =>
-    DesignPage({ params: Promise.resolve({ countryCode, handle }) })
+    DesignPage({ params: Promise.resolve({ countryCode, handle }), searchParams: Promise.resolve({}) })
 
   it("a product with a model shows the designer", async () => {
     listProducts.mockResolvedValue({
@@ -220,6 +231,20 @@ describe("the way out: the return path and the notice", () => {
   })
 })
 
+/** What the designer page gives the designer (lib/editor/designer-context.ts): a visitor, no team order. */
+const designerContext = (over: Record<string, unknown> = {}) => ({
+  productId: "prod_jersey",
+  productTitle: "Jersey",
+  sizes: undefined,
+  noun: { one: "jersey", many: "jerseys" },
+  sizeChart: null,
+  region: { id: "reg_pk", phrase: "Pakistan", minimum: null },
+  signedIn: false,
+  resumeStart: false,
+  order: null,
+  ...over,
+})
+
 describe("the designer returns to the product page", () => {
   const saveDesign = vi.fn()
   const flush = vi.fn()
@@ -244,6 +269,7 @@ describe("the designer returns to the product page", () => {
         },
         openIndexedDbStore: vi.fn().mockResolvedValue({}),
         createMemoryKeyValueStore: vi.fn(),
+        upgradeDesign: () => ok(design),
         createDeviceAssetStore: () => ({ restore: vi.fn().mockResolvedValue([]) }),
         createAutosave: (o: { save: (d: unknown) => Promise<void> }) => ({
           schedule: (d: unknown) => void o.save(d),
@@ -277,25 +303,38 @@ describe("the designer returns to the product page", () => {
     )
   })
 
-  async function mount() {
+  async function mount(context: Record<string, unknown> = {}) {
     const { default: DesignEditor } = await import("@modules/design/components/design-editor")
     render(
       <DesignEditor
         product={editorProductFor("jersey")!}
         countryCode="pk"
         fontFamilies={{}}
+        context={designerContext(context) as never}
       />
     )
     await screen.findByText("done")
   }
 
-  it("Done saves the design, remembers it for the button and returns with the notice flag", async () => {
+  it("Done, signed out, saves the design on this device and asks to sign in, then comes back to finish", async () => {
     await mount()
     fireEvent.click(screen.getByText("change"))
     fireEvent.click(screen.getByText("done"))
-    await waitFor(() => expect(push).toHaveBeenCalledWith("/pk/products/jersey?design=saved"))
+    const step = await screen.findByTestId("team-order-sign-in")
     expect(flush).toHaveBeenCalled()
     expect(hasSavedDesign("jersey")).toBe(true)
+    expect(push).not.toHaveBeenCalled()
+    // the sign-in comes back to the designer with ?start=1 (the address is safe: a path of ours)
+    expect(screen.getByTestId("team-order-sign-in-link")).toHaveAttribute("href", "/pk/account?view=signin&next=%2Fdesign%2Fjersey%3Fstart%3D1")
+    expect(step).toHaveTextContent("stay on this device")
+  })
+
+  it("Done, signed in, asks for the team name and a need-by date; nothing is made before it is answered", async () => {
+    await mount({ signedIn: true })
+    fireEvent.click(screen.getByText("done"))
+    expect(await screen.findByTestId("team-order-start")).toBeInTheDocument()
+    expect(screen.getByTestId("team-order-submit")).toBeInTheDocument()
+    expect(push).not.toHaveBeenCalled()
   })
 
   it("the close button returns to the product page without the notice", async () => {
@@ -307,7 +346,7 @@ describe("the designer returns to the product page", () => {
   it("keeps the page from scrolling while the designer is open, and lets go after", async () => {
     const { default: DesignEditor } = await import("@modules/design/components/design-editor")
     const view = render(
-      <DesignEditor product={editorProductFor("jersey")!} countryCode="pk" fontFamilies={{}} />
+      <DesignEditor product={editorProductFor("jersey")!} countryCode="pk" fontFamilies={{}} context={designerContext() as never} />
     )
     expect(document.body.style.overflow).toBe("hidden")
     expect(document.documentElement.style.overscrollBehavior).toBe("none")

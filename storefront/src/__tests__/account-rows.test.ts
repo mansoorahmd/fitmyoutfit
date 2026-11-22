@@ -13,9 +13,10 @@ import {
 import { customer } from "./fixtures/account"
 
 describe("the account menu and frame (05, 9.1)", () => {
-  it("lists Orders, Addresses and Profile, in that order", () => {
+  it("lists Orders, Team orders, Addresses and Profile, in that order", () => {
     expect(ACCOUNT_MENU.map((m) => [m.label, m.href])).toEqual([
       ["Orders", "/account/orders"],
+      ["Team orders", "/account/team-orders"],
       ["Addresses", "/account/addresses"],
       ["Profile", "/account/profile"],
     ])
@@ -24,7 +25,7 @@ describe("the account menu and frame (05, 9.1)", () => {
   it("heads the overview with the title band, the inner pages with the back link", () => {
     expect(showsTitleBand("overview")).toBe(true)
     expect(showsBackLink("overview")).toBe(false)
-    for (const page of ["orders", "addresses", "profile"] as const) {
+    for (const page of ["orders", "team-orders", "addresses", "profile"] as const) {
       expect(showsTitleBand(page)).toBe(false)
       expect(showsBackLink(page)).toBe(true)
     }

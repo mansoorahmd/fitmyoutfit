@@ -19,7 +19,8 @@ const navLink =
  * sticky; 56 px tall on phones, 64 px from 768 px, 72 px from 1280 px.
  * Left: the menu button (below 1280 px) and the wordmark, with the tagline
  * from 768 px. Right: the region chip and the cart. From 1280 px the garment
- * links and Account replace the menu button.
+ * links, "Design your kit" and Account replace the menu button. Below 1280 px
+ * "Design your kit" is the first link at the bottom of the menu.
  *
  * The spec's compact "Start your team kit" button is left out: on the home
  * page it would be a second red button beside the hero's, and on the product
@@ -81,6 +82,13 @@ export default async function Nav({ countryCode }: { countryCode: string }) {
               choices={regionChoices}
               currentCountryCode={countryCode}
             />
+            <LocalizedClientLink
+              href={navigationContent.designLink.href}
+              className={`${navLink} hidden xl:inline-flex`}
+              data-testid="nav-design-link"
+            >
+              {navigationContent.designLink.label}
+            </LocalizedClientLink>
             <LocalizedClientLink
               href={navigationContent.accountLink.href}
               className={`${navLink} hidden xl:inline-flex`}

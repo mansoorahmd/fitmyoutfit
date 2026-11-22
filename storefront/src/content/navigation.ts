@@ -15,6 +15,8 @@ export const navigationContent = {
     { label: "Account", href: "/account" },
     { label: "Cart", href: "/cart" },
   ],
+  /** The way into the 3D designer: the header from 1280 px and the menu below it. DRAFT WORDING. */
+  designLink: { label: "Design your kit", href: "/design" },
   /** From 1280 px the header shows these beside the garment links. */
   accountLink: { label: "Account", href: "/account" },
 }

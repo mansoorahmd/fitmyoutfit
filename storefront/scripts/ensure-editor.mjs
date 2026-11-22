@@ -11,9 +11,12 @@ const packages = resolve(dirname(fileURLToPath(import.meta.url)), "../../package
 const editor = resolve(packages, "editor")
 const rules = resolve(packages, "team-rules")
 // What the storefront imports, per the editor's package.json "exports".
-const built = ["dist/index.js", "dist/types/index.d.ts", "dist/design.js", "dist/types/design/index.d.ts"].map((f) =>
-  resolve(editor, f)
-)
+const built = [
+  ...["dist/index.js", "dist/types/index.d.ts", "dist/design.js", "dist/types/design/index.d.ts"].map((f) => resolve(editor, f)),
+  // The storefront imports @fitmyoutfit/team-rules itself too (the team-order pages): its built output must be there
+  // as well (the editor's build makes it).
+  ...["dist/esm/index.js", "dist/esm/index.d.ts"].map((f) => resolve(rules, f)),
+]
 
 /** The newest modification time among the files under a folder (0 when the folder is missing). */
 function newest(dir) {

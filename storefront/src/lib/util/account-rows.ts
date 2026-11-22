@@ -2,12 +2,13 @@
 // 9.1 and 9.6), and what each row says. Plain data; the pages lay it out.
 
 import { accountContent } from "@content/account"
+import { teamOrderContent } from "@content/team-order"
 
 import type { AccountIconName } from "@modules/account/components/account-icon"
 
 const words = accountContent
 
-export type AccountPage = "overview" | "orders" | "addresses" | "profile"
+export type AccountPage = "overview" | "orders" | "team-orders" | "addresses" | "profile"
 
 export type MenuItem = {
   page: Exclude<AccountPage, "overview">
@@ -17,9 +18,10 @@ export type MenuItem = {
   icon: AccountIconName
 }
 
-/** The menu (05, 9.1): Orders, Addresses, Profile; "Sign out" is a button after them. */
+/** The menu (05, 9.1): Orders, Team orders (M3-1), Addresses, Profile; "Sign out" is a button after them. */
 export const ACCOUNT_MENU: MenuItem[] = [
   { page: "orders", label: words.frame.menu.orders, href: "/account/orders", icon: "orders" },
+  { page: "team-orders", label: teamOrderContent.nav.label, href: "/account/team-orders", icon: "team" },
   { page: "addresses", label: words.frame.menu.addresses, href: "/account/addresses", icon: "pin" },
   { page: "profile", label: words.frame.menu.profile, href: "/account/profile", icon: "user" },
 ]

@@ -33,7 +33,7 @@ describe("home content file (placeholder copy)", () => {
     expect(homeContent.headline).not.toBe("")
     expect(homeContent.subline).not.toBe("")
     expect(homeContent.button.label).not.toBe("")
-    expect(homeContent.button.href).toBe("/store")
+    expect(homeContent.button.href).toBe("/design")
   })
 
   it("describes the organizer's team list, with no player link (decision 012)", () => {
@@ -45,7 +45,7 @@ describe("home content file (placeholder copy)", () => {
     expect(all).not.toMatch(/drop the link|share one link|adds? their own|each player adds/i)
   })
 
-  it("hero shows the content file's copy with a /pk/store button", () => {
+  it("hero shows the content file's copy with a /pk/design button", () => {
     render(<Hero />)
 
     expect(
@@ -54,7 +54,7 @@ describe("home content file (placeholder copy)", () => {
     expect(screen.getByText(homeContent.subline)).toBeInTheDocument()
     expect(
       screen.getByRole("link", { name: homeContent.button.label })
-    ).toHaveAttribute("href", "/pk/store")
+    ).toHaveAttribute("href", "/pk/design")
   })
 
   it("home meta description equals the subline", () => {

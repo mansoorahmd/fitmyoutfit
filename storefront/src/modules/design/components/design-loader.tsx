@@ -4,6 +4,7 @@ import dynamic from "next/dynamic"
 import { Component, useEffect, useState, type ReactNode } from "react"
 
 import { designContent } from "@content/design"
+import type { DesignerContext } from "@lib/editor/designer-context"
 import type { EditorProduct } from "@lib/editor/products"
 import { webglAvailable } from "@lib/editor/webgl"
 
@@ -15,6 +16,8 @@ export type DesignLoaderProps = {
   countryCode: string
   /** The font catalogue's family names to the faces next/font generated. */
   fontFamilies: Record<string, string>
+  /** The visitor, the product's sizes, the region, and the team order when the address names one. */
+  context: DesignerContext
 }
 
 // The editor, Three.js and the model's code load here and nowhere else, in

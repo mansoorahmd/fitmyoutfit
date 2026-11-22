@@ -96,7 +96,7 @@ describe("how team orders work", () => {
       "The organizer pays 50% when the proof is approved and 50% before shipping."
     )
     const button = screen.getByRole("link", { name: "Start your team kit" })
-    expect(button).toHaveAttribute("href", "/pk/store")
+    expect(button).toHaveAttribute("href", "/pk/design")
     expect(button.className).toContain("bg-brand-primary")
   })
 
