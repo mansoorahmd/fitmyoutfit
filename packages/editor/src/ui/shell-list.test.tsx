@@ -134,3 +134,13 @@ describe("the inputs hold no more than the reader accepts (S2)", () => {
     expect(notes).toEqual([[{ code: "line-left-out", index: 2, reason: "not-an-object" }]]);
   });
 });
+
+describe("the host's taken numbers show beside the line (S3)", () => {
+  it("a line whose number is taken shows the problem in the shell once its number field was left", () => {
+    const view = mount({ initial: saved(["Ali", "Bilal"]), taken: [{ number: "1", source: "first-order", name: "Hamza" }] });
+    const number = view.getByTestId("tl-number-0");
+    act(() => void number.focus());
+    act(() => void number.blur());
+    expect(view.getByTestId("tl-msg-0").textContent).toContain("already taken");
+  });
+});

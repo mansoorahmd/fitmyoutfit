@@ -449,7 +449,8 @@ export function EditorShell(props: EditorShellProps) {
   });
   const hostLimits = teamHost?.limits;
   const hostMinimum = teamHost?.minimum?.pieces ?? null;
-  const listSettings = useMemo(() => ({ prints, sizes: listSizes, ...(hostLimits ? { limits: hostLimits } : {}), minimum: hostMinimum }), [prints, listSizes, hostLimits, hostMinimum]);
+  const hostTaken = teamHost?.taken;
+  const listSettings = useMemo(() => ({ prints, sizes: listSizes, ...(hostLimits ? { limits: hostLimits } : {}), minimum: hostMinimum, ...(hostTaken ? { taken: hostTaken } : {}) }), [prints, listSizes, hostLimits, hostMinimum, hostTaken]);
   const analysis = useMemo(() => analyseList(lines, listSettings), [lines, listSettings]);
   const [chosen, setChosen] = useState<string | null>(null);
   // Only an empty list has no chosen line: the first line when the editor opens, the next one after a removal (7.3).
