@@ -1,0 +1,10 @@
+{
+  "productId": "match-jersey-round",
+  "templates": [
+    "classic",
+    "hoops",
+    "stripes",
+    "sash",
+    "chevron"
+  ]
+}

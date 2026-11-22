@@ -29,7 +29,10 @@ interface Neck {
   front: { width: number; height: number };
 }
 
-const NECKS: Neck[] = [{ id: "match-jersey-vneck", triangles: 40_385, scale: 1.839, front: { width: 470.53, height: 645.73 } }];
+const NECKS: Neck[] = [
+  { id: "match-jersey-vneck", triangles: 40_385, scale: 1.839, front: { width: 470.53, height: 645.73 } },
+  { id: "match-jersey-round", triangles: 40_322, scale: 1.839, front: { width: 470.54, height: 645.74 } },
+];
 
 const PIECES = ["front", "back", "sleeve_left", "sleeve_right", "side_panel_left", "side_panel_right", "collar", "cuff_left", "cuff_right"];
 

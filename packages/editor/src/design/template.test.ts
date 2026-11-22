@@ -9,7 +9,7 @@ import { findLayers, placeAtPreset, setOutline, setRoleSlot, setSizeStep } from 
 import type { DesignDocument, ProductDefinition, TeamColors } from "./schema";
 import { setTeamColor, swapTeamColors, teamColourValue } from "./team-colours";
 import { applyTemplate, validateTemplate, type Template } from "./template";
-import { validateDesign } from "./validate";
+import { validateDesign, validateProductDefinition } from "./validate";
 import { commit, createHistory, sameJson, undo } from "../state/history";
 import { loadMatchJerseyProduct, loadPlaceholderFonts, loadPlaceholderPalette, loadStandInJerseyProduct, loadStandInProduct } from "../test/fixtures";
 
@@ -30,6 +30,8 @@ const jerseyTemplates = templatesOf("stand-in-jersey");
 const tshirtTemplates = templatesOf("stand-in-tshirt");
 /** G3: the match jersey's own versions of the jersey's five (its zones and its cut). */
 const matchTemplates = templatesOf("match-jersey-vneck");
+const matchRoundTemplates = templatesOf("match-jersey-round");
+const matchRound = validateProductDefinition(JSON.parse(readFileSync(resolve(root, "samples/products/match-jersey-round.json"), "utf8")) as unknown);
 const byId = (list: Template[], id: string) => list.find((t) => t.id === id)!;
 /**
  * The sample hoops, with the medium Main outline on the number that it set until E3a-2 (its number now
@@ -60,7 +62,7 @@ describe("the sample templates", () => {
     expect(jerseyTemplates.map((t) => t.id)).toEqual(["classic", "hoops", "stripes", "sash", "chevron"]);
     expect(tshirtTemplates.map((t) => t.id)).toEqual(["plain", "contrast", "band"]);
     expect(matchTemplates.map((t) => t.id)).toEqual(["classic", "hoops", "stripes", "sash", "chevron"]);
-    for (const [product, list] of [[jersey, jerseyTemplates], [tshirt, tshirtTemplates], [match, matchTemplates]] as const) {
+    for (const [product, list] of [[jersey, jerseyTemplates], [tshirt, tshirtTemplates], [match, matchTemplates], [matchRound.ok ? matchRound.value : match, matchRoundTemplates]] as const) {
       for (const t of list) {
         const r = validateTemplate(t, { product, fonts });
         expect(r.ok, `${t.id}: ${r.ok ? "" : r.errors.map((e) => e.message).join("; ")}`).toBe(true);
