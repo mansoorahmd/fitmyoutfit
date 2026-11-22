@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import { currentFamily, withCurrentFonts } from "./proof-fonts"
-import { registerStableFamilies, type FontEnvironment } from "./stable-fonts"
+import { absoluteSource, registerStableFamilies, type FontEnvironment } from "./stable-fonts"
 
 /** A page as one build of the storefront leaves it: next/font's @font-face rules under that build's generated names. */
 function build(suffix: string) {
@@ -59,6 +59,32 @@ describe("stable font family names", () => {
       },
     }
     expect(registerStableFamilies(generated, { ...env, styleSheets: [blocked, ...Array.from(env.styleSheets)] })).toEqual({ Oswald: "Oswald", Graduate: "Graduate" })
+  })
+
+  it("a font file's address is taken from its style sheet, not from the page (a relative one would not be found)", () => {
+    const sheet = "http://localhost:8000/_next/static/chunks/fonts.css"
+    const page = "http://localhost:8000/pk/design/jersey"
+    // the dev server writes addresses relative to the sheet
+    expect(absoluteSource(`url(../media/oswald.woff2) format("woff2")`, sheet)).toBe(`url("http://localhost:8000/_next/static/media/oswald.woff2") format("woff2")`)
+    expect(absoluteSource(`url("../media/a.woff2") format("woff2"), url('../media/a.woff')`, sheet)).toBe(
+      `url("http://localhost:8000/_next/static/media/a.woff2") format("woff2"), url("http://localhost:8000/_next/static/media/a.woff")`
+    )
+    // a production build writes them from the site's root: the same file
+    expect(absoluteSource(`url(/_next/static/media/b.woff2)`, sheet)).toBe(`url("http://localhost:8000/_next/static/media/b.woff2")`)
+    // no base known: the text is kept
+    expect(absoluteSource(`url(../media/c.woff2)`, null)).toBe(`url(../media/c.woff2)`)
+
+    const { generated, env, added } = build("a1b2c3")
+    const relative = {
+      type: 5,
+      style: { getPropertyValue: (name: string) => ({ "font-family": `'${generated.Oswald}'`, src: `url(../media/oswald-rel.woff2) format("woff2")` })[name] ?? "" },
+    }
+    registerStableFamilies(generated, { ...env, baseURI: page, styleSheets: [{ href: sheet, cssRules: [relative] }] })
+    expect(added.map((f) => f.source)).toEqual([`url("http://localhost:8000/_next/static/media/oswald-rel.woff2") format("woff2")`])
+    // an inline sheet has no address of its own: the page's is the base, as the browser does for its rules
+    added.length = 0
+    registerStableFamilies(generated, { ...env, baseURI: page, styleSheets: [{ href: null, cssRules: [relative] }] })
+    expect(added[0]!.source).toContain("http://localhost:8000/pk/media/oswald-rel.woff2")
   })
 
   it("a design saved with stable names opens with its fonts after a new build; one saved with a generated name still does", () => {
