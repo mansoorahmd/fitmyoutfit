@@ -408,25 +408,42 @@ export async function seedStore(
     logger.warn(message)
     warnings.push(message)
   }
-  const pictureSteps = settlePicturePlan(picturePlan, new Set(pictureFiles.unreadable))
+  const unusable = new Set(pictureFiles.unreadable)
   const uploadedUrls = new Map<string, string>()
-  for (const file of new Set(
-    pictureSteps.filter((step) => step.set === "files").flatMap((step) => step.entry.files)
-  )) {
-    const { result } = await uploadFilesWorkflow(container).run({
-      input: {
-        files: [
-          {
-            filename: file,
-            mimeType: pictureMimeType(file),
-            content: (pictureFiles.found.get(file) as Buffer).toString("base64"),
-            access: "public",
-          },
-        ],
-      },
-    })
-    uploadedUrls.set(file, result[0].url)
+  const toUpload = new Set(
+    settlePicturePlan(picturePlan, unusable)
+      .filter((step) => step.set === "files")
+      .flatMap((step) => step.entry.files)
+  )
+  const failedUploads: string[] = []
+  for (const file of toUpload) {
+    try {
+      const { result } = await uploadFilesWorkflow(container).run({
+        input: {
+          files: [
+            {
+              filename: file,
+              mimeType: pictureMimeType(file),
+              content: (pictureFiles.found.get(file) as Buffer).toString("base64"),
+              access: "public",
+            },
+          ],
+        },
+      })
+      uploadedUrls.set(file, result[0].url)
+    } catch (error) {
+      failedUploads.push(file)
+      unusable.add(file)
+      if (failedUploads.length === 1) {
+        const message =
+          "Product pictures: the file storage refused an upload " +
+          `(${error instanceof Error ? error.message : String(error)}), so the images were left as they are.`
+        logger.warn(message)
+        warnings.push(message)
+      }
+    }
   }
+  const pictureSteps = settlePicturePlan(picturePlan, unusable)
   if (pictureSteps.length > 0) {
     const pictures = pictureSteps.map((step) => {
       const urls =
