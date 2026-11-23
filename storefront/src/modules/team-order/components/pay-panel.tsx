@@ -288,9 +288,11 @@ export default function PayPanel({
               when: momentWords(money[phase.part].paidAt) ?? dayOfMoment(money[phase.part].paidAt) ?? "",
             })}
           </p>
-          <p className="type-body" data-testid="pay-done-status">
-            {fill(w.done.order, { status: statusWords(money.teamOrder.status).label })}
-          </p>
+          {phase.part === "deposit" && (
+            <p className="type-body" data-testid="pay-done-status">
+              {fill(w.done.order, { status: statusWords(money.teamOrder.status).label })}
+            </p>
+          )}
           <p className="type-body font-semibold" data-testid="pay-done-next">
             {phase.part === "deposit" ? w.done.nextAfterDeposit : w.done.nextAfterBalance}
           </p>

@@ -107,6 +107,7 @@ export default function TeamOrderDetail({
         {product.designerHandle && (
           <ButtonLink
             href={designOrderPath(product.designerHandle, order.id)}
+            variant={draft ? "primary" : "secondary"}
             fullWidth
             className="md:w-auto md:self-start"
             data-testid="team-order-edit"
