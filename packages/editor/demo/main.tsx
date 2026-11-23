@@ -427,7 +427,10 @@ function App() {
 }
 
 const container = document.getElementById("root");
-if (container) {
+if (container && PARAMS.get("pictures") === "1") {
+  // The product pictures page (G5): its own module, loaded only for this address, so the editor page does not carry it.
+  void import("./pictures").then((m) => m.mountPicturesPage(container));
+} else if (container) {
   createRoot(container).render(
     <StrictMode>
       <App />
