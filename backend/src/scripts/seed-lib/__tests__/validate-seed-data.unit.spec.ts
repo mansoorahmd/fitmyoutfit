@@ -218,6 +218,17 @@ describe("validateSeedData", () => {
     expect(problems).toContain('products: "rush-add-on" images must be marked placeholder: true')
   })
 
+  it("rejects picture files that are empty, have a folder or a wrong extension, or are listed twice", () => {
+    const seed = clone()
+    seed.products.data[0].images.files = []
+    seed.products.data[1].images.files = ["../x.webp", "a.gif"]
+    seed.products.data[2].images.files = ["a.webp", "a.webp"]
+    const problems = validateSeedData(seed)
+    expect(problems).toContain('products: "jersey" images.files must list at least one file')
+    expect(problems.filter((p) => p.includes('"t-shirt" picture file'))).toHaveLength(2)
+    expect(problems).toContain('products: "jacket" picture file "a.webp" is listed twice')
+  })
+
   it("rejects a product without an images entry", () => {
     const seed = clone()
     delete (seed.products.data[0] as { images?: unknown }).images

@@ -1,3 +1,5 @@
+import fs from "node:fs"
+import path from "node:path"
 import { medusaIntegrationTestRunner } from "@medusajs/test-utils"
 import type { MedusaContainer } from "@medusajs/framework/types"
 import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils"
@@ -93,8 +95,9 @@ async function snapshot(container: MedusaContainer) {
       title: p.title,
       status: p.status,
       metadata: p.metadata,
-      thumbnail: p.thumbnail,
-      images: (p.images ?? []).map((i: any) => i.url).sort(),
+      // An uploaded picture's URL starts with the upload time, which differs from run to run.
+      thumbnail: p.thumbnail?.replace(/\/static\/\d+-/, "/static/") ?? null,
+      images: (p.images ?? []).map((i: any) => i.url.replace(/\/static\/\d+-/, "/static/")).sort(),
       collection: p.collection?.handle ?? null,
       sales_channels: (p.sales_channels ?? []).map((s: any) => s.name).sort(),
       shipping_profile: p.shipping_profile?.type ?? null,
@@ -427,26 +430,107 @@ medusaIntegrationTestRunner({
         ).toEqual([["aed", 0], ["gbp", 0], ["pkr", 0], ["usd", 0]])
       })
 
-      it("sets each product's placeholder image URLs from the seed data, first as the thumbnail", async () => {
+      const PICTURES = path.resolve(process.cwd(), "../packages/editor/samples/pictures/products")
+      const OLD_STAND_INS = (handle: string) => {
+        const urls = seedData.products.data.find((p) => p.handle === handle)!.images.urls
+        return { thumbnail: urls[0], images: urls.map((url) => ({ url })) }
+      }
+      const pictureOf = async (handle: string) => {
+        const [product] = await getContainer()
+          .resolve(Modules.PRODUCT)
+          .listProducts({ handle }, { relations: ["images"] })
+        return { thumbnail: product.thumbnail, images: (product.images ?? []).map((i) => i.url) }
+      }
+      const uploadedFiles = () => {
+        const folder = path.join(process.cwd(), "static")
+        return fs.existsSync(folder) ? fs.readdirSync(folder).sort() : []
+      }
+      const storedName = (url: string) => path.basename(new URL(url).pathname).replace(/^\d+-/, "")
+
+      it("gives the jersey four of our own pictures and the T-shirt two, uploaded through the file storage, the rest their stand-in links", async () => {
         expect([...firstRun.created.images].sort()).toEqual([...contractOrder].sort())
         const { data } = await api.get("/store/products?fields=handle,thumbnail,*images", {
           headers,
         })
         expect(data.products).toHaveLength(5)
         for (const product of data.products) {
-          const urls = seedData.products.data.find((p) => p.handle === product.handle)!.images.urls
-          expect(product.thumbnail).toBe(urls[0])
-          expect(product.images.map((i: any) => i.url)).toEqual(urls)
+          const images = seedData.products.data.find((p) => p.handle === product.handle)!.images
+          const shown = product.images.map((i: any) => i.url)
+          expect(product.thumbnail).toBe(shown[0])
+          if (!images.files) {
+            expect(shown).toEqual(images.urls)
+            continue
+          }
+          expect(shown.map(storedName)).toEqual(images.files)
+          // Each URL answers with the file. The host in the URL is BACKEND_URL (not this test
+          // server), so only its path is fetched.
+          for (const [index, file] of images.files.entries()) {
+            const answer = await api.get(new URL(shown[index]).pathname, {
+              responseType: "arraybuffer",
+              validateStatus: () => true,
+            })
+            expect(answer.status).toBe(200)
+            expect(answer.headers["content-type"]).toBe("image/webp")
+            expect(Buffer.from(answer.data).equals(fs.readFileSync(path.join(PICTURES, file)))).toBe(
+              true
+            )
+          }
         }
-        // The contract's first jersey photo, query string included (no network: only the stored URL).
         const jersey = data.products.find((p: any) => p.handle === "jersey")
-        expect(jersey.thumbnail).toBe(
-          "https://www.spized.com/thumbnail/4b/cb/26/1744736603/abc184bc-ffaa-6972-d8f4-67ad4c530dd0_784006_600x600.webp?ts=1793783716"
-        )
-        expect(jersey.images.map((i: any) => i.url)).toHaveLength(2)
+        expect(jersey.images.map((i: any) => storedName(i.url))).toEqual([
+          "jersey-vneck-front.webp",
+          "jersey-vneck-back.webp",
+          "jersey-round-front.webp",
+          "jersey-round-back.webp",
+        ])
+        const tshirt = data.products.find((p: any) => p.handle === "t-shirt")
+        expect(tshirt.images.map((i: any) => storedName(i.url))).toEqual([
+          "tshirt-front.webp",
+          "tshirt-back.webp",
+        ])
+        expect(firstRun.repaired.filter((line) => line.includes("pictures"))).toEqual([])
       })
 
-      it("gives a product without a picture its images again and never replaces an admin's photo", async () => {
+      it("replaces the old stand-in photos with our pictures, reported as repaired, and a second run changes nothing", async () => {
+        const container = getContainer()
+        const productModule = container.resolve(Modules.PRODUCT)
+        const [jersey] = await productModule.listProducts({ handle: "jersey" })
+        const [tshirt] = await productModule.listProducts({ handle: "t-shirt" })
+        await updateProductsWorkflow(container).run({
+          input: {
+            products: [
+              { id: jersey.id, ...OLD_STAND_INS("jersey") },
+              { id: tshirt.id, ...OLD_STAND_INS("t-shirt") },
+            ],
+          },
+        })
+        expect((await pictureOf("jersey")).images).toEqual(seedData.products.data[0].images.urls)
+
+        const rerun = await seedStore(container, adminOptions)
+        expect(rerun.created.images).toEqual([])
+        expect(rerun.repaired.filter((line) => line.includes("pictures"))).toEqual([
+          "jersey: pictures (stand-in photos replaced by our own)",
+          "t-shirt: pictures (stand-in photos replaced by our own)",
+        ])
+        const jerseyAfter = await pictureOf("jersey")
+        expect(jerseyAfter.images.map(storedName)).toEqual(seedData.products.data[0].images.files)
+        expect(jerseyAfter.thumbnail).toBe(jerseyAfter.images[0])
+        const tshirtAfter = await pictureOf("t-shirt")
+        expect(tshirtAfter.images.map(storedName)).toEqual(seedData.products.data[1].images.files)
+        expect(tshirtAfter.thumbnail).toBe(tshirtAfter.images[0])
+
+        // Run again: nothing uploaded, nothing changed, nothing reported.
+        const filesBefore = uploadedFiles()
+        const again = await seedStore(container, adminOptions)
+        expect(again.created.images).toEqual([])
+        expect(again.repaired).toEqual([])
+        expect(again.warnings).toEqual([])
+        expect(uploadedFiles()).toEqual(filesBefore)
+        expect(await pictureOf("jersey")).toEqual(jerseyAfter)
+        expect(await pictureOf("t-shirt")).toEqual(tshirtAfter)
+      })
+
+      it("gives a product without a picture its pictures again and never replaces an admin photo", async () => {
         const container = getContainer()
         const productModule = container.resolve(Modules.PRODUCT)
         const [jersey] = await productModule.listProducts({ handle: "jersey" })
@@ -467,24 +551,77 @@ medusaIntegrationTestRunner({
         const rerun = await seedStore(container, adminOptions)
         expect(rerun.created.images).toEqual(["jersey"])
 
-        const [jerseyAfter] = await productModule.listProducts(
-          { handle: "jersey" },
-          { relations: ["images"] }
-        )
-        expect(jerseyAfter.thumbnail).toBe(seedData.products.data[0].images.urls[0])
-        expect(jerseyAfter.images?.map((i) => i.url)).toEqual(seedData.products.data[0].images.urls)
-        const [jacketAfter] = await productModule.listProducts(
-          { handle: "jacket" },
-          { relations: ["images"] }
-        )
-        expect(jacketAfter.thumbnail).toBe(adminPhoto)
-        expect(jacketAfter.images?.map((i) => i.url)).toEqual([adminPhoto])
-        const [tshirtAfter] = await productModule.listProducts(
-          { handle: "t-shirt" },
-          { relations: ["images"] }
-        )
-        expect(tshirtAfter.thumbnail).toBeNull()
-        expect(tshirtAfter.images?.map((i) => i.url)).toEqual([adminPhoto])
+        const jerseyAfter = await pictureOf("jersey")
+        expect(jerseyAfter.images.map(storedName)).toEqual(seedData.products.data[0].images.files)
+        expect(jerseyAfter.thumbnail).toBe(jerseyAfter.images[0])
+        expect(await pictureOf("jacket")).toEqual({ thumbnail: adminPhoto, images: [adminPhoto] })
+        expect(await pictureOf("t-shirt")).toEqual({ thumbnail: null, images: [adminPhoto] })
+      })
+
+      it("leaves a changed stand-in picture alone: another thumbnail, or an added image", async () => {
+        const container = getContainer()
+        const productModule = container.resolve(Modules.PRODUCT)
+        const [jersey] = await productModule.listProducts({ handle: "jersey" })
+        const [tshirt] = await productModule.listProducts({ handle: "t-shirt" })
+        const adminPhoto = "https://example.com/our-own-photo.jpg"
+        const jerseyStandIn = OLD_STAND_INS("jersey")
+        const tshirtStandIn = OLD_STAND_INS("t-shirt")
+        await updateProductsWorkflow(container).run({
+          input: {
+            products: [
+              { id: jersey.id, thumbnail: adminPhoto, images: jerseyStandIn.images },
+              {
+                id: tshirt.id,
+                thumbnail: tshirtStandIn.thumbnail,
+                images: [...tshirtStandIn.images, { url: adminPhoto }],
+              },
+            ],
+          },
+        })
+        const filesBefore = uploadedFiles()
+        const rerun = await seedStore(container, adminOptions)
+        expect(rerun.repaired).toEqual([])
+        expect(uploadedFiles()).toEqual(filesBefore)
+        const jerseyAfter = await pictureOf("jersey")
+        expect(jerseyAfter.thumbnail).toBe(adminPhoto)
+        expect(jerseyAfter.images).toEqual(seedData.products.data[0].images.urls)
+        const tshirtAfter = await pictureOf("t-shirt")
+        expect(tshirtAfter.images).toHaveLength(3)
+        expect(tshirtAfter.images).toContain(adminPhoto)
+      })
+
+      it("leaves the images as they are and warns once when the picture files cannot be read", async () => {
+        const container = getContainer()
+        const productModule = container.resolve(Modules.PRODUCT)
+        const [jersey] = await productModule.listProducts({ handle: "jersey" })
+        const [tshirt] = await productModule.listProducts({ handle: "t-shirt" })
+        await updateProductsWorkflow(container).run({
+          input: {
+            products: [
+              { id: jersey.id, ...OLD_STAND_INS("jersey") },
+              { id: tshirt.id, ...OLD_STAND_INS("t-shirt") },
+            ],
+          },
+        })
+        const filesBefore = uploadedFiles()
+        const rerun = await seedStore(container, {
+          ...adminOptions,
+          picturesDirectories: [path.join(process.cwd(), "no-such-folder")],
+        })
+        expect(rerun.warnings).toHaveLength(1)
+        expect(rerun.warnings[0]).toContain("could not read")
+        for (const handle of ["jersey", "t-shirt"]) {
+          for (const file of seedData.products.data.find((p) => p.handle === handle)!.images.files!) {
+            expect(rerun.warnings[0]).toContain(file)
+          }
+        }
+        expect(rerun.created.images).toEqual([])
+        expect(rerun.repaired).toEqual([])
+        expect(uploadedFiles()).toEqual(filesBefore)
+        expect(await pictureOf("jersey")).toEqual({
+          thumbnail: seedData.products.data[0].images.urls[0],
+          images: seedData.products.data[0].images.urls,
+        })
       })
 
       it("lists Jersey, T-Shirt and Jacket in the garments collection, priced per region", async () => {
@@ -1165,7 +1302,7 @@ medusaIntegrationTestRunner({
         const before = await counts()
         expect(before.region).toBe(4)
         expect(before.product).toBe(5)
-        expect(before.image).toBe(9)
+        expect(before.image).toBe(11)
         expect(before.stockLocation).toBe(1)
         expect(before.fulfillmentSet).toBe(1)
         expect(before.serviceZone).toBe(4)

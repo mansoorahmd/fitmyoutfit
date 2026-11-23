@@ -81,6 +81,18 @@ describe("buildFileModules", () => {
     expect(buildFileModules({})).toEqual([])
   })
 
+  it("configures the local provider with BACKEND_URL when no S3 variable is set", () => {
+    const [fileModule] = buildFileModules({ BACKEND_URL: "http://localhost:9009/" })
+    expect(fileModule.resolve).toBe("@medusajs/medusa/file")
+    expect((fileModule.options as { providers: unknown[] }).providers).toEqual([
+      {
+        resolve: "@medusajs/medusa/file-local",
+        id: "local",
+        options: { backend_url: "http://localhost:9009/static" },
+      },
+    ])
+  })
+
   it("uses the S3 provider with path-style addressing when an endpoint is set", () => {
     const [fileModule] = buildFileModules(s3Env)
     expect(fileModule.resolve).toBe("@medusajs/medusa/file")

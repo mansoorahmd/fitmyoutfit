@@ -385,14 +385,34 @@ const S3_REQUIRED = [
 
 /**
  * The S3 file provider, only when the S3_* variables are set.
- * Without them Medusa uses the local file provider (files in backend/static).
+ * Without them Medusa uses the local file provider (files in backend/static, served at
+ * <backend>/static). Medusa's own default writes the links of those files with port 9000; when
+ * BACKEND_URL is set the provider is configured here with it (`<BACKEND_URL>/static`), so the
+ * links of the seed's product pictures open on the port the backend really runs on.
  * When S3_ENDPOINT is set (MinIO, R2 and similar) path-style addressing is turned on,
  * because those servers do not serve buckets as sub-domains.
  */
 export function buildFileModules(env: Env): ModuleEntry[] {
   const missing = S3_REQUIRED.filter((name) => !clean(env[name]))
   if (missing.length === S3_REQUIRED.length) {
-    return []
+    const backendUrl = clean(env.BACKEND_URL)?.replace(/\/+$/, "")
+    if (!backendUrl) {
+      return []
+    }
+    return [
+      {
+        resolve: "@medusajs/medusa/file",
+        options: {
+          providers: [
+            {
+              resolve: "@medusajs/medusa/file-local",
+              id: "local",
+              options: { backend_url: `${backendUrl}/static` },
+            },
+          ],
+        },
+      },
+    ]
   }
   if (missing.length > 0) {
     throw new ConfigError(
