@@ -2,12 +2,14 @@ import Image from "next/image"
 
 import { teamOrderContent } from "@content/team-order"
 import { designOrderPath } from "@lib/editor/designer-context"
+import type { PaymentsView } from "@lib/team-order/payments"
 import type { ProofView, TeamOrderView } from "@lib/team-order/types"
 import { isDraft, scheduleSentence, statusWords } from "@lib/team-order/words"
 import { ButtonLink } from "@modules/common/components/button"
 
 import DeleteOrder from "./delete-order"
 import ListSummary from "./list-summary"
+import MoneySection from "./money-section"
 import NeedByForm from "./need-by-form"
 import ProofSection from "./proof-section"
 import RenameForm from "./rename-form"
@@ -35,12 +37,17 @@ export default function TeamOrderDetail({
   product,
   proofs,
   countryCode,
+  money,
+  moneyFailed,
 }: {
   order: TeamOrderView
   product: DetailProduct
   /** Every proof of the order, newest first; null when they could not be read. */
   proofs: ProofView[] | null
   countryCode: string
+  /** The backend's cost and payments (contract M3-3); null for a draft, or when they could not be read. */
+  money: PaymentsView | null
+  moneyFailed: boolean
 }) {
   const draft = isDraft(order.status)
   const schedule = scheduleSentence(order.schedule)
@@ -92,7 +99,9 @@ export default function TeamOrderDetail({
         />
       </section>
 
-      <ProofSection order={order} proofs={proofs} countryCode={countryCode} designerHandle={product.designerHandle} />
+      <ProofSection order={order} proofs={proofs} countryCode={countryCode} designerHandle={product.designerHandle} payments={money} />
+
+      <MoneySection orderId={order.id} status={order.status} money={money} failed={moneyFailed} />
 
       <section className="flex flex-col gap-4" aria-label={words.actions.edit}>
         {product.designerHandle && (

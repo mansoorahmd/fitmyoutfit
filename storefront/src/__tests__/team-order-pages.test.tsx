@@ -9,6 +9,7 @@ const { state } = vi.hoisted(() => ({
     order: null as unknown,
     list: null as unknown,
     proofs: { ok: true, value: [] } as unknown,
+    payments: { ok: false, failure: { kind: "unavailable" } } as unknown,
     products: [] as unknown[],
     schedule: [] as unknown[],
     scheduleAnswer: (() => ({ ok: true })) as (id: string, change: unknown) => unknown,
@@ -63,6 +64,9 @@ vi.mock("@lib/data/customer", () => ({
 vi.mock("@lib/data/products", () => ({
   listProducts: async () => ({ response: { products: state.products } }),
 }))
+vi.mock("@lib/data/team-order-payments", () => ({
+  retrievePayments: async () => state.payments,
+}))
 vi.mock("@lib/data/team-orders", () => ({
   listTeamOrders: async () => state.list,
   retrieveTeamOrder: async () => state.order,
@@ -111,6 +115,7 @@ beforeEach(() => {
   state.pushed = []
   state.customer = "in"
   state.products = [jersey]
+  state.payments = { ok: false, failure: { kind: "unavailable" } }
   state.schedule = []
   state.scheduleAnswer = () => ({ ok: true, value: parseTeamOrderAnswer(apiAnswer())! })
   state.renamed = []
@@ -258,7 +263,9 @@ describe("one team order: the page", () => {
     state.proofs = { ok: true, value: [parseProofView({ ...signed, number: 2 }), parseProofView(first)] }
     await openOrder()
     expect(screen.getByTestId("proof-signed")).toHaveTextContent("The proof is signed on 23 November 2026")
-    expect(screen.getByTestId("proof-next")).toHaveTextContent("Next is the deposit. Payment is not open yet")
+    // the money is the Money section's (the payments could not be read here, so it claims nothing and offers nothing)
+    expect(screen.queryByTestId("proof-next")).toBeNull()
+    expect(screen.getByTestId("money-failed")).toHaveTextContent("We couldn't load the money details")
     expect(screen.getByTestId("proof-open")).toHaveTextContent("Open the signed proof")
     const history = screen.getAllByTestId("proof-history-item")
     expect(history).toHaveLength(2)
@@ -362,13 +369,13 @@ describe("one team order: the page", () => {
     await waitFor(() => expect(state.refreshed).toBe(1))
   })
 
-  it("rush chosen: says it is a paid option and that payment is not open, with a way back", async () => {
+  it("rush chosen: says it is a paid option whose charge is on the price shown with the proof, with a way back", async () => {
     state.order = view({
       team_order: { need_by_date: "2026-12-05", rush_requested: true },
       schedule: apiSchedule({ state: "needs_rush", need_by_date: "2026-12-05", latest_sign_standard: "2026-11-20", latest_sign_rush: "2026-11-25" }),
     })
     await openOrder()
-    expect(screen.getByTestId("need-by-rush")).toHaveTextContent("Rush delivery is chosen. It is a paid option; payment is not open yet.")
+    expect(screen.getByTestId("need-by-rush")).toHaveTextContent("Rush delivery is chosen. It is a paid option: its charge is a line of the price shown with the proof.")
     expect(screen.getByTestId("need-by-rush-off")).toHaveTextContent("Keep standard delivery")
   })
 

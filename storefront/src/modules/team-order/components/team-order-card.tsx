@@ -1,5 +1,6 @@
 import Image from "next/image"
 
+import { paymentsContent } from "@content/payments"
 import { teamOrderContent } from "@content/team-order"
 import type { TeamOrderListItem } from "@lib/team-order/types"
 import { dayWords, piecesWords, playersWords } from "@lib/team-order/words"
@@ -47,6 +48,9 @@ export default function TeamOrderCard({
         </span>
         <span className="type-small text-brand-ink-muted" data-testid="team-order-card-meta">
           {playersWords(order.players)} · {piecesWords(order.pieces)}
+        </span>
+        <span className="type-small font-semibold text-brand-ink" data-testid="team-order-card-money">
+          {paymentsContent.card.money[order.status]}
         </span>
         <span className="type-small text-brand-ink-muted" data-testid="team-order-card-need-by">
           {order.needByDate ? fill(words.needBy, { date: dayWords(order.needByDate) }) : words.noNeedBy}
