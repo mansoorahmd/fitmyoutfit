@@ -320,6 +320,7 @@ medusaIntegrationTestRunner({
           "schedule_time_zone",
           "team_order_deposit_percentage",
           "team_order_payment_path",
+          "fit_kit_return_days",
         ])
         const [seeded] = await getContainer().resolve(Modules.STORE).listStores({})
         expect(seeded.metadata).toMatchObject({
@@ -1014,6 +1015,7 @@ medusaIntegrationTestRunner({
             "schedule_time_zone",
             "team_order_deposit_percentage",
             "team_order_payment_path",
+            "fit_kit_return_days",
           ],
           regionSettings: [
             "Pakistan: min_garment_quantity",
