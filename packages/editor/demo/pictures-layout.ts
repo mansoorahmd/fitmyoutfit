@@ -6,13 +6,21 @@
 export type PictureSide = "front" | "back";
 
 /** The garments that get pictures, with the name used in the file names. */
-export const PICTURE_GARMENTS = [
+export interface PictureGarment {
+  productId: string;
+  /** The name in the file names. */
+  name: string;
+  /** The product's own template the kit uses. */
+  template: string;
+  /** The back number's font size in pattern mm, when the product's default is too wide for this model's back (the stand-in T-shirt's number wraps over the side seam at 215). */
+  numberSize?: number;
+}
+
+export const PICTURE_GARMENTS: readonly PictureGarment[] = [
   { productId: "match-jersey-vneck", name: "jersey-vneck", template: "classic" },
   { productId: "match-jersey-round", name: "jersey-round", template: "classic" },
-  { productId: "stand-in-tshirt", name: "tshirt", template: "band" },
-] as const;
-
-export type PictureGarment = (typeof PICTURE_GARMENTS)[number];
+  { productId: "stand-in-tshirt", name: "tshirt", template: "band", numberSize: 165 },
+];
 
 /** The picture's edge in pixels, and how much of it the garment fills (its taller side, over the whole set). */
 export const PICTURE_SIZE = 1200;

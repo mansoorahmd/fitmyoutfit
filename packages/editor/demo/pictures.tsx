@@ -21,6 +21,7 @@ import {
   applyTemplate,
   createDesign,
   fontsReady,
+  updateLayer,
   validateFontCatalog,
   validatePalette,
   validateProductDefinition,
@@ -79,7 +80,11 @@ async function loadKit(garment: PictureGarment, palette: Palette, fonts: FontCat
   const base = createDesign(product, { teamColors: { main: colour(KIT.main), second: colour(KIT.second) }, teamName: "", samplePlayer: SAMPLE });
   const tpl = validateTemplate(await fetchJson(`/templates/${garment.productId}/${garment.template}.json`), { product, fonts });
   if (!tpl.ok) throw new Error(`template ${garment.template}: ${tpl.errors.map((e) => e.message).join("; ")}`);
-  return { garment, product, design: applyTemplate(base, tpl.value, { product, fonts }) };
+  let design = applyTemplate(base, tpl.value, { product, fonts });
+  if (garment.numberSize) {
+    for (const layer of design.layers) if (layer.role === "player-number") design = updateLayer(design, layer.id, { fontSize: garment.numberSize }, { product });
+  }
+  return { garment, product, design };
 }
 
 const frames = (n: number) =>
