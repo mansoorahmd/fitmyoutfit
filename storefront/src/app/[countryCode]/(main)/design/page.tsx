@@ -4,7 +4,7 @@ import { notFound } from "next/navigation"
 import { designContent } from "@content/design"
 import { loadChooser } from "@lib/data/design-chooser"
 import { getRegion } from "@lib/data/regions"
-import { chooserCardHref } from "@lib/editor/chooser"
+import { chooserCards } from "@lib/editor/chooser"
 import { STORE_NAME } from "@lib/store-config"
 import { ButtonLink } from "@modules/common/components/button"
 import DesignCardAction from "@modules/design/components/design-card-action"
@@ -17,9 +17,10 @@ export const metadata: Metadata = {
 }
 
 /**
- * The way into the 3D designer from the whole store (/pk/design): the garments the designer knows,
- * each with its picture, name and "from" price as the listing shows them, each opening the designer
- * for that garment. With one garment it still shows (more are coming). The designer itself is
+ * The way into the 3D designer from the whole store (/pk/design): one card per garment the designer
+ * knows (the jersey's two necks are two cards), each with our own picture of the garment (the product's
+ * thumbnail when it has none), its name and the product's "from" price, each opening the designer on
+ * that garment. The designer itself is
  * /[countryCode]/design/[handle].
  */
 export default async function DesignChooserPage(props: { params: Promise<{ countryCode: string }> }) {
@@ -29,6 +30,7 @@ export default async function DesignChooserPage(props: { params: Promise<{ count
 
   const words = designContent.chooser
   const state = await loadChooser(region)
+  const cards = state.kind === "ok" ? chooserCards(state.products) : []
 
   return (
     <div className="content-container flex flex-col gap-6 py-8 md:gap-8 md:py-12 xl:py-16" data-testid="design-chooser">
@@ -41,15 +43,17 @@ export default async function DesignChooserPage(props: { params: Promise<{ count
 
       {state.kind === "ok" && (
         <>
-          <ul className={productGridClasses(state.products.length)} data-testid="design-chooser-list">
-            {state.products.map((product) => (
-              <li key={product.id}>
+          <ul className={productGridClasses(cards.length)} data-testid="design-chooser-list">
+            {cards.map((card) => (
+              <li key={card.garmentId} data-testid="design-chooser-card" data-garment={card.garmentId}>
                 <ProductPreview
-                  product={product}
+                  product={card.product}
                   region={region}
-                  href={chooserCardHref(product.handle ?? "")}
-                  footer={<DesignCardAction handle={product.handle ?? ""} />}
-                  imageSizes={productCardImageSizes(state.products.length)}
+                  title={card.name}
+                  image={card.picture}
+                  href={card.href}
+                  footer={<DesignCardAction garmentId={card.garmentId} />}
+                  imageSizes={productCardImageSizes(cards.length)}
                 />
               </li>
             ))}

@@ -34,8 +34,8 @@ vi.mock("@lib/data/team-orders", () => ({
 // next/font only runs inside the Next.js compiler.
 vi.mock("@lib/editor/fonts", () => ({ editorFontFamilies: { Oswald: "__Oswald_x" } }))
 vi.mock("@modules/design/components/design-loader", () => ({
-  default: (props: { product: { handle: string }; countryCode: string }) => (
-    <div data-testid="loader" data-handle={props.product.handle} data-country={props.countryCode} />
+  default: (props: { product: { handle: string }; countryCode: string; context?: { requestedGarment?: string | null } }) => (
+    <div data-testid="loader" data-handle={props.product.handle} data-country={props.countryCode} data-garment={props.context?.requestedGarment ?? ""} />
   ),
 }))
 // The localized link reads the country from the URL; a plain link is enough here.
@@ -211,6 +211,22 @@ describe("the designer page: not found", () => {
     expect(screen.getByTestId("loader")).toHaveAttribute("data-handle", "jersey")
     expect(screen.getByTestId("loader")).toHaveAttribute("data-country", "pk")
     expect(notFound).not.toHaveBeenCalled()
+  })
+
+  it("a chooser card's garment is handed to the designer; an unknown one, or another product's, is not", async () => {
+    listProducts.mockResolvedValue({ response: { products: [{ handle: "jersey", metadata: { kind: "garment" } }] } })
+    const garmentOf = async (garment: string | undefined) => {
+      const page = await DesignPage({ params: Promise.resolve({ countryCode: "pk", handle: "jersey" }), searchParams: Promise.resolve(garment === undefined ? {} : { garment }) })
+      const { unmount } = render(page)
+      const value = screen.getByTestId("loader").getAttribute("data-garment")
+      unmount()
+      return value
+    }
+    expect(await garmentOf("match-jersey-round")).toBe("match-jersey-round")
+    expect(await garmentOf("match-jersey-vneck")).toBe("match-jersey-vneck")
+    expect(await garmentOf("stand-in-tshirt")).toBe("")
+    expect(await garmentOf("nope")).toBe("")
+    expect(await garmentOf(undefined)).toBe("")
   })
 
   it("the jacket (a product with no model) is not found, without asking the backend", async () => {

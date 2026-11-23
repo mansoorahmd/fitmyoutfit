@@ -25,6 +25,8 @@ export type DesignerContext = {
   signedIn: boolean
   /** The visitor came back from signing in to finish starting a team order (`?start=1`). */
   resumeStart: boolean
+  /** The garment (an editor product id) the address asks for (`?garment=`), outside a team order and when the product has it; else null. */
+  requestedGarment?: string | null
   /** The team order this designer is open for, with its design JSON as the server holds it. */
   order: { view: TeamOrderView; design: unknown } | null
 }

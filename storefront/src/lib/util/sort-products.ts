@@ -6,6 +6,18 @@ interface MinPricedProduct extends HttpTypes.StoreProduct {
 }
 
 /**
+ * The store's own order of two products: the order the seed lists them in. Medusa's default listing order is the
+ * product id ascending (the seed makes the ids sort in its list's order, backend/src/scripts/seed-lib/
+ * product-repair-plan.ts, `orderedIds`), and the products of one seed run share one `created_at`, so the date cannot
+ * decide it (a tie is left to the database's own row order, which moves when a row is updated: the "Team kit" list
+ * once showed Jacket, T-shirt, Jersey after the seed changed the pictures). The id is stable and is the home page's order.
+ */
+export const compareStoreOrder = (
+  a: Pick<HttpTypes.StoreProduct, "id">,
+  b: Pick<HttpTypes.StoreProduct, "id">
+): number => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
+
+/**
  * Helper function to sort products by price until the store API supports sorting by price
  * @param products
  * @param sortBy
@@ -36,6 +48,10 @@ export function sortProducts(
       const diff = a._minPrice! - b._minPrice!
       return sortBy === "price_asc" ? diff : -diff
     })
+  }
+
+  if (sortBy === "store_order") {
+    sortedProducts.sort(compareStoreOrder)
   }
 
   if (sortBy === "created_at") {

@@ -21,7 +21,7 @@ export default function CategoryTemplate({
   countryCode: string
 }) {
   const pageNumber = page ? parseInt(page) : 1
-  const sort = sortBy || "created_at"
+  const sort = sortBy || "store_order"
 
   if (!category || !countryCode) notFound()
 

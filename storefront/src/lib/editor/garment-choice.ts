@@ -18,12 +18,18 @@ export type DeviceRecord = { id: string; savedAt: number }
  * has not seen yet (a neck changed since the last save point) is the newer truth and opens first. Outside an order the
  * device's most recently saved design wins, so a design saved on the round neck opens on the round neck; a device with
  * nothing saved (or one that cannot be read) opens on the product's first garment.
+ *
+ * Outside an order a garment the address asks for (`?garment=`, a chooser card's) comes first, when the product has it:
+ * a garment that is unknown or another product's is ignored. Inside an order the order's design decides, whatever the
+ * address says.
  */
 export function openingGarment(
   entry: Pick<EditorProduct, "garments">,
   input: {
     order?: { design: unknown; draft?: { productId: string; designDirty: boolean } | null }
     device?: readonly DeviceRecord[]
+    /** The editor product id the address asks for (outside a team order only). */
+    requested?: string | null
   }
 ): EditorGarment {
   if (input.order) {
@@ -31,6 +37,8 @@ export function openingGarment(
     const fromDraft = draft?.designDirty ? garmentById(entry, draft.productId) : null
     return fromDraft ?? garmentOfDesign(entry, input.order.design)
   }
+  const asked = garmentById(entry, input.requested)
+  if (asked) return asked
   let best: DeviceRecord | null = null
   for (const record of input.device ?? []) {
     if (!garmentById(entry, record.id)) continue

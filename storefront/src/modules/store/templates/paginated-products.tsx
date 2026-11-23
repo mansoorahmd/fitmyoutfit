@@ -82,10 +82,9 @@ export default async function PaginatedProducts({
   // page neither shows it nor obeys a sortBy left in the URL: everything is
   // on the first page, in the default order.
   const sortVisible = showsSort(count)
-  const shown =
-    sortVisible || sortBy === "created_at" || !sortBy
-      ? products
-      : sortProducts([...products], "created_at")
+  const shown = sortVisible
+    ? products
+    : sortProducts([...products], "store_order")
 
   return (
     <>

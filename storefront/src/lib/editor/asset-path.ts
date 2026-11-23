@@ -10,6 +10,8 @@ const SHAPES: { pattern: RegExp; type: string }[] = [
   { pattern: /^models\/[a-z0-9][a-z0-9-]*\.glb$/, type: "model/gltf-binary" },
   { pattern: /^(products|palettes|fonts)\/[a-z0-9][a-z0-9-]*\.json$/, type: "application/json" },
   { pattern: /^pictures\/[a-z0-9][a-z0-9-]*\.png$/, type: "image/png" },
+  // our own product pictures, rendered from the 3D models (the chooser's cards): pictures/products/ only
+  { pattern: /^pictures\/products\/[a-z0-9][a-z0-9-]*\.webp$/, type: "image/webp" },
   { pattern: /^templates\/[a-z0-9][a-z0-9-]*\/[a-z0-9][a-z0-9-]*\.json$/, type: "application/json" },
 ]
 
