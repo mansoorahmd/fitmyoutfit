@@ -19,6 +19,7 @@ Status: step E4b (the team list, second part: pasting, the player chip, the Done
 | `npm run generate:model` | Rewrites the placeholder GLB from `scripts/generate-placeholder-jersey.ts` (run with `tsx`), built from the pattern pieces in the product definition |
 | `npm run generate:templates` | Rewrites the sample templates (`samples/templates/<product>/`) from `scripts/make-sample-templates.ts`, measuring body heights on the committed models |
 | `node scripts/audit/editor-audit.mjs` | The page audits of the review's rules (section 4), against a running demo; see "Step E3d: what changed" |
+| `node scripts/render-pictures.mjs` | Renders the six product pictures of our garments (`samples/pictures/products/`) in a headless Chrome from a running demo; see "Product pictures of our own garments (G5)" |
 | `npm run process:stand-in -- <source.glb>` | Rewrites a stand-in model and its product definition from its downloaded source file (the jersey or the T-shirt, picked by the file's SHA-256); see "Stand-in models" |
 | `npm run process:model -- <jersey.glb>` | The same route for our own match jerseys (the Style3D exports; see "Match jerseys and the body") |
 | `npm run process:body -- <avatar.glb>` | Rewrites `samples/models/body-male.glb` from the Style3D avatar by its source record |
@@ -641,3 +642,20 @@ Inside the designer the customer can change the garment: from the start card ("G
 ## The surface, the light and the audits (G4)
 
 The match jersey's cloth is evenly lit: roughness 0.72 (it was 0.5, and its broad highlight read as a pale blotch on the upper chest and shoulder), the sky light 1.35 with a neutral ground (`react/studio.ts`), which also brings the colours back to the palette. The layout audit (`scripts/audit/editor-audit.mjs`) measures the garment for rule 4.6 by running it with the person hidden (the view control), and rule 4.6b holds the resting view with the person: the head is not cut off or under a row, and the hem (the garment's main colour, down the middle) is in view.
+
+## Product pictures of our own garments (G5)
+
+The store's product pages, product list and "Design your kit" page showed stand-in photos from another company's site. **The six pictures in `samples/pictures/products/` replace them**: `jersey-vneck-front.webp`, `jersey-vneck-back.webp`, `jersey-round-front.webp`, `jersey-round-back.webp`, `tshirt-front.webp` and `tshirt-back.webp`. Each is 1200 x 1200, WebP with a **transparent background** (the store puts them on its own light grey), the garment alone (no person), centred, at most 200 KB. They are rendered from the editor's own 3D models with the designer's lights and fabric, so they show what the editor shows.
+
+**One kit for all six:** the product's own template in navy (Main) and white (Second): `classic` on both match jerseys, `band` on the T-shirt. No team name and no logo on the front. On the back, the sample name `PLAYER` and number `10` in the product's default lettering (Oswald for the name, Graduate for the number, from the template's slots).  On the T-shirt the number is set at 165 mm instead of the preset's 215 (`numberSize` in `demo/pictures-layout.ts`): at 215 the stand-in T-shirt's back lets the 0 wrap over the side seam. The V-neck and the round neck differ in the collar. One camera and one scale for the whole set: the tallest render (a back view) fills 80% of the height, and the others keep their real relative size.
+
+**To make them again** (needs Google Chrome on this computer, with a GPU or `--software`; no new package):
+
+```sh
+npm run dev -w packages/editor -- --port 5184 --strictPort      # the demo, in one terminal
+node packages/editor/scripts/render-pictures.mjs --url http://localhost:5184
+```
+
+Flags: `--url` (the demo's address, default `http://localhost:5173`), `--chrome <path>` (default: the usual install places), `--out <folder>` (default `samples/pictures/products`), `--debug-port <n>` (Chrome's debugging port, default 9222) and `--software` (the software rasteriser instead of the GPU; slower, same lights). It takes about ten seconds and overwrites the six files. The same page works by hand in a normal browser: open the demo with `?pictures=1`, wait for "Done", and save the pictures from the links.
+
+How it works: `demo/pictures.tsx` (the page, loaded only for `?pictures=1`, so neither the library nor the editor page carries it) renders each garment with `DesignCanvas` (`showBody={false}`, 1800 px square, 4096 px texture), turns to the front and back, copies the canvas's pixels (the page asks the browser to keep the drawing buffer), crops by the transparent border, and places all six with one scale (`demo/pictures-layout.ts`, tested) into 1200 x 1200 canvases that the browser encodes as WebP (the canvas's own encoder, quality 0.92, lowered only if a file passes 200 KB). The script only drives Chrome (the DevTools protocol over Node's own WebSocket) and writes the files. A change to a product, a template or the lights means rendering the pictures again.
