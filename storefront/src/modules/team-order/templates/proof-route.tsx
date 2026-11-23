@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation"
 import { proofContent } from "@content/proof"
 import { customerState } from "@lib/data/customer"
 import { listProducts } from "@lib/data/products"
+import { retrievePayments } from "@lib/data/team-order-payments"
 import { loadSavedDesign, retrieveProof, retrieveTeamOrder } from "@lib/data/team-orders"
 import { designOrderPath } from "@lib/editor/designer-context"
 import { editorFontFamilies } from "@lib/editor/fonts"
@@ -95,6 +96,11 @@ export default async function ProofRoute({
     needByDate: proof.needByDate ?? (isCurrent ? order.needByDate : null),
   })
   const waiting = proof.status === "sent" && isCurrent
+  // The price of the proof that is out (the organizer reads it before signing), or of the signed order. Only when it is
+  // the price of this very proof: anything else is "not read", and signing is not offered.
+  const priced = isCurrent && (waiting || proof.status === "signed")
+  const paymentsRead = priced ? await retrievePayments(orderId) : null
+  const money = paymentsRead?.ok && paymentsRead.value.cost.proofId === proof.id ? paymentsRead.value : null
   const designerHref =
     entry && product?.handle ? `/${countryCode}${designOrderPath(product.handle, orderId)}` : `/${countryCode}/account/team-orders/${encodeURIComponent(orderId)}`
 
@@ -115,6 +121,8 @@ export default async function ProofRoute({
         earlierModel: !!entry && isEarlierModelDesign(design, entry),
       }}
       changeListPath={designerHref}
+      orderStatus={order.status}
+      money={money}
     />
   )
 }

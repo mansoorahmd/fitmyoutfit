@@ -3,14 +3,16 @@
 import { useRouter } from "next/navigation"
 import { useRef, useState } from "react"
 
+import { paymentsContent } from "@content/payments"
 import { proofContent } from "@content/proof"
 import { signProof } from "@lib/data/team-orders"
 import { authHref } from "@lib/util/account-auth"
 import { checkSigning, stepFailure, type SigningSchedule } from "@lib/team-order/signing"
-import type { ProofView, ScheduleState } from "@lib/team-order/types"
+import { moneyWords, payModel, type PaymentsView } from "@lib/team-order/payments"
+import type { ProofView, ScheduleState, TeamOrderStatus } from "@lib/team-order/types"
 import { fill } from "@lib/util/wording"
 import { Alert } from "@modules/common/components/alert"
-import { Button } from "@modules/common/components/button"
+import { Button, ButtonLink } from "@modules/common/components/button"
 import CheckField from "@modules/common/components/check-field"
 import { TextField } from "@modules/common/components/text-field"
 
@@ -29,6 +31,7 @@ export default function SignProof({
   schedule,
   orderHref,
   signedInPath,
+  statement,
   onSigned,
   onStale,
 }: {
@@ -39,6 +42,8 @@ export default function SignProof({
   orderHref: string
   /** This page's own path, for coming back after signing in again. */
   signedInPath: string
+  /** The statement the organizer agrees to, with the backend's total and its split in it. */
+  statement: string
   onSigned: (proof: ProofView | null) => void
   onStale: (sentence: string) => void
 }) {
@@ -119,7 +124,7 @@ export default function SignProof({
       )}
 
       <p className="type-body rounded-control bg-brand-surface-alt p-3" data-testid="sign-statement">
-        {w.statement}
+        {statement}
       </p>
 
       <TextField
@@ -166,17 +171,38 @@ export default function SignProof({
   )
 }
 
-/** After signing: who signed and when (from the backend's answer), the lock, what comes next in one line, and no button for it. */
+/**
+ * After signing: who signed and when (from the backend's answer), the lock, and what comes next in one line:
+ * the deposit with its amount (the backend's) and the button to the payment page while it is due. Once the
+ * deposit is in, the line says so.
+ */
 export function SignedPanel({
   proof,
   whenText,
   promisedText,
+  money,
+  justSigned,
+  orderStatus,
+  payHref,
+  orderHref,
 }: {
   proof: Pick<ProofView, "signedName">
   whenText: string
   promisedText: string | null
+  /** The backend's money for the order, or null when it could not be read. */
+  money: PaymentsView | null
+  /** Signed a moment ago on this page: the server's copy of the order is not read again yet. */
+  justSigned: boolean
+  orderStatus: TeamOrderStatus
+  /** Paths without the country code. */
+  payHref: string
+  orderHref: string
 }) {
   const d = w.done
+  const p = paymentsContent.signed
+  const amount = money ? moneyWords(money.deposit.amount, money.cost.currencyCode) : null
+  const payNow = justSigned || (money ? payModel(orderStatus, money).kind === "pay" : false)
+  const depositIn = money?.deposit.state === "paid"
   return (
     <section className="fmo-no-print flex flex-col gap-3 rounded-card border-2 border-brand-success bg-brand-success-surface p-4 md:p-6" data-testid="signed-panel" aria-labelledby="signed-title">
       <h2 id="signed-title" className="type-h2">
@@ -192,9 +218,23 @@ export function SignedPanel({
         </p>
       )}
       <p className="type-body font-semibold" data-testid="signed-next">
-        {d.next}
+        {depositIn && amount ? fill(p.depositPaid, { amount }) : money && amount ? fill(p.next, { amount }) : p.unreadable}
       </p>
-      <p className="type-small text-brand-ink-muted">{d.changeHint}</p>
+      {payNow && amount && (
+        <div>
+          <ButtonLink href={payHref} fullWidth className="md:w-auto" data-testid="signed-pay">
+            {p.pay}
+          </ButtonLink>
+        </div>
+      )}
+      {!money && (
+        <div>
+          <ButtonLink href={orderHref} variant="secondary" fullWidth className="md:w-auto" data-testid="signed-open-order">
+            {p.openOrder}
+          </ButtonLink>
+        </div>
+      )}
+      {orderStatus === "approved" || justSigned ? <p className="type-small text-brand-ink-muted">{d.changeHint}</p> : null}
     </section>
   )
 }
