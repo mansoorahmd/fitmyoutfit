@@ -1,9 +1,19 @@
+import path from "node:path"
 import { seedData } from "../../seed-data"
-import { isHttpsUrl, needsPlaceholderImage, planPlaceholderImages } from "../product-images"
+import {
+  classifyPictures,
+  isHttpsUrl,
+  isUploadOf,
+  needsPlaceholderImage,
+  planProductPictures,
+  settlePicturePlan,
+} from "../product-images"
+import { pictureDirectories, pictureMimeType, readPictureFiles } from "../product-picture-files"
 
 /**
  * The contract's "Product images" table (docs/contracts/sprint-0-dev-setup.md, as changed on
- * 10 Nov 2026), written out in full so a typo in the seed data fails here. No network needed.
+ * 10 Nov 2026), written out in full so a typo in the seed data fails here. These are the stand-in
+ * links (the old stand-ins for the jersey and the T-shirt). No network needed.
  */
 const CONTRACT_IMAGES: Record<string, string[]> = {
   jersey: [
@@ -25,19 +35,53 @@ const CONTRACT_IMAGES: Record<string, string[]> = {
   "rush-add-on": ["https://medusa-public-images.s3.eu-west-1.amazonaws.com/shorts-vintage-front.png"],
 }
 
-describe("the placeholder image URLs in the seed data", () => {
-  it("are exactly the contract's URLs, in order, marked placeholder", () => {
-    const byHandle = Object.fromEntries(
-      seedData.products.data.map((p) => [p.handle, p.images])
-    )
+/** Our own pictures: the jersey (V-neck then round neck, front then back) and the T-shirt. */
+const OUR_FILES: Record<string, string[]> = {
+  jersey: [
+    "jersey-vneck-front.webp",
+    "jersey-vneck-back.webp",
+    "jersey-round-front.webp",
+    "jersey-round-back.webp",
+  ],
+  "t-shirt": ["tshirt-front.webp", "tshirt-back.webp"],
+}
+
+describe("the product pictures in the seed data", () => {
+  it("are the contract's stand-in URLs in order, plus our own files for the jersey and the T-shirt, marked placeholder", () => {
+    const byHandle = Object.fromEntries(seedData.products.data.map((p) => [p.handle, p.images]))
     expect(byHandle).toEqual(
       Object.fromEntries(
-        Object.entries(CONTRACT_IMAGES).map(([handle, urls]) => [handle, { placeholder: true, urls }])
+        Object.entries(CONTRACT_IMAGES).map(([handle, urls]) => [
+          handle,
+          { placeholder: true, urls, ...(OUR_FILES[handle] ? { files: OUR_FILES[handle] } : {}) },
+        ])
       )
     )
   })
 
-  it("keeps the query strings and the encoded brackets of the spized.com links", () => {
+  it("name our own files as plain file names, and no file for the jacket and the fit kit", () => {
+    for (const product of seedData.products.data) {
+      for (const file of product.images.files ?? []) {
+        expect(file).toMatch(/^[a-z-]+\.webp$/)
+      }
+    }
+    for (const handle of ["jacket", "fit-kit", "rush-add-on"]) {
+      expect(seedData.products.data.find((p) => p.handle === handle)!.images.files).toBeUndefined()
+    }
+  })
+
+  it("name files that exist in packages/editor/samples/pictures/products/ (WebP)", async () => {
+    const { found, unreadable } = await readPictureFiles(Object.values(OUR_FILES).flat(), [
+      path.resolve(__dirname, "../../../../../packages/editor/samples/pictures/products"),
+    ])
+    expect(unreadable).toEqual([])
+    for (const content of found.values()) {
+      expect(content.subarray(0, 4).toString("latin1")).toBe("RIFF")
+      expect(content.subarray(8, 12).toString("latin1")).toBe("WEBP")
+    }
+  })
+
+  it("keep the query strings and the encoded brackets of the spized.com links", () => {
     for (const product of seedData.products.data.filter((p) => p.handle !== "rush-add-on")) {
       for (const url of product.images.urls) {
         expect(url).toMatch(/^https:\/\/www\.spized\.com\/thumbnail\/.+\?ts=\d+$/)
@@ -66,56 +110,162 @@ describe("needsPlaceholderImage", () => {
   })
 })
 
-describe("planPlaceholderImages", () => {
+describe("planProductPictures", () => {
   const seeds = seedData.products.data
+  const seedOf = (handle: string) => seeds.find((p) => p.handle === handle)!
+  const standIns = (handle: string) => ({
+    thumbnail: seedOf(handle).images.urls[0],
+    images: seedOf(handle).images.urls.map((url) => ({ url })),
+  })
+  const ours = (handle: string) => {
+    const urls = seedOf(handle).images.files!.map(
+      (file) => `http://localhost:9009/static/1700000000000-${file}`
+    )
+    return { thumbnail: urls[0], images: urls.map((url) => ({ url })) }
+  }
 
-  it("sets the first URL as thumbnail and all URLs as images, only on products without a picture", () => {
-    const plan = planPlaceholderImages(
+  it("gives a product with no picture our files, or the stand-in links when it has no files", () => {
+    const plan = planProductPictures(
       [
         { id: "p1", handle: "jersey", thumbnail: null, images: [] },
-        { id: "p2", handle: "jacket", thumbnail: "http://x/real.jpg", images: [{ id: "i" }] },
+        { id: "p2", handle: "jacket", thumbnail: "http://x/real.jpg", images: [{ url: "http://x/real.jpg" }] },
         { id: "p3", handle: "fit-kit", thumbnail: null, images: [] },
       ],
       seeds
     )
-    const [jersey1, jersey2] = CONTRACT_IMAGES.jersey
-    const [fitKit1, fitKit2] = CONTRACT_IMAGES["fit-kit"]
     expect(plan).toEqual([
       {
         productId: "p1",
         handle: "jersey",
-        thumbnail: jersey1,
-        images: [{ url: jersey1 }, { url: jersey2 }],
+        kind: "fresh",
+        urls: CONTRACT_IMAGES.jersey,
+        files: OUR_FILES.jersey,
       },
-      {
-        productId: "p3",
-        handle: "fit-kit",
-        thumbnail: fitKit1,
-        images: [{ url: fitKit1 }, { url: fitKit2 }],
-      },
+      { productId: "p3", handle: "fit-kit", kind: "fresh", urls: CONTRACT_IMAGES["fit-kit"], files: [] },
     ])
   })
 
-  it("leaves a product with an admin's images alone, even without a thumbnail", () => {
+  it("replaces exactly the old stand-in photos of a product that has files, and only those", () => {
+    const plan = planProductPictures(
+      [
+        { id: "p1", handle: "jersey", ...standIns("jersey") },
+        { id: "p2", handle: "t-shirt", ...standIns("t-shirt") },
+        { id: "p3", handle: "jacket", ...standIns("jacket") },
+      ],
+      seeds
+    )
+    expect(plan.map((e) => [e.handle, e.kind])).toEqual([
+      ["jersey", "replace"],
+      ["t-shirt", "replace"],
+    ])
+  })
+
+  it("leaves a changed picture alone: another thumbnail, an extra or a missing image, an admin photo", () => {
+    const jersey = standIns("jersey")
+    const adminPhoto = "https://cdn.example.com/our-photo.jpg"
+    const cases = [
+      { thumbnail: adminPhoto, images: jersey.images },
+      { thumbnail: jersey.thumbnail, images: [...jersey.images, { url: adminPhoto }] },
+      { thumbnail: jersey.thumbnail, images: [jersey.images[0]] },
+      { thumbnail: adminPhoto, images: [{ url: adminPhoto }] },
+      { thumbnail: null, images: [{ url: adminPhoto }] },
+      { thumbnail: jersey.thumbnail, images: [] },
+    ]
+    for (const state of cases) {
+      expect(planProductPictures([{ id: "p1", handle: "jersey", ...state }], seeds)).toEqual([])
+    }
+  })
+
+  it("plans nothing for a product that already shows our pictures, so a second run uploads nothing", () => {
+    expect(classifyPictures({ id: "p1", handle: "jersey", ...ours("jersey") }, seedOf("jersey"))).toBe(
+      "ours"
+    )
     expect(
-      planPlaceholderImages([{ id: "p1", handle: "jersey", thumbnail: null, images: [{}] }], seeds)
+      planProductPictures(
+        [
+          { id: "p1", handle: "jersey", ...ours("jersey") },
+          { id: "p2", handle: "t-shirt", ...ours("t-shirt") },
+        ],
+        seeds
+      )
     ).toEqual([])
   })
 
   it("ignores products that are not in the seed data", () => {
-    expect(
-      planPlaceholderImages([{ id: "p9", handle: "admin-made", thumbnail: null }], seeds)
-    ).toEqual([])
+    expect(planProductPictures([{ id: "p9", handle: "admin-made", thumbnail: null }], seeds)).toEqual([])
   })
 
   it("plans nothing once every product has a picture", () => {
     const existing = seeds.map((p, i) => ({
       id: `p${i}`,
       handle: p.handle,
-      thumbnail: p.images.urls[0],
-      images: [{ id: `i${i}` }],
+      ...(p.images.files ? ours(p.handle) : standIns(p.handle)),
     }))
-    expect(planPlaceholderImages(existing, seeds)).toEqual([])
+    expect(planProductPictures(existing, seeds)).toEqual([])
+  })
+})
+
+describe("isUploadOf", () => {
+  it("matches the stored name with a prefix, not another file that merely ends alike", () => {
+    expect(isUploadOf("http://h/static/1700-tshirt-front.webp", "tshirt-front.webp")).toBe(true)
+    expect(isUploadOf("https://s3.example/bucket/01ABC-tshirt-front.webp?x=1", "tshirt-front.webp")).toBe(true)
+    expect(isUploadOf("http://h/static/tshirt-front.webp", "tshirt-front.webp")).toBe(true)
+    expect(isUploadOf("http://h/static/mytshirt-front.webp", "tshirt-front.webp")).toBe(false)
+    expect(isUploadOf("http://h/static/1700-tshirt-back.webp", "tshirt-front.webp")).toBe(false)
+  })
+})
+
+describe("settlePicturePlan", () => {
+  const fresh = {
+    productId: "p1",
+    handle: "jersey",
+    kind: "fresh" as const,
+    urls: ["https://a/1"],
+    files: ["a.webp", "b.webp"],
+  }
+  const replace = { ...fresh, productId: "p2", handle: "t-shirt", kind: "replace" as const }
+  const plain = { ...fresh, productId: "p3", handle: "fit-kit", files: [] }
+
+  it("sets the files when all are readable, the links for a product without files", () => {
+    expect(
+      settlePicturePlan([fresh, replace, plain], new Set()).map((s) => [s.entry.handle, s.set])
+    ).toEqual([
+      ["jersey", "files"],
+      ["t-shirt", "files"],
+      ["fit-kit", "urls"],
+    ])
+  })
+
+  it("leaves a replace entry as it is, and gives a fresh one its links, when a file is unreadable", () => {
+    expect(
+      settlePicturePlan([fresh, replace], new Set(["b.webp"])).map((s) => [s.entry.handle, s.set])
+    ).toEqual([["jersey", "urls"]])
+  })
+})
+
+describe("the picture files reader", () => {
+  it("lists what it cannot read, in the order asked", async () => {
+    const { found, unreadable } = await readPictureFiles(["nope-1.webp", "nope-2.webp"], [
+      path.join(__dirname, "no-such-folder"),
+    ])
+    expect(found.size).toBe(0)
+    expect(unreadable).toEqual(["nope-1.webp", "nope-2.webp"])
+  })
+
+  it("looks in the repo's packages folder from backend/ and from backend/.medusa/server", () => {
+    const [fromBackend] = pictureDirectories(path.resolve("/repo/backend")).map((dir) =>
+      dir.replace(/\\/g, "/")
+    )
+    expect(fromBackend).toMatch(/\/repo\/packages\/editor\/samples\/pictures\/products$/)
+    expect(
+      pictureDirectories(path.resolve("/repo/backend/.medusa/server")).map((d) => d.replace(/\\/g, "/"))[1]
+    ).toMatch(/\/repo\/packages\/editor\/samples\/pictures\/products$/)
+  })
+
+  it("gives the MIME type from the extension", () => {
+    expect(pictureMimeType("a.webp")).toBe("image/webp")
+    expect(pictureMimeType("a.PNG")).toBe("image/png")
+    expect(pictureMimeType("a.jpeg")).toBe("image/jpeg")
   })
 })
 

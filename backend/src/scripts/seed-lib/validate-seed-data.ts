@@ -15,6 +15,9 @@ import { readDepositPercentage, readPaymentPath } from "../../lib/settings/team-
 import { readReturnDays } from "../../lib/settings/fit-kit-refund"
 import { isHttpsUrl } from "./product-images"
 
+/** A file name only (no folder), as named under packages/editor/samples/pictures/products/. */
+const PICTURE_FILE_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*\.(webp|png|jpe?g)$/
+
 const PAYMENT_PROVIDER_RE = /^pp_[a-z0-9-]+(_[a-z0-9-]+)+$/
 const CURRENCY_RE = /^[a-z]{3}$/
 const COUNTRY_RE = /^[a-z]{2}$/
@@ -222,6 +225,22 @@ export function validateSeedData(seed: SeedData): string[] {
       }
       for (const url of duplicates(images.urls.filter((u) => typeof u === "string"))) {
         problems.push(`products: "${product.handle}" image "${url}" is listed twice`)
+      }
+      if (images.files !== undefined) {
+        if (!Array.isArray(images.files) || images.files.length === 0) {
+          problems.push(`products: "${product.handle}" images.files must list at least one file`)
+        } else {
+          for (const file of images.files) {
+            if (typeof file !== "string" || !PICTURE_FILE_RE.test(file)) {
+              problems.push(
+                `products: "${product.handle}" picture file ${JSON.stringify(file)} must be a plain file name ending in .webp, .png or .jpg`
+              )
+            }
+          }
+          for (const file of duplicates(images.files.filter((f) => typeof f === "string"))) {
+            problems.push(`products: "${product.handle}" picture file "${file}" is listed twice`)
+          }
+        }
       }
     }
   }

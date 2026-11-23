@@ -36,6 +36,7 @@ import {
   updateProductsWorkflow,
   updateRegionsWorkflow,
   updateStoresWorkflow,
+  uploadFilesWorkflow,
   upsertVariantPricesWorkflow,
 } from "@medusajs/medusa/core-flows"
 import { describeNodeEnv } from "../../lib/config/node-env"
@@ -43,7 +44,8 @@ import { seedData as defaultSeedData } from "../seed-data"
 import type { SeedData } from "../seed-data/types"
 import { planAdminUser, type AdminUserPlan } from "./admin-user-plan"
 import { buildProductInput } from "./build-product-input"
-import { planPlaceholderImages, type ExistingProduct } from "./product-images"
+import { planProductPictures, settlePicturePlan, type ExistingProduct } from "./product-images"
+import { pictureMimeType, readPictureFiles } from "./product-picture-files"
 import {
   describeRepair,
   orderedIds,
@@ -73,6 +75,8 @@ export type SeedOptions = {
   adminPassword?: string
   /** NODE_ENV. The dev admin user is created only when it is unset, development or test. */
   nodeEnv?: string
+  /** Where to look for our product picture files; by default next to the backend (tests set it). */
+  picturesDirectories?: string[]
 }
 
 export type SeedResult = {
@@ -89,7 +93,7 @@ export type SeedResult = {
     regionSettings: string[]
     collections: string[]
     products: string[]
-    /** Handles of the products that got their placeholder images in this run. */
+    /** Handles of the products that got their pictures in this run (they had none). */
     images: string[]
     /** Handles of the products that got their placeholder size chart in this run. */
     sizeCharts: string[]
@@ -378,29 +382,85 @@ export async function seedStore(
     }
   }
 
-  // 6c. Placeholder images: web URLs from the seed data, set on every seeded product that has no
-  // thumbnail and no images. A product with a picture (for example one set in the admin) is left
-  // alone. Nothing is downloaded or uploaded.
+  // 6c. Product pictures. A product with no picture gets them; one that still shows exactly the
+  // seed's old stand-in photos gets our own pictures instead (the repair). A picture an admin
+  // uploaded or changed is never touched, and a product already showing our pictures is left
+  // alone, so a second run uploads nothing. Our files are uploaded through the File Module (local
+  // files or S3 / MinIO, whichever is configured); the URLs it returns are what the product
+  // shows. When a file cannot be read, one warning names it and the images stay as they are (a
+  // product with no picture at all gets its stand-in links, as before).
   const { data: pictureRows } = await query.graph({
     entity: "product",
-    fields: ["id", "handle", "thumbnail", "images.id"],
+    fields: ["id", "handle", "thumbnail", "images.id", "images.url"],
     filters: { handle: seed.products.data.map((p) => p.handle) },
   })
-  const imagePlan = planPlaceholderImages(
+  const picturePlan = planProductPictures(
     pictureRows as unknown as ExistingProduct[],
     seed.products.data
   )
-  if (imagePlan.length > 0) {
-    await updateProductsWorkflow(container).run({
-      input: {
-        products: imagePlan.map((entry) => ({
-          id: entry.productId,
-          thumbnail: entry.thumbnail,
-          images: entry.images,
-        })),
-      },
+  const wantedFiles = [...new Set(picturePlan.flatMap((entry) => entry.files))]
+  const pictureFiles = await readPictureFiles(wantedFiles, options.picturesDirectories)
+  if (pictureFiles.unreadable.length > 0) {
+    const message =
+      `Product pictures: could not read ${pictureFiles.unreadable.join(", ")} ` +
+      "(packages/editor/samples/pictures/products/ is not next to the backend), so the images " +
+      "were left as they are."
+    logger.warn(message)
+    warnings.push(message)
+  }
+  const unusable = new Set(pictureFiles.unreadable)
+  const uploadedUrls = new Map<string, string>()
+  const toUpload = new Set(
+    settlePicturePlan(picturePlan, unusable)
+      .filter((step) => step.set === "files")
+      .flatMap((step) => step.entry.files)
+  )
+  const failedUploads: string[] = []
+  for (const file of toUpload) {
+    try {
+      const { result } = await uploadFilesWorkflow(container).run({
+        input: {
+          files: [
+            {
+              filename: file,
+              mimeType: pictureMimeType(file),
+              content: (pictureFiles.found.get(file) as Buffer).toString("base64"),
+              access: "public",
+            },
+          ],
+        },
+      })
+      uploadedUrls.set(file, result[0].url)
+    } catch (error) {
+      failedUploads.push(file)
+      unusable.add(file)
+      if (failedUploads.length === 1) {
+        const message =
+          "Product pictures: the file storage refused an upload " +
+          `(${error instanceof Error ? error.message : String(error)}), so the images were left as they are.`
+        logger.warn(message)
+        warnings.push(message)
+      }
+    }
+  }
+  const pictureSteps = settlePicturePlan(picturePlan, unusable)
+  if (pictureSteps.length > 0) {
+    const pictures = pictureSteps.map((step) => {
+      const urls =
+        step.set === "files" ? step.entry.files.map((file) => uploadedUrls.get(file) as string) : step.entry.urls
+      return {
+        id: step.entry.productId,
+        thumbnail: urls[0],
+        images: urls.map((url) => ({ url })),
+      }
     })
-    created.images = imagePlan.map((entry) => entry.handle)
+    await updateProductsWorkflow(container).run({ input: { products: pictures } })
+    created.images = pictureSteps.filter((step) => step.entry.kind === "fresh").map((step) => step.entry.handle)
+    repaired.push(
+      ...pictureSteps
+        .filter((step) => step.entry.kind === "replace")
+        .map((step) => `${step.entry.handle}: pictures (stand-in photos replaced by our own)`)
+    )
   }
 
   // 6d. Placeholder size charts (metadata.size_chart), only on a product that has none, so a

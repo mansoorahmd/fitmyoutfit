@@ -82,9 +82,11 @@ export type ProductSeed = {
    */
   has_fixed_prices: boolean
   /**
-   * The product's images as web URLs (`https://` only). The seed sets the first as the
-   * thumbnail and all of them as the product's images, but only for a product that has no
-   * thumbnail and no images, so a photo set in the admin is never replaced.
+   * The product's pictures. A product with `files` gets our own pictures (the seed uploads them
+   * through Medusa's File Module); one without gets its stand-in `urls` (web links). The seed sets
+   * the first as the thumbnail and all as the product's images, and only on a product that has no
+   * picture yet or still shows exactly the stand-in `urls`, so a photo set in the admin is never
+   * replaced (product-images.ts).
    */
   images: ProductImagesSeed
 }
@@ -95,8 +97,18 @@ export type ProductImagesSeed = {
    * the real photos are uploaded in the admin or listed here before any public launch.
    */
   placeholder: true
-  /** At least one; the first becomes the thumbnail. */
+  /**
+   * The stand-in photos as web URLs (`https://` only), at least one; the first becomes the
+   * thumbnail. For a product that also has `files` they are the old stand-ins: the seed replaces
+   * them with the files, and only when a product still shows exactly these.
+   */
   urls: string[]
+  /**
+   * Our own pictures, by file name under `packages/editor/samples/pictures/products/` (data, not
+   * a URL), in display order; the first becomes the thumbnail. Optional: a product without them
+   * keeps its stand-in `urls`.
+   */
+  files?: string[]
 }
 
 /**
