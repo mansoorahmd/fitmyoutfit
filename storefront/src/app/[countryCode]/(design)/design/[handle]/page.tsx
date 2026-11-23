@@ -8,7 +8,7 @@ import { listProducts } from "@lib/data/products"
 import { getRegion, listRegions } from "@lib/data/regions"
 import { loadSavedDesign, retrieveTeamOrder } from "@lib/data/team-orders"
 import { designOrderPath, type DesignerContext } from "@lib/editor/designer-context"
-import { editorProductFor } from "@lib/editor/products"
+import { editorProductFor, garmentById } from "@lib/editor/products"
 import { editorFontFamilies } from "@lib/editor/fonts"
 import { listMinimum, regionPhrase, teamListSizes, teamNoun } from "@lib/editor/team-list-host"
 import { STORE_NAME } from "@lib/store-config"
@@ -107,6 +107,8 @@ export default async function DesignPage(props: Props) {
     },
     signedIn: state.kind === "signed_in",
     resumeStart: first(query.start) === "1",
+    // a chooser card names its garment; inside a team order the order's design decides
+    requestedGarment: orderId ? null : (garmentById(entry, first(query.garment))?.definition ?? null),
     order,
   }
 

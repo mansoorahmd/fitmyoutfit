@@ -36,8 +36,8 @@ const products = (count: number) =>
   Array.from({ length: count }, (_, i) => ({
     id: `prod_${i}`,
     title: `Garment ${i}`,
-    // older products first, so the default order (newest first) reverses them
-    created_at: new Date(Date.UTC(2026, 0, i + 1)).toISOString(),
+    // one run of the seed: every product has the same created_at, and the ids sort in the seed's order
+    created_at: new Date(Date.UTC(2026, 0, 30 - i)).toISOString(),
   }))
 
 const listing = (count: number) => {
@@ -128,9 +128,9 @@ describe("listing grid and Sort by", () => {
     await renderGrid("price_asc")
 
     expect(screen.getAllByTestId("card").map((c) => c.textContent)).toEqual([
-      "Garment 2",
-      "Garment 1",
       "Garment 0",
+      "Garment 1",
+      "Garment 2",
     ])
   })
 

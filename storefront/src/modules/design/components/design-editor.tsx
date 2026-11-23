@@ -12,6 +12,7 @@ import {
   createDesign,
   createDeviceAssetStore,
   createMemoryKeyValueStore,
+  planGarmentChange,
   designAssetIds,
   openIndexedDbStore,
   readSavedListWithNotes,
@@ -370,14 +371,14 @@ export default function DesignEditor({ product: entry, countryCode, fontFamilies
         opening = openingGarment(entry, { order: { design: orderContext.design, draft: raw } })
       } else {
         const records = device.persistent ? await readDeviceRecords(device.kv, garmentIds(entry)) : []
-        opening = openingGarment(entry, { device: records })
+        opening = openingGarment(entry, { device: records, requested: context.requestedGarment })
       }
       if (alive) setGarment(opening)
     })().catch(() => alive && setGarment(entry.garments[0]!))
     return () => {
       alive = false
     }
-  }, [device, garment, entry, orderContext])
+  }, [device, garment, entry, orderContext, context.requestedGarment])
 
   // ---- the editor's data ---------------------------------------------------
   // The lettering faces under stable names (a saved design opens with its fonts after a new build).
@@ -473,7 +474,7 @@ export default function DesignEditor({ product: entry, countryCode, fontFamilies
         const missing = await assets.restore(designAssetIds(design))
         if (persistent) await designs.saveDesign(data.product.id, design, { started: true, teamList }).catch(() => undefined)
         if (!alive) return
-        setSavedDesignFlag(handle, true)
+        setSavedDesignFlag(handle, true, data.product.id)
         latest.current = { design, teamList }
         setStore({ kv, designs, assets, persistent, missing })
         setSession({ key: ++keyCount.current, design, teamList, startCard: false, resume: false, locked: false, earlierModel: "none", notice: change.notice })
@@ -483,10 +484,35 @@ export default function DesignEditor({ product: entry, countryCode, fontFamilies
 
       const saved = persistent ? await designs.loadDesign(data.product).catch(() => null) : null
       if (!alive) return
+
+      // A chooser card opened a garment this device holds no design for, while it holds one for another neck of the
+      // product (the latest): the customer's colours come along, the way the editor's own garment chooser carries them.
+      // The garment's own saved design, when there is one, is opened above instead.
+      if (!saved && persistent && context.requestedGarment === data.product.id) {
+        const others = (await readDeviceRecords(kv, garmentIds(entry).filter((id) => id !== data.product.id))).sort((a, b) => b.savedAt - a.savedAt)
+        const from = data.garments.find((g) => g.id === others[0]?.id)
+        const to = data.garments.find((g) => g.id === data.product.id)
+        const other = from?.product ? await designs.loadDesign(from.product).catch(() => null) : null
+        if (from?.product && to && other) {
+          const plan = planGarmentChange(EDITOR_WORDING, other.design, { ...from, product: from.product }, to)
+          if (plan.carry) {
+            const design = plan.carry.design
+            const teamList = other.teamList ? { ...other.teamList, productId: data.product.id } : null
+            const missing = await assets.restore(designAssetIds(design))
+            await designs.saveDesign(data.product.id, design, { started: true, teamList }).catch(() => undefined)
+            if (!alive) return
+            setSavedDesignFlag(handle, true, data.product.id)
+            latest.current = { design, teamList }
+            setStore({ kv, designs, assets, persistent, missing })
+            setSession({ key: ++keyCount.current, design, teamList, startCard: false, resume: false, locked: false, earlierModel: "none", notice: plan.notice })
+            return
+          }
+        }
+      }
       const missing = saved ? await assets.restore(designAssetIds(saved.design)) : []
       if (saved) await designs.pruneAssets().catch(() => undefined)
       // The product page's button reads this flag; the real store is the truth.
-      setSavedDesignFlag(handle, !!saved)
+      setSavedDesignFlag(handle, !!saved, data.product.id)
       // a design this device holds for an earlier model of the garment is left where it is, and the visitor is told
       const earlierOnDevice = saved ? false : await hasEarlierDeviceDesign(kv, handle)
       // arriving from another garment's designer: its sentence, once, and no "Continue your last design?"
@@ -524,7 +550,7 @@ export default function DesignEditor({ product: entry, countryCode, fontFamilies
     return () => {
       alive = false
     }
-  }, [data, device, handle, entry, orderContext, context.resumeStart])
+  }, [data, device, handle, entry, orderContext, context.resumeStart, context.requestedGarment])
 
   useEffect(() => {
     lockedRef.current = session?.locked ?? false
@@ -555,7 +581,7 @@ export default function DesignEditor({ product: entry, countryCode, fontFamilies
           started: started.current,
           teamList: latest.current.teamList,
         })
-        if (started.current) setSavedDesignFlag(handle, true)
+        if (started.current) setSavedDesignFlag(handle, true, productId)
         tabs.current?.announce(record.savedAt)
       },
       onState: setDeviceState,
@@ -921,7 +947,7 @@ export default function DesignEditor({ product: entry, countryCode, fontFamilies
         const design = own?.design ?? change.design
         const teamList = change.teamList ?? own?.teamList ?? null
         if (device.persistent) await device.designs.saveDesign(change.garmentId, design, { started: true, teamList }).catch(() => undefined)
-        setSavedDesignFlag(move.entry.handle, true)
+        setSavedDesignFlag(move.entry.handle, true, change.garmentId)
         rememberGarmentNotice(move.entry.handle, own ? EDITOR_WORDING.garment.noticeBack.replaceAll("{name}", move.garment.name) : change.notice)
         router.push(`/${countryCode}${designPath(move.entry.handle)}`)
       })()

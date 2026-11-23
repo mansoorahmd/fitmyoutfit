@@ -37,6 +37,8 @@ export default function ProductPreview({
   priority = false,
   href,
   footer,
+  title,
+  image,
 }: {
   product: HttpTypes.StoreProduct
   /** Kept for the starter's call sites; the card needs only the product. */
@@ -49,9 +51,15 @@ export default function ProductPreview({
   href?: string
   /** A line under the price (the chooser's "Design your kit"). */
   footer?: React.ReactNode
+  /** The card's name when it is not the product's (the chooser's "Jersey, V-neck"). */
+  title?: string
+  /** The card's picture when it is not the product's (a garment's own front picture: one address, no hover picture). */
+  image?: string
 }) {
   const { cheapestPrice } = getProductPrice({ product })
-  const { primary, secondary } = cardImages(product)
+  const images = cardImages(product)
+  const primary = image ?? images.primary
+  const secondary = image ? null : images.secondary
   const Heading = `h${headingLevel}` as const
   const { pricePrefix, priceSuffix } = listingContent.card
 
@@ -99,7 +107,7 @@ export default function ProductPreview({
       </div>
       <div className="flex flex-1 flex-col gap-1 p-4">
         <Heading className="type-h3 text-brand-ink" data-testid="product-title">
-          {product.title}
+          {title ?? product.title}
         </Heading>
         {cheapestPrice && (
           <p className="type-body text-brand-ink" data-testid="product-card-price">

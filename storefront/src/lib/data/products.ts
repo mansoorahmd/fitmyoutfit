@@ -97,7 +97,7 @@ export const listProducts = async ({
 export const listProductsWithSort = async ({
   page = 0,
   queryParams,
-  sortBy = "created_at",
+  sortBy = "store_order",
   countryCode,
 }: {
   page?: number

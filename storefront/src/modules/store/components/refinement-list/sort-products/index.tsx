@@ -2,7 +2,8 @@
 
 import FilterRadioGroup from "@modules/common/components/filter-radio-group"
 
-export type SortOptions = "price_asc" | "price_desc" | "created_at"
+/** `store_order` is the store's own order (the seed's list: see lib/util/sort-products.ts); it is the default. */
+export type SortOptions = "store_order" | "price_asc" | "price_desc" | "created_at"
 
 type SortProductsProps = {
   sortBy: SortOptions
@@ -11,6 +12,10 @@ type SortProductsProps = {
 }
 
 const sortOptions = [
+  {
+    value: "store_order",
+    label: "Featured",
+  },
   {
     value: "created_at",
     label: "Latest Arrivals",

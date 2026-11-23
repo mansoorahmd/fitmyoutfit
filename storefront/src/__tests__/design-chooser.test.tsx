@@ -53,23 +53,43 @@ describe("the garment chooser (/design)", () => {
     window.localStorage.clear()
   })
 
-  it("lists the garments the designer knows, each with its name and from-price, each leading to its designer", async () => {
+  it("shows one card per garment, in the garments' order: the jersey's two necks, then the T-shirt", async () => {
     await open()
     expect(screen.getByRole("heading", { level: 1, name: "Design your kit" })).toBeInTheDocument()
     const list = screen.getByTestId("design-chooser-list")
     const cards = within(list).getAllByTestId("product-wrapper")
-    expect(cards.map((c) => c.getAttribute("href"))).toEqual(["/pk/design/jersey", "/pk/design/t-shirt"])
-    expect(within(cards[0]!).getByTestId("product-title")).toHaveTextContent("Jersey")
-    expect(within(cards[0]!).getByTestId("product-card-price")).toHaveTextContent("from PKR 3,500 per piece")
-    expect(within(cards[0]!).getByTestId("design-card-action")).toHaveTextContent("Design this kit")
+    expect(cards).toHaveLength(3)
+    expect(cards.map((c) => c.getAttribute("href"))).toEqual([
+      "/pk/design/jersey?garment=match-jersey-vneck",
+      "/pk/design/jersey?garment=match-jersey-round",
+      "/pk/design/t-shirt",
+    ])
+    expect(cards.map((c) => within(c).getByTestId("product-title").textContent)).toEqual(["Jersey, V-neck", "Jersey, round neck", "T-shirt"])
+    // the product's from-price on each, and the action line
+    for (const card of cards) {
+      expect(within(card).getByTestId("product-card-price")).toHaveTextContent("from PKR 3,500 per piece")
+      expect(within(card).getByTestId("design-card-action")).toHaveTextContent("Design this kit")
+    }
     // no jacket: it has no model
     expect(within(list).queryByText("Jacket")).not.toBeInTheDocument()
   })
 
-  it("still shows with one garment, and says more are coming", async () => {
+  it("each card shows our own front picture of its garment", async () => {
+    await open()
+    const cards = within(screen.getByTestId("design-chooser-list")).getAllByTestId("product-wrapper")
+    expect(cards.map((c) => within(c).getByTestId("product-card-image").querySelector("img")?.getAttribute("src"))).toEqual([
+      "/api/editor-assets/pictures/products/jersey-vneck-front.webp",
+      "/api/editor-assets/pictures/products/jersey-round-front.webp",
+      "/api/editor-assets/pictures/products/tshirt-front.webp",
+    ])
+    // our pictures have no hover swap to the product's other photos
+    expect(screen.queryByTestId("product-card-hover-image")).not.toBeInTheDocument()
+  })
+
+  it("still shows both jersey cards when only the jersey is in the store, and says more are coming", async () => {
     state.products = [product("jersey", "Jersey")]
     await open()
-    expect(within(screen.getByTestId("design-chooser-list")).getAllByTestId("product-wrapper")).toHaveLength(1)
+    expect(within(screen.getByTestId("design-chooser-list")).getAllByTestId("product-wrapper")).toHaveLength(2)
     expect(screen.getByTestId("design-chooser-more")).toHaveTextContent("More garments are coming.")
   })
 
@@ -101,12 +121,12 @@ describe("the garment chooser (/design)", () => {
     await expect(open()).rejects.toThrow("NEXT_NOT_FOUND")
   })
 
-  it("a card offers to continue when this device holds a saved design for it", async () => {
-    const { hasSavedDesign } = await import("@lib/editor/saved-design")
-    vi.spyOn(await import("@lib/editor/saved-design"), "hasSavedDesign").mockImplementation((handle: string) => handle === "t-shirt")
-    expect(hasSavedDesign).toBeDefined()
+  it("a card offers to continue only when this device holds a saved design for that garment", async () => {
+    // the round neck's design, not the V-neck's, and not the T-shirt's
+    window.localStorage.setItem("fmo:saved-design:garment:match-jersey-round", "1")
+    window.localStorage.setItem("fmo:saved-design:jersey", "1")
     await open()
     const actions = await screen.findAllByTestId("design-card-action")
-    expect(actions.map((a) => a.textContent)).toEqual(["Design this kit", "Continue your design"])
+    expect(actions.map((a) => a.textContent)).toEqual(["Design this kit", "Continue your design", "Design this kit"])
   })
 })

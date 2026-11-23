@@ -40,8 +40,13 @@ export type EditorGarment = {
   variant?: string
   /** The shape in a sentence after the product's name ("V-neck", "round neck"); absent for a garment with one shape. */
   phrase?: string
-  /** A picture in samples/pictures/ (a .png), when the editor has one. */
+  /** A small picture in samples/pictures/ (a .png) for the editor's garment chooser, when the editor has one. */
   picture?: string
+  /**
+   * The garment's own front picture for the store's chooser card (/design), in samples/pictures/products/ (a .webp,
+   * rendered from our 3D model). Absent: the card shows the Medusa product's thumbnail.
+   */
+  productPicture?: string
 }
 
 export type EditorProduct = {
@@ -83,6 +88,7 @@ const EDITOR_PRODUCTS: readonly EditorProduct[] = [
         variant: "V-neck",
         phrase: "V-neck",
         picture: "pictures/match-jersey-vneck.png",
+        productPicture: "pictures/products/jersey-vneck-front.webp",
       },
       {
         definition: "match-jersey-round",
@@ -91,6 +97,7 @@ const EDITOR_PRODUCTS: readonly EditorProduct[] = [
         variant: "Round neck",
         phrase: "round neck",
         picture: "pictures/match-jersey-round.png",
+        productPicture: "pictures/products/jersey-round-front.webp",
       },
     ],
     bodyFile: "body-male.glb",
@@ -101,7 +108,14 @@ const EDITOR_PRODUCTS: readonly EditorProduct[] = [
     handle: "t-shirt",
     definition: "stand-in-tshirt",
     modelFile: "stand-in-tshirt.glb",
-    garments: [{ definition: "stand-in-tshirt", modelFile: "stand-in-tshirt.glb", name: "T-shirt" }],
+    garments: [
+      {
+        definition: "stand-in-tshirt",
+        modelFile: "stand-in-tshirt.glb",
+        name: "T-shirt",
+        productPicture: "pictures/products/tshirt-front.webp",
+      },
+    ],
     shortName: "T-shirt",
     credit: {
       title: "Garment 3D",
