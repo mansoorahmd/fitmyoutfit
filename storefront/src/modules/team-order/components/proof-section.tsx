@@ -1,5 +1,6 @@
 import { proofContent } from "@content/proof"
 import { designOrderPath } from "@lib/editor/designer-context"
+import { changeListOffered, type PaymentsView } from "@lib/team-order/payments"
 import { dayOfMoment, momentWords, proofGate } from "@lib/team-order/proof"
 import type { ProofView, TeamOrderView } from "@lib/team-order/types"
 import { fill } from "@lib/util/wording"
@@ -21,12 +22,15 @@ export default function ProofSection({
   proofs,
   countryCode,
   designerHandle,
+  payments,
 }: {
   order: TeamOrderView
   /** Every proof of the order, newest first; null when they could not be read (the section says the rest without them). */
   proofs: ProofView[] | null
   countryCode: string
   designerHandle: string | null
+  /** The backend's deposit state decides whether "Change the list" is offered; null: not read (a draft, or it failed). */
+  payments: Pick<PaymentsView, "deposit"> | null
 }) {
   const gate = proofGate(order)
   const current = order.currentProof
@@ -75,16 +79,11 @@ export default function ProofSection({
           <p className="type-body" data-testid="proof-signed">
             {fill(w.make.signed, { date: dayOfMoment(current.signedAt) ?? "" })}
           </p>
-          {order.status === "approved" && (
-            <p className="type-body font-semibold" data-testid="proof-next">
-              {w.make.next}
-            </p>
-          )}
           <div className="flex flex-wrap items-center gap-3">
             <ButtonLink href={proofHref} variant="secondary" fullWidth className="md:w-auto" data-testid="proof-open">
               {w.make.openSigned}
             </ButtonLink>
-            {order.status === "approved" && <ReopenButton orderId={order.id} signed afterHref={afterReopen} variant="text" />}
+            {changeListOffered(order.status, payments) && <ReopenButton orderId={order.id} signed afterHref={afterReopen} variant="text" />}
           </div>
         </>
       )}

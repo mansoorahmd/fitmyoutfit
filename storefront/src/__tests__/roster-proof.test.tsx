@@ -120,6 +120,7 @@ describe("signing", () => {
         schedule={signingSchedule(scheduleFromApi(apiSchedule({ state: "ok" }))!, false)}
         orderHref="/pk/account/team-orders/teamord_1"
         signedInPath="/account/team-orders/teamord_1/proof"
+        statement="I have checked every name, number and size on this proof. I agree that the kit is made as shown."
         onSigned={onSigned}
         onStale={onStale}
         {...props}

@@ -148,11 +148,11 @@ export const teamOrderContent = {
       needsRush: "Standard delivery is now too late for this date. With rush delivery, the latest day to sign the proof is {latest}.",
       cannotBeMet: "We can't meet this date, even with rush delivery: the latest day to sign for rush was {latest}. Choose a later date.",
       cannotBeMetNoDay: "We can't meet this date, even with rush delivery. Choose a later date.",
-      // Rush: a choice the backend stores; the charge belongs to payments, which are not open.
+      // Rush: a choice the backend stores; its charge is a line of the price shown with the proof.
       rushChoose: "Choose rush delivery",
       rushKeep: "Keep standard delivery",
-      rushChosen: "Rush delivery is chosen. It is a paid option; payment is not open yet.",
-      rushNote: "Rush delivery is a paid option. Payment is not open yet.",
+      rushChosen: "Rush delivery is chosen. It is a paid option: its charge is a line of the price shown with the proof.",
+      rushNote: "Rush delivery is a paid option. Its charge is a line of the price shown with the proof.",
     },
     actions: {
       // DRAFT WORDING. No id: the button into the designer.

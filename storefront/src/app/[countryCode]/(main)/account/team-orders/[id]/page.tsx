@@ -5,6 +5,7 @@ import { cache } from "react"
 import { teamOrderContent } from "@content/team-order"
 import { customerState } from "@lib/data/customer"
 import { listProducts } from "@lib/data/products"
+import { retrievePayments } from "@lib/data/team-order-payments"
 import { listProofs, retrieveTeamOrder } from "@lib/data/team-orders"
 import { editorProductFor } from "@lib/editor/products"
 import { authHref } from "@lib/util/account-auth"
@@ -61,6 +62,8 @@ export default async function TeamOrderPage(props: Props) {
 
   // The proofs ever made, for the list on the page; the page works without it when they cannot be read.
   const proofs = await listProofs(id)
+  // The money: a draft has no price (nothing to read); otherwise what it costs and what is paid.
+  const money = order.status === "draft" ? null : await retrievePayments(id)
 
   return (
     <AccountFrame
@@ -72,6 +75,8 @@ export default async function TeamOrderPage(props: Props) {
         order={order}
         proofs={proofs.ok ? proofs.value : null}
         countryCode={countryCode}
+        money={money?.ok ? money.value : null}
+        moneyFailed={money !== null && !money.ok}
         product={{
           name: product?.title ?? "",
           thumbnail: product?.thumbnail ?? null,
