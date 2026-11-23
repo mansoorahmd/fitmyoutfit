@@ -12,6 +12,7 @@ const all = {
   schedule_time_zone: "Asia/Karachi",
   team_order_deposit_percentage: 50,
   team_order_payment_path: "/[countryCode]/account/team-orders/[id]/pay",
+  fit_kit_return_days: 0,
 }
 
 describe("missingStoreSettings", () => {
@@ -45,6 +46,7 @@ describe("missingStoreSettings", () => {
           schedule_time_zone: "nowhere",
           team_order_deposit_percentage: 0,
           team_order_payment_path: "bad",
+          fit_kit_return_days: 5,
         },
         defaults
       )
@@ -55,7 +57,7 @@ describe("missingStoreSettings", () => {
     const { rush_percentage: _rush, ...rest } = all
     expect(missingStoreSettings({ rush_percentage: 20 }, defaults)).toEqual(rest)
     // a store seeded before the team lists: only the new keys are missing
-    const { roster_max_lines: _a, roster_max_count: _b, roster_max_name_length: _c, schedule_time_zone: _d, team_order_deposit_percentage: _e, team_order_payment_path: _f, ...older } = all
+    const { roster_max_lines: _a, roster_max_count: _b, roster_max_name_length: _c, schedule_time_zone: _d, team_order_deposit_percentage: _e, team_order_payment_path: _f, fit_kit_return_days: _z, ...older } = all
     expect(missingStoreSettings(older, defaults)).toEqual({
       roster_max_lines: 100,
       roster_max_count: 10,
@@ -63,12 +65,14 @@ describe("missingStoreSettings", () => {
       schedule_time_zone: "Asia/Karachi",
       team_order_deposit_percentage: 50,
       team_order_payment_path: "/[countryCode]/account/team-orders/[id]/pay",
+      fit_kit_return_days: 0,
     })
     // a store seeded before team-order payments (M3-3): only the two new keys are missing
-    const { team_order_deposit_percentage: _g, team_order_payment_path: _h, ...beforePayments } = all
+    const { team_order_deposit_percentage: _g, team_order_payment_path: _h, fit_kit_return_days: _y, ...beforePayments } = all
     expect(missingStoreSettings(beforePayments, defaults)).toEqual({
       team_order_deposit_percentage: 50,
       team_order_payment_path: "/[countryCode]/account/team-orders/[id]/pay",
+      fit_kit_return_days: 0,
     })
   })
 

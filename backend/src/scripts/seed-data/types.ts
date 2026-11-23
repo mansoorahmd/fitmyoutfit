@@ -128,6 +128,8 @@ export type StoreSettingsSeed = {
   team_order_deposit_percentage: number
   /** The storefront path of a team order's payment page, with [countryCode] and [id]; the payment emails link to it. */
   team_order_payment_path: string
+  /** Days after the order within which a fit kit may be refunded; 0 for no limit. */
+  fit_kit_return_days: number
 }
 
 /**

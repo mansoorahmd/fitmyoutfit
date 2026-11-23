@@ -672,7 +672,7 @@ describe("buildMedusaConfig", () => {
 describe("buildModules", () => {
   it("combines redis, file and payment modules, and our own", () => {
     const modules = buildModules({ ...s3Env, REDIS_URL: "redis://x:6379" })
-    expect(modules).toHaveLength(9)
+    expect(modules).toHaveLength(11)
   })
 
   it("always registers the design and team-order modules", () => {

@@ -30,6 +30,13 @@
  * errorHandlerWithUndecodableIds). A design's JSON may be larger than Medusa's default body limit,
  * so the two routes that take one allow a body of up to DESIGN_BODY_LIMIT.
  *
+ * The design-help form (docs: the contract for the storefront; lib/rules/design-request.ts): POST /store/design-requests
+ * is open to a visitor with no account (a signed-in customer's token is read when there is one), its body
+ * is limited to 16 KB (a larger one is 413 `request_too_large`) and a NUL character in a text is refused;
+ * the limits per address and per email are applied in the route's workflow, in the database. A customer reads
+ * their own requests with GET (sign-in needed). The admin's /admin/design-requests* routes get the NUL check
+ * for their ids.
+ *
  * Team orders for staff (/admin/team-orders*) need no sign-in middleware of ours: Medusa puts every
  * /admin route behind the admin user's sign-in, and a customer's token is refused there (401). Only
  * the NUL check above is added for their ids.
@@ -342,6 +349,9 @@ export async function refuseDeletedCustomer(
 
 /** The refusal of an id that cannot name anything: 404 in the shape of the routes' own refusals. */
 function notFoundBody(path: string) {
+  if (path.startsWith("/admin/design-requests")) {
+    return { type: MedusaError.Types.NOT_FOUND, code: "design_request_not_found", message: "Design request not found." }
+  }
   const design = path.startsWith("/store/designs")
   return {
     type: MedusaError.Types.NOT_FOUND,
@@ -386,14 +396,36 @@ export function errorHandlerWithUndecodableIds(
   res: MedusaResponse,
   next: MedusaNextFunction
 ): Promise<void> | void {
-  if (isPathDecodeError(error) && /^\/(store\/(designs|team-orders)|admin\/team-orders)(\/|$)/.test(req.path)) {
+  if (isPathDecodeError(error) && /^\/(store\/(designs|team-orders)|admin\/(team-orders|design-requests))(\/|$)/.test(req.path)) {
     res.status(404).json(notFoundBody(req.path))
+    return
+  }
+  // A body over the limit of the open design-request form: a refusal with a code, not Medusa's text.
+  if ((error as { type?: unknown } | null)?.type === "entity.too.large" && req.path === "/store/design-requests") {
+    res.status(413).json({
+      type: MedusaError.Types.INVALID_DATA,
+      code: "request_too_large",
+      message: `The request is too large (at most ${DESIGN_REQUEST_BODY_LIMIT}).`,
+    })
     return
   }
   return coreErrorHandler(error, req, res, next)
 }
 
 const customerOnly = [authenticate("customer", ["session", "bearer"]), refuseDeletedCustomer, refuseNullCharacters]
+
+/**
+ * The body limit of the open design-request form (lib/rules/design-request.ts, 16 KB): the form is a
+ * few short fields, and the route is open to anyone, so a large body is refused (413).
+ */
+export const DESIGN_REQUEST_BODY_LIMIT = "16kb"
+
+/**
+ * The open design-request form: a visitor with no account may post; a signed-in customer's token is
+ * read when there is one (`allowUnauthenticated`: no token, or a token that is not a customer's, is
+ * a visitor). The body is limited above, and a NUL character in any text is refused.
+ */
+const openDesignRequestForm = [authenticate("customer", ["session", "bearer"], { allowUnauthenticated: true }), refuseNullCharacters]
 
 export default defineMiddlewares({
   errorHandler: errorHandlerWithUndecodableIds,
@@ -412,6 +444,27 @@ export default defineMiddlewares({
       matcher: "/admin/team-orders/:id/steps",
       method: ["POST"],
       middlewares: [refuseNullCharacters],
+    },
+    {
+      matcher: "/admin/design-requests/:id",
+      method: ["GET"],
+      middlewares: [refuseNullCharacters],
+    },
+    {
+      matcher: "/admin/design-requests/:id/*",
+      method: ["POST"],
+      middlewares: [refuseNullCharacters],
+    },
+    {
+      matcher: "/store/design-requests",
+      method: ["POST"],
+      bodyParser: { sizeLimit: DESIGN_REQUEST_BODY_LIMIT },
+      middlewares: openDesignRequestForm,
+    },
+    {
+      matcher: "/store/design-requests",
+      method: ["GET"],
+      middlewares: customerOnly,
     },
     {
       matcher: "/store/designs",
