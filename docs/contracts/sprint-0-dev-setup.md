@@ -125,7 +125,11 @@ The three garments belong to one product collection, title `Garments`, handle `g
 
 Each product also carries metadata `kind`: `"garment"` for the three garments, `"fit_kit"` and `"rush_add_on"` for the extras. Later sprints use this to find the extras without relying on handles.
 
-### Product images (added 10 Nov 2026, changed the same day, founder's direction)
+### Product images (added 10 Nov 2026, changed the same day, founder's direction; jersey and T-shirt changed 23 Nov 2026)
+
+**Since 23 Nov 2026 the jersey and the T-shirt show our own pictures** (task G5): rendered from our 3D models, the garment alone, front and back, 1200 x 1200 WebP with a transparent background, in `packages/editor/samples/pictures/products/` (jersey: V-neck front, V-neck back, round neck front, round neck back, thumbnail the V-neck front; T-shirt: front, back). The seed data names the files (`images.files`); the seed uploads them through Medusa's File Module and uses the URLs it returns, on a product with no picture or in place of the stand-in photos below when those are still exactly as the seed set them. A picture changed in the admin is never touched; a second run uploads nothing; missing files or a refused upload leave the images as they are with one warning. The design on them (navy and white, `PLAYER 10` on the back) is a sample. The stand-in URLs of the jersey and the T-shirt stay in the seed data only so the seed can recognise and replace them.
+
+The jacket and the fit kit have no 3D model yet and keep the stand-in photos below.
 
 For local development the products use ready-made photos from a live store. Nothing is generated or drawn. The founder named [spized.com](https://www.spized.com/en) as the source, and said our own product shoot replaces them once the design is ready.
 
@@ -147,7 +151,7 @@ All URLs start with `https://www.spized.com/thumbnail/`. Seen on the site on 10 
 
 **These photos belong to another store and carry its logo. They are for local development only:**
 - The storefront allows the host `www.spized.com` for images only when it is not a production build (`storefront/next.config.js`).
-- They must be replaced by our own product photos before anything is deployed where the public can see it. This is a launch blocker; it is listed in `docs/progress.md`.
+- They must be replaced by our own product photos before anything is deployed where the public can see it. This is a launch blocker; it is listed in `docs/progress.md`. Done for the jersey and the T-shirt (above); still open for the jacket and the fit kit.
 
 ### Sample prices (placeholders, per unit, same price for every size)
 
