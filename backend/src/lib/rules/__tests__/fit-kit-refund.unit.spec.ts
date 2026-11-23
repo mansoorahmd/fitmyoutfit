@@ -222,3 +222,18 @@ describe("the setting", () => {
     expect(readReturnDays({ fit_kit_return_days: "soon" }).ok).toBe(false)
   })
 })
+
+describe("quantities as Medusa hands them out", () => {
+  it("reads a big-number object, a decimal string and a number", () => {
+    for (const quantity of [2, "2", { value: "2" }, { value: 2 }]) {
+      const input = order()
+      input.lines[0]!.quantity = quantity
+      expect(kitRefundState(input).kits_total).toBe(2)
+    }
+    for (const quantity of [0, -1, 1.5, "x", null, undefined, { value: "1.5" }]) {
+      const input = order()
+      input.lines[0]!.quantity = quantity
+      expect(kitRefundState(input).kits_total).toBe(0)
+    }
+  })
+})

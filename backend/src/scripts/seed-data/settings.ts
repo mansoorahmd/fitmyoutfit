@@ -26,5 +26,7 @@ export const settings: PlaceholderData<StoreSettingsSeed> = {
     schedule_time_zone: "Asia/Karachi",
     team_order_deposit_percentage: 50,
     team_order_payment_path: "/[countryCode]/account/team-orders/[id]/pay",
+    // Days after an order within which a fit kit may come back and be refunded; 0 = no limit (not settled).
+    fit_kit_return_days: 0,
   },
 }

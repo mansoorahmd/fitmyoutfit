@@ -159,10 +159,10 @@ export type KitRefundState = {
   message: string | null
 }
 
-/** A positive whole number, or 0 for anything else. */
+/** A positive whole number, or 0 for anything else (a number, a decimal string or Medusa's big-number object). */
 function wholeQuantity(value: unknown): number {
-  const number = typeof value === "number" ? value : typeof value === "string" ? Number(value) : Number.NaN
-  return Number.isInteger(number) && number > 0 ? number : 0
+  const read = readExact(value)
+  return read !== null && read.den === 1n && read.num > 0n && read.num < 1_000_000n ? Number(read.num) : 0
 }
 
 /** The amount of each kit, in the order of the lines: a line's shares add up to its total exactly. */
