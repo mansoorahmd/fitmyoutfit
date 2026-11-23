@@ -151,8 +151,6 @@ export const proofContent = {
       title: "Proof signed",
       by: "Signed by {name} on {date}.",
       locked: "The team list and the design are now locked.",
-      // DRAFT WORDING. No id: what comes next, in one line, without a button: payment is not open.
-      next: "Next is the deposit. Payment is not open yet: we will tell you when it is.",
       promised: "Delivery date recorded when you signed: {date}.",
       changeHint: "If a name, number or size is wrong, you can change the list. That withdraws this signed proof and you will sign a new one.",
     },
@@ -160,7 +158,7 @@ export const proofContent = {
     schedule: {
       needsRush: "Standard delivery is now too late for your need-by date. With rush delivery, the latest day to sign is {latest}.",
       needsRushNotChosen: "You have not chosen rush delivery. If you sign without it, the date will be missed. You can choose rush on the team order page before you sign.",
-      needsRushChosen: "You have chosen rush delivery, a paid option. Payment is not open yet.",
+      needsRushChosen: "You have chosen rush delivery, a paid option. Its charge is in the price above.",
       cannotBeMet: "We can't meet your need-by date, even with rush delivery. If you sign now, the date will not be met. You can still sign, or choose a later date on the team order page first.",
       cannotBeMetNoDay: "We can't meet your need-by date, even with rush delivery. If you sign now, the date will not be met.",
       chooseDate: "Open the team order page",
@@ -190,8 +188,7 @@ export const proofContent = {
     signed: "The proof is signed on {date}. The team list and the design are locked.",
     open: "Open the proof",
     openSigned: "Open the signed proof",
-    // After signing, one line for what is next (no button: payment is not open).
-    next: "Next is the deposit. Payment is not open yet: we will tell you when it is.",
+    // After signing, the deposit and the button are in the Money section of the team order (src/content/payments.ts).
   },
 
   // ---- going back to change the list ---------------------------------------
@@ -269,6 +266,8 @@ export const proofContent = {
       // 400 not_allowed
       team_order_already_draft: "The team order is already open for changes.",
       team_order_not_reopenable: "The deposit is paid, so the list can't be changed here any more. Please contact us.",
+      // DRAFT WORDING. No id: money of the deposit is with the payment system or taken (M3-3).
+      payment_in_progress: "A payment for the deposit is with the payment system, so the list can't be changed now. Check the team order again in a moment.",
       team_order_has_add_ons: "This order has add-on orders for late players, so it can't go back to a draft. Delete the draft add-ons first.",
       // 409
       team_order_changed: "The team order changed while we were going back. Nothing was changed. Open it and try again.",
@@ -308,5 +307,5 @@ export const PROOF_REFUSAL_CODES: Record<ProofAction, readonly string[]> = {
     "proof_not_current",
     "schedule_changed",
   ],
-  reopen: ["team_order_already_draft", "team_order_not_reopenable", "team_order_has_add_ons", "team_order_changed"],
+  reopen: ["team_order_already_draft", "team_order_not_reopenable", "payment_in_progress", "team_order_has_add_ons", "team_order_changed"],
 }
